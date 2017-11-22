@@ -319,9 +319,14 @@ unsafe fn print_devices(dd: i32, filter_type: u8) {
         let mut addr = [0u8; 18];
         let mut len : i32;
         loop {
-            len = read(dd, buf.as_mut_ptr() as (*mut ::std::os::raw::c_void),
-                              mem::size_of_val(&buf)) as i32;
-            if len < 0 {
+            if !({
+                len = read(
+                    dd,
+                    buf.as_mut_ptr() as (*mut ::std::os::raw::c_void),
+                    ::std::mem::size_of::<[u8; 260]>()
+                ) as (i32);
+                len
+            } < 0i32) {
                 break;
             }
         }
@@ -346,7 +351,7 @@ unsafe fn print_devices(dd: i32, filter_type: u8) {
 
         let addr_s = String::from_utf8_unchecked(addr.to_vec());
         let name_s = String::from_utf8_unchecked(name.to_vec());
-        println!("{:?} {:?}\n", addr, name);
+        println!("{} {}\n", addr_s, name_s);
     }
 }
 

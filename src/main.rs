@@ -1,9 +1,11 @@
 extern crate libc;
+#[macro_use] extern crate nix;
 
 use std::ptr;
-use libc::{c_char, getsockopt, setsockopt, c_void, memcpy};
+use libc::{c_char, getsockopt, setsockopt, c_void, memcpy, socket, SOCK_RAW};
 use std::mem;
 use std::ffi::CString;
+use nix::sys::ioctl;
 
 #[derive(Copy)]
 #[repr(C)]
@@ -76,6 +78,7 @@ extern {
     fn read(
         __fd : i32, __buf : *mut ::std::os::raw::c_void, __nbytes : usize
     ) -> isize;
+
 }
 
 #[link(name = "bluetooth")]
@@ -97,6 +100,8 @@ extern {
                               time_out: i32) -> i32;
 
     fn ba2str(ba : *const BDAddr, str : *mut u8) -> i32;
+
+    fn hci_read_bd_addr(dd: i32, bdaddr: *const BDAddr, to: i32);
 }
 #[no_mangle]
 pub unsafe extern fn hci_set_bit(
@@ -355,11 +360,39 @@ unsafe fn print_devices(dd: i32, filter_type: u8) {
     }
 }
 
+// #define HCIDEVUP	_IOW('H', 201, int)
+// #define HCIDEVDOWN	_IOW('H', 202, int)
+
+static AF_BLUETOOTH: i32 = 31;
+static BTPROTO_HCI: i32 = 1;
+
+ioctl!(write_int hci_dev_up with b'H', 201);
+ioctl!(write_int hci_dev_down with b'H', 202);
+
+unsafe fn reset(dev_id: i32) {
+    //let mut addr: BDAddr = std::mem::uninitialized();
+    //hci_read_bd_addr(dd, &mut addr, 1000);
+
+    let ctl: i32 = socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI);
+    if ctl < 0 {
+        let s = CString::new("Failed to down device").unwrap();
+        perror(s.as_ptr());
+        panic!("failed");
+    }
+
+    println!("ctl: {}", ctl);
+
+    hci_dev_down(ctl, dev_id).unwrap();
+    hci_dev_up(ctl, dev_id).unwrap();
+}
+
 fn main() {
     unsafe {
         let dev_id = hci_get_route(ptr::null());
         let dd = hci_open_dev(dev_id);
         println!("dd {:?}", dd);
+
+        reset(dev_id);
 
         let own_type: u8 = 0x00;
         let scan_type: u8 = 0x01;

@@ -4,10 +4,12 @@ extern crate libc;
 use std::ptr;
 use libc::{c_char, getsockopt, setsockopt, c_void, memcpy, socket, SOCK_RAW};
 use std::mem;
-use std::ffi::CString;
+use std::ffi::{CString, CStr};
 use nix::sys::ioctl;
+use nix::Errno;
 
 #[derive(Copy)]
+#[derive(Debug)]
 #[repr(C)]
 pub struct BDAddr {
     pub b : [ u8 ; 6usize ]
@@ -38,6 +40,74 @@ impl HCIFilter {
 impl Clone for HCIFilter {
     fn clone(&self) -> Self { *self }
 }
+
+#[derive(Copy)]
+#[derive(Debug)]
+#[repr(C)]
+pub struct HCIDevReq {
+    dev_id: u16,
+    dev_opt: u32,
+}
+
+impl Clone for HCIDevReq {
+    fn clone(&self) -> Self { *self }
+}
+
+
+#[derive(Copy)]
+#[repr(C)]
+pub struct HCIDevListReq {
+    dev_num: u16,
+    dev_reqs: [HCIDevReq; 0],
+}
+
+impl Clone for HCIDevListReq {
+    fn clone(&self) -> Self { *self }
+}
+
+
+#[derive(Copy)]
+#[repr(C)]
+pub struct HCIDevStats {
+    pub err_rx : u32,
+    pub err_tx : u32,
+    pub cmd_tx : u32,
+    pub evt_rx : u32,
+    pub acl_tx : u32,
+    pub acl_rx : u32,
+    pub sco_tx : u32,
+    pub sco_rx : u32,
+    pub byte_rx : u32,
+    pub byte_tx : u32,
+}
+
+impl Clone for HCIDevStats{
+    fn clone(&self) -> Self { *self }
+}
+
+#[derive(Copy)]
+#[repr(C)]
+pub struct HCIDevInfo {
+    pub dev_id : u16,
+    pub name : [c_char; 8],
+    pub bdaddr : BDAddr,
+    pub flags : u32,
+    pub type_ : u8,
+    pub features : [u8; 8],
+    pub pkt_type : u32,
+    pub link_policy : u32,
+    pub link_mode : u32,
+    pub acl_mtu : u16,
+    pub acl_pkts : u16,
+    pub sco_mtu : u16,
+    pub sco_pkts : u16,
+    pub stat : HCIDevStats,
+}
+
+impl Clone for HCIDevInfo {
+    fn clone(&self) -> Self { *self }
+}
+
 
 #[derive(Copy)]
 #[repr(C)]
@@ -243,20 +313,21 @@ extern {
 }
 
 // hci.h
-static HCI_FILTER: i32 = 2;
-static HCI_EVENT_PKT: i32 = 0x04;
-static HCI_LE_META_EVENT: i32 = 0x3E;
-static HCI_EVENT_HDR_SIZE: i32 = 2;
+const HCI_MAX_DEV: usize = 16;
+const HCI_FILTER: i32 = 2;
+const HCI_EVENT_PKT: i32 = 0x04;
+const HCI_LE_META_EVENT: i32 = 0x3E;
+const HCI_EVENT_HDR_SIZE: i32 = 2;
 
 // bluetooth.h
-static SOL_HCI: i32 = 0;
-static SOL_L2CAP: i32 = 6;
-static SOL_SCO: i32 = 17;
-static SOL_RFCOMM: i32 = 18;
+const SOL_HCI: i32 = 0;
+const SOL_L2CAP: i32 = 6;
+const SOL_SCO: i32 = 17;
+const SOL_RFCOMM: i32 = 18;
 
 // local
-static EIR_NAME_SHORT: u8 = 0x08;  // shortened local name
-static EIR_NAME_COMPLETE: u8 = 0x09;  // complete local name
+const EIR_NAME_SHORT: u8 = 0x08;  // shortened local name
+const EIR_NAME_COMPLETE: u8 = 0x09;  // complete local name
 
 unsafe fn eir_parse_name(mut eir: *mut u8, eir_len: usize, buf: *mut u8, buf_size: usize) {
     let mut offset = 0usize;
@@ -374,6 +445,7 @@ unsafe fn reset(dev_id: i32) {
     //hci_read_bd_addr(dd, &mut addr, 1000);
 
     let ctl: i32 = socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI);
+    println!("CTL = {}", ctl);
     if ctl < 0 {
         let s = CString::new("Failed to down device").unwrap();
         perror(s.as_ptr());
@@ -386,37 +458,139 @@ unsafe fn reset(dev_id: i32) {
     hci_dev_up(ctl, dev_id).unwrap();
 }
 
-fn main() {
+struct Adapter {
+    dev_id: i32,
+    name: String
+}
+
+fn handle_error(v: i32) -> nix::Result<i32> {
+    if v < 0 {
+        Err(nix::Error::Sys(Errno::last()))
+    } else {
+        Ok(v)
+    }
+}
+
+fn get_control_socket() -> nix::Result<i32> {
+    handle_error(unsafe { socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI) })
+}
+
+// #define HCIGETDEVLIST	_IOR('H', 210, int)
+ioctl!(read hci_get_dev_list with b'H', 210; i32);
+// #define HCIGETDEVINFO	_IOR('H', 211, int)
+ioctl!(read hci_get_dev_info with b'H', 211; i32);
+
+
+static HCI_GET_DEV_LIST_MAGIC: usize = (2u32 << 0i32 + 8i32 + 8i32 + 14i32 |
+    (b'H' as (i32) << 0i32 + 8i32) as (u32) | (210i32 << 0i32) as (u32)) as
+    (usize) | 4 /* (sizeof(i32)) */ << 0i32 + 8i32 + 8i32;
+
+static HCI_GET_DEV_MAGIC: usize = (2u32 << 0i32 + 8i32 + 8i32 + 14i32 |
+    (b'H' as (i32) << 0i32 + 8i32) as (u32) | (211i32 << 0i32) as (u32)) as (usize) |
+    4 /* (sizeof(i32)) */ << 0i32 + 8i32 + 8i32;
+
+fn get_adapters() -> nix::Result<Vec<Adapter>> {
+    let result: Vec<Adapter> = vec![];
+
+    let ctl = get_control_socket()?;
+
+    println!("ctl = {}", ctl);
+
     unsafe {
-        let dev_id = hci_get_route(ptr::null());
-        let dd = hci_open_dev(dev_id);
-        println!("dd {:?}", dd);
+        let mut dl: *mut HCIDevListReq;
+        let mut dr: *mut HCIDevReq;
 
-        reset(dev_id);
 
-        let own_type: u8 = 0x00;
-        let scan_type: u8 = 0x01;
-        let filter_policy: u8 = 0x00;
-        let interval: u16 = 0x0010;
-        let window: u16 = 0x0010;
-        let filter_dup: u8 = 1;
-        let filter_type: u8 = 0;
 
-        let e1 = hci_le_set_scan_parameters(dd, scan_type, interval, window,
-                                             own_type, filter_policy, 1000);
+        dl = libc::malloc(
+            16usize.wrapping_mul(
+                ::std::mem::size_of::<HCIDevReq>()
+            ).wrapping_add(
+                ::std::mem::size_of::<u16>()
+            )) as (*mut HCIDevListReq);
 
-        if e1 < 0 {
-            let s = CString::new("Failed to set scan parameters").unwrap();
-            perror(s.as_ptr());
+        (*dl).dev_num = 16u16;
+        dr = (*dl).dev_reqs.as_mut_ptr();
+
+        if dl.is_null() {
+            panic!("Failed to allocate memory");
         }
+        handle_error(libc::ioctl(ctl, HCI_GET_DEV_LIST_MAGIC as libc::c_ulong, dl as (*mut c_void)))?;
 
-        let e2 = hci_le_set_scan_enable(dd, 1, filter_dup, 1000);
-        if e2 < 0 {
-            let s = CString::new("Failed to enable scan").unwrap();
-            perror(s.as_ptr());
+        println!("size {}", (*dl).dev_num);
+
+        for i in 0..(*dl).dev_num {
+            let mut di = HCIDevInfo {
+                dev_id: (*dr.offset(i as isize)).dev_id,
+                name: [0i8; 8],
+                bdaddr: BDAddr { b: [0u8; 6] },
+                flags: 0u32,
+                type_: 0u8,
+                features: [0u8; 8],
+                pkt_type: 0u32,
+                link_policy: 0u32,
+                link_mode: 0u32,
+                acl_mtu: 0u16,
+                acl_pkts: 0u16,
+                sco_mtu: 0u16,
+                sco_pkts: 0u16,
+                stat: HCIDevStats {
+                    err_rx: 0u32,
+                    err_tx: 0u32,
+                    cmd_tx: 0u32,
+                    evt_rx: 0u32,
+                    acl_tx: 0u32,
+                    acl_rx: 0u32,
+                    sco_tx: 0u32,
+                    sco_rx: 0u32,
+                    byte_rx: 0u32,
+                    byte_tx: 0u32
+                }};
+
+            handle_error(libc::ioctl(ctl, HCI_GET_DEV_MAGIC as libc::c_ulong,
+                                     &mut di as (*mut HCIDevInfo) as (*mut c_void)))?;
+
+            println!("{:?}", CStr::from_ptr(di.name.as_ptr()));
         }
-
-        print_devices(dd, filter_type);
     };
+
+    Ok(result)
+}
+
+fn main() {
+    get_adapters().unwrap();
+
+//    unsafe {
+//
+//        let dev_id = hci_get_route(ptr::null());
+//        let dd = hci_open_dev(dev_id);
+//        println!("dd {:?}", dd);
+//
+//        reset(dev_id);
+//
+//        let own_type: u8 = 0x00;
+//        let scan_type: u8 = 0x01;
+//        let filter_policy: u8 = 0x00;
+//        let interval: u16 = 0x0010;
+//        let window: u16 = 0x0010;
+//        let filter_dup: u8 = 1;
+//        let filter_type: u8 = 0;
+//
+//        let e1 = hci_le_set_scan_parameters(dd, scan_type, interval, window,
+//                                             own_type, filter_policy, 1000);
+//
+//        if e1 < 0 {
+//            let s = CString::new("Failed to set scan parameters").unwrap();
+//            perror(s.as_ptr());
+//        }
+//
+//        let e2 = hci_le_set_scan_enable(dd, 1, filter_dup, 1000);
+//        if e2 < 0 {
+//            let s = CString::new("Failed to enable scan").unwrap();
+//            perror(s.as_ptr());
+//        }
+//
+//        print_devices(dd, filter_type);
+//    };
 
 }

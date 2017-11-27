@@ -7,7 +7,7 @@ use nix;
 use std::collections::HashSet;
 use std::fmt;
 use std::fmt::{Display, Debug, Formatter};
-
+use std::os::unix::io::RawFd;
 use util::handle_error;
 
 
@@ -47,7 +47,7 @@ impl Clone for HCIDevReq {
     fn clone(&self) -> Self { *self }
 }
 
-#[derive(Copy)]
+#[derive(Copy, Serialize, Deserialize)]
 #[repr(C)]
 pub struct BDAddr {
     pub address: [ u8 ; 6usize ]
@@ -192,7 +192,7 @@ impl AdapterState {
 
 pub struct ConnectedAdapter {
     pub adapter: Adapter,
-    dd: i32,
+    dd: RawFd,
 }
 
 impl Drop for ConnectedAdapter {
@@ -211,7 +211,6 @@ impl ConnectedAdapter {
         let interval: u16 = 0x0010;
         let window: u16 = 0x0010;
         let filter_dup: u8 = 1;
-        let filter_type: u8 = 0;
 
         unsafe {
             handle_error(hci_le_set_scan_parameters(

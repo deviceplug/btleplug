@@ -2,8 +2,9 @@ use std::io::prelude::*;
 use std::mem;
 use std::os::unix::io::FromRawFd;
 use std::os::unix::net::UnixStream;
+use std::io::Bytes;
 
-use bincode::{deserialize, Infinite};
+use bincode::{deserialize, Bounded};
 
 use libc::{setsockopt, c_void, memcpy};
 
@@ -67,31 +68,30 @@ impl Clone for HCIFilter {
 }
 
 
-#[derive(Copy, Deserialize)]
+#[derive(Copy, Deserialize, Debug)]
 #[repr(C)]
 pub struct EvtLeMetaEvent {
     pub subevent : u8,
-    pub data : [u8; 0],
+//     pub data : [u8; 0],
 }
 
 impl Clone for EvtLeMetaEvent {
     fn clone(&self) -> Self { *self }
 }
 
-impl EvtLeMetaEvent {
-    fn default() -> EvtLeMetaEvent {
-        EvtLeMetaEvent { subevent: 0, data: [] }
-    }
-}
+//impl EvtLeMetaEvent {
+//    fn default() -> EvtLeMetaEvent {
+//        EvtLeMetaEvent { subevent: 0, data: [] }
+//    }
+//}
 
-#[derive(Copy, Deserialize)]
+#[derive(Copy, Deserialize, Debug)]
 #[repr(C)]
 pub struct LeAdvertisingInfo {
     pub evt_type : u8,
     pub bdaddr_type : u8,
     pub bdaddr : BDAddr,
     pub length : u8,
-    pub data : [u8; 0],
 }
 
 impl Clone for LeAdvertisingInfo {
@@ -162,37 +162,54 @@ impl ConnectedAdapter {
 
         let mut stream = unsafe { UnixStream::from_raw_fd(self.dd) };
 
+
+
         loop {
             let mut buf = [0u8; 260];
-            let mut len = stream.read(&mut buf).unwrap() as i32;
+            let mut iter = buf.iter_mut();
+            let mut idx = 1usize + HCI_EVENT_HDR_SIZE as usize;
+            let len = stream.read(&mut buf).unwrap();
 
-            unsafe {
-                let mut meta: *mut EvtLeMetaEvent;
-                let mut info: *mut LeAdvertisingInfo;
-                let mut addr = [0u8; 18];
 
-                let ptr = buf.as_mut_ptr().offset((1 + HCI_EVENT_HDR_SIZE) as (isize));
-                len = len - (1 + HCI_EVENT_HDR_SIZE);
-                meta = ptr as (*mut ::std::os::raw::c_void) as (*mut EvtLeMetaEvent);
-                if (*meta).subevent as i32 != 2 {
-                    break;
-                }
+            let sub_event = buf[idx];
+            idx += 1;
+            println!("Sub Event: {}", sub_event);
 
-                info = (*meta).data.as_mut_ptr().offset(1) as (*mut LeAdvertisingInfo);
-                let mut name = [0u8; 30];
-                ba2str(&mut (*info).bdaddr, addr.as_mut_ptr());
-
-                eir_parse_name(
-                    (*info).data.as_mut_ptr(),
-                    (*info).length as (usize),
-                    name.as_mut_ptr(),
-                    ::std::mem::size_of::<[u8; 30]>().wrapping_sub(1usize)
-                );
-
-                let addr_s = String::from_utf8_unchecked(addr.to_vec());
-                let name_s = String::from_utf8_unchecked(name.to_vec());
-                println!("{} {}\n", addr_s, name_s);
+            if sub_event != 2 {
+                break;
             }
+
+            // let mut len = stream.read(&mut buf).unwrap() as i32;
+
+            // let mut idx = 1usize + HCI_EVENT_HDR_SIZE;
+
+            // let meta = deserialize_from()
+            idx += 1;
+            let info: LeAdvertisingInfo = deserialize(&buf[idx..len]).unwrap();
+
+            println!("info: {:?}", info);
+
+//            unsafe {
+//                // let mut meta: *mut EvtLeMetaEvent;
+//                // let mut info: *mut LeAdvertisingInfo;
+//                let mut addr = [0u8; 18];
+//
+//
+//                // info = (*meta).data.as_mut_ptr().offset(1) as (*mut LeAdvertisingInfo);
+//                let mut name = [0u8; 30];
+//                ba2str(&mut (*info).bdaddr, addr.as_mut_ptr());
+//
+//                eir_parse_name(
+//                    (*info).data.as_mut_ptr(),
+//                    (*info).length as (usize),
+//                    name.as_mut_ptr(),
+//                    ::std::mem::size_of::<[u8; 30]>().wrapping_sub(1usize)
+//                );
+//
+//                let addr_s = String::from_utf8_unchecked(addr.to_vec());
+//                let name_s = String::from_utf8_unchecked(name.to_vec());
+//                println!("{} {}\n", addr_s, name_s);
+//            }
         }
 
         Ok(())

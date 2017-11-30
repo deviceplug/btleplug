@@ -22,5 +22,5 @@ fn main() {
 
     // println!("Adapter: {:#?}", manager.update(&connected.adapter).unwrap());
 
-    connected.print_devices();
+    connected.print_devices().unwrap();
 }

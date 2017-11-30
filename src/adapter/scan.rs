@@ -2,25 +2,15 @@ use std::io::prelude::*;
 use std::mem;
 use std::os::unix::io::FromRawFd;
 use std::os::unix::net::UnixStream;
-use std::io::Bytes;
 
-use bincode::{deserialize, Bounded};
+use bincode::deserialize;
 
-use libc::{setsockopt, c_void, memcpy};
+use libc::{setsockopt, c_void};
 
 use nix;
 
-use serde_derive;
-
 use ::util::handle_error;
 use ::adapter::{BDAddr, ConnectedAdapter};
-
-#[link(name = "bluetooth")]
-extern {
-    fn ba2str(ba : *const BDAddr, str : *mut u8) -> i32;
-
-    // fn hci_read_bd_addr(dd: i32, bdaddr: *const BDAddr, to: i32);
-}
 
 fn hci_set_bit_safe(nr: i32, cur: i32) -> i32 {
     cur | 1 << (nr & 31)
@@ -70,23 +60,6 @@ impl Clone for HCIFilter {
 
 #[derive(Copy, Deserialize, Debug)]
 #[repr(C)]
-pub struct EvtLeMetaEvent {
-    pub subevent : u8,
-//     pub data : [u8; 0],
-}
-
-impl Clone for EvtLeMetaEvent {
-    fn clone(&self) -> Self { *self }
-}
-
-//impl EvtLeMetaEvent {
-//    fn default() -> EvtLeMetaEvent {
-//        EvtLeMetaEvent { subevent: 0, data: [] }
-//    }
-//}
-
-#[derive(Copy, Deserialize, Debug)]
-#[repr(C)]
 pub struct LeAdvertisingInfo {
     pub evt_type : u8,
     pub bdaddr_type : u8,
@@ -111,39 +84,32 @@ const SOL_HCI: i32 = 0;
 const EIR_NAME_SHORT: u8 = 0x08;  // shortened local name
 const EIR_NAME_COMPLETE: u8 = 0x09;  // complete local name
 
-unsafe fn eir_parse_name(mut eir: *mut u8, eir_len: usize, buf: *mut u8, buf_size: usize) {
+fn parse_name(data: Vec<u8>) -> Option<String> {
+    let len = data.len();
+    let mut iter = data.into_iter();
     let mut offset = 0usize;
-    while offset < eir_len {
-        let field_len = *eir.offset(0);
+    while offset < len {
+        let field_len = iter.next()? as usize;
+
         // check for the end of EIR
         if field_len == 0 {
             break;
         }
 
-        if offset + (field_len as usize) > eir_len {
-            println!("Failed -- unknown");
-            return;
-        }
-
-        let t = *eir.offset(1);
+        let t = iter.next()?;
         if t == EIR_NAME_SHORT || t == EIR_NAME_COMPLETE {
             let name_len = field_len - 1;
-            if name_len as usize > buf_size {
-                print!("Failed -- too big");
-                return;
+            let bytes: Vec<u8> = iter.take(field_len - 1).collect();
+            if bytes.len() < name_len {
+                return None;
+            } else {
+                return String::from_utf8(bytes).ok();
             }
-
-            memcpy(buf as (*mut c_void),
-                   &mut *eir.offset(2) as (*mut u8) as (*const c_void),
-                   name_len as usize);
-            return;
         }
 
-        offset = offset.wrapping_add(
-            (field_len as (i32) + 1i32) as (usize)
-        );
-        eir = eir.offset((field_len as (i32) + 1i32) as (isize));
+        offset += field_len;
     }
+    return None;
 }
 
 impl ConnectedAdapter {
@@ -166,10 +132,8 @@ impl ConnectedAdapter {
 
         loop {
             let mut buf = [0u8; 260];
-            let mut iter = buf.iter_mut();
             let mut idx = 1usize + HCI_EVENT_HDR_SIZE as usize;
             let len = stream.read(&mut buf).unwrap();
-
 
             let sub_event = buf[idx];
             idx += 1;
@@ -179,37 +143,16 @@ impl ConnectedAdapter {
                 break;
             }
 
-            // let mut len = stream.read(&mut buf).unwrap() as i32;
-
-            // let mut idx = 1usize + HCI_EVENT_HDR_SIZE;
-
-            // let meta = deserialize_from()
             idx += 1;
             let info: LeAdvertisingInfo = deserialize(&buf[idx..len]).unwrap();
+            idx += mem::size_of_val(&info);
+
+            let data: Vec<u8> = buf[idx..idx + info.length as usize].to_vec();
 
             println!("info: {:?}", info);
 
-//            unsafe {
-//                // let mut meta: *mut EvtLeMetaEvent;
-//                // let mut info: *mut LeAdvertisingInfo;
-//                let mut addr = [0u8; 18];
-//
-//
-//                // info = (*meta).data.as_mut_ptr().offset(1) as (*mut LeAdvertisingInfo);
-//                let mut name = [0u8; 30];
-//                ba2str(&mut (*info).bdaddr, addr.as_mut_ptr());
-//
-//                eir_parse_name(
-//                    (*info).data.as_mut_ptr(),
-//                    (*info).length as (usize),
-//                    name.as_mut_ptr(),
-//                    ::std::mem::size_of::<[u8; 30]>().wrapping_sub(1usize)
-//                );
-//
-//                let addr_s = String::from_utf8_unchecked(addr.to_vec());
-//                let name_s = String::from_utf8_unchecked(name.to_vec());
-//                println!("{} {}\n", addr_s, name_s);
-//            }
+            let name = parse_name(data);
+            println!("{}, {:?}", info.bdaddr, name);
         }
 
         Ok(())

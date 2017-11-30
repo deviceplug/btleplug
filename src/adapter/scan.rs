@@ -11,6 +11,7 @@ use nix;
 
 use ::util::handle_error;
 use ::adapter::{BDAddr, ConnectedAdapter};
+use ::device::Device;
 
 fn hci_set_bit_safe(nr: i32, cur: i32) -> i32 {
     cur | 1 << (nr & 31)
@@ -113,12 +114,10 @@ fn parse_name(data: Vec<u8>) -> Option<String> {
 }
 
 impl ConnectedAdapter {
-    pub fn print_devices(&mut self) -> nix::Result<()> {
+    pub fn devices(&mut self) -> nix::Result<Vec<Device>> {
         let mut nf = HCIFilter::default();
         nf.set_ptype(HCI_EVENT_PKT);
         nf.set_event(HCI_LE_META_EVENT);
-
-        println!("{:#?}", nf);
 
         unsafe {
             let nf_ptr: *mut c_void = &mut nf as *mut _ as *mut c_void;
@@ -128,8 +127,7 @@ impl ConnectedAdapter {
 
         let mut stream = unsafe { UnixStream::from_raw_fd(self.dd) };
 
-
-
+        let mut devices: Vec<Device> = vec![];
         loop {
             let mut buf = [0u8; 260];
             let mut idx = 1usize + HCI_EVENT_HDR_SIZE as usize;
@@ -137,7 +135,6 @@ impl ConnectedAdapter {
 
             let sub_event = buf[idx];
             idx += 1;
-            println!("Sub Event: {}", sub_event);
 
             if sub_event != 2 {
                 break;
@@ -148,13 +145,19 @@ impl ConnectedAdapter {
             idx += mem::size_of_val(&info);
 
             let data: Vec<u8> = buf[idx..idx + info.length as usize].to_vec();
-
-            println!("info: {:?}", info);
-
             let name = parse_name(data);
-            println!("{}, {:?}", info.bdaddr, name);
+
+            devices.push(Device {
+                addr: info.bdaddr,
+                name
+            })
         }
 
+        Ok(devices)
+    }
+
+    pub fn print_devices(&mut self) -> nix::Result<()> {
+        println!("{:#?}", self.devices()?);
         Ok(())
     }
 }

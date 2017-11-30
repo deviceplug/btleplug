@@ -11,4 +11,5 @@ extern crate serde;
 
 pub mod adapter;
 pub mod manager;
+pub mod device;
 mod util;

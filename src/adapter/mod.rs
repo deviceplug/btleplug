@@ -7,33 +7,7 @@ use nix;
 use std::collections::HashSet;
 use std::fmt;
 use std::fmt::{Display, Debug, Formatter};
-use std::os::unix::io::RawFd;
 use util::handle_error;
-
-
-#[link(name = "bluetooth")]
-extern {
-    fn hci_open_dev(dev_id: i32) -> i32;
-
-    fn hci_close_dev(dd: i32) -> i32;
-
-    fn hci_le_set_scan_parameters(dev_id: i32,
-                                  typ : u8,
-                                  interval: u16,
-                                  window: u16,
-                                  own_type: u8,
-                                  filter: u8,
-                                  time_out: i32) -> i32;
-
-    fn hci_le_set_scan_enable(dev_id: i32,
-                              enable: u8,
-                              filter_dup: u8,
-                              time_out: i32) -> i32;
-//
-//    fn ba2str(ba : *const BDAddr, str : *mut u8) -> i32;
-//
-//    fn hci_read_bd_addr(dd: i32, bdaddr: *const BDAddr, to: i32);
-}
 
 #[derive(Copy)]
 #[derive(Debug)]
@@ -190,41 +164,6 @@ impl AdapterState {
     }
 }
 
-pub struct ConnectedAdapter {
-    pub adapter: Adapter,
-    dd: RawFd,
-}
-
-impl Drop for ConnectedAdapter {
-    fn drop(&mut self) {
-        unsafe {
-            hci_close_dev(self.dd);
-        }
-    }
-}
-
-impl ConnectedAdapter {
-    pub fn scan_le(&mut self) -> nix::Result<()> {
-        let own_type: u8 = 0x00;
-        let scan_type: u8 = 0x01;
-        let filter_policy: u8 = 0x00;
-        let interval: u16 = 0x0010;
-        let window: u16 = 0x0010;
-        let filter_dup: u8 = 1;
-
-        unsafe {
-            handle_error(hci_le_set_scan_parameters(
-                self.dd, scan_type, interval, window,
-                own_type, filter_policy, 1000))?;
-
-            handle_error(
-                hci_le_set_scan_enable(self.dd, 1, filter_dup, 1000))?;
-        }
-
-        Ok(())
-    }
-}
-
 #[derive(Debug)]
 pub struct Adapter {
     pub name: String,
@@ -264,13 +203,5 @@ impl Adapter {
 
     pub fn is_up(&self) -> bool {
         self.states.contains(&AdapterState::Up)
-    }
-
-    pub fn connect(self) -> nix::Result<ConnectedAdapter> {
-        let dd = unsafe {
-            handle_error(hci_open_dev(self.dev_id as i32))?
-        };
-
-        Ok(ConnectedAdapter { adapter: self, dd })
     }
 }

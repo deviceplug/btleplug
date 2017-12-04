@@ -1,8 +1,14 @@
 extern crate rust_bluez;
 
+#[macro_use]
+extern crate log;
+extern crate env_logger;
+
 use rust_bluez::manager::Manager;
 
 fn main() {
+    env_logger::init().unwrap();
+
     let manager = Manager::new().unwrap();
 
     let adapters = manager.adapters().unwrap();
@@ -14,13 +20,14 @@ fn main() {
     // println!("Adapter: {:#?}", adapter);
 
     adapter = manager.up(&adapter).unwrap();
-    // println!("Adapter: {:#?}", adapter);
+    debug!("Adapter: {:#?}", adapter);
 
-    let mut connected = adapter.connect().unwrap();
-
-    connected.scan_le().unwrap();
+    let scanner = adapter.scanner(Some(|device| {
+        info!("Device!: {:?}", device);
+    })).unwrap();
+    std::thread::sleep(std::time::Duration::from_secs(10));
+    info!("Devices: {:#?}", scanner.devices());
 
     // println!("Adapter: {:#?}", manager.update(&connected.adapter).unwrap());
 
-    connected.print_devices().unwrap();
 }

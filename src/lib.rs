@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 extern crate libc;
 
 #[macro_use]
@@ -13,14 +15,11 @@ extern crate bincode;
 extern crate serde_derive;
 extern crate serde;
 
-extern crate tokio_uds;
-extern crate tokio_core;
-extern crate tokio_io;
-extern crate tokio_proto;
-extern crate tokio_service;
 extern crate bytes;
-extern crate futures;
-
+#[macro_use]
+extern crate enum_primitive;
+#[macro_use]
+extern crate nom;
 
 pub mod adapter;
 pub mod manager;

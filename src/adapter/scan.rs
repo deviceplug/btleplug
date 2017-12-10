@@ -7,16 +7,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::thread::JoinHandle;
 use std::boxed::Box;
-use std::collections::VecDeque;
-
-use bincode::deserialize;
 
 use libc::{setsockopt, c_void};
 
 use nix;
 
 use ::util::handle_error;
-use ::adapter::{BDAddr, Adapter};
+use ::adapter::{Adapter};
 use ::adapter::parser::AdapterDecoder;
 use ::device::Device;
 
@@ -145,16 +142,16 @@ impl DeviceScanner {
             thread::spawn(move || {
                 let mut buf = [0u8; 2048];
 
-                let mut vd: VecDequeue<u8> = VecDeque::new();
+                // let mut vd: VecDequeue<u8> = VecDeque::new();
                 let mut idx = 0;
 
                 while !should_stop.load(Ordering::Relaxed) {
                     let len = stream.read(&mut buf).unwrap();
 
-                    let result = AdapterDecoder::decode(&buf[0..len]).unwrap();
-                    if let Some((event, i)) = result {
-                        idx = i;
-                    }
+//                    let result = AdapterDecoder::decode(&buf[0..len]).unwrap();
+//                    if let Some((event, i)) = result {
+//                        idx = i;
+//                    }
                     // devices.lock().unwrap().push(device);
                 }
 

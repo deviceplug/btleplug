@@ -9,14 +9,11 @@ use std::collections::HashSet;
 use std::fmt;
 use std::fmt::{Display, Debug, Formatter};
 use std::sync::{Arc, Mutex};
-use std::mem;
 use std::os::unix::net::UnixStream;
-use std::os::unix::io::{FromRawFd, AsRawFd};
+use std::os::unix::io::FromRawFd;
 
 use util::handle_error;
-use device::Device;
 use manager::Callback;
-use manager::Event;
 
 #[link(name = "bluetooth")]
 extern {
@@ -37,7 +34,7 @@ impl Clone for HCIDevReq {
     fn clone(&self) -> Self { *self }
 }
 
-#[derive(Copy, Serialize, Deserialize)]
+#[derive(Copy, Serialize, Deserialize, PartialEq)]
 #[repr(C)]
 pub struct BDAddr {
     pub address: [ u8 ; 6usize ]

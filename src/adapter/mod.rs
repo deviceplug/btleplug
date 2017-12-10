@@ -1,4 +1,5 @@
 mod scan;
+mod parser;
 
 use libc;
 use libc::{c_char, c_void};
@@ -7,7 +8,22 @@ use nix;
 use std::collections::HashSet;
 use std::fmt;
 use std::fmt::{Display, Debug, Formatter};
+use std::sync::{Arc, Mutex};
+use std::mem;
+use std::os::unix::net::UnixStream;
+use std::os::unix::io::{FromRawFd, AsRawFd};
+
 use util::handle_error;
+use device::Device;
+use manager::Callback;
+use manager::Event;
+
+#[link(name = "bluetooth")]
+extern {
+    fn hci_open_dev(dev_id: i32) -> i32;
+
+    fn hci_close_dev(dd: i32) -> i32;
+}
 
 #[derive(Copy)]
 #[derive(Debug)]
@@ -125,7 +141,7 @@ impl HCIDevInfo {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum AdapterType {
     BrEdr,
     Amp,
@@ -164,7 +180,27 @@ impl AdapterState {
     }
 }
 
-#[derive(Debug)]
+pub struct ConnectedAdapter {
+    pub adapter: Adapter,
+    stream: UnixStream,
+    callbacks: Arc<Mutex<Vec<Callback>>>,
+}
+
+impl ConnectedAdapter {
+    pub fn new(adapter: &Adapter, callbacks: Vec<Callback>) -> nix::Result<ConnectedAdapter> {
+        let mut stream = unsafe {
+            UnixStream::from_raw_fd(handle_error(hci_open_dev(adapter.dev_id as i32))?)
+        };
+
+        Ok(ConnectedAdapter {
+            adapter: adapter.clone(),
+            stream,
+            callbacks: Arc::new(Mutex::new(callbacks))
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Adapter {
     pub name: String,
     pub dev_id: u16,

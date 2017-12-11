@@ -2,22 +2,27 @@ buf = [4,62,23,2,1,0,0,192,74,150,234,218,116,11,2,1,6,7,2,240,255,229,255,224,2
 Sub Event: 2
 info: LeAdvertisingInfo { evt_type: 0, bdaddr_type: 0, bdaddr: 74:DA:EA:96:4A:C0, length: 11 }
 74:DA:EA:96:4A:C0, None
+
 buf = [4,62,40,2,1,4,0,192,74,150,234,218,116,28,18,9,76,69,68,66,108,117,101,45,69,65,57,54,52,65,67,48,32,5,18,16,0,20,0,2,10,4,190]
 Sub Event: 2
 info: LeAdvertisingInfo { evt_type: 4, bdaddr_type: 0, bdaddr: 74:DA:EA:96:4A:C0, length: 28 }
 74:DA:EA:96:4A:C0, Some("LEDBlue-EA964AC0 ")
+
 buf = [4,62,23,2,1,0,0,163,183,151,234,218,116,11,2,1,6,7,2,240,255,229,255,224,255,193]
 Sub Event: 2
 info: LeAdvertisingInfo { evt_type: 0, bdaddr_type: 0, bdaddr: 74:DA:EA:97:B7:A3, length: 11 }
 74:DA:EA:97:B7:A3, None
+
 buf = [4,62,40,2,1,4,0,163,183,151,234,218,116,28,18,9,76,69,68,66,108,117,101,45,69,65,57,55,66,55,65,51,32,5,18,16,0,20,0,2,10,4,193]
 Sub Event: 2
 info: LeAdvertisingInfo { evt_type: 4, bdaddr_type: 0, bdaddr: 74:DA:EA:97:B7:A3, length: 28 }
 74:DA:EA:97:B7:A3, Some("LEDBlue-EA97B7A3 ")
+
 buf = [4,62,40,2,1,2,0,226,74,20,66,240,228,28,3,3,159,254,23,22,159,254,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,170]
 Sub Event: 2
 info: LeAdvertisingInfo { evt_type: 2, bdaddr_type: 0, bdaddr: E4:F0:42:14:4A:E2, length: 28 }
 E4:F0:42:14:4A:E2, None
+
 buf = [4,62,22,2,1,4,0,226,74,20,66,240,228,10,9,255,224,0,0,104,202,150,180,214,171]
 Sub Event: 2
 info: LeAdvertisingInfo { evt_type: 4, bdaddr_type: 0, bdaddr: E4:F0:42:14:4A:E2, length: 10 }

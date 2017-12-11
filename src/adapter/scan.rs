@@ -148,7 +148,9 @@ impl DeviceScanner {
                 while !should_stop.load(Ordering::Relaxed) {
                     let len = stream.read(&mut buf).unwrap();
 
-//                    let result = AdapterDecoder::decode(&buf[0..len]).unwrap();
+
+                    let result = AdapterDecoder::decode(&buf[0..len]).unwrap();
+                    println!("result: {:#?}", result);
 //                    if let Some((event, i)) = result {
 //                        idx = i;
 //                    }

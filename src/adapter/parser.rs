@@ -246,7 +246,7 @@ fn le_meta_event(i: &[u8]) -> IResult<&[u8], Message> {
         },
         _ => {
             warn!("Unhandled le_type {:?}", le_type);
-            return IResult::Error(Err::Code(ErrorKind::Custom(0)))
+            return IResult::Error(Err::Code(ErrorKind::Custom(1)))
         }
     };
     IResult::Done(i, result)
@@ -266,7 +266,7 @@ fn message(i: &[u8]) -> IResult<&[u8], Message> {
         },
         (typ, sub_typ) => {
             warn!("Unhandled type/subtype ({:?}, {:?})", typ, sub_typ);
-            return IResult::Error(Err::Code(ErrorKind::Custom(0)))
+            return IResult::Error(Err::Code(ErrorKind::Custom(2)))
         }
     };
 

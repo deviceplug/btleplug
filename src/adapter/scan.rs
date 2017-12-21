@@ -16,7 +16,7 @@ use nom;
 use nom::IResult;
 
 use ::util::handle_error;
-use ::adapter::{Adapter};
+use ::adapter::{Adapter, ConnectedAdapter};
 use ::adapter::parser::{AdapterDecoder, Message};
 use ::device::Device;
 
@@ -94,19 +94,8 @@ const HCI_LE_META_EVENT: i32 = 0x3E;
 // bluetooth.h
 const SOL_HCI: i32 = 0;
 
-// local
-
-type DeviceCallback = fn (Device) -> ();
-
-pub struct DeviceScanner {
-    devices: Arc<Mutex<Vec<Device>>>,
-    should_stop: Arc<AtomicBool>,
-    handle: Box<JoinHandle<()>>,
-}
-
-impl DeviceScanner {
-    pub fn start(adapter: Adapter, callback: Option<DeviceCallback>)
-        -> nix::Result<DeviceScanner> {
+impl ConnectedAdapter {
+    pub fn start_scan(&self) -> nix::Result<()> {
         let own_type: u8 = 0x00;
         let scan_type: u8 = 0x01;
         let filter_policy: u8 = 0x00;
@@ -118,12 +107,9 @@ impl DeviceScanner {
         nf.set_ptype(HCI_EVENT_PKT);
         nf.set_event(HCI_LE_META_EVENT);
 
-        let devices: Arc<Mutex<Vec<Device>>> = Arc::new(Mutex::new(vec![]));
-        let should_stop = Arc::new(AtomicBool::new(false));
-
-        let mut stream = unsafe {
-            let fd = handle_error(hci_open_dev(adapter.dev_id as i32))?;
-
+        unsafe {
+            let stream = self.stream.lock().unwrap();
+            let fd = stream.as_raw_fd();
             // start scan
             handle_error(hci_le_set_scan_parameters(
                 fd, scan_type, interval, window,
@@ -132,85 +118,10 @@ impl DeviceScanner {
             handle_error(
                 hci_le_set_scan_enable(fd, 1, filter_dup, 10_000))?;
 
-
             let nf_ptr: *mut c_void = &mut nf as *mut _ as *mut c_void;
             handle_error(setsockopt(fd, SOL_HCI, HCI_FILTER, nf_ptr,
                                     mem::size_of_val(&nf) as u32))?;
-            UnixStream::from_raw_fd(fd)
         };
-
-        let jh = {
-            let devices = devices.clone();
-            let should_stop = should_stop.clone();
-            thread::spawn(move || {
-                let mut buf = [0u8; 2048];
-                let mut cur: Vec<u8> = vec![];
-
-                let mut idx = 0;
-
-                while !should_stop.load(Ordering::Relaxed) {
-                    let len = stream.read(&mut buf).unwrap();
-                    cur.put_slice(&buf[0..len]);
-
-                    let mut new_cur: Option<Vec<u8>> = Some(vec![]);
-                    {
-                        let result = {
-                            AdapterDecoder::decode(&cur)
-                        };
-
-                        match result {
-                            IResult::Done(left, result) => {
-                                DeviceScanner::handle(result);
-                                if !left.is_empty() {
-                                    new_cur = Some(left.to_owned());
-                                };
-                            }
-                            IResult::Incomplete(needed) => {
-                                new_cur = None;
-                            },
-                            IResult::Error(err) => {
-                                error!("parse error {}", err);
-                            }
-                        }
-                    };
-
-                    cur = new_cur.unwrap_or(cur);
-                }
-
-                // clean up
-                debug!("cleaning up device");
-                let fd = stream.as_raw_fd();
-                drop(stream);
-                unsafe {
-                    hci_close_dev(fd);
-                }
-            })
-        };
-
-        Ok(DeviceScanner {
-            devices,
-            should_stop,
-            handle: Box::new(jh),
-        })
-    }
-
-    fn handle(message: Message) {
-        println!("got message {:#?}", message);
-    }
-
-    pub fn devices(&self) -> Vec<Device> {
-        (*self.devices.lock().unwrap()).to_vec()
-    }
-}
-
-impl Drop for DeviceScanner {
-    fn drop(&mut self) {
-        self.should_stop.store(true, Ordering::Relaxed);
-    }
-}
-
-impl Adapter {
-    pub fn scanner(self, cb: Option<DeviceCallback>) -> nix::Result<DeviceScanner> {
-        DeviceScanner::start(self, cb)
+        Ok(())
     }
 }

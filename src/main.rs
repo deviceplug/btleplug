@@ -20,13 +20,15 @@ fn main() {
     // println!("Adapter: {:#?}", adapter);
 
     adapter = manager.up(&adapter).unwrap();
-    debug!("Adapter: {:#?}", adapter);
+    info!("Adapter: {:#?}", adapter);
 
-    let scanner = adapter.scanner(Some(|device| {
-        info!("Device!: {:?}", device);
-    })).unwrap();
-    std::thread::sleep(std::time::Duration::from_secs(10));
-    info!("Devices: {:#?}", scanner.devices());
+    let connected = adapter.connect(vec![]).unwrap();
+
+    connected.start_scan().unwrap();
+
+    std::thread::sleep(std::time::Duration::from_secs(5));
+    let devices = connected.discovered.lock().unwrap();
+    info!("Devices: {:#?}", *devices);
 
     // println!("Adapter: {:#?}", manager.update(&connected.adapter).unwrap());
 

@@ -2,18 +2,32 @@ mod scan;
 mod parser;
 
 use libc;
+use std;
 use libc::{c_char, c_void};
 use std::ffi::CStr;
 use nix;
-use std::collections::HashSet;
+use nom;
+use nom::IResult;
+use bytes::BufMut;
+
+use std::io::Read;
+
+use std::collections::{HashSet, HashMap};
 use std::fmt;
 use std::fmt::{Display, Debug, Formatter};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::os::unix::net::UnixStream;
-use std::os::unix::io::FromRawFd;
+use std::os::unix::io::{FromRawFd, AsRawFd};
+use std::thread;
+use std::thread::JoinHandle;
+use std::boxed::Box;
 
 use util::handle_error;
 use manager::Callback;
+use ::adapter::parser::{AdapterDecoder, Message};
+use ::device::Device;
+
 
 #[link(name = "bluetooth")]
 extern {
@@ -22,9 +36,7 @@ extern {
     fn hci_close_dev(dd: i32) -> i32;
 }
 
-#[derive(Copy)]
-#[derive(Debug)]
-#[repr(C)]
+#[derive(Debug, Copy)]
 pub struct HCIDevReq {
     pub dev_id: u16,
     pub dev_opt: u32,
@@ -34,7 +46,7 @@ impl Clone for HCIDevReq {
     fn clone(&self) -> Self { *self }
 }
 
-#[derive(Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Copy, Serialize, Deserialize, Hash, Eq, PartialEq)]
 #[repr(C)]
 pub struct BDAddr {
     pub address: [ u8 ; 6usize ]
@@ -177,23 +189,129 @@ impl AdapterState {
     }
 }
 
+#[derive(Clone)]
 pub struct ConnectedAdapter {
     pub adapter: Adapter,
-    stream: UnixStream,
+    stream: Arc<Mutex<UnixStream>>,
+    should_stop: Arc<AtomicBool>,
     callbacks: Arc<Mutex<Vec<Callback>>>,
+    pub discovered: Arc<Mutex<HashMap<BDAddr, Device>>>
 }
 
 impl ConnectedAdapter {
     pub fn new(adapter: &Adapter, callbacks: Vec<Callback>) -> nix::Result<ConnectedAdapter> {
-        let mut stream = unsafe {
+        let mut stream = Arc::new(Mutex::new(unsafe {
             UnixStream::from_raw_fd(handle_error(hci_open_dev(adapter.dev_id as i32))?)
-        };
+        }));
 
-        Ok(ConnectedAdapter {
+        let should_stop = Arc::new(AtomicBool::new(false));
+
+        let connected = ConnectedAdapter {
             adapter: adapter.clone(),
             stream,
-            callbacks: Arc::new(Mutex::new(callbacks))
-        })
+            should_stop,
+            callbacks: Arc::new(Mutex::new(callbacks)),
+            discovered: Arc::new(Mutex::new(HashMap::new()))
+        };
+
+        {
+            let should_stop = connected.should_stop.clone();
+            let mut stream = connected.stream.clone();
+            let connected = connected.clone();
+            thread::spawn(move || {
+                let mut buf = [0u8; 2048];
+                let mut cur: Vec<u8> = vec![];
+
+                let mut idx = 0;
+
+                while !should_stop.load(Ordering::Relaxed) {
+                    let len = {
+                        stream.lock().unwrap().read(&mut buf).unwrap()
+                    };
+
+                    cur.put_slice(&buf[0..len]);
+
+                    let mut new_cur: Option<Vec<u8>> = Some(vec![]);
+                    {
+                        let result = {
+                            AdapterDecoder::decode(&cur)
+                        };
+
+                        match result {
+                            IResult::Done(left, result) => {
+                                ConnectedAdapter::handle(&connected, result);
+                                if !left.is_empty() {
+                                    new_cur = Some(left.to_owned());
+                                };
+                            }
+                            IResult::Incomplete(needed) => {
+                                new_cur = None;
+                            },
+                            IResult::Error(err) => {
+                                error!("parse error {}", err);
+                            }
+                        }
+                    };
+
+                    cur = new_cur.unwrap_or(cur);
+                }
+            })
+        };
+
+        Ok(connected)
+    }
+
+    fn handle(&self, message: Message) {
+        debug!("got message {:#?}", message);
+
+        let mut discovered = self.discovered.lock().unwrap();
+        match message {
+            Message::LEAdvertisingReport(info) => {
+                use ::adapter::parser::LEAdvertisingData::*;
+
+                let mut device = discovered.entry(info.bdaddr)
+                    .or_insert_with(|| Device::new(info.bdaddr));
+
+                device.discovery_count += 1;
+
+                if info.evt_type == 4 {
+                    // discover event
+                    device.has_scan_response = true;
+                } else {
+                    // TODO: reset service data
+                }
+
+                for datum in info.data {
+                    match datum {
+                        LocalName(name) => {
+                            device.local_name = Some(name);
+                        }
+                        TxPowerLevel(power) => {
+                            device.tx_power_level = Some(power);
+                        }
+                        ManufacturerSpecific(data) => {
+                            device.manufacturer_data = Some(data);
+                        }
+                        _ => {
+                            // skip for now
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl Drop for ConnectedAdapter {
+    fn drop(&mut self) {
+        self.should_stop.store(true, Ordering::Relaxed);
+        // clean up
+        debug!("cleaning up device");
+        let fd = self.stream.lock().unwrap().as_raw_fd();
+        unsafe {
+            hci_close_dev(fd);
+        }
+
     }
 }
 
@@ -236,5 +354,9 @@ impl Adapter {
 
     pub fn is_up(&self) -> bool {
         self.states.contains(&AdapterState::Up)
+    }
+
+    pub fn connect(&self, callbacks: Vec<Callback>) -> nix::Result<ConnectedAdapter> {
+        ConnectedAdapter::new(self, callbacks)
     }
 }

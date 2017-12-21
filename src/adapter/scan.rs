@@ -7,14 +7,17 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::thread::JoinHandle;
 use std::boxed::Box;
+use bytes::BufMut;
 
 use libc::{setsockopt, c_void};
 
 use nix;
+use nom;
+use nom::IResult;
 
 use ::util::handle_error;
 use ::adapter::{Adapter};
-use ::adapter::parser::AdapterDecoder;
+use ::adapter::parser::{AdapterDecoder, Message};
 use ::device::Device;
 
 fn hci_set_bit(nr: i32, cur: i32) -> i32 {
@@ -136,25 +139,42 @@ impl DeviceScanner {
             UnixStream::from_raw_fd(fd)
         };
 
-        let handle = {
+        let jh = {
             let devices = devices.clone();
             let should_stop = should_stop.clone();
             thread::spawn(move || {
                 let mut buf = [0u8; 2048];
+                let mut cur: Vec<u8> = vec![];
 
-                // let mut vd: VecDequeue<u8> = VecDeque::new();
                 let mut idx = 0;
 
                 while !should_stop.load(Ordering::Relaxed) {
                     let len = stream.read(&mut buf).unwrap();
+                    cur.put_slice(&buf[0..len]);
 
+                    let mut new_cur: Option<Vec<u8>> = Some(vec![]);
+                    {
+                        let result = {
+                            AdapterDecoder::decode(&cur)
+                        };
 
-                    let result = AdapterDecoder::decode(&buf[0..len]).unwrap();
-                    println!("result: {:#?}", result);
-//                    if let Some((event, i)) = result {
-//                        idx = i;
-//                    }
-                    // devices.lock().unwrap().push(device);
+                        match result {
+                            IResult::Done(left, result) => {
+                                DeviceScanner::handle(result);
+                                if !left.is_empty() {
+                                    new_cur = Some(left.to_owned());
+                                };
+                            }
+                            IResult::Incomplete(needed) => {
+                                new_cur = None;
+                            },
+                            IResult::Error(err) => {
+                                error!("parse error {}", err);
+                            }
+                        }
+                    };
+
+                    cur = new_cur.unwrap_or(cur);
                 }
 
                 // clean up
@@ -170,8 +190,12 @@ impl DeviceScanner {
         Ok(DeviceScanner {
             devices,
             should_stop,
-            handle: Box::new(handle),
+            handle: Box::new(jh),
         })
+    }
+
+    fn handle(message: Message) {
+        println!("got message {:#?}", message);
     }
 
     pub fn devices(&self) -> Vec<Device> {

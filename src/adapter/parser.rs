@@ -273,49 +273,8 @@ fn message(i: &[u8]) -> IResult<&[u8], Message> {
     IResult::Done(i, result)
 }
 
-// format is
-// [MESSAGE_TYPE(u8), ???(u8), length(u8), ...]
 impl AdapterDecoder {
-    pub fn decode(buf: &[u8]) -> io::Result<Message> {
-        Ok(message(buf).unwrap().1)
+    pub fn decode(buf: &[u8]) -> IResult<&[u8], Message> {
+        message(buf)
     }
-//    pub fn decode(buf: &[u8]) -> io::Result<Option<(Message, usize)>> {
-//        let idx = 1usize + HCI_EVENT_HDR_SIZE as usize;
-//
-//        if buf.len() < idx + 2 {
-//            return Ok(None)
-//        }
-//
-//        let sub_event = buf[idx];
-//        match sub_event {
-//            2 => AdapterDecoder::decode_device(&buf[idx + 2..]),
-//            _ => panic!("Unknown sub_event {}", sub_event)
-//        }
-//    }
-//
-//    fn decode_device(buf: &[u8]) -> io::Result<Option<(Event, usize)>> {
-//        let mut idx = 0usize;
-//
-//        if buf.len() < mem::size_of::<LeAdvertisingInfo>() {
-//            return Ok(None)
-//        }
-//
-//        let info: LeAdvertisingInfo = deserialize(&buf[idx..]).unwrap();
-//        idx += mem::size_of_val(&info);
-//
-//        if buf.len() < idx + info.length as usize {
-//            return Ok(None)
-//        }
-//
-//        let data: Vec<u8> = buf[idx..idx + info.length as usize].to_vec();
-//        idx += info.length as usize;
-//        let name = parse_name(data);
-//
-//        let device = Device {
-//            addr: info.bdaddr,
-//            name
-//        };
-//
-//        Ok(Some((Event::DeviceDiscovered(device), idx)))
-//    }
 }

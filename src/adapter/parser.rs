@@ -265,7 +265,7 @@ fn message(i: &[u8]) -> IResult<&[u8], Message> {
             try_parse!(data, le_meta_event)
         },
         (typ, sub_typ) => {
-            warn!("Unhandled type/subtype ({:?}, {:?})", typ, sub_typ);
+            warn!("Unhandled type/subtype ({:?}, {:?}): {:?}", typ, sub_typ, i);
             return IResult::Error(Err::Code(ErrorKind::Custom(2)))
         }
     };

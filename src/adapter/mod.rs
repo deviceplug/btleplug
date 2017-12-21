@@ -8,9 +8,9 @@ use std::ffi::CStr;
 use nix;
 use nom;
 use nom::IResult;
-use bytes::BufMut;
+use bytes::{BufMut, BytesMut, LittleEndian};
 
-use std::io::Read;
+use std::io::{Read, Write};
 
 use std::collections::{HashSet, HashMap};
 use std::fmt;
@@ -189,6 +189,11 @@ impl AdapterState {
     }
 }
 
+const HCI_COMMAND_PKT: u8 = 0x01;
+const OCF_LE_CREATE_CONN: u16 = 0x000d;
+const OGF_LE_CTL: u8 = 0x08;
+const LE_CREATE_CONN_CMD: u16 = OCF_LE_CREATE_CONN | ((OGF_LE_CTL as u16) << 10);
+
 #[derive(Clone)]
 pub struct ConnectedAdapter {
     pub adapter: Adapter,
@@ -201,8 +206,11 @@ pub struct ConnectedAdapter {
 impl ConnectedAdapter {
     pub fn new(adapter: &Adapter, callbacks: Vec<Callback>) -> nix::Result<ConnectedAdapter> {
         let mut stream = Arc::new(Mutex::new(unsafe {
-            UnixStream::from_raw_fd(handle_error(hci_open_dev(adapter.dev_id as i32))?)
+            let stream = UnixStream::from_raw_fd(handle_error(hci_open_dev(adapter.dev_id as i32))?);
+            stream.set_nonblocking(true);
+            stream
         }));
+
 
         let should_stop = Arc::new(AtomicBool::new(false));
 
@@ -225,11 +233,16 @@ impl ConnectedAdapter {
                 let mut idx = 0;
 
                 while !should_stop.load(Ordering::Relaxed) {
-                    let len = {
-                        stream.lock().unwrap().read(&mut buf).unwrap()
-                    };
+                    let len = stream.lock().unwrap().read(&mut buf).unwrap_or(0);
+                    if len == 0 {
+                        // TODO: this is awful
+                        std::thread::sleep_ms(100);
+                        continue;
+                    }
 
                     cur.put_slice(&buf[0..len]);
+
+                    info!("parsing {:?}", cur);
 
                     let mut new_cur: Option<Vec<u8>> = Some(vec![]);
                     {
@@ -268,9 +281,12 @@ impl ConnectedAdapter {
         match message {
             Message::LEAdvertisingReport(info) => {
                 use ::adapter::parser::LEAdvertisingData::*;
+                use ::device::AddressType;
 
                 let mut device = discovered.entry(info.bdaddr)
-                    .or_insert_with(|| Device::new(info.bdaddr));
+                    .or_insert_with(||
+                        Device::new(info.bdaddr,
+                                    if info.bdaddr_type == 1 { AddressType::Random } else { AddressType::Public }));
 
                 device.discovery_count += 1;
 
@@ -299,6 +315,37 @@ impl ConnectedAdapter {
                 }
             }
         }
+    }
+
+    pub fn connect(&self, device: Device) -> std::io::Result<()> {
+        use ::device::AddressType::*;
+        let mut cmd = BytesMut::with_capacity(29);
+
+        // header
+        cmd.put_u8(HCI_COMMAND_PKT);
+        cmd.put_u16::<LittleEndian>(LE_CREATE_CONN_CMD);
+
+        //length
+        cmd.put_u8(0x19);
+
+        // data
+        cmd.put_u16::<LittleEndian>(0x0060); // interval
+        cmd.put_u16::<LittleEndian>(0x0030); // window
+        cmd.put_u8(0x00); // initiator filter
+
+        cmd.put_u8(if device.address_type == Random { 1 } else { 0 });
+        cmd.put_slice(&device.address.address);
+
+        cmd.put_u16::<LittleEndian>(0x0006); // min interval
+        cmd.put_u16::<LittleEndian>(0x000c); // max interval
+        cmd.put_u16::<LittleEndian>(0x0000); // latency
+        cmd.put_u16::<LittleEndian>(0x00c8); // supervision timeout
+        cmd.put_u16::<LittleEndian>(0x0004); // min ce length
+        cmd.put_u16::<LittleEndian>(0x0006); // max ce length
+
+        let mut stream = self.stream.lock().unwrap();
+        info!("sending {:?}", &*cmd);
+        stream.write_all(&*cmd)
     }
 }
 

@@ -27,9 +27,16 @@ fn main() {
     connected.start_scan().unwrap();
 
     std::thread::sleep(std::time::Duration::from_secs(5));
-    let devices = connected.discovered.lock().unwrap();
-    info!("Devices: {:#?}", *devices);
+    let first_device = {
+        let devices =
+            connected.discovered.lock().unwrap();
+        info!("Devices: {:#?}", *devices);
+        devices.iter().filter(|d| d.1.local_name.is_some())
+            .next().unwrap().1.clone()
+    };
 
-    // println!("Adapter: {:#?}", manager.update(&connected.adapter).unwrap());
-
+    info!("Connecting to {:?}", first_device);
+    connected.connect(first_device).unwrap();
+    info!("Connected");
+    std::thread::sleep(std::time::Duration::from_secs(5));
 }

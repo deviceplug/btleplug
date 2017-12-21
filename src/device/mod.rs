@@ -1,8 +1,15 @@
 use ::adapter::BDAddr;
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum AddressType {
+    Random,
+    Public,
+}
+
 #[derive(Debug, Clone)]
 pub struct Device {
     pub address: BDAddr,
+    pub address_type: AddressType,
     pub local_name: Option<String>,
     pub tx_power_level: Option<i8>,
     pub manufacturer_data: Option<Vec<u8>>,
@@ -13,9 +20,10 @@ pub struct Device {
 }
 
 impl Device {
-    pub fn new(address: BDAddr) -> Device {
+    pub fn new(address: BDAddr, address_type: AddressType) -> Device {
         Device {
             address,
+            address_type,
             local_name: None,
             tx_power_level: None,
             manufacturer_data: None,

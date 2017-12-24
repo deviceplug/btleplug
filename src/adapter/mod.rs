@@ -3,7 +3,8 @@ mod parser;
 
 use libc;
 use std;
-use libc::{c_char, c_void, bind, socket, connect, sockaddr, SOCK_SEQPACKET, sa_family_t};
+use libc::{c_char, c_void, bind, socket, connect, sockaddr, SOCK_SEQPACKET, sa_family_t,
+           getsockopt, setsockopt, SOL_SOCKET, SO_ERROR, SO_DOMAIN, SO_PROTOCOL};
 use std::ffi::CStr;
 use nix;
 use nom;
@@ -22,6 +23,7 @@ use std::os::unix::io::{FromRawFd, AsRawFd};
 use std::thread;
 use std::thread::JoinHandle;
 use std::boxed::Box;
+use std::mem::size_of;
 
 use util::handle_error;
 use manager::{Callback, AF_BLUETOOTH};
@@ -157,12 +159,29 @@ pub struct SockaddrL2 {
     l2_psm: u16,
     l2_bdaddr: BDAddr,
     l2_cid: u16,
-    l2_bdaddr_type: u8,
+    l2_bdaddr_type: u32,
 }
 impl Clone for SockaddrL2 {
     fn clone(&self) -> Self { *self }
 }
 
+const L2CAP_OPTIONS: i32 = 0x01;
+const SOL_L2CAP: i32 = 6;
+
+#[derive(Copy, Debug, Default)]
+#[repr(C)]
+struct L2CapOptions {
+    omtu: u16,
+    imtu: u16,
+    flush_to: u16,
+    mode: u8,
+    fcs : u8,
+    max_tx: u8,
+    txwin_size: u16,
+}
+impl Clone for L2CapOptions {
+    fn clone(&self) -> Self { *self }
+}
 
 #[derive(Debug, Copy, Clone)]
 pub enum AdapterType {
@@ -221,7 +240,8 @@ const ATT_CID: u16 = 4;
 #[derive(Clone)]
 pub struct ConnectedAdapter {
     pub adapter: Adapter,
-    stream: Arc<Mutex<UnixStream>>,
+    adapter_stream: Arc<Mutex<UnixStream>>,
+    device_stream: Arc<Mutex<UnixStream>>,
     should_stop: Arc<AtomicBool>,
     callbacks: Arc<Mutex<Vec<Callback>>>,
     pub discovered: Arc<Mutex<HashMap<BDAddr, Device>>>
@@ -229,72 +249,96 @@ pub struct ConnectedAdapter {
 
 impl ConnectedAdapter {
     pub fn new(adapter: &Adapter, callbacks: Vec<Callback>) -> nix::Result<ConnectedAdapter> {
-        let mut stream = Arc::new(Mutex::new(unsafe {
+        let mut adapter_stream = Arc::new(Mutex::new(unsafe {
             let stream = UnixStream::from_raw_fd(handle_error(hci_open_dev(adapter.dev_id as i32))?);
             stream.set_nonblocking(true);
             stream
         }));
 
 
+        let fd = handle_error(unsafe {
+            socket(AF_BLUETOOTH, SOCK_SEQPACKET, 0)
+        })?;
+
+        let mut local_addr = SockaddrL2 {
+            l2_family: AF_BLUETOOTH as u16,
+            l2_psm: 0,
+            l2_bdaddr: adapter.addr,
+            l2_cid: ATT_CID,
+            l2_bdaddr_type: adapter.typ.num() as u32,
+        };
+
+        handle_error(unsafe {
+            bind(fd, &local_addr as *const SockaddrL2 as *const sockaddr,
+                 std::mem::size_of::<SockaddrL2>() as u32)
+        })?;
+
+        let device_stream = Arc::new(Mutex::new(unsafe {
+            UnixStream::from_raw_fd(fd)
+        }));
+
         let should_stop = Arc::new(AtomicBool::new(false));
 
         let connected = ConnectedAdapter {
             adapter: adapter.clone(),
-            stream,
+            adapter_stream,
+            device_stream,
             should_stop,
             callbacks: Arc::new(Mutex::new(callbacks)),
             discovered: Arc::new(Mutex::new(HashMap::new()))
         };
 
         {
-            let should_stop = connected.should_stop.clone();
-            let mut stream = connected.stream.clone();
-            let connected = connected.clone();
-            thread::spawn(move || {
-                let mut buf = [0u8; 2048];
-                let mut cur: Vec<u8> = vec![];
+            let streams = vec![connected.adapter_stream.clone(), connected.device_stream.clone()];
+            for stream in streams.into_iter() {
+                let should_stop = connected.should_stop.clone();
+                let connected = connected.clone();
 
-                let mut idx = 0;
+                thread::spawn(move || {
+                    let mut buf = [0u8; 2048];
+                    let mut cur: Vec<u8> = vec![];
 
-                while !should_stop.load(Ordering::Relaxed) {
-                    let len = stream.lock().unwrap().read(&mut buf).unwrap_or(0);
-                    if len == 0 {
-                        // TODO: this is awful
-                        std::thread::sleep_ms(100);
-                        continue;
-                    }
+                    let mut idx = 0;
 
-                    cur.put_slice(&buf[0..len]);
+                    while !should_stop.load(Ordering::Relaxed) {
+                        let len = stream.lock().unwrap().read(&mut buf).unwrap_or(0);
+                        if len == 0 {
+                            // TODO: this is awful
+                            std::thread::sleep_ms(100);
+                            continue;
+                        }
 
-                    info!("parsing {:?}", cur);
+                        cur.put_slice(&buf[0..len]);
 
-                    let mut new_cur: Option<Vec<u8>> = Some(vec![]);
-                    {
-                        let result = {
-                            AdapterDecoder::decode(&cur)
+                        info!("parsing {:?}", cur);
+
+                        let mut new_cur: Option<Vec<u8>> = Some(vec![]);
+                        {
+                            let result = {
+                                AdapterDecoder::decode(&cur)
+                            };
+
+                            match result {
+                                IResult::Done(left, result) => {
+                                    ConnectedAdapter::handle(&connected, result);
+                                    if !left.is_empty() {
+                                        new_cur = Some(left.to_owned());
+                                    };
+                                }
+                                IResult::Incomplete(needed) => {
+                                    new_cur = None;
+                                },
+                                IResult::Error(err) => {
+                                    error!("parse error {}", err);
+                                }
+                            }
                         };
 
-                        match result {
-                            IResult::Done(left, result) => {
-                                ConnectedAdapter::handle(&connected, result);
-                                if !left.is_empty() {
-                                    new_cur = Some(left.to_owned());
-                                };
-                            }
-                            IResult::Incomplete(needed) => {
-                                new_cur = None;
-                            },
-                            IResult::Error(err) => {
-                                error!("parse error {}", err);
-                            }
-                        }
-                    };
-
-                    cur = new_cur.unwrap_or(cur);
-                }
-            })
-        };
-
+                        cur = new_cur.unwrap_or(cur);
+                    }
+                });
+            }
+        }
         Ok(connected)
     }
 
@@ -344,36 +388,32 @@ impl ConnectedAdapter {
     pub fn connect(&self, device: Device) -> nix::Result<()> {
         // let mut addr = device.address.clone();
 
-        let fd = handle_error(unsafe {
-            socket(AF_BLUETOOTH, SOCK_SEQPACKET, 0)
-        })?;
-
-        let mut local_addr = SockaddrL2 {
-            l2_family: AF_BLUETOOTH as u16,
-            l2_psm: 0,
-            l2_bdaddr: self.adapter.addr,
-            l2_cid: ATT_CID,
-            l2_bdaddr_type: self.adapter.typ.num(),
-        };
-
-        handle_error(unsafe {
-            bind(fd, &local_addr as *const SockaddrL2 as *const sockaddr,
-                 std::mem::size_of::<SockaddrL2>() as u32)
-        })?;
-
-
         let mut addr = SockaddrL2 {
             l2_family: AF_BLUETOOTH as u16,
             l2_psm: 0,
             l2_bdaddr: device.address,
             l2_cid: ATT_CID,
-            l2_bdaddr_type: device.address_type.num()
+            l2_bdaddr_type: 1,
         };
 
+        let stream = self.device_stream.lock().unwrap();
         handle_error(unsafe {
-            connect(fd, &addr as *const SockaddrL2 as *const sockaddr,
-                    std::mem::size_of::<SockaddrL2>() as u32)
+            connect(stream.as_raw_fd(),
+                    &addr as *const SockaddrL2 as *const sockaddr,
+                    size_of::<SockaddrL2>() as u32)
         })?;
+
+        let mut opts = L2CapOptions::default();
+
+        let mut len = size_of::<L2CapOptions>() as u32;
+        handle_error(unsafe {
+            getsockopt(stream.as_raw_fd(), SOL_L2CAP, L2CAP_OPTIONS,
+                       &mut opts as *mut _ as *mut c_void,
+                       &mut len)
+        })?;
+
+        info!("sock opts: {:#?}", opts);
+
 
         Ok(())
     }
@@ -384,7 +424,7 @@ impl Drop for ConnectedAdapter {
         self.should_stop.store(true, Ordering::Relaxed);
         // clean up
         debug!("cleaning up device");
-        let fd = self.stream.lock().unwrap().as_raw_fd();
+        let fd = self.adapter_stream.lock().unwrap().as_raw_fd();
         unsafe {
             hci_close_dev(fd);
         }

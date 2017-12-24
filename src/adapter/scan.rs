@@ -108,7 +108,7 @@ impl ConnectedAdapter {
         nf.set_event(HCI_LE_META_EVENT);
 
         unsafe {
-            let stream = self.stream.lock().unwrap();
+            let stream = self.adapter_stream.lock().unwrap();
             let fd = stream.as_raw_fd();
             // start scan
             handle_error(hci_le_set_scan_parameters(

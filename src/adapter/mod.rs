@@ -3,7 +3,7 @@ mod parser;
 
 use libc;
 use std;
-use libc::{c_char, c_void};
+use libc::{c_char, c_void, bind, socket, connect, sockaddr, SOCK_SEQPACKET, sa_family_t};
 use std::ffi::CStr;
 use nix;
 use nom;
@@ -24,7 +24,7 @@ use std::thread::JoinHandle;
 use std::boxed::Box;
 
 use util::handle_error;
-use manager::Callback;
+use manager::{Callback, AF_BLUETOOTH};
 use ::adapter::parser::{AdapterDecoder, Message};
 use ::device::Device;
 
@@ -150,11 +150,25 @@ impl HCIDevInfo {
     }
 }
 
+#[derive(Copy, Debug)]
+#[repr(C)]
+pub struct SockaddrL2 {
+    l2_family: sa_family_t,
+    l2_psm: u16,
+    l2_bdaddr: BDAddr,
+    l2_cid: u16,
+    l2_bdaddr_type: u8,
+}
+impl Clone for SockaddrL2 {
+    fn clone(&self) -> Self { *self }
+}
+
+
 #[derive(Debug, Copy, Clone)]
 pub enum AdapterType {
     BrEdr,
     Amp,
-    Unknown
+    Unknown(u8)
 }
 
 impl AdapterType {
@@ -162,7 +176,15 @@ impl AdapterType {
         match typ {
             0 => AdapterType::BrEdr,
             1 => AdapterType::Amp,
-            _ => AdapterType::Unknown,
+            x => AdapterType::Unknown(x),
+        }
+    }
+
+    fn num(&self) -> u8 {
+        match *self {
+            AdapterType::BrEdr => 0,
+            AdapterType::Amp => 1,
+            AdapterType::Unknown(x) => x,
         }
     }
 }
@@ -193,6 +215,8 @@ const HCI_COMMAND_PKT: u8 = 0x01;
 const OCF_LE_CREATE_CONN: u16 = 0x000d;
 const OGF_LE_CTL: u8 = 0x08;
 const LE_CREATE_CONN_CMD: u16 = OCF_LE_CREATE_CONN | ((OGF_LE_CTL as u16) << 10);
+const ATT_CID: u16 = 4;
+
 
 #[derive(Clone)]
 pub struct ConnectedAdapter {
@@ -317,35 +341,41 @@ impl ConnectedAdapter {
         }
     }
 
-    pub fn connect(&self, device: Device) -> std::io::Result<()> {
-        use ::device::AddressType::*;
-        let mut cmd = BytesMut::with_capacity(29);
+    pub fn connect(&self, device: Device) -> nix::Result<()> {
+        // let mut addr = device.address.clone();
 
-        // header
-        cmd.put_u8(HCI_COMMAND_PKT);
-        cmd.put_u16::<LittleEndian>(LE_CREATE_CONN_CMD);
+        let fd = handle_error(unsafe {
+            socket(AF_BLUETOOTH, SOCK_SEQPACKET, 0)
+        })?;
 
-        //length
-        cmd.put_u8(0x19);
+        let mut local_addr = SockaddrL2 {
+            l2_family: AF_BLUETOOTH as u16,
+            l2_psm: 0,
+            l2_bdaddr: self.adapter.addr,
+            l2_cid: ATT_CID,
+            l2_bdaddr_type: self.adapter.typ.num(),
+        };
 
-        // data
-        cmd.put_u16::<LittleEndian>(0x0060); // interval
-        cmd.put_u16::<LittleEndian>(0x0030); // window
-        cmd.put_u8(0x00); // initiator filter
+        handle_error(unsafe {
+            bind(fd, &local_addr as *const SockaddrL2 as *const sockaddr,
+                 std::mem::size_of::<SockaddrL2>() as u32)
+        })?;
 
-        cmd.put_u8(if device.address_type == Random { 1 } else { 0 });
-        cmd.put_slice(&device.address.address);
 
-        cmd.put_u16::<LittleEndian>(0x0006); // min interval
-        cmd.put_u16::<LittleEndian>(0x000c); // max interval
-        cmd.put_u16::<LittleEndian>(0x0000); // latency
-        cmd.put_u16::<LittleEndian>(0x00c8); // supervision timeout
-        cmd.put_u16::<LittleEndian>(0x0004); // min ce length
-        cmd.put_u16::<LittleEndian>(0x0006); // max ce length
+        let mut addr = SockaddrL2 {
+            l2_family: AF_BLUETOOTH as u16,
+            l2_psm: 0,
+            l2_bdaddr: device.address,
+            l2_cid: ATT_CID,
+            l2_bdaddr_type: device.address_type.num()
+        };
 
-        let mut stream = self.stream.lock().unwrap();
-        info!("sending {:?}", &*cmd);
-        stream.write_all(&*cmd)
+        handle_error(unsafe {
+            connect(fd, &addr as *const SockaddrL2 as *const sockaddr,
+                    std::mem::size_of::<SockaddrL2>() as u32)
+        })?;
+
+        Ok(())
     }
 }
 

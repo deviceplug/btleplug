@@ -9,7 +9,7 @@ use util::handle_error;
 use adapter::{Adapter, HCIDevReq, ConnectedAdapter};
 use device::Device;
 
-const AF_BLUETOOTH: i32 = 31;
+pub const AF_BLUETOOTH: i32 = 31;
 const BTPROTO_HCI: i32 = 1;
 
 // #define HCIGETDEVLIST	_IOR('H', 210, int)

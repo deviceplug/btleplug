@@ -6,6 +6,15 @@ pub enum AddressType {
     Public,
 }
 
+impl AddressType {
+    pub fn num(&self) -> u8 {
+        match *self {
+            AddressType::Public => 0,
+            AddressType::Random => 1
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Device {
     pub address: BDAddr,

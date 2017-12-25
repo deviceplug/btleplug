@@ -1,14 +1,7 @@
-use std::io;
-use std::mem;
-
-use bincode::deserialize;
 use nom::{le_u8, le_u16, le_u32, le_i8, IResult, Err, ErrorKind};
 use num::FromPrimitive;
 
-use ::device::Device;
 use ::adapter::BDAddr;
-use ::manager::Event;
-
 
 #[cfg(test)]
 mod tests {
@@ -87,6 +80,7 @@ mod tests {
 #[derive(Debug, PartialEq)]
 pub enum Message {
     LEAdvertisingReport(LEAdvertisingInfo),
+    LEConnComplete(LEConnInfo)
 }
 
 #[derive(Debug, PartialEq)]
@@ -110,6 +104,18 @@ pub struct LEAdvertisingInfo {
     pub bdaddr_type: u8,
     pub bdaddr: BDAddr,
     pub data: Vec<LEAdvertisingData>
+}
+
+#[derive(Debug, PartialEq)]
+pub struct LEConnInfo {
+    handle: u16,
+    role: u8,
+    bdaddr: BDAddr,
+    bdaddr_type: u8,
+    interval: u16,
+    latency: u16,
+    supervision_timeout: u16,
+    master_clock_accuracy: u8,
 }
 
 pub struct AdapterDecoder {
@@ -238,12 +244,34 @@ named!(bd_addr<&[u8], BDAddr>,
          })
 ));
 
+named!(le_conn_complete<&[u8], LEConnInfo>,
+    do_parse!(
+       // TODO: check this
+       skip: le_u8 >>
+       handle: le_u16 >>
+       role: le_u8 >>
+       bdaddr_type: le_u8 >>
+       bdaddr: bd_addr >>
+       interval: le_u16 >>
+       latency: le_u16 >>
+       supervision_timeout: le_u16 >>
+       master_clock_accuracy: le_u8 >>
+       (
+           LEConnInfo {
+              handle, role, bdaddr_type, bdaddr, interval, latency,
+              supervision_timeout, master_clock_accuracy
+           }
+       )));
+
 fn le_meta_event(i: &[u8]) -> IResult<&[u8], Message> {
     let (i, le_type) = try_parse!(i, map_opt!(le_u8, |b| LEEventType::from_u8(b)));
     let (i, result) = match le_type {
         LEEventType::LEAdvertisingReport => {
             try_parse!(i, map!(le_advertising_info, |x| Message::LEAdvertisingReport(x)))
-        },
+        }
+        LEEventType::LEConnComplete => {
+            try_parse!(i, map!(le_conn_complete, |x| Message::LEConnComplete(x)))
+        }
         _ => {
             warn!("Unhandled le_type {:?}", le_type);
             return IResult::Error(Err::Code(ErrorKind::Custom(1)))
@@ -253,7 +281,6 @@ fn le_meta_event(i: &[u8]) -> IResult<&[u8], Message> {
 }
 
 fn message(i: &[u8]) -> IResult<&[u8], Message> {
-    use self::Message::*;
     use self::EventType::*;
     use self::SubEventType::*;
 

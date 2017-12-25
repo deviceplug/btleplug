@@ -36,7 +36,9 @@ fn main() {
     };
 
     info!("Connecting to {:?}", first_device);
-    connected.connect(first_device).unwrap();
+    connected.connect(&first_device).unwrap();
     info!("Connected");
+    std::thread::sleep(std::time::Duration::from_secs(5));
+    connected.discover_chars(&first_device);
     std::thread::sleep(std::time::Duration::from_secs(5));
 }

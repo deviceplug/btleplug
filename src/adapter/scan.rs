@@ -1,24 +1,10 @@
-use std::io::Read;
 use std::mem;
-use std::os::unix::io::{FromRawFd, AsRawFd};
-use std::os::unix::net::UnixStream;
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
-use std::thread::JoinHandle;
-use std::boxed::Box;
-use bytes::BufMut;
-
 use libc::{setsockopt, c_void};
 
 use nix;
-use nom;
-use nom::IResult;
 
 use ::util::handle_error;
-use ::adapter::{Adapter, ConnectedAdapter};
-use ::adapter::parser::{AdapterDecoder, Message};
-use ::device::Device;
+use ::adapter::ConnectedAdapter;
 
 fn hci_set_bit(nr: i32, cur: i32) -> i32 {
     cur | 1 << (nr & 31)
@@ -26,10 +12,6 @@ fn hci_set_bit(nr: i32, cur: i32) -> i32 {
 
 #[link(name = "bluetooth")]
 extern {
-    fn hci_open_dev(dev_id: i32) -> i32;
-
-    fn hci_close_dev(dd: i32) -> i32;
-
     fn hci_le_set_scan_parameters(dev_id: i32,
                                   typ : u8,
                                   interval: u16,
@@ -108,18 +90,16 @@ impl ConnectedAdapter {
         nf.set_event(HCI_LE_META_EVENT);
 
         unsafe {
-            let stream = self.adapter_stream.lock().unwrap();
-            let fd = stream.as_raw_fd();
             // start scan
             handle_error(hci_le_set_scan_parameters(
-                fd, scan_type, interval, window,
+                self.adapter_fd, scan_type, interval, window,
                 own_type, filter_policy, 10_000))?;
 
             handle_error(
-                hci_le_set_scan_enable(fd, 1, filter_dup, 10_000))?;
+                hci_le_set_scan_enable(self.adapter_fd, 1, filter_dup, 10_000))?;
 
             let nf_ptr: *mut c_void = &mut nf as *mut _ as *mut c_void;
-            handle_error(setsockopt(fd, SOL_HCI, HCI_FILTER, nf_ptr,
+            handle_error(setsockopt(self.adapter_fd, SOL_HCI, HCI_FILTER, nf_ptr,
                                     mem::size_of_val(&nf) as u32))?;
         };
         Ok(())

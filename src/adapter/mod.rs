@@ -185,7 +185,6 @@ impl Clone for SockaddrHCI {
     fn clone(&self) -> Self { *self }
 }
 
-
 #[derive(Copy, Debug)]
 #[repr(C)]
 pub struct SockaddrL2 {
@@ -196,6 +195,17 @@ pub struct SockaddrL2 {
     l2_bdaddr_type: u32,
 }
 impl Clone for SockaddrL2 {
+    fn clone(&self) -> Self { *self }
+}
+
+#[derive(Copy, Debug, Default)]
+#[repr(packed)]
+struct MgmtHdr {
+    opcode: u16,
+    index: u16,
+    len: u16,
+}
+impl Clone for MgmtHdr {
     fn clone(&self) -> Self { *self }
 }
 
@@ -303,7 +313,7 @@ impl ConnectedAdapter {
             device_fds: Arc::new(Mutex::new(HashMap::new())),
         };
 
-        connected.add_socket_reader(adapter_fd);
+        connected.add_raw_socket_reader(adapter_fd);
 
         connected.set_socket_filter()?;
 
@@ -331,12 +341,9 @@ impl ConnectedAdapter {
         Ok(())
     }
 
-    fn add_socket_reader(&self, fd: i32) {
+    fn add_raw_socket_reader(&self, fd: i32) {
         let should_stop = self.should_stop.clone();
         let connected = self.clone();
-//        let mut stream = unsafe {
-//            UnixStream::from_raw_fd(fd)
-//        };
 
         thread::spawn(move || {
             let mut buf = [0u8; 2048];
@@ -381,6 +388,99 @@ impl ConnectedAdapter {
                 cur = new_cur.unwrap_or(cur);
             }
         });
+    }
+
+    fn add_seq_socket_reader(&self, fd: i32) {
+        let should_stop = self.should_stop.clone();
+        let connected = self.clone();
+
+        thread::spawn(move || {
+            let mut control = [0u8; 64];
+            let mut buf = [0u8; 2048];
+
+            while !should_stop.load(Ordering::Relaxed) {
+                let mut header = MgmtHdr::default();
+                let mut iov = [
+                    iovec {
+                        iov_base:  &mut header as *mut _ as *mut c_void,
+                        iov_len: size_of::<MgmtHdr>(),
+                    },
+                    iovec {
+                        iov_base: buf.as_mut_ptr() as *mut c_void,
+                        iov_len: buf.len()
+                    },
+                ];
+
+                let mut msg = msghdr {
+                    msg_iov: iov.as_mut_ptr(),
+                    msg_iovlen: iov.len(),
+                    msg_control: control.as_mut_ptr() as *mut c_void,
+                    msg_controllen: control.len(),
+                    msg_name: std::ptr::null_mut() as *mut c_void,
+                    msg_namelen: 0,
+                    msg_flags: 0,
+                };
+
+                let len = handle_error(unsafe { recvmsg(fd, &mut msg, 0) as i32 });
+
+                let len = match len {
+                    Ok(x) => x,
+                    Err(err) => {
+                        match err {
+                            nix::Error::Sys(nix::errno::ENOTCONN) => {
+                                // skip
+                            }
+                            nix::Error::Sys(nix::errno::EBADF) => {
+                                info!("fd {} closed, stopping read", fd);
+                                break;
+                            }
+                            _ => {
+                                warn!("fd {} error: {:?}", fd, err)
+                            }
+                        };
+                        thread::sleep(std::time::Duration::from_millis(100));
+                        0
+                    }
+                };
+
+                if (len as usize) < size_of::<MgmtHdr>() {
+                    continue;
+                }
+
+                // TODO: monitor/control.c does some stuff with timevals and creds that should
+                // probably be duplicated
+
+                let data = &buf[0..header.len as usize];
+
+                match header.opcode {
+                    HCI_CHANNEL_CONTROL => {
+                        // control message, not currently handled
+                        debug!("received control message");
+                    }
+                    HCI_CHANNEL_MONITOR => {
+                        match AdapterDecoder::decode(data) {
+                            IResult::Done(left, result) => {
+                                info!("> {:?}", result);
+                                connected.handle(result);
+                                if !left.is_empty() {
+                                    error!("unexpected left-over data: {:?}", left);
+                                }
+                            }
+                            IResult::Incomplete(_) => {
+                                error!("unexpected incomplete {:?}", data);
+                            }
+                            IResult::Error(err) => {
+                                error!("parse error {}\nfrom: {:?}", err, data);
+                            }
+                        }
+                    }
+                    _ => {
+                        warn!("Unhandled opcode {}", header.opcode);
+                    }
+                }
+            }
+        });
+
     }
 
     fn handle(&self, message: Message) {
@@ -438,8 +538,6 @@ impl ConnectedAdapter {
             socket(AF_BLUETOOTH, SOCK_SEQPACKET, 0)
         })?;
 
-        self.add_socket_reader(fd);
-
         let local_addr = SockaddrL2 {
             l2_family: AF_BLUETOOTH as sa_family_t,
             l2_psm: 0,
@@ -466,6 +564,8 @@ impl ConnectedAdapter {
                     size_of::<SockaddrL2>() as u32)
         })?;
 
+        self.add_seq_socket_reader(fd);
+
         let mut opts = L2CapOptions::default();
 
         let mut len = size_of::<L2CapOptions>() as u32;
@@ -485,15 +585,14 @@ impl ConnectedAdapter {
         // TODO: improve error handling
         let fd = self.device_fds.lock().unwrap().get(&device.address).unwrap().clone();
 
-        let mut stream = unsafe { UnixStream::from_raw_fd(fd) };
-
         let mut buf = BytesMut::with_capacity(7);
         buf.put_u8(ATT_OP_READ_BY_GROUP_REQ);
         buf.put_u16::<LittleEndian>(1);
         buf.put_u16::<LittleEndian>(0xFFFF);
         buf.put_u16::<LittleEndian>(GATT_CHARAC_UUID);
-
-        stream.write_all(&*buf).unwrap();
+        handle_error(unsafe {
+            write(fd, buf.as_mut_ptr() as *mut c_void, buf.len()) as i32
+        }).unwrap();
     }
 }
 
@@ -501,11 +600,12 @@ impl Drop for ConnectedAdapter {
     fn drop(&mut self) {
         self.should_stop.store(true, Ordering::Relaxed);
         // clean up
-        debug!("cleaning up device");
+        info!("cleaning up device");
         unsafe {
             hci_close_dev(self.adapter_fd);
         }
 
+        // TODO: cleanup device sockets
     }
 }
 

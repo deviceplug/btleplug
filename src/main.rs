@@ -41,4 +41,5 @@ fn main() {
     std::thread::sleep(std::time::Duration::from_secs(5));
     connected.discover_chars(&first_device);
     std::thread::sleep(std::time::Duration::from_secs(5));
+    info!("shutting down...");
 }

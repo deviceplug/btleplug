@@ -6,6 +6,13 @@ pub const HCI_EVENT_PKT: i32 = 0x04;
 pub const HCI_ACLDATA_PKT: i32 = 0x02;
 pub const HCI_LE_META_EVENT: i32 = 0x3E;
 
+pub const HCI_CHANNEL_RAW: u16 = 0;
+pub const HCI_CHANNEL_USER: u16 = 1;
+pub const HCI_CHANNEL_MONITOR: u16 = 2;
+pub const HCI_CHANNEL_CONTROL: u16 = 3;
+pub const HCI_CHANNEL_LOGGING: u16 = 4;
+
+
 // bluetooth.h
 pub const SOL_HCI: i32 = 0;
 

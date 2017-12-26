@@ -101,8 +101,8 @@ pub enum Message {
         data: Vec<u8>,
     },
     ACLDataPartial {
-
-    }
+    },
+    Tmp
 }
 
 #[derive(Debug, PartialEq)]
@@ -438,20 +438,20 @@ fn hci_command_pkt(i: &[u8]) -> IResult<&[u8], Message> {
     IResult::Done(i, result)
 }
 
-//fn hci_acldata_pkt(i: &[u8]) -> IResult<&[u8], Message> {
-//    let (i, head) = try_parse!(i, le_u16); // 3
-//    let flags = head >> 12;
-//    let handle = head & 0x0FFF;
-//    let (i, len) = try_parse!(i, le_u8); // 4
-//    match flags {
-//        ACL_START => {
-//            let (i, length) = try_parse!(i, le_u8); // 5
-//            let (i, _) = try_parse!(i, le_u8); // 6
-//            let (i, cid) = try_parse!(i, le_u8); // 7
-//
-//        }
-//    }
-//}
+fn hci_acldata_pkt(i: &[u8]) -> IResult<&[u8], Message> {
+    let (i, head) = try_parse!(i, le_u16); // 3
+    let flags = head >> 12;
+    let handle = head & 0x0FFF;
+    let (i, dlen) = try_parse!(i, le_u16); // 4
+    match flags {
+        ACL_START => {
+            let (i, length) = try_parse!(i, le_u8); // 5
+            let (i, _) = try_parse!(i, le_u8); // 6
+            let (i, cid) = try_parse!(i, le_u8); // 7
+
+        }
+    }
+}
 
 fn message(i: &[u8]) -> IResult<&[u8], Message> {
     use self::EventType::*;
@@ -460,7 +460,7 @@ fn message(i: &[u8]) -> IResult<&[u8], Message> {
     match typ {
         HCIEventPkt => hci_event_pkt(i),
         HCICommandPkt => hci_command_pkt(i),
-        HCI_ACLDATA_PKT => unimplemented!(),
+        HCIAclDataPkt => IResult::Error(Err::Code(ErrorKind::Custom(9)))
     }
 }
 

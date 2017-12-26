@@ -395,10 +395,10 @@ impl ConnectedAdapter {
         let connected = self.clone();
 
         thread::spawn(move || {
-            let mut control = [0u8; 64];
-            let mut buf = [0u8; 2048];
-
             while !should_stop.load(Ordering::Relaxed) {
+                let mut control = [0u8; 64];
+                let mut buf = [0u8; 2048];
+
                 let mut header = MgmtHdr::default();
                 let mut iov = [
                     iovec {
@@ -585,6 +585,7 @@ impl ConnectedAdapter {
         // TODO: improve error handling
         let fd = self.device_fds.lock().unwrap().get(&device.address).unwrap().clone();
 
+        info!("start char discovery");
         let mut buf = BytesMut::with_capacity(7);
         buf.put_u8(ATT_OP_READ_BY_GROUP_REQ);
         buf.put_u16::<LittleEndian>(1);

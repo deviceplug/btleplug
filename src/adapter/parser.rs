@@ -37,7 +37,7 @@ mod tests {
             }
         );
 
-        let device = assert_eq!(message(&buf), IResult::Done(&[][..], expected));
+        assert_eq!(message(&buf), IResult::Done(&[][..], expected));
     }
 
     #[test]
@@ -76,6 +76,20 @@ mod tests {
         assert_eq!(le_advertising_data(&buf), IResult::Done(&[][..], vec![
             LocalName(String::from("LEDBlue-EA97B7A3 "))]));
     }
+
+    #[test]
+    fn test_acl_data_packet() {
+        let buf = [2, 64, 32, 9, 0, 5, 0, 4, 0, 1, 16, 1, 0, 16];
+        assert_eq!(AdapterDecoder::decode(&buf), IResult::Done(
+            &[][..],
+            Message::ACLDataPacket {
+                handle: 64,
+                cid: 5,
+                data: vec![4, 0, 1, 16, 1, 0, 16],
+                len: 7,
+            }
+        ))
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -97,12 +111,14 @@ pub enum Message {
     },
     ACLDataPacket {
         handle: u16,
-        cid: u8,
+        cid: u16,
         data: Vec<u8>,
+        len: u16
     },
-    ACLDataPartial {
-    },
-    Tmp
+    ACLDataContiuation {
+        handle: u16,
+        data: Vec<u8>,
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -439,18 +455,32 @@ fn hci_command_pkt(i: &[u8]) -> IResult<&[u8], Message> {
 }
 
 fn hci_acldata_pkt(i: &[u8]) -> IResult<&[u8], Message> {
-    let (i, head) = try_parse!(i, le_u16); // 3
+    let (i, head) = try_parse!(i, le_u16); // 2
     let flags = head >> 12;
     let handle = head & 0x0FFF;
-    let (i, dlen) = try_parse!(i, le_u16); // 4
-    match flags {
+    let message = match flags {
         ACL_START => {
-            let (i, length) = try_parse!(i, le_u8); // 5
-            let (i, _) = try_parse!(i, le_u8); // 6
-            let (i, cid) = try_parse!(i, le_u8); // 7
-
+            let (i, dlen) = try_parse!(i, le_u16);
+            let (i, cid) = try_parse!(i, le_u16);
+            Message::ACLDataPacket {
+                handle,
+                cid,
+                data: i.clone().to_owned(),
+                len: dlen - 2,
+            }
         }
-    }
+        ACL_CONT => {
+            Message::ACLDataContiuation {
+                handle,
+                data: i.clone().to_owned(),
+            }
+        },
+        x => {
+            warn!("unknown flag type: {}", x);
+            return IResult::Error(Err::Code(ErrorKind::Custom(11)));
+        }
+    };
+    IResult::Done(&i[i.len()..], message)
 }
 
 fn message(i: &[u8]) -> IResult<&[u8], Message> {
@@ -460,7 +490,7 @@ fn message(i: &[u8]) -> IResult<&[u8], Message> {
     match typ {
         HCIEventPkt => hci_event_pkt(i),
         HCICommandPkt => hci_command_pkt(i),
-        HCIAclDataPkt => IResult::Error(Err::Code(ErrorKind::Custom(9)))
+        HCIAclDataPkt => hci_acldata_pkt(i),
     }
 }
 

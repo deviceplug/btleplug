@@ -12,6 +12,10 @@ pub const HCI_CHANNEL_MONITOR: u16 = 2;
 pub const HCI_CHANNEL_CONTROL: u16 = 3;
 pub const HCI_CHANNEL_LOGGING: u16 = 4;
 
+pub const ACL_START_NO_FLUSH: u16 = 0x00;
+pub const ACL_CONT: u16  = 0x01;
+pub const ACL_START: u16 = 0x02;
+
 
 // bluetooth.h
 pub const SOL_HCI: i32 = 0;

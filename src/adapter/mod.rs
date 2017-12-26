@@ -36,6 +36,29 @@ extern {
     fn hci_close_dev(dd: i32) -> i32;
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum AddressType {
+    Random,
+    Public,
+}
+
+impl AddressType {
+    pub fn from_u8(v: u8) -> Option<AddressType> {
+        match v {
+            0 => Some(AddressType::Public),
+            1 => Some(AddressType::Random),
+            _ => None,
+        }
+    }
+
+    pub fn num(&self) -> u8 {
+        match *self {
+            AddressType::Public => 0,
+            AddressType::Random => 1
+        }
+    }
+}
+
 #[derive(Debug, Copy)]
 pub struct HCIDevReq {
     pub dev_id: u16,
@@ -350,7 +373,7 @@ impl ConnectedAdapter {
                             new_cur = None;
                         },
                         IResult::Error(err) => {
-                            error!("parse error {}", err);
+                            error!("parse error {}\nfrom: {:?}", err, cur);
                         }
                     }
                 };
@@ -361,13 +384,12 @@ impl ConnectedAdapter {
     }
 
     fn handle(&self, message: Message) {
-        debug!("got message {:#?}", message);
+        debug!("got message {:?}", message);
 
         let mut discovered = self.discovered.lock().unwrap();
         match message {
             Message::LEAdvertisingReport(info) => {
                 use ::adapter::parser::LEAdvertisingData::*;
-                use ::device::AddressType;
 
                 let device = discovered.entry(info.bdaddr)
                     .or_insert_with(||
@@ -402,7 +424,10 @@ impl ConnectedAdapter {
                 }
             }
             Message::LEConnComplete(info) => {
-                println!("connected to {:?}", info);
+                info!("connected to {:?}", info);
+            }
+            message => {
+                debug!("unhandled message {:?}", message);
             }
         }
     }

@@ -1,7 +1,8 @@
 use nom::{le_u8, le_u16, le_u32, le_i8, IResult, Err, ErrorKind};
 use num::FromPrimitive;
 
-use ::adapter::BDAddr;
+use ::adapter::{BDAddr, AddressType};
+use ::constants::*;
 
 #[cfg(test)]
 mod tests {
@@ -80,7 +81,28 @@ mod tests {
 #[derive(Debug, PartialEq)]
 pub enum Message {
     LEAdvertisingReport(LEAdvertisingInfo),
-    LEConnComplete(LEConnInfo)
+    LEConnComplete(LEConnInfo),
+    HCICommandComplete(CommandComplete),
+    LEScanEnableCommand {
+        enable: bool,
+        filter_duplicates: bool,
+    },
+    HCICommand {
+        command: CommandType,
+        data: Vec<u8>,
+    },
+    CommandStatus {
+        command: CommandType,
+        status: u8,
+    },
+    ACLDataPacket {
+        handle: u16,
+        cid: u8,
+        data: Vec<u8>,
+    },
+    ACLDataPartial {
+
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -134,7 +156,7 @@ enum EventType {
 enum_from_primitive! {
 #[derive(Debug, PartialEq)]
 #[repr(u8)]
-enum SubEventType {
+enum HCIEventSubType {
     DisconnComplete = 0x05,
     EncryptChange = 0x08,
     CmdComplete = 0x0e,
@@ -151,6 +173,55 @@ enum LEEventType {
     LEAdvertisingReport = 2,
     LEConnUpdateComplete = 3,
 }
+}
+
+enum_from_primitive! {
+#[derive(Debug, PartialEq)]
+#[repr(u16)]
+pub enum CommandType {
+    Reset = OCF_RESET as u16 | (OGF_HOST_CTL as u16) << 10,
+    ReadLEHostSupported = OCF_READ_LE_HOST_SUPPORTED | (OGF_HOST_CTL as u16) << 10,
+    WriteLEHostSupported = OCF_WRITE_LE_HOST_SUPPORTED | (OGF_HOST_CTL as u16) << 10,
+    ReadLocalVersion = OCF_READ_LOCAL_VERSION | (OGF_INFO_PARAM as u16) << 10,
+    ReadBDAddr = OCF_READ_BD_ADDR | (OGF_INFO_PARAM as u16) << 10,
+    ReadRSSI = OCF_READ_RSSI | (OGF_STATUS_PARAM as u16) << 10,
+
+    LESetEventMask = OCF_LE_SET_EVENT_MASK | (OGF_LE_CTL as u16) << 10,
+    LESetScanParameters = OCF_LE_SET_SCAN_PARAMETERS | (OGF_LE_CTL as u16) << 10,
+    LESetScanEnabled = OCF_LE_SET_SCAN_ENABLE | (OGF_LE_CTL as u16) << 10,
+    LECreateConnection = OCF_LE_CREATE_CONN | (OGF_LE_CTL as u16) << 10,
+    LEConnectionUpdate = OCF_LE_CONN_UPDATE | (OGF_LE_CTL as u16) << 10,
+    LEStartEncryption = OCF_LE_START_ENCRYPTION | (OGF_LE_CTL as u16) << 10,
+}}
+
+#[derive(Debug, PartialEq)]
+pub enum CommandComplete {
+    Reset,
+    ReadLEHostSupported { le: u8, simul: u8 },
+    ReadLocalVersion {
+        hci_version: u8,
+        hci_revision: u16,
+        lmp_version: i8,
+        manufacturer: u16,
+        lmp_sub_version: u8,
+    },
+    ReadBDAddr {
+        address_type: AddressType,
+        address: BDAddr,
+    },
+    LESetScanParameters,
+    LESetScanEnabled {
+        enabled: bool,
+    },
+    ReadRSSI {
+        handle: u16,
+        rssi: u8
+    },
+    Other {
+        command: CommandType,
+        status: u8,
+        data: Vec<u8>
+    }
 }
 
 named!(parse_uuid_128<&[u8], [u8; 16]>, count_fixed!(u8, le_u8, 16));
@@ -280,24 +351,117 @@ fn le_meta_event(i: &[u8]) -> IResult<&[u8], Message> {
     IResult::Done(i, result)
 }
 
-fn message(i: &[u8]) -> IResult<&[u8], Message> {
-    use self::EventType::*;
-    use self::SubEventType::*;
+fn cmd_complete(i: &[u8]) -> IResult<&[u8], Message> {
+    use self::CommandComplete::*;
 
-    let (i, typ) = try_parse!(i, map_opt!(le_u8, |b| EventType::from_u8(b)));
-    let (i, sub_typ) = try_parse!(i, map_opt!(le_u8, |b| SubEventType::from_u8(b)));
-    let (i, data) = try_parse!(i, length_data!(le_u8));
-    let (_, result) = match (typ, sub_typ) {
-        (HCIEventPkt, LEMetaEvent) => {
-            try_parse!(data, le_meta_event)
+    let (i, _skip) = try_parse!(i, le_u8);
+    let (i, cmd) = try_parse!(i, map_opt!(le_u16, |b| CommandType::from_u16(b)));
+    let (i, status) = try_parse!(i, le_u8);
+    let result = match cmd {
+        CommandType::Reset => Reset,
+        CommandType::ReadLEHostSupported => {
+            let (i, le) = try_parse!(i, le_u8);
+            let (_, simul) = try_parse!(i, le_u8);
+            ReadLEHostSupported { le, simul }
         },
-        (typ, sub_typ) => {
-            warn!("Unhandled type/subtype ({:?}, {:?}): {:?}", typ, sub_typ, i);
-            return IResult::Error(Err::Code(ErrorKind::Custom(2)))
+        CommandType::ReadBDAddr => {
+            let (i, address_type) = try_parse!(i, map_opt!(le_u8, |b| AddressType::from_u8(b)));
+            let (_, address) = try_parse!(i, bd_addr);
+
+            ReadBDAddr { address_type, address }
+        },
+        CommandType::LESetScanParameters => LESetScanParameters,
+        CommandType::LESetScanEnabled => {
+            // TODO: not 100% sure about this
+            let enabled = status == 0;
+            LESetScanEnabled { enabled }
+        },
+        CommandType::ReadRSSI => {
+            let (i, handle) = try_parse!(i, le_u16);
+            let (_, rssi) = try_parse!(i, le_u8);
+            ReadRSSI { handle, rssi }
+        },
+        x => {
+            Other {
+                command: x,
+                status,
+                data: i.clone().to_owned()
+            }
         }
     };
 
+    IResult::Done(&i, Message::HCICommandComplete(result))
+}
+
+fn hci_event_pkt(i: &[u8]) -> IResult<&[u8], Message> {
+    use self::HCIEventSubType::*;
+    let (i, sub_type) = try_parse!(i, map_opt!(le_u8, |b| HCIEventSubType::from_u8(b)));
+    let (i, data) = try_parse!(i, length_data!(le_u8));
+    let result = match sub_type {
+        LEMetaEvent => try_parse!(data, le_meta_event).1,
+        CmdComplete => try_parse!(data, cmd_complete).1,
+        CmdStatus => {
+            let (data, status) = try_parse!(data, le_u8);
+            let (data, _) = try_parse!(data, le_u8);
+            let (_, command) = try_parse!(data, map_opt!(le_u16, |b| CommandType::from_u16(b)));
+            Message::CommandStatus {
+                command, status,
+            }
+        },
+        _ => {
+            warn!("unhandled HCIEventPkt subtype {:?}", sub_type);
+            return IResult::Error(Err::Code(ErrorKind::Custom(4)))
+        }
+    };
     IResult::Done(i, result)
+}
+
+fn hci_command_pkt(i: &[u8]) -> IResult<&[u8], Message> {
+    let (i, cmd) = try_parse!(i, map_opt!(le_u16, CommandType::from_u16));
+    let (i, data) = try_parse!(i, length_data!(le_u8));
+    let result = match cmd {
+        CommandType::LESetScanEnabled => {
+            let (data, enable) = try_parse!(data, le_u8);
+            let (_, filter_duplicates) = try_parse!(data, le_u8);
+            Message::LEScanEnableCommand {
+                enable: enable == 1,
+                filter_duplicates: filter_duplicates == 1,
+            }
+        },
+        other => {
+            Message::HCICommand {
+                command: other,
+                data: data.to_owned(),
+            }
+        }
+    };
+    IResult::Done(i, result)
+}
+
+//fn hci_acldata_pkt(i: &[u8]) -> IResult<&[u8], Message> {
+//    let (i, head) = try_parse!(i, le_u16); // 3
+//    let flags = head >> 12;
+//    let handle = head & 0x0FFF;
+//    let (i, len) = try_parse!(i, le_u8); // 4
+//    match flags {
+//        ACL_START => {
+//            let (i, length) = try_parse!(i, le_u8); // 5
+//            let (i, _) = try_parse!(i, le_u8); // 6
+//            let (i, cid) = try_parse!(i, le_u8); // 7
+//
+//        }
+//    }
+//}
+
+fn message(i: &[u8]) -> IResult<&[u8], Message> {
+    use self::EventType::*;
+
+    let (i, typ) = try_parse!(i, map_opt!(le_u8, |b| EventType::from_u8(b)));
+    match typ {
+        HCIEventPkt => hci_event_pkt(i),
+        HCICommandPkt => hci_command_pkt(i),
+        HCI_ACLDATA_PKT => unimplemented!(),
+    }
 }
 
 impl AdapterDecoder {

@@ -1,19 +1,4 @@
-use ::adapter::BDAddr;
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum AddressType {
-    Random,
-    Public,
-}
-
-impl AddressType {
-    pub fn num(&self) -> u8 {
-        match *self {
-            AddressType::Public => 0,
-            AddressType::Random => 1
-        }
-    }
-}
+use ::adapter::{BDAddr, AddressType};
 
 #[derive(Debug, Clone)]
 pub struct Device {

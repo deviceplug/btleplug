@@ -23,6 +23,19 @@ pub const EVT_LE_CONN_COMPLETE: u8 = 0x01;
 pub const EVT_LE_ADVERTISING_REPORT: u8 = 0x02;
 pub const EVT_LE_CONN_UPDATE_COMPLETE: u8 = 0x03;
 
+pub const OGF_HOST_CTL: u8 = 0x03;
+pub const OCF_SET_EVENT_MASK: u16 = 0x0001;
+pub const OCF_RESET: u16 = 0x0003;
+pub const OCF_READ_LE_HOST_SUPPORTED: u16 = 0x006C;
+pub const OCF_WRITE_LE_HOST_SUPPORTED: u16 = 0x006D;
+
+
+pub const OGF_INFO_PARAM: u8 = 0x04;
+pub const OCF_READ_LOCAL_VERSION: u16 = 0x0001;
+pub const OCF_READ_BD_ADDR: u16 = 0x0009;
+
+pub const OGF_STATUS_PARAM: u8 = 0x05;
+pub const OCF_READ_RSSI: u16 = 0x0005;
 
 pub const OGF_LE_CTL: u8 = 0x08;
 pub const OCF_LE_SET_EVENT_MASK: u16 = 0x0001;

@@ -1,21 +1,14 @@
 use std::sync::Mutex;
 
 use libc;
-use libc::{c_void, socket, SOCK_RAW};
+use libc::{c_void, socket, SOCK_RAW, AF_BLUETOOTH};
 use std::mem;
 use nix;
 
 use util::handle_error;
 use adapter::{Adapter, HCIDevReq, ConnectedAdapter};
 use device::Device;
-
-pub const AF_BLUETOOTH: i32 = 31;
-const BTPROTO_HCI: i32 = 1;
-
-// #define HCIGETDEVLIST	_IOR('H', 210, int)
-static HCI_GET_DEV_LIST_MAGIC: usize = (2u32 << 0i32 + 8i32 + 8i32 + 14i32 |
-    (b'H' as (i32) << 0i32 + 8i32) as (u32) | (210i32 << 0i32) as (u32)) as
-    (usize) | 4 /* (sizeof(i32)) */ << 0i32 + 8i32 + 8i32;
+use ::constants::*;
 
 // #define HCIDEVUP	_IOW('H', 201, int)
 ioctl!(write_int hci_dev_up with b'H', 201);

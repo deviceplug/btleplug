@@ -1,10 +1,16 @@
 use std::mem;
-use libc::{setsockopt, c_void};
+use std::io;
+
+use libc::{setsockopt, c_void, write};
 
 use nix;
+use bytes::{BytesMut, BufMut, LittleEndian};
 
 use ::util::handle_error;
 use ::adapter::ConnectedAdapter;
+use ::adapter::protocol::Protocol;
+use ::constants::*;
+
 
 fn hci_set_bit(nr: i32, cur: i32) -> i32 {
     cur | 1 << (nr & 31)
@@ -67,41 +73,30 @@ impl Clone for HCIFilter {
     fn clone(&self) -> Self { *self }
 }
 
-
-// hci.h
-const HCI_FILTER: i32 = 2;
-const HCI_EVENT_PKT: i32 = 0x04;
-const HCI_LE_META_EVENT: i32 = 0x3E;
-
-// bluetooth.h
-const SOL_HCI: i32 = 0;
-
 impl ConnectedAdapter {
+    fn set_scan_params(&self) -> nix::Result<()> {
+        let mut data = BytesMut::with_capacity(7);
+        data.put_u8(1); // scan_type = active
+        data.put_u16::<LittleEndian>(0x0010); // interval ms
+        data.put_u16::<LittleEndian>(0x0010); // window ms
+        data.put_u8(0); // own_type = public
+        data.put_u8(0); // filter_policy = public
+        let mut buf = Protocol::hci(LE_SET_SCAN_PARAMETERS_CMD, &*data);
+        Protocol::write(self.adapter_fd, &mut *buf)
+    }
+
+    fn set_scan_enabled(&self, enabled: bool) -> nix::Result<()> {
+        let mut data = BytesMut::with_capacity(2);
+        data.put_u8(if enabled { 1 } else { 0 }); // enabled
+        data.put_u8(1); // filter duplicates
+
+        let mut buf = Protocol::hci(LE_SET_SCAN_ENABLE_CMD, &*data);
+        Protocol::write(self.adapter_fd, &mut *buf)
+    }
+
     pub fn start_scan(&self) -> nix::Result<()> {
-        let own_type: u8 = 0x00;
-        let scan_type: u8 = 0x01;
-        let filter_policy: u8 = 0x00;
-        let interval: u16 = 0x0010;
-        let window: u16 = 0x0010;
-        let filter_dup: u8 = 1;
-
-        let mut nf = HCIFilter::default();
-        nf.set_ptype(HCI_EVENT_PKT);
-        nf.set_event(HCI_LE_META_EVENT);
-
-        unsafe {
-            // start scan
-            handle_error(hci_le_set_scan_parameters(
-                self.adapter_fd, scan_type, interval, window,
-                own_type, filter_policy, 10_000))?;
-
-            handle_error(
-                hci_le_set_scan_enable(self.adapter_fd, 1, filter_dup, 10_000))?;
-
-            let nf_ptr: *mut c_void = &mut nf as *mut _ as *mut c_void;
-            handle_error(setsockopt(self.adapter_fd, SOL_HCI, HCI_FILTER, nf_ptr,
-                                    mem::size_of_val(&nf) as u32))?;
-        };
-        Ok(())
+        // self.set_scan_enabled(false).unwrap();
+        self.set_scan_params().unwrap();
+        self.set_scan_enabled(true)
     }
 }

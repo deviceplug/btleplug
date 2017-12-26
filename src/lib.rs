@@ -1,4 +1,4 @@
-// #![allow(warnings)]
+#![allow(dead_code, unused_imports)]
 
 extern crate libc;
 
@@ -26,5 +26,7 @@ extern crate nom;
 pub mod adapter;
 pub mod manager;
 pub mod device;
+
 mod util;
+mod constants;
 

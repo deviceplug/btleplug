@@ -1,10 +1,10 @@
 mod scan;
 mod parser;
+mod protocol;
 
 use libc;
 use std;
-use libc::{c_char, c_void, bind, socket, connect, sockaddr, SOCK_SEQPACKET, sa_family_t,
-           getsockopt, setsockopt, SOL_SOCKET, SO_ERROR, SO_DOMAIN, SO_PROTOCOL};
+use libc::*;
 use std::ffi::CStr;
 use nix;
 use nom::IResult;
@@ -23,9 +23,10 @@ use std::thread;
 use std::mem::size_of;
 
 use util::handle_error;
-use manager::{Callback, AF_BLUETOOTH};
+use manager::Callback;
 use ::adapter::parser::{AdapterDecoder, Message};
 use ::device::Device;
+use ::constants::*;
 
 
 #[link(name = "bluetooth")]
@@ -151,6 +152,19 @@ impl HCIDevInfo {
 
 #[derive(Copy, Debug)]
 #[repr(C)]
+pub struct SockaddrHCI {
+    hci_family: sa_family_t,
+    hci_dev: u16,
+    hci_channel: u16,
+}
+
+impl Clone for SockaddrHCI {
+    fn clone(&self) -> Self { *self }
+}
+
+
+#[derive(Copy, Debug)]
+#[repr(C)]
 pub struct SockaddrL2 {
     l2_family: sa_family_t,
     l2_psm: u16,
@@ -227,14 +241,6 @@ impl AdapterState {
     }
 }
 
-pub const HCI_COMMAND_PKT: u8 = 0x01;
-pub const OCF_LE_CREATE_CONN: u16 = 0x000d;
-pub const OGF_LE_CTL: u8 = 0x08;
-pub const LE_CREATE_CONN_CMD: u16 = OCF_LE_CREATE_CONN | ((OGF_LE_CTL as u16) << 10);
-pub const ATT_CID: u16 = 4;
-pub const ATT_OP_READ_BY_GROUP_REQ: u8 = 0x10;
-pub const GATT_CHARAC_UUID: u16 = 0x2803;
-
 #[derive(Clone)]
 pub struct ConnectedAdapter {
     pub adapter: Adapter,
@@ -247,7 +253,21 @@ pub struct ConnectedAdapter {
 
 impl ConnectedAdapter {
     pub fn new(adapter: &Adapter, callbacks: Vec<Callback>) -> nix::Result<ConnectedAdapter> {
-        let adapter_fd = handle_error(unsafe { hci_open_dev(adapter.dev_id as i32) })?;
+
+        let adapter_fd = handle_error(unsafe {
+            socket(AF_BLUETOOTH, SOCK_RAW | SOCK_CLOEXEC /*| SOCK_NONBLOCK*/, 1)
+        })?;
+
+        let addr = SockaddrHCI {
+            hci_family: AF_BLUETOOTH as u16,
+            hci_dev: adapter.dev_id,
+            hci_channel: 0,
+        };
+
+        handle_error(unsafe {
+            bind(adapter_fd, &addr as *const SockaddrHCI as *const sockaddr,
+                 std::mem::size_of::<SockaddrHCI>() as u32)
+        })?;
 
         let should_stop = Arc::new(AtomicBool::new(false));
 
@@ -262,22 +282,48 @@ impl ConnectedAdapter {
 
         connected.add_socket_reader(adapter_fd);
 
+        connected.set_socket_filter()?;
+
         Ok(connected)
+    }
+
+    fn set_socket_filter(&self) -> nix::Result<()> {
+        let mut filter = BytesMut::with_capacity(14);
+        let type_mask = (1 << HCI_COMMAND_PKT) | (1 << HCI_EVENT_PKT) | (1 << HCI_ACLDATA_PKT);
+        let event_mask1 = (1 << EVT_DISCONN_COMPLETE) | (1 << EVT_ENCRYPT_CHANGE) |
+            (1 << EVT_CMD_COMPLETE) | (1 << EVT_CMD_STATUS);
+        let event_mask2 = 1 << (EVT_LE_META_EVENT - 32);
+        let opcode = 0;
+
+        filter.put_u32::<LittleEndian>(type_mask);
+        filter.put_u32::<LittleEndian>(event_mask1);
+        filter.put_u32::<LittleEndian>(event_mask2);
+        filter.put_u32::<LittleEndian>(opcode);
+
+        handle_error(unsafe {
+            setsockopt(self.adapter_fd, SOL_HCI, HCI_FILTER,
+                       filter.as_mut_ptr() as *mut _ as *mut c_void,
+                       filter.len() as u32)
+        })?;
+        Ok(())
     }
 
     fn add_socket_reader(&self, fd: i32) {
         let should_stop = self.should_stop.clone();
         let connected = self.clone();
-        let mut stream = unsafe {
-            UnixStream::from_raw_fd(fd)
-        };
+//        let mut stream = unsafe {
+//            UnixStream::from_raw_fd(fd)
+//        };
 
         thread::spawn(move || {
             let mut buf = [0u8; 2048];
             let mut cur: Vec<u8> = vec![];
 
             while !should_stop.load(Ordering::Relaxed) {
-                let len = stream.read(&mut buf).unwrap_or(0);
+                // debug!("reading");
+                let len = handle_error(unsafe {
+                    read(fd, buf.as_mut_ptr() as *mut _ as *mut c_void, buf.len()) as i32
+                }).unwrap_or(0) as usize;
                 if len == 0 {
                     continue;
                 }
@@ -370,7 +416,7 @@ impl ConnectedAdapter {
         self.add_socket_reader(fd);
 
         let local_addr = SockaddrL2 {
-            l2_family: AF_BLUETOOTH as u16,
+            l2_family: AF_BLUETOOTH as sa_family_t,
             l2_psm: 0,
             l2_bdaddr: self.adapter.addr,
             l2_cid: ATT_CID,

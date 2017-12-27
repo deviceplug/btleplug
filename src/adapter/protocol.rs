@@ -24,6 +24,17 @@ impl Protocol {
         buf
     }
 
+    pub fn acl(handle: u16, cid: u16, data: &[u8]) -> BytesMut {
+        let mut buf = BytesMut::with_capacity(9 + data.len());
+        buf.put_u8(HCI_ACLDATA_PKT as u8);
+        buf.put_u16::<LittleEndian>(handle | (ACL_START_NO_FLUSH << 12));
+        buf.put_u16::<LittleEndian>(data.len() as u16 + 4);
+        buf.put_u16::<LittleEndian>(data.len() as u16);
+        buf.put_u16::<LittleEndian>(cid);
+        buf.put(data);
+        buf
+    }
+
     pub fn write(fd: i32, message: &mut [u8]) -> nix::Result<()> {
         debug!("writing({}) {:?}", fd, message);
         let ptr = message.as_mut_ptr();

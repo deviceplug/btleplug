@@ -1,6 +1,7 @@
 mod scan;
 mod parser;
 mod protocol;
+mod acl_stream;
 
 use libc;
 use std;
@@ -24,7 +25,9 @@ use std::mem::size_of;
 
 use util::handle_error;
 use manager::Callback;
-use ::adapter::parser::{AdapterDecoder, Message};
+use ::adapter::parser::{Decoder, Message};
+use ::adapter::acl_stream::ACLStream;
+use ::adapter::protocol::Protocol;
 use ::device::Device;
 use ::constants::*;
 
@@ -282,6 +285,7 @@ pub struct ConnectedAdapter {
     callbacks: Arc<Mutex<Vec<Callback>>>,
     pub discovered: Arc<Mutex<HashMap<BDAddr, Device>>>,
     device_fds: Arc<Mutex<HashMap<BDAddr, i32>>>,
+    streams: Arc<Mutex<HashMap<BDAddr, ACLStream>>>,
 }
 
 impl ConnectedAdapter {
@@ -311,6 +315,7 @@ impl ConnectedAdapter {
             callbacks: Arc::new(Mutex::new(callbacks)),
             discovered: Arc::new(Mutex::new(HashMap::new())),
             device_fds: Arc::new(Mutex::new(HashMap::new())),
+            streams: Arc::new(Mutex::new(HashMap::new())),
         };
 
         connected.add_raw_socket_reader(adapter_fd);
@@ -365,7 +370,7 @@ impl ConnectedAdapter {
                 let mut new_cur: Option<Vec<u8>> = Some(vec![]);
                 {
                     let result = {
-                        AdapterDecoder::decode(&cur)
+                        Decoder::decode(&cur)
                     };
 
                     match result {
@@ -458,7 +463,7 @@ impl ConnectedAdapter {
                         debug!("received control message");
                     }
                     HCI_CHANNEL_MONITOR => {
-                        match AdapterDecoder::decode(data) {
+                        match Decoder::decode(data) {
                             IResult::Done(left, result) => {
                                 info!("> {:?}", result);
                                 connected.handle(result);
@@ -525,7 +530,29 @@ impl ConnectedAdapter {
             }
             Message::LEConnComplete(info) => {
                 info!("connected to {:?}", info);
+                let fd = *self.device_fds.lock().unwrap().get(&info.bdaddr).unwrap();
+
+                self.streams.lock().unwrap()
+                    .entry(info.bdaddr)
+                    .or_insert_with(|| ACLStream {
+                        address: info.bdaddr,
+                        handle: info.handle,
+                        fd,
+                        cur_handler: Mutex::new(Option::None),
+                    });
             }
+//            Message::ACLDataPacket{ handle, .. } => {
+//                let mut streams = self.streams.lock().unwrap();
+//                let stream = streams.entry(handle)
+//                    .or_insert_with(||
+//                        ACLStream {
+//                            handle,
+//                            address: BDAddr {
+//                                address: [0u8; 6],
+//                            },
+//                        }
+//                );
+//            }
             message => {
                 debug!("unhandled message {:?}", message);
             }
@@ -537,6 +564,7 @@ impl ConnectedAdapter {
         let fd = handle_error(unsafe {
             socket(AF_BLUETOOTH, SOCK_SEQPACKET, 0)
         })?;
+        self.device_fds.lock().unwrap().insert(device.address, fd);
 
         let local_addr = SockaddrL2 {
             l2_family: AF_BLUETOOTH as sa_family_t,
@@ -577,23 +605,25 @@ impl ConnectedAdapter {
 
         info!("sock opts: {:#?}", opts);
 
-        self.device_fds.lock().unwrap().insert(device.address, fd);
         Ok(())
     }
 
-    pub fn discover_chars(&self, device: &Device) {
+    fn write_acl_packet(&self, device: &Device, data: &mut [u8]) -> nix::Result<()> {
         // TODO: improve error handling
-        let fd = self.device_fds.lock().unwrap().get(&device.address).unwrap().clone();
+        self.streams.lock().unwrap()
+            .get(&device.address).unwrap()
+            .write(data)
+    }
 
+    pub fn discover_chars(&self, device: &Device) {
         info!("start char discovery");
         let mut buf = BytesMut::with_capacity(7);
-        buf.put_u8(ATT_OP_READ_BY_GROUP_REQ);
-        buf.put_u16::<LittleEndian>(1);
+        buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
+        buf.put_u16::<LittleEndian>(0x0001);
         buf.put_u16::<LittleEndian>(0xFFFF);
         buf.put_u16::<LittleEndian>(GATT_CHARAC_UUID);
-        handle_error(unsafe {
-            write(fd, buf.as_mut_ptr() as *mut c_void, buf.len()) as i32
-        }).unwrap();
+
+        self.write_acl_packet(device, &mut *buf).unwrap();
     }
 }
 

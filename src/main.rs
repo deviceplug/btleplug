@@ -31,7 +31,8 @@ fn main() {
         let devices =
             connected.discovered.lock().unwrap();
         info!("Devices: {:#?}", *devices);
-        devices.iter().filter(|d| d.1.local_name.is_some())
+        devices.iter()
+            .filter(|d| d.1.local_name.iter().any(|name| name.contains("LED")))
             .next().unwrap().1.clone()
     };
 

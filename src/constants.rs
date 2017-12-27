@@ -21,6 +21,8 @@ pub const ACL_START: u16 = 0x02;
 pub const SOL_HCI: i32 = 0;
 
 pub const ATT_CID: u16 = 4;
+pub const ATT_OP_READ_BY_TYPE_REQ: u8 = 0x08;
+pub const ATT_OP_READ_BY_TYPE_RESP: u8 = 0x09;
 pub const ATT_OP_READ_BY_GROUP_REQ: u8 = 0x10;
 pub const GATT_CHARAC_UUID: u16 = 0x2803;
 

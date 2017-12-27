@@ -80,7 +80,7 @@ mod tests {
     #[test]
     fn test_acl_data_packet() {
         let buf = [2, 64, 32, 9, 0, 5, 0, 4, 0, 1, 16, 1, 0, 16];
-        assert_eq!(AdapterDecoder::decode(&buf), IResult::Done(
+        assert_eq!(Decoder::decode(&buf), IResult::Done(
             &[][..],
             Message::ACLDataPacket {
                 handle: 64,
@@ -115,7 +115,7 @@ pub enum Message {
         data: Vec<u8>,
         len: u16
     },
-    ACLDataContiuation {
+    ACLDataContinuation {
         handle: u16,
         data: Vec<u8>,
     }
@@ -146,17 +146,14 @@ pub struct LEAdvertisingInfo {
 
 #[derive(Debug, PartialEq)]
 pub struct LEConnInfo {
-    handle: u16,
-    role: u8,
-    bdaddr: BDAddr,
-    bdaddr_type: u8,
-    interval: u16,
-    latency: u16,
-    supervision_timeout: u16,
-    master_clock_accuracy: u8,
-}
-
-pub struct AdapterDecoder {
+    pub handle: u16,
+    pub role: u8,
+    pub bdaddr: BDAddr,
+    pub bdaddr_type: u8,
+    pub interval: u16,
+    pub latency: u16,
+    pub supervision_timeout: u16,
+    pub master_clock_accuracy: u8,
 }
 
 enum_from_primitive! {
@@ -459,7 +456,7 @@ fn hci_acldata_pkt(i: &[u8]) -> IResult<&[u8], Message> {
     let flags = head >> 12;
     let handle = head & 0x0FFF;
     let message = match flags {
-        ACL_START => {
+        ACL_START | ACL_START_NO_FLUSH => {
             let (i, dlen) = try_parse!(i, le_u16);
             let (i, cid) = try_parse!(i, le_u16);
             Message::ACLDataPacket {
@@ -470,7 +467,7 @@ fn hci_acldata_pkt(i: &[u8]) -> IResult<&[u8], Message> {
             }
         }
         ACL_CONT => {
-            Message::ACLDataContiuation {
+            Message::ACLDataContinuation {
                 handle,
                 data: i.clone().to_owned(),
             }
@@ -494,8 +491,59 @@ fn message(i: &[u8]) -> IResult<&[u8], Message> {
     }
 }
 
-impl AdapterDecoder {
+fn characteristics(i: &[u8]) -> IResult<&[u8], Vec<Characteristic>> {
+    let (i, opcode) = try_parse!(i, le_u8);
+
+    let (i, result) = match opcode {
+        ATT_OP_READ_BY_TYPE_RESP => {
+            let (i, rec_len) = try_parse!(i, le_u8);
+            let num = i.len() / rec_len as usize;
+            let mut result = Vec::with_capacity(num);
+            for _ in 0..num {
+                let (i, start_handle) = try_parse!(i, le_u16);
+                let (i, properties) = try_parse!(i, le_u8);
+                let (i, value_handle) = try_parse!(i, le_u16);
+                let (_, uuid) = if rec_len == 7 {
+                    try_parse!(i, map!(le_u16, |b| CharacteristicUUID::B16(b)))
+                } else {
+                    try_parse!(i, map!(parse_uuid_128, |b| CharacteristicUUID::B128(b)))
+                };
+                result.push(Characteristic {
+                    start_handle, properties, value_handle, uuid
+                });
+            }
+            (&[][..], result)
+        }
+        x => {
+            warn!("unhandled characteristics op type {}", x);
+            (&[][..], vec![])
+        }
+    };
+
+    IResult::Done(i, result)
+}
+
+pub struct Decoder {
+}
+
+pub enum CharacteristicUUID {
+    B16(u16),
+    B128([u8; 16]),
+}
+
+pub struct Characteristic {
+    pub start_handle: u16,
+    pub properties: u8,
+    pub value_handle: u16,
+    pub uuid: CharacteristicUUID,
+}
+
+impl Decoder {
     pub fn decode(buf: &[u8]) -> IResult<&[u8], Message> {
         message(buf)
+    }
+
+    pub fn decode_characteristics(buf: &[u8]) -> IResult<&[u8], Vec<Characteristic>> {
+        characteristics(buf)
     }
 }

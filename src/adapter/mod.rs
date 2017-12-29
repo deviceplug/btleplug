@@ -26,11 +26,10 @@ use std::mem::size_of;
 use util::handle_error;
 use manager::Callback;
 use ::adapter::parser::{Decoder, Message};
-use ::adapter::acl_stream::ACLStream;
+use ::adapter::acl_stream::{ACLStream, HandleFn};
 use ::adapter::protocol::Protocol;
 use ::device::Device;
 use ::constants::*;
-
 
 #[link(name = "bluetooth")]
 extern {
@@ -201,16 +200,6 @@ impl Clone for SockaddrL2 {
     fn clone(&self) -> Self { *self }
 }
 
-#[derive(Copy, Debug, Default)]
-#[repr(packed)]
-struct MgmtHdr {
-    opcode: u16,
-    index: u16,
-    len: u16,
-}
-impl Clone for MgmtHdr {
-    fn clone(&self) -> Self { *self }
-}
 
 const L2CAP_OPTIONS: i32 = 0x01;
 const SOL_L2CAP: i32 = 6;
@@ -395,98 +384,6 @@ impl ConnectedAdapter {
         });
     }
 
-    fn add_seq_socket_reader(&self, fd: i32) {
-        let should_stop = self.should_stop.clone();
-        let connected = self.clone();
-
-        thread::spawn(move || {
-            while !should_stop.load(Ordering::Relaxed) {
-                let mut control = [0u8; 64];
-                let mut buf = [0u8; 2048];
-
-                let mut header = MgmtHdr::default();
-                let mut iov = [
-                    iovec {
-                        iov_base:  &mut header as *mut _ as *mut c_void,
-                        iov_len: size_of::<MgmtHdr>(),
-                    },
-                    iovec {
-                        iov_base: buf.as_mut_ptr() as *mut c_void,
-                        iov_len: buf.len()
-                    },
-                ];
-
-                let mut msg = msghdr {
-                    msg_iov: iov.as_mut_ptr(),
-                    msg_iovlen: iov.len(),
-                    msg_control: control.as_mut_ptr() as *mut c_void,
-                    msg_controllen: control.len(),
-                    msg_name: std::ptr::null_mut() as *mut c_void,
-                    msg_namelen: 0,
-                    msg_flags: 0,
-                };
-
-                let len = handle_error(unsafe { recvmsg(fd, &mut msg, 0) as i32 });
-
-                let len = match len {
-                    Ok(x) => x,
-                    Err(err) => {
-                        match err {
-                            nix::Error::Sys(nix::errno::ENOTCONN) => {
-                                // skip
-                            }
-                            nix::Error::Sys(nix::errno::EBADF) => {
-                                info!("fd {} closed, stopping read", fd);
-                                break;
-                            }
-                            _ => {
-                                warn!("fd {} error: {:?}", fd, err)
-                            }
-                        };
-                        thread::sleep(std::time::Duration::from_millis(100));
-                        0
-                    }
-                };
-
-                if (len as usize) < size_of::<MgmtHdr>() {
-                    continue;
-                }
-
-                // TODO: monitor/control.c does some stuff with timevals and creds that should
-                // probably be duplicated
-
-                let data = &buf[0..header.len as usize];
-
-                match header.opcode {
-                    HCI_CHANNEL_CONTROL => {
-                        // control message, not currently handled
-                        debug!("received control message");
-                    }
-                    HCI_CHANNEL_MONITOR => {
-                        match Decoder::decode(data) {
-                            IResult::Done(left, result) => {
-                                info!("> {:?}", result);
-                                connected.handle(result);
-                                if !left.is_empty() {
-                                    error!("unexpected left-over data: {:?}", left);
-                                }
-                            }
-                            IResult::Incomplete(_) => {
-                                error!("unexpected incomplete {:?}", data);
-                            }
-                            IResult::Error(err) => {
-                                error!("parse error {}\nfrom: {:?}", err, data);
-                            }
-                        }
-                    }
-                    _ => {
-                        warn!("Unhandled opcode {}", header.opcode);
-                    }
-                }
-            }
-        });
-
-    }
 
     fn handle(&self, message: Message) {
         debug!("got message {:?}", message);
@@ -534,12 +431,8 @@ impl ConnectedAdapter {
 
                 self.streams.lock().unwrap()
                     .entry(info.bdaddr)
-                    .or_insert_with(|| ACLStream {
-                        address: info.bdaddr,
-                        handle: info.handle,
-                        fd,
-                        cur_handler: Mutex::new(Option::None),
-                    });
+                    .or_insert_with(|| ACLStream::new(info.bdaddr,
+                                                      info.handle, fd));
             }
 //            Message::ACLDataPacket{ handle, .. } => {
 //                let mut streams = self.streams.lock().unwrap();
@@ -592,8 +485,6 @@ impl ConnectedAdapter {
                     size_of::<SockaddrL2>() as u32)
         })?;
 
-        self.add_seq_socket_reader(fd);
-
         let mut opts = L2CapOptions::default();
 
         let mut len = size_of::<L2CapOptions>() as u32;
@@ -608,22 +499,45 @@ impl ConnectedAdapter {
         Ok(())
     }
 
-    fn write_acl_packet(&self, device: &Device, data: &mut [u8]) -> nix::Result<()> {
+    fn write_acl_packet(&self, device: &Device, data: &mut [u8], handler: Option<HandleFn>) {
         // TODO: improve error handling
         self.streams.lock().unwrap()
             .get(&device.address).unwrap()
-            .write(data)
+            .write(data, handler)
     }
 
     pub fn discover_chars(&self, device: &Device) {
+        self.discover_chars_in_range(device, 0x0001, 0xFFFF);
+    }
+
+    pub fn discover_chars_in_range(&self, device: &Device, start: u16, end: u16) {
         info!("start char discovery");
         let mut buf = BytesMut::with_capacity(7);
         buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
-        buf.put_u16::<LittleEndian>(0x0001);
-        buf.put_u16::<LittleEndian>(0xFFFF);
+        buf.put_u16::<LittleEndian>(start);
+        buf.put_u16::<LittleEndian>(end);
         buf.put_u16::<LittleEndian>(GATT_CHARAC_UUID);
 
-        self.write_acl_packet(device, &mut *buf).unwrap();
+        let self_copy = self.clone();
+        let device_copy = device.clone();
+        let handler = Box::new(move |_: u16, data: &[u8]| {
+            match Decoder::decode_characteristics(data).to_result() {
+                Ok(chars) => {
+                    info!("Chars: {:#?}", chars);
+                    chars.last().map(|last| {
+                        let next = last.start_handle + 1;
+                        if next < end {
+                            self_copy.discover_chars_in_range(&device_copy, next, end);
+                        }
+                    });
+                }
+                Err(err) => {
+                    error!("failed to parse chars: {:?}", err);
+                }
+            };
+        });
+
+        self.write_acl_packet(device, &mut *buf, Some(handler));
     }
 }
 

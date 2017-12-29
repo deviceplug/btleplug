@@ -1,5 +1,7 @@
 use nom::{le_u8, le_u16, le_u32, le_i8, IResult, Err, ErrorKind};
 use num::FromPrimitive;
+use std::fmt;
+use std::fmt::{Display, Debug, Formatter};
 
 use ::adapter::{BDAddr, AddressType};
 use ::constants::*;
@@ -531,6 +533,24 @@ pub enum CharacteristicUUID {
     B128([u8; 16]),
 }
 
+impl Display for CharacteristicUUID {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match *self {
+            CharacteristicUUID::B16(u) => write!(f, "{:02X}:{:02X}", u & 0xFF, u >> 8),
+            CharacteristicUUID::B128(a) => write!(f, "{:X}:{:X}:{:X}:{:X}:{:X}:{:X}",
+                                                  a[5], a[4], a[3], a[2], a[1], a[0])
+
+        }
+    }
+}
+
+impl Debug for CharacteristicUUID {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        (self as &Display).fmt(f)
+    }
+}
+
+#[derive(Debug)]
 pub struct Characteristic {
     pub start_handle: u16,
     pub properties: u8,

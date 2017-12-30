@@ -1,3 +1,5 @@
+extern crate core;
+
 mod scan;
 mod parser;
 mod protocol;
@@ -13,7 +15,8 @@ use bytes::{BytesMut, BufMut, LittleEndian};
 
 use std::io::{Read, Write};
 
-use std::collections::{HashSet, HashMap};
+use std::cell::RefCell;
+use std::collections::{HashSet, HashMap, BTreeSet};
 use std::fmt;
 use std::fmt::{Display, Debug, Formatter};
 use std::sync::{Arc, Mutex};
@@ -28,7 +31,7 @@ use manager::Callback;
 use ::adapter::parser::{Decoder, Message};
 use ::adapter::acl_stream::{ACLStream, HandleFn};
 use ::adapter::protocol::Protocol;
-use ::device::Device;
+use ::device::{Device, Characteristic};
 use ::constants::*;
 
 #[link(name = "bluetooth")]
@@ -42,6 +45,10 @@ extern {
 pub enum AddressType {
     Random,
     Public,
+}
+
+impl Default for AddressType {
+    fn default() -> Self { AddressType::Public }
 }
 
 impl AddressType {
@@ -71,7 +78,7 @@ impl Clone for HCIDevReq {
     fn clone(&self) -> Self { *self }
 }
 
-#[derive(Copy, Serialize, Deserialize, Hash, Eq, PartialEq)]
+#[derive(Copy, Serialize, Deserialize, Hash, Eq, PartialEq, Default)]
 #[repr(C)]
 pub struct BDAddr {
     pub address: [ u8 ; 6usize ]
@@ -266,13 +273,38 @@ impl AdapterState {
     }
 }
 
+#[derive(Debug, Default)]
+struct DeviceState {
+    address: BDAddr,
+    address_type: AddressType,
+    local_name: Option<String>,
+    tx_power_level: Option<i8>,
+    manufacturer_data: Option<Vec<u8>>,
+    discovery_count: u32,
+    has_scan_response: bool,
+    characteristics: BTreeSet<Characteristic>,
+}
+
+impl DeviceState {
+    fn to_device(&self) -> Device {
+        Device {
+            address: self.address,
+            address_type: self.address_type.clone(),
+            local_name: self.local_name.clone(),
+            tx_power_level: self.tx_power_level.clone(),
+            manufacturer_data: self.manufacturer_data.clone(),
+            characteristics: self.characteristics.clone(),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct ConnectedAdapter {
     pub adapter: Adapter,
     adapter_fd: i32,
     should_stop: Arc<AtomicBool>,
     callbacks: Arc<Mutex<Vec<Callback>>>,
-    pub discovered: Arc<Mutex<HashMap<BDAddr, Device>>>,
+    discovered: Arc<Mutex<HashMap<BDAddr, DeviceState>>>,
     device_fds: Arc<Mutex<HashMap<BDAddr, i32>>>,
     streams: Arc<Mutex<HashMap<BDAddr, ACLStream>>>,
 }
@@ -305,7 +337,7 @@ impl ConnectedAdapter {
             discovered: Arc::new(Mutex::new(HashMap::new())),
             device_fds: Arc::new(Mutex::new(HashMap::new())),
             streams: Arc::new(Mutex::new(HashMap::new())),
-        };
+         };
 
         connected.add_raw_socket_reader(adapter_fd);
 
@@ -394,10 +426,13 @@ impl ConnectedAdapter {
                 use ::adapter::parser::LEAdvertisingData::*;
 
                 let device = discovered.entry(info.bdaddr)
-                    .or_insert_with(||
-                        Device::new(info.bdaddr,
-                                    if info.bdaddr_type == 1 { AddressType::Random }
-                                        else { AddressType::Public }));
+                    .or_insert_with(|| {
+                        let mut d = DeviceState::default();
+                        d.address = info.bdaddr;
+                        d.address_type = if info.bdaddr_type == 1 { AddressType::Random }
+                            else { AddressType::Public };
+                        d
+                    });
 
                 device.discovery_count += 1;
 
@@ -499,11 +534,21 @@ impl ConnectedAdapter {
         Ok(())
     }
 
-    fn write_acl_packet(&self, device: &Device, data: &mut [u8], handler: Option<HandleFn>) {
+    fn write_acl_packet(&self, address: BDAddr, data: &mut [u8], handler: Option<HandleFn>) {
         // TODO: improve error handling
         self.streams.lock().unwrap()
-            .get(&device.address).unwrap()
+            .get(&address).unwrap()
             .write(data, handler)
+    }
+
+    pub fn discovered(&self) -> Vec<Device> {
+        let discovered = self.discovered.lock().unwrap();
+        discovered.values().map(|d| d.to_device()).collect()
+    }
+
+    pub fn device(&self, address: BDAddr) -> Option<Device> {
+        let discovered = self.discovered.lock().unwrap();
+        discovered.get(&address).map(|d| d.to_device())
     }
 
     pub fn discover_chars(&self, device: &Device) {
@@ -511,7 +556,10 @@ impl ConnectedAdapter {
     }
 
     pub fn discover_chars_in_range(&self, device: &Device, start: u16, end: u16) {
-        info!("start char discovery");
+        self.discover_chars_in_range_int(device.address, start, end);
+    }
+
+    fn discover_chars_in_range_int(&self, address: BDAddr, start: u16, end: u16) {
         let mut buf = BytesMut::with_capacity(7);
         buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
         buf.put_u16::<LittleEndian>(start);
@@ -519,17 +567,28 @@ impl ConnectedAdapter {
         buf.put_u16::<LittleEndian>(GATT_CHARAC_UUID);
 
         let self_copy = self.clone();
-        let device_copy = device.clone();
         let handler = Box::new(move |_: u16, data: &[u8]| {
             match Decoder::decode_characteristics(data).to_result() {
                 Ok(chars) => {
-                    info!("Chars: {:#?}", chars);
-                    chars.last().map(|last| {
-                        let next = last.start_handle + 1;
-                        if next < end {
-                            self_copy.discover_chars_in_range(&device_copy, next, end);
-                        }
+                    debug!("Chars: {:#?}", chars);
+                    let mut devices = self_copy.discovered.lock().unwrap();
+                    devices.get_mut(&address).as_mut().map(|ref mut d| {
+                        let mut next = None;
+                        chars.into_iter().for_each(|c| {
+                            next = Some(c.start_handle + 1);
+                            d.characteristics.insert(c);
+                        });
+
+                        next.map(|next| {
+                            if next < end {
+                                self_copy.discover_chars_in_range_int(address, next, end);
+                            }
+                        });
+                    }).or_else(|| {
+                        warn!("received chars for unknown device: {}", address);
+                        None
                     });
+
                 }
                 Err(err) => {
                     error!("failed to parse chars: {:?}", err);
@@ -537,22 +596,33 @@ impl ConnectedAdapter {
             };
         });
 
-        self.write_acl_packet(device, &mut *buf, Some(handler));
+        self.write_acl_packet(address, &mut *buf, Some(handler));
+    }
+
+    pub fn write(&self, address: BDAddr, char: &Characteristic, data: &[u8]) {
+        let streams = self.streams.lock().unwrap();
+        let stream = streams.get(&address).unwrap();
+        let mut buf = BytesMut::with_capacity(3 + data.len());
+        buf.put_u8(ATT_OP_WRITE_CMD);
+        buf.put_u16::<LittleEndian>(char.value_handle);
+        buf.put(data);
+        stream.write_cmd(&mut *buf);
     }
 }
 
-impl Drop for ConnectedAdapter {
-    fn drop(&mut self) {
-        self.should_stop.store(true, Ordering::Relaxed);
-        // clean up
-        info!("cleaning up device");
-        unsafe {
-            hci_close_dev(self.adapter_fd);
-        }
-
-        // TODO: cleanup device sockets
-    }
-}
+// TODO: figure out how to do this correctly given clones
+//impl Drop for ConnectedAdapter {
+//    fn drop(&mut self) {
+//        self.should_stop.store(true, Ordering::Relaxed);
+//        // clean up
+//        info!("cleaning up device");
+//        unsafe {
+//            hci_close_dev(self.adapter_fd);
+//        }
+//
+//        // TODO: cleanup device sockets
+//    }
+//}
 
 #[derive(Debug, Clone)]
 pub struct Adapter {

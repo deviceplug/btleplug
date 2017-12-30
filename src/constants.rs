@@ -24,6 +24,10 @@ pub const ATT_CID: u16 = 4;
 pub const ATT_OP_READ_BY_TYPE_REQ: u8 = 0x08;
 pub const ATT_OP_READ_BY_TYPE_RESP: u8 = 0x09;
 pub const ATT_OP_READ_BY_GROUP_REQ: u8 = 0x10;
+pub const ATT_OP_WRITE_REQ: u8 = 0x12;
+pub const ATT_OP_WRITE_RESP: u8 = 0x13;
+pub const ATT_OP_WRITE_CMD: u8 = 0x52;
+
 pub const GATT_CHARAC_UUID: u16 = 0x2803;
 
 pub const EVT_DISCONN_COMPLETE: u8 = 0x05;

@@ -14,7 +14,7 @@ use nom::IResult;
 
 use adapter::BDAddr;
 use adapter::protocol::Protocol;
-use adapter::parser::{Message, Characteristic, CharacteristicUUID, Decoder};
+use adapter::parser::{Message, Decoder};
 use ::util::handle_error;
 use ::constants::*;
 
@@ -40,7 +40,7 @@ pub struct ACLStream {
     pub handle: u16,
     fd: i32,
     should_stop: Arc<AtomicBool>,
-    sender: Sender<(Vec<u8>, Option<HandleFn>)>
+    sender: Sender<(Vec<u8>, Option<HandleFn>, bool)>
 }
 
 impl ACLStream {
@@ -68,8 +68,8 @@ impl ACLStream {
         acl_stream
     }
 
-    fn handle_iteration(&self, receiver: &Receiver<(Vec<u8>, Option<HandleFn>)>) -> nix::Result<()> {
-        let (mut data, handler) = receiver.recv().unwrap();
+    fn handle_iteration(&self, receiver: &Receiver<(Vec<u8>, Option<HandleFn>, bool)>) -> nix::Result<()> {
+        let (mut data, handler, command) = receiver.recv().unwrap();
 
         debug!("sending {:?} to {}", data, self.fd);
 
@@ -77,30 +77,31 @@ impl ACLStream {
             write(self.fd, data.as_mut_ptr() as *mut c_void, data.len()) as i32
         })?;
 
-        match self.read_message() {
-//            Ok(Message::ACLDataPacket {cid, data, ..}) => {
-//                handler.map(|h| h(cid, &data));
-//            },
-            Ok(data) => {
-                handler.map(|h| h(self.handle, &data));
-            }
-            Err(err) => {
-                match err {
-                    nix::Error::Sys(nix::errno::ENOTCONN) => {
-                        // skip
-                    }
-                    nix::Error::Sys(nix::errno::EBADF) => {
-                        info!("fd {} closed, stopping read", self.fd);
-                        // todo: stop
-                    }
-                    _ => {
-                        warn!("fd {} error: {:?}", self.fd, err)
-                    }
-                };
-                thread::sleep(std::time::Duration::from_millis(100));
-            }
-        };
-
+        if !command {
+            match self.read_message() {
+                //            Ok(Message::ACLDataPacket {cid, data, ..}) => {
+                //                handler.map(|h| h(cid, &data));
+                //            },
+                Ok(data) => {
+                    handler.map(|h| h(self.handle, &data));
+                }
+                Err(err) => {
+                    match err {
+                        nix::Error::Sys(nix::errno::ENOTCONN) => {
+                            // skip
+                        }
+                        nix::Error::Sys(nix::errno::EBADF) => {
+                            info!("fd {} closed, stopping read", self.fd);
+                            // todo: stop
+                        }
+                        _ => {
+                            warn!("fd {} error: {:?}", self.fd, err)
+                        }
+                    };
+                    thread::sleep(std::time::Duration::from_millis(100));
+                }
+            };
+        }
         Ok(())
     }
 
@@ -179,10 +180,18 @@ impl ACLStream {
 
     pub fn write(&self, data: &mut [u8], handler: Option<HandleFn>) {
         // let mut packet = Protocol::acl(self.handle, ATT_CID, data);
-        self.sender.send((data.to_owned(), handler)).unwrap();
+        self.sender.send((data.to_owned(), handler, false)).unwrap();
     }
 
+    pub fn write_cmd(&self, data: &mut [u8]) {
+        // let mut packet = Protocol::acl(self.handle, ATT_CID, data);
+        self.sender.send((data.to_owned(), None, true)).unwrap();
+    }
 
+//    pub fn write_att(&self, data: &mut [u8]) {
+//        let packet = Protocol::acl(self.handle, ATT_CID, data);
+//        self.sender.send((packet.to_vec(), None)).unwrap();
+//    }
 
 //    pub fn receive(&self, message: Message) {
 //        // TODO: handle partial packets

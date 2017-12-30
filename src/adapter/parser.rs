@@ -4,6 +4,7 @@ use std::fmt;
 use std::fmt::{Display, Debug, Formatter};
 
 use ::adapter::{BDAddr, AddressType};
+use ::device::{Characteristic, CharacteristicUUID};
 use ::constants::*;
 
 #[cfg(test)]
@@ -528,35 +529,6 @@ fn characteristics(i: &[u8]) -> IResult<&[u8], Vec<Characteristic>> {
 pub struct Decoder {
 }
 
-pub enum CharacteristicUUID {
-    B16(u16),
-    B128([u8; 16]),
-}
-
-impl Display for CharacteristicUUID {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match *self {
-            CharacteristicUUID::B16(u) => write!(f, "{:02X}:{:02X}", u & 0xFF, u >> 8),
-            CharacteristicUUID::B128(a) => write!(f, "{:X}:{:X}:{:X}:{:X}:{:X}:{:X}",
-                                                  a[5], a[4], a[3], a[2], a[1], a[0])
-
-        }
-    }
-}
-
-impl Debug for CharacteristicUUID {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        (self as &Display).fmt(f)
-    }
-}
-
-#[derive(Debug)]
-pub struct Characteristic {
-    pub start_handle: u16,
-    pub properties: u8,
-    pub value_handle: u16,
-    pub uuid: CharacteristicUUID,
-}
 
 impl Decoder {
     pub fn decode(buf: &[u8]) -> IResult<&[u8], Message> {

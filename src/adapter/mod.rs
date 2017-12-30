@@ -599,7 +599,7 @@ impl ConnectedAdapter {
         self.write_acl_packet(address, &mut *buf, Some(handler));
     }
 
-    pub fn write(&self, address: BDAddr, char: &Characteristic, data: &[u8]) {
+    pub fn command(&self, address: BDAddr, char: &Characteristic, data: &[u8]) {
         let streams = self.streams.lock().unwrap();
         let stream = streams.get(&address).unwrap();
         let mut buf = BytesMut::with_capacity(3 + data.len());
@@ -607,6 +607,17 @@ impl ConnectedAdapter {
         buf.put_u16::<LittleEndian>(char.value_handle);
         buf.put(data);
         stream.write_cmd(&mut *buf);
+    }
+
+    pub fn request(&self, address: BDAddr, char: &Characteristic, data: &[u8],
+                   handler: Option<HandleFn>) {
+        let streams = self.streams.lock().unwrap();
+        let stream = streams.get(&address).unwrap();
+        let mut buf = BytesMut::with_capacity(3 + data.len());
+        buf.put_u8(ATT_OP_WRITE_REQ);
+        buf.put_u16::<LittleEndian>(char.value_handle);
+        buf.put(data);
+        stream.write(&mut *buf, handler);
     }
 }
 

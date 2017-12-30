@@ -52,25 +52,40 @@ fn main() {
         connected.discover_chars(dev);
     });
 
-    std::thread::sleep(std::time::Duration::from_secs(1));
+    std::thread::sleep(std::time::Duration::from_secs(2));
 
+    lights.iter().for_each(|dev| {
+        connected.device(dev.address)
+            .unwrap()
+            .characteristics.iter().for_each(|c| println!("{}", c));
+    });
 
     let threads: Vec<JoinHandle<()>> = lights.iter().map(|dev| {
         let green = vec![0x56, 0x00, 0xFF, 0x00, 0x00, 0xF0, 0xAA];
         let warm = vec![0x56, 0x00, 0x00, 0x00, 0xFF, 0x0f, 0xaa];
+        let status = vec![0xEF, 0x01, 0x77];
 
         let connected = connected.clone();
         let address = dev.address;
         std::thread::spawn(move|| {
             let chars = connected.device(address).unwrap().characteristics;
             let cmd_char = chars.iter().find(|c| c.uuid == B16(0xFFE9)).unwrap();
+            let status_char = chars.iter().find(|c| c.uuid == B16(0xFFE4)).unwrap();
 
+            {
+                let address = address.clone();
+                connected.request(address, status_char, &status,
+                                  Some(Box::new(move |_, resp| {
+                                      info!("Got back status for {}: {:?}", address, resp)
+                                  })));
+            }
             for _ in 0..10 {
-                connected.write(address, cmd_char, &green);
+                connected.command(address, cmd_char, &green);
                 std::thread::sleep(Duration::from_millis(250));
-                connected.write(address, cmd_char, &warm);
+                connected.command(address, cmd_char, &warm);
                 std::thread::sleep(Duration::from_millis(250));
             }
+
         })
     }).collect();
 

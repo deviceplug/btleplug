@@ -1,20 +1,25 @@
 [package]
-name = "rust-bluez"
-version = "0.1.0"
+name = "rumble"
+version = "0.0.1"
 authors = ["Micah Wylde <micah@micahw.com>"]
+license = "MIT/Apache-2.0"
+repository = "https://github.com/mwylde/rumble"
+homepage = "https://github.com/mwylde/rumble"
+
+description = """
+A Rust Bluetooth Low Energy (BLE) central module
+library, currently supporting Linux/Bluez
+"""
 
 [dependencies]
-dbus = "0.6.0"
 libc = "0.2.33"
 nix = "0.9.0"
-bincode = "0.9.2"
-serde = "1.0.21"
-serde_derive = "1.0.21"
 bytes = "0.4"
+num = "0.1.41"
 log = "0.3.8"
 env_logger = "0.4.3"
 enum_primitive = "0.1.1"
-num = "0.1.41"
+
 
 [dependencies.nom]
 version = "^3.2"

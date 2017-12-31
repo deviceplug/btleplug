@@ -9,12 +9,6 @@ extern crate env_logger;
 #[macro_use]
 extern crate nix;
 
-extern crate bincode;
-
-#[macro_use]
-extern crate serde_derive;
-extern crate serde;
-
 extern crate bytes;
 #[macro_use]
 extern crate enum_primitive;

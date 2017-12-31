@@ -1,4 +1,4 @@
-extern crate rust_bluez;
+extern crate rumble;
 
 #[macro_use]
 extern crate log;
@@ -7,9 +7,9 @@ extern crate env_logger;
 use std::time::Duration;
 use std::thread::JoinHandle;
 
-use rust_bluez::manager::Manager;
-use rust_bluez::device::Device;
-use rust_bluez::device::CharacteristicUUID::B16;
+use rumble::manager::Manager;
+use rumble::device::Device;
+use rumble::device::CharacteristicUUID::B16;
 
 fn main() {
     env_logger::init().unwrap();

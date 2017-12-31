@@ -78,7 +78,7 @@ impl Clone for HCIDevReq {
     fn clone(&self) -> Self { *self }
 }
 
-#[derive(Copy, Serialize, Deserialize, Hash, Eq, PartialEq, Default)]
+#[derive(Copy, Hash, Eq, PartialEq, Default)]
 #[repr(C)]
 pub struct BDAddr {
     pub address: [ u8 ; 6usize ]

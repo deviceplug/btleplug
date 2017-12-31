@@ -396,7 +396,7 @@ impl ConnectedAdapter {
 
                     match result {
                         IResult::Done(left, result) => {
-                            info!("> {:?}", result);
+                            debug!("> {:?}", result);
                             ConnectedAdapter::handle(&connected, result);
                             if !left.is_empty() {
                                 new_cur = Some(left.to_owned());
@@ -406,7 +406,7 @@ impl ConnectedAdapter {
                             new_cur = None;
                         },
                         IResult::Error(err) => {
-                            error!("parse error {}\nfrom: {:?}", err, cur);
+                            debug!("parse error {}\nfrom: {:?}", err, cur);
                         }
                     }
                 };

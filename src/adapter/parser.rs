@@ -1,7 +1,5 @@
 use nom::{le_u8, le_u16, le_u32, le_i8, IResult, Err, ErrorKind};
 use num::FromPrimitive;
-use std::fmt;
-use std::fmt::{Display, Debug, Formatter};
 
 use ::adapter::{BDAddr, AddressType};
 use ::device::{Characteristic, CharacteristicUUID};
@@ -210,6 +208,7 @@ pub enum CommandType {
     LEStartEncryption = OCF_LE_START_ENCRYPTION | (OGF_LE_CTL as u16) << 10,
 }}
 
+#[allow(dead_code)]
 #[derive(Debug, PartialEq)]
 pub enum CommandComplete {
     Reset,

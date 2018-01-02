@@ -11,6 +11,10 @@ A Rust Bluetooth Low Energy (BLE) central module
 library, currently supporting Linux/Bluez
 """
 
+readme = "README.md"
+keywords = ["bluetooth", "BLE", "IOT", "bluez"]
+categories = ["network-programming", "hardware-support"]
+
 [dependencies]
 libc = "0.2.33"
 nix = "0.9.0"

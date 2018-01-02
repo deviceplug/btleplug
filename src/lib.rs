@@ -1,5 +1,3 @@
-#![allow(dead_code, unused_imports)]
-
 extern crate libc;
 
 #[macro_use]

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 pub const HCI_COMMAND_PKT: u8 = 0x01;
 
 // hci.h

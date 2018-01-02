@@ -3,20 +3,14 @@ extern crate core;
 use std;
 use std::thread;
 use std::boxed::Box;
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::AtomicPtr;
-use std::mem::size_of;
+use std::sync::Arc;
 
 use libc::*;
 
 use nix;
-use nom::IResult;
 
 use adapter::BDAddr;
-use adapter::protocol::Protocol;
-use adapter::parser::{Message, Decoder};
 use ::util::handle_error;
-use ::constants::*;
 
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::sync::atomic::{AtomicBool, Ordering};

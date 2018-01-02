@@ -1,6 +1,5 @@
 extern crate core;
 
-mod scan;
 mod parser;
 mod protocol;
 mod acl_stream;
@@ -13,33 +12,21 @@ use nix;
 use nom::IResult;
 use bytes::{BytesMut, BufMut, LittleEndian};
 
-use std::io::{Read, Write};
-
-use std::cell::RefCell;
 use std::collections::{HashSet, HashMap, BTreeSet};
 use std::fmt;
 use std::fmt::{Display, Debug, Formatter};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::os::unix::net::UnixStream;
-use std::os::unix::io::FromRawFd;
 use std::thread;
 use std::mem::size_of;
 
 use util::handle_error;
 use manager::Callback;
+use ::adapter::protocol::Protocol;
 use ::adapter::parser::{Decoder, Message};
 use ::adapter::acl_stream::{ACLStream, HandleFn};
-use ::adapter::protocol::Protocol;
 use ::device::{Device, Characteristic};
 use ::constants::*;
-
-#[link(name = "bluetooth")]
-extern {
-    fn hci_open_dev(dev_id: i32) -> i32;
-
-    fn hci_close_dev(dd: i32) -> i32;
-}
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum AddressType {
@@ -534,6 +521,32 @@ impl ConnectedAdapter {
         Ok(())
     }
 
+    fn set_scan_params(&self) -> nix::Result<()> {
+        let mut data = BytesMut::with_capacity(7);
+        data.put_u8(1); // scan_type = active
+        data.put_u16::<LittleEndian>(0x0010); // interval ms
+        data.put_u16::<LittleEndian>(0x0010); // window ms
+        data.put_u8(0); // own_type = public
+        data.put_u8(0); // filter_policy = public
+        let mut buf = Protocol::hci(LE_SET_SCAN_PARAMETERS_CMD, &*data);
+        Protocol::write(self.adapter_fd, &mut *buf)
+    }
+
+    fn set_scan_enabled(&self, enabled: bool) -> nix::Result<()> {
+        let mut data = BytesMut::with_capacity(2);
+        data.put_u8(if enabled { 1 } else { 0 }); // enabled
+        data.put_u8(1); // filter duplicates
+
+        let mut buf = Protocol::hci(LE_SET_SCAN_ENABLE_CMD, &*data);
+        Protocol::write(self.adapter_fd, &mut *buf)
+    }
+
+    pub fn start_scan(&self) -> nix::Result<()> {
+        // self.set_scan_enabled(false).unwrap();
+        self.set_scan_params().unwrap();
+        self.set_scan_enabled(true)
+    }
+
     fn write_acl_packet(&self, address: BDAddr, data: &mut [u8], handler: Option<HandleFn>) {
         // TODO: improve error handling
         self.streams.lock().unwrap()
@@ -620,20 +633,6 @@ impl ConnectedAdapter {
         stream.write(&mut *buf, handler);
     }
 }
-
-// TODO: figure out how to do this correctly given clones
-//impl Drop for ConnectedAdapter {
-//    fn drop(&mut self) {
-//        self.should_stop.store(true, Ordering::Relaxed);
-//        // clean up
-//        info!("cleaning up device");
-//        unsafe {
-//            hci_close_dev(self.adapter_fd);
-//        }
-//
-//        // TODO: cleanup device sockets
-//    }
-//}
 
 #[derive(Debug, Clone)]
 pub struct Adapter {

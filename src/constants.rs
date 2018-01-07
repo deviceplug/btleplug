@@ -32,6 +32,9 @@ pub const ATT_OP_WRITE_CMD: u8 = 0x52;
 
 pub const GATT_CHARAC_UUID: u16 = 0x2803;
 
+pub const GATT_CLIENT_CHARAC_CFG_UUID: u16 = 0x2902;
+pub const GATT_SERVER_CHARAC_CFG_UUID: u16 = 0x2903;
+
 pub const EVT_DISCONN_COMPLETE: u8 = 0x05;
 pub const EVT_ENCRYPT_CHANGE: u8 = 0x08;
 pub const EVT_CMD_COMPLETE: u8 = 0x0e;

@@ -83,14 +83,34 @@ mod tests {
         let buf = [2, 64, 32, 9, 0, 5, 0, 4, 0, 1, 16, 1, 0, 16];
         assert_eq!(Decoder::decode(&buf), IResult::Done(
             &[][..],
-            Message::ACLDataPacket {
+            Message::ACLDataPacket(ACLData {
                 handle: 64,
                 cid: 5,
                 data: vec![4, 0, 1, 16, 1, 0, 16],
                 len: 7,
+            }),
+        ))
+    }
+
+    #[test]
+    fn test_notify_response() {
+        let buf = [1, 18, 63, 0, 3];
+        assert_eq!(Decoder::decode_notify_response(&buf), IResult::Done(
+            &[][..],
+            NotifyResponse {
+                handle: 6243,
+                value: 3,
             }
         ))
     }
+}
+
+#[derive(Debug,PartialEq)]
+pub struct ACLData {
+    pub handle: u16,
+    pub cid: u16,
+    pub data: Vec<u8>,
+    pub len: u16,
 }
 
 #[derive(Debug, PartialEq)]
@@ -110,12 +130,7 @@ pub enum Message {
         command: CommandType,
         status: u8,
     },
-    ACLDataPacket {
-        handle: u16,
-        cid: u16,
-        data: Vec<u8>,
-        len: u16
-    },
+    ACLDataPacket(ACLData),
     ACLDataContinuation {
         handle: u16,
         data: Vec<u8>,
@@ -461,12 +476,12 @@ fn hci_acldata_pkt(i: &[u8]) -> IResult<&[u8], Message> {
         ACL_START | ACL_START_NO_FLUSH => {
             let (i, dlen) = try_parse!(i, le_u16);
             let (i, cid) = try_parse!(i, le_u16);
-            Message::ACLDataPacket {
+            Message::ACLDataPacket(ACLData {
                 handle,
                 cid,
                 data: i.clone().to_owned(),
                 len: dlen - 2,
-            }
+            })
         }
         ACL_CONT => {
             Message::ACLDataContinuation {
@@ -525,6 +540,31 @@ fn characteristics(i: &[u8]) -> IResult<&[u8], Vec<Characteristic>> {
     IResult::Done(i, result)
 }
 
+#[derive(Debug, PartialEq)]
+pub struct NotifyResponse {
+    pub handle: u16,
+    pub value: u16,
+}
+
+named!(notify_response<&[u8], NotifyResponse>,
+   do_parse!(
+      typ: tag!(&[ATT_OP_READ_BY_TYPE_RESP]) >>
+      handle: le_u16 >>
+      value: le_u16 >>
+      (
+        NotifyResponse { handle, value }
+      )
+   ));
+//
+//fn notify_response(i: &[u8]) -> IResult<&[u8], NotifyResponse> {
+//    let (i, typ) = try_parse!(i, le_u8);
+//    if typ != ATT_OP_READ_BY_TYPE_RESP {
+//        return IResult::Error(Err(ErrorKind::Custom(1)));
+//    }
+//
+//    let (i, handle) =
+//}
+
 pub struct Decoder {
 }
 
@@ -536,5 +576,9 @@ impl Decoder {
 
     pub fn decode_characteristics(buf: &[u8]) -> IResult<&[u8], Vec<Characteristic>> {
         characteristics(buf)
+    }
+
+    pub fn decode_notify_response(buf: &[u8]) -> IResult<&[u8], NotifyResponse> {
+        notify_response(buf)
     }
 }

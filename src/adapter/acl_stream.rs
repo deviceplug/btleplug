@@ -10,10 +10,13 @@ use libc::*;
 use nix;
 
 use adapter::BDAddr;
+use adapter::protocol::Protocol;
+use ::constants::*;
 use ::util::handle_error;
 
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::sync::atomic::{AtomicBool, Ordering};
+use adapter::parser::ACLData;
 
 #[derive(Copy, Debug, Default)]
 #[repr(packed)]
@@ -182,24 +185,14 @@ impl ACLStream {
         self.sender.send((data.to_owned(), None, true)).unwrap();
     }
 
-//    pub fn write_att(&self, data: &mut [u8]) {
-//        let packet = Protocol::acl(self.handle, ATT_CID, data);
-//        self.sender.send((packet.to_vec(), None)).unwrap();
-//    }
+    pub fn write_att(&self, data: &mut [u8], handler: Option<HandleFn>) {
+        let packet = Protocol::acl(self.handle, ATT_CID, data);
+        self.sender.send((packet.to_vec(), handler, false)).unwrap();
+    }
 
-//    pub fn receive(&self, message: Message) {
-//        // TODO: handle partial packets
-//        match message {
-//            Message::ACLDataPacket { cid, data, .. } => {
-//                let handler = self.cur_handler.lock().unwrap();
-//                handler.map(|f| {
-//                    f(cid, &data);
-//                });
-//
-//            }
-//            _ => {
-//                panic!("should onl ysend ACLDataPackets here")
-//            }
-//        }
-//    }
+    pub fn receive(&self, message: &ACLData) {
+        message.data
+        // TODO: handle partial packets
+
+    }
 }

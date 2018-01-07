@@ -294,6 +294,7 @@ pub struct ConnectedAdapter {
     discovered: Arc<Mutex<HashMap<BDAddr, DeviceState>>>,
     device_fds: Arc<Mutex<HashMap<BDAddr, i32>>>,
     streams: Arc<Mutex<HashMap<BDAddr, ACLStream>>>,
+    handles: Arc<Mutex<HashMap<u16, BDAddr>>>,
 }
 
 impl ConnectedAdapter {
@@ -324,6 +325,7 @@ impl ConnectedAdapter {
             discovered: Arc::new(Mutex::new(HashMap::new())),
             device_fds: Arc::new(Mutex::new(HashMap::new())),
             streams: Arc::new(Mutex::new(HashMap::new())),
+            handles: Arc::new(Mutex::new(HashMap::new())),
          };
 
         connected.add_raw_socket_reader(adapter_fd);
@@ -455,19 +457,21 @@ impl ConnectedAdapter {
                     .entry(info.bdaddr)
                     .or_insert_with(|| ACLStream::new(info.bdaddr,
                                                       info.handle, fd));
+                self.handles.lock().unwrap()
+                    .entry(info.handle)
+                    .or_insert(info.bdaddr);
             }
-//            Message::ACLDataPacket{ handle, .. } => {
-//                let mut streams = self.streams.lock().unwrap();
-//                let stream = streams.entry(handle)
-//                    .or_insert_with(||
-//                        ACLStream {
-//                            handle,
-//                            address: BDAddr {
-//                                address: [0u8; 6],
-//                            },
-//                        }
-//                );
-//            }
+            Message::ACLDataPacket(data) => {
+                let handles = self.handles.lock().unwrap();
+                let address = handles.get(&data.handle);
+
+                address.map(|addr| {
+                    let streams = self.streams.lock().unwrap();
+                    streams.get(addr).map(|stream| {
+                        stream.receive(&data);
+                    });
+                });
+            }
             message => {
                 debug!("unhandled message {:?}", message);
             }
@@ -624,13 +628,80 @@ impl ConnectedAdapter {
 
     pub fn request(&self, address: BDAddr, char: &Characteristic, data: &[u8],
                    handler: Option<HandleFn>) {
+        self.request_by_handle(address, char.value_handle, data, handler);
+    }
+
+    fn request_by_handle(&self, address: BDAddr, handle: u16, data: &[u8],
+                         handler: Option<HandleFn>) {
         let streams = self.streams.lock().unwrap();
         let stream = streams.get(&address).unwrap();
         let mut buf = BytesMut::with_capacity(3 + data.len());
         buf.put_u8(ATT_OP_WRITE_REQ);
-        buf.put_u16::<LittleEndian>(char.value_handle);
+        buf.put_u16::<LittleEndian>(handle);
         buf.put(data);
         stream.write(&mut *buf, handler);
+    }
+
+    pub fn subscribe(&self, device: &Device, char: &Characteristic) {
+        self.notify(device.address, char, true);
+    }
+
+    pub fn unsubscribe(&self, device: &Device, char: &Characteristic) {
+        self.notify(device.address, char, false);
+    }
+
+    fn notify(&self, address: BDAddr, char: &Characteristic, enable: bool) {
+        info!("setting notify for {}/{:?} to {}", address, char.uuid, enable);
+        let streams = self.streams.lock().unwrap();
+        let stream = streams.get(&address).unwrap();
+        let mut buf = BytesMut::with_capacity(7);
+        buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
+        buf.put_u16::<LittleEndian>(char.start_handle);
+        buf.put_u16::<LittleEndian>(char.value_handle);
+        buf.put_u16::<LittleEndian>(GATT_CLIENT_CHARAC_CFG_UUID);
+        let self_copy = self.clone();
+        let char_copy = char.clone();
+        stream.write_att(&mut *buf, Some(Box::new(move |_, data| {
+            info!("got notify response: {:?}", data);
+
+            match Decoder::decode_notify_response(data).to_result() {
+                Ok(resp) => {
+                    let use_notify = char_copy.properties & 0x10 != 0;
+                    let use_indicate = char_copy.properties & 0x20 != 0;
+
+                    let mut value = resp.value;
+
+                    if enable {
+                        if use_notify {
+                            value |= 0x0001;
+                        } else if use_indicate {
+                            value |= 0x002;
+                        }
+                    } else {
+                        if use_notify {
+                            value &= 0xFFFE;
+                        } else if use_indicate {
+                            value &= 0xFFFD;
+                        }
+                    }
+
+                    let mut value_buf = BytesMut::with_capacity(2);
+                    value_buf.put_u16::<LittleEndian>(value);
+                    self_copy.request_by_handle(address, resp.handle,
+                                                &*value_buf, Some(Box::new(|_, data| {
+                            if data.len() > 0 && data[0] == ATT_OP_WRITE_RESP {
+                                info!("Got response from notify: {:?}", data);
+                            } else {
+                                info!("Unexpected notify response: {:?}", data);
+                            }
+                        })));
+                }
+                Err(err) => {
+                    error!("failed to parse notify response: {:?}", err);
+                }
+            };
+
+        })));
     }
 }
 

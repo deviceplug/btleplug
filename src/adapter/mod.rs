@@ -375,8 +375,6 @@ impl ConnectedAdapter {
 
                 cur.put_slice(&buf[0..len]);
 
-                debug!("parsing {:?}", cur);
-
                 let mut new_cur: Option<Vec<u8>> = Some(vec![]);
                 {
                     let result = {
@@ -385,7 +383,6 @@ impl ConnectedAdapter {
 
                     match result {
                         IResult::Done(left, result) => {
-                            debug!("> {:?}", result);
                             ConnectedAdapter::handle(&connected, result);
                             if !left.is_empty() {
                                 new_cur = Some(left.to_owned());
@@ -591,14 +588,16 @@ impl ConnectedAdapter {
                     let mut devices = self_copy.discovered.lock().unwrap();
                     devices.get_mut(&address).as_mut().map(|ref mut d| {
                         let mut next = None;
-                        chars.into_iter().for_each(|c| {
-                            next = Some(c.start_handle + 1);
+                        chars.into_iter().for_each(|mut c| {
+                            // this probably isn't totally right
+                            c.end_handle = end;
+                            next = Some(c.start_handle);
                             d.characteristics.insert(c);
                         });
 
                         next.map(|next| {
                             if next < end {
-                                self_copy.discover_chars_in_range_int(address, next, end);
+                                self_copy.discover_chars_in_range_int(address, next + 1, end);
                             }
                         });
                     }).or_else(|| {
@@ -654,15 +653,17 @@ impl ConnectedAdapter {
         info!("setting notify for {}/{:?} to {}", address, char.uuid, enable);
         let streams = self.streams.lock().unwrap();
         let stream = streams.get(&address).unwrap();
+
         let mut buf = BytesMut::with_capacity(7);
         buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
         buf.put_u16::<LittleEndian>(char.start_handle);
-        buf.put_u16::<LittleEndian>(char.value_handle);
+        buf.put_u16::<LittleEndian>(65);
         buf.put_u16::<LittleEndian>(GATT_CLIENT_CHARAC_CFG_UUID);
         let self_copy = self.clone();
         let char_copy = char.clone();
-        stream.write_att(&mut *buf, Some(Box::new(move |_, data| {
-            info!("got notify response: {:?}", data);
+
+        stream.write(&mut *buf, Some(Box::new(move |_, data| {
+            debug!("got notify response: {:?}", data);
 
             match Decoder::decode_notify_response(data).to_result() {
                 Ok(resp) => {
@@ -690,9 +691,9 @@ impl ConnectedAdapter {
                     self_copy.request_by_handle(address, resp.handle,
                                                 &*value_buf, Some(Box::new(|_, data| {
                             if data.len() > 0 && data[0] == ATT_OP_WRITE_RESP {
-                                info!("Got response from notify: {:?}", data);
+                                debug!("Got response from notify: {:?}", data);
                             } else {
-                                info!("Unexpected notify response: {:?}", data);
+                                warn!("Unexpected notify response: {:?}", data);
                             }
                         })));
                 }

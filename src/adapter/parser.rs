@@ -526,7 +526,7 @@ fn characteristics(i: &[u8]) -> IResult<&[u8], Vec<Characteristic>> {
                     try_parse!(i, map!(parse_uuid_128, |b| CharacteristicUUID::B128(b)))
                 };
                 result.push(Characteristic {
-                    start_handle, properties, value_handle, uuid
+                    start_handle, properties, value_handle, end_handle: 0, uuid
                 });
             }
             (&[][..], result)
@@ -542,17 +542,19 @@ fn characteristics(i: &[u8]) -> IResult<&[u8], Vec<Characteristic>> {
 
 #[derive(Debug, PartialEq)]
 pub struct NotifyResponse {
+    pub typ: u8,
     pub handle: u16,
     pub value: u16,
 }
 
 named!(notify_response<&[u8], NotifyResponse>,
    do_parse!(
-      typ: tag!(&[ATT_OP_READ_BY_TYPE_RESP]) >>
+      op: tag!(&[ATT_OP_READ_BY_TYPE_RESP]) >>
+      typ: le_u8 >>
       handle: le_u16 >>
       value: le_u16 >>
       (
-        NotifyResponse { handle, value }
+        NotifyResponse { typ, handle, value }
       )
    ));
 //

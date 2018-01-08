@@ -30,6 +30,7 @@ impl Debug for CharacteristicUUID {
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
 pub struct Characteristic {
     pub start_handle: u16,
+    pub end_handle: u16,
     pub value_handle: u16,
     pub properties: u8,
     pub uuid: CharacteristicUUID,

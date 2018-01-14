@@ -14,6 +14,9 @@ extern crate num;
 #[macro_use]
 extern crate nom;
 
+#[macro_use]
+extern crate bitflags;
+
 pub mod adapter;
 pub mod manager;
 pub mod device;

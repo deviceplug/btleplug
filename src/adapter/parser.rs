@@ -2,12 +2,12 @@ use nom::{le_u8, le_u16, le_u32, le_i8, IResult, Err, ErrorKind};
 use num::FromPrimitive;
 
 use ::adapter::{BDAddr, AddressType};
-use ::device::{Characteristic, CharacteristicUUID};
+use ::device::{Characteristic, CharacteristicUUID, CharPropFlags};
 use ::constants::*;
 
 #[cfg(test)]
 mod tests {
-    use ::device::Device;
+    use ::device::{Device};
     use ::manager::Event;
     use ::adapter::BDAddr;
     use nom::IResult;
@@ -85,22 +85,10 @@ mod tests {
             &[][..],
             Message::ACLDataPacket(ACLData {
                 handle: 64,
-                cid: 5,
-                data: vec![4, 0, 1, 16, 1, 0, 16],
-                len: 7,
+                cid: 4,
+                data: vec![1, 16, 1, 0, 16],
+                len: 5,
             }),
-        ))
-    }
-
-    #[test]
-    fn test_notify_response() {
-        let buf = [1, 18, 63, 0, 3];
-        assert_eq!(Decoder::decode_notify_response(&buf), IResult::Done(
-            &[][..],
-            NotifyResponse {
-                handle: 6243,
-                value: 3,
-            }
         ))
     }
 }
@@ -468,33 +456,38 @@ fn hci_command_pkt(i: &[u8]) -> IResult<&[u8], Message> {
     IResult::Done(i, result)
 }
 
+// 2, [[64, 32,] [19, 0,]] [15, 0,] [4, 0,] 27, 63, 0, [102, 21, 35, 65, 35, 16, 0, 0, 0, 255, 6, 153]
 fn hci_acldata_pkt(i: &[u8]) -> IResult<&[u8], Message> {
     let (i, head) = try_parse!(i, le_u16); // 2
     let flags = head >> 12;
     let handle = head & 0x0FFF;
-    let message = match flags {
+    let (i, message) = match flags {
         ACL_START | ACL_START_NO_FLUSH => {
+            // the length of this packet
             let (i, dlen) = try_parse!(i, le_u16);
+            // the length of the message, which may span multiple packets
+            let (i, plen) = try_parse!(i, le_u16);
             let (i, cid) = try_parse!(i, le_u16);
-            Message::ACLDataPacket(ACLData {
+            let (i, data) = try_parse!(i, take!(dlen - 4));
+            (i, Message::ACLDataPacket(ACLData {
                 handle,
                 cid,
-                data: i.clone().to_owned(),
-                len: dlen - 2,
-            })
+                data: data.to_owned(),
+                len: plen,
+            }))
         }
         ACL_CONT => {
-            Message::ACLDataContinuation {
+            (&[][..], Message::ACLDataContinuation {
                 handle,
                 data: i.clone().to_owned(),
-            }
+            })
         },
         x => {
             warn!("unknown flag type: {}", x);
             return IResult::Error(Err::Code(ErrorKind::Custom(11)));
         }
     };
-    IResult::Done(&i[i.len()..], message)
+    IResult::Done(i, message)
 }
 
 fn message(i: &[u8]) -> IResult<&[u8], Message> {
@@ -525,8 +518,10 @@ fn characteristics(i: &[u8]) -> IResult<&[u8], Vec<Characteristic>> {
                 } else {
                     try_parse!(i, map!(parse_uuid_128, |b| CharacteristicUUID::B128(b)))
                 };
+
                 result.push(Characteristic {
-                    start_handle, properties, value_handle, end_handle: 0, uuid
+                    start_handle, value_handle, end_handle: 0, uuid,
+                    properties: CharPropFlags::from_bits_truncate(properties),
                 });
             }
             (&[][..], result)

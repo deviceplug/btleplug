@@ -14,6 +14,8 @@ use ::util::handle_error;
 
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+use std::collections::HashMap;
 use adapter::parser::ACLData;
 
 pub type HandleFn = Box<Fn(u16, &[u8]) + Send>;
@@ -26,6 +28,7 @@ pub struct ACLStream {
     should_stop: Arc<AtomicBool>,
     cmd_sender: Sender<(Vec<u8>, Option<HandleFn>, bool)>,
     resp_sender: Sender<Vec<u8>>,
+    subscriptions: Arc<Mutex<HashMap<u16, Vec<HandleFn>>>>
 }
 
 impl ACLStream {
@@ -40,6 +43,7 @@ impl ACLStream {
             should_stop: Arc::new(AtomicBool::new(false)),
             cmd_sender: tx,
             resp_sender: resp_tx,
+            subscriptions: Arc::new(Mutex::new(HashMap::new())),
         };
 
         {
@@ -70,9 +74,8 @@ impl ACLStream {
 
             if resp == data {
                 // confirmation
-                if command {
-                     break;
-                }
+            } else if resp.len() > 0 && command && resp[0] == ATT_OP_WRITE_RESP {
+                break;
             } else {
                 debug!("got resp: {:?}", resp);
                 handler.map(|h| h(self.handle, &resp));
@@ -97,8 +100,8 @@ impl ACLStream {
     pub fn receive(&self, message: &ACLData) {
         // message.data
         // TODO: handle partial packets
-        if message.data[0] == ATT_CID as u8 {
-            self.resp_sender.send(message.data[2..].to_vec()).unwrap();
+        if message.cid == ATT_CID {
+            self.resp_sender.send(message.data.to_vec()).unwrap();
         }
     }
 }

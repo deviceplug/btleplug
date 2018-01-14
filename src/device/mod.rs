@@ -27,13 +27,26 @@ impl Debug for CharacteristicUUID {
     }
 }
 
+bitflags! {
+    pub struct CharPropFlags: u8 {
+        const BROADCAST = 0x01;
+        const READ = 0x02;
+        const WRITE_WITHOUT_RESPONSE = 0x04;
+        const WRITE = 0x08;
+        const NOTIFY = 0x10;
+        const INDICATE = 0x20;
+        const AUTHENTICATED_SIGNED_WRITES = 0x40;
+        const EXTENDED_PROPERTIES = 0x80;
+    }
+}
+
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
 pub struct Characteristic {
     pub start_handle: u16,
     pub end_handle: u16,
     pub value_handle: u16,
-    pub properties: u8,
     pub uuid: CharacteristicUUID,
+    pub properties: CharPropFlags,
 }
 
 impl Display for Characteristic {

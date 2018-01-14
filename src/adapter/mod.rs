@@ -25,7 +25,7 @@ use manager::Callback;
 use ::adapter::protocol::Protocol;
 use ::adapter::parser::{Decoder, Message};
 use ::adapter::acl_stream::{ACLStream, HandleFn};
-use ::device::{Device, Characteristic};
+use ::device::{Device, Characteristic, CharPropFlags};
 use ::constants::*;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -517,7 +517,7 @@ impl ConnectedAdapter {
                        &mut len)
         })?;
 
-        info!("sock opts: {:#?}", opts);
+        debug!("sock opts: {:#?}", opts);
 
         Ok(())
     }
@@ -656,19 +656,19 @@ impl ConnectedAdapter {
 
         let mut buf = BytesMut::with_capacity(7);
         buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
-        buf.put_u16::<LittleEndian>(char.start_handle);
+        buf.put_u16::<LittleEndian>(char.value_handle);
         buf.put_u16::<LittleEndian>(65);
         buf.put_u16::<LittleEndian>(GATT_CLIENT_CHARAC_CFG_UUID);
         let self_copy = self.clone();
         let char_copy = char.clone();
 
         stream.write(&mut *buf, Some(Box::new(move |_, data| {
-            debug!("got notify response: {:?}", data);
-
             match Decoder::decode_notify_response(data).to_result() {
                 Ok(resp) => {
-                    let use_notify = char_copy.properties & 0x10 != 0;
-                    let use_indicate = char_copy.properties & 0x20 != 0;
+                    debug!("got notify response: {:?}", resp);
+
+                    let use_notify = char_copy.properties.contains(CharPropFlags::NOTIFY);
+                    let use_indicate = char_copy.properties.contains(CharPropFlags::INDICATE);
 
                     let mut value = resp.value;
 
@@ -676,7 +676,7 @@ impl ConnectedAdapter {
                         if use_notify {
                             value |= 0x0001;
                         } else if use_indicate {
-                            value |= 0x002;
+                            value |= 0x0002;
                         }
                     } else {
                         if use_notify {

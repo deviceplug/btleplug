@@ -22,6 +22,7 @@ bytes = "0.4"
 num = "0.1.41"
 log = "0.3.8"
 enum_primitive = "0.1.1"
+bitflags = "1.0.1"
 
 [dependencies.nom]
 version = "^3.2"

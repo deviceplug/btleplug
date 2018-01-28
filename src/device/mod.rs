@@ -14,9 +14,12 @@ impl Display for CharacteristicUUID {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
             CharacteristicUUID::B16(u) => write!(f, "{:02X}:{:02X}", u >> 8, u & 0xFF),
-            CharacteristicUUID::B128(a) => write!(f, "{:X}:{:X}:{:X}:{:X}:{:X}:{:X}",
-                                                  a[5], a[4], a[3], a[2], a[1], a[0])
-
+            CharacteristicUUID::B128(a) => {
+                for i in (1..a.len()).rev() {
+                    write!(f, "{:02X}:", a[i])?;
+                }
+                write!(f, "{:02X}", a[0])
+            }
         }
     }
 }

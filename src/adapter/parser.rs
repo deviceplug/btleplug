@@ -552,15 +552,6 @@ named!(notify_response<&[u8], NotifyResponse>,
         NotifyResponse { typ, handle, value }
       )
    ));
-//
-//fn notify_response(i: &[u8]) -> IResult<&[u8], NotifyResponse> {
-//    let (i, typ) = try_parse!(i, le_u8);
-//    if typ != ATT_OP_READ_BY_TYPE_RESP {
-//        return IResult::Error(Err(ErrorKind::Custom(1)));
-//    }
-//
-//    let (i, handle) =
-//}
 
 pub struct Decoder {
 }

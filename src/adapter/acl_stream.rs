@@ -18,7 +18,15 @@ use std::sync::Mutex;
 use std::collections::HashMap;
 use adapter::parser::ACLData;
 
+use self::StreamMessage::*;
+
 pub type HandleFn = Box<Fn(u16, &[u8]) + Send>;
+
+enum StreamMessage {
+    Command(Vec<u8>),
+    Request(Vec<u8>, Option<HandleFn>),
+    Data(Vec<u8>),
+}
 
 #[derive(Clone)]
 pub struct ACLStream {
@@ -26,8 +34,7 @@ pub struct ACLStream {
     pub handle: u16,
     fd: i32,
     should_stop: Arc<AtomicBool>,
-    cmd_sender: Sender<(Vec<u8>, Option<HandleFn>, bool)>,
-    resp_sender: Sender<Vec<u8>>,
+    sender: Sender<StreamMessage>,
     subscriptions: Arc<Mutex<HashMap<u16, Vec<HandleFn>>>>
 }
 
@@ -35,14 +42,12 @@ impl ACLStream {
     pub fn new(address: BDAddr, handle: u16, fd: i32) -> ACLStream {
         info!("Creating new ACLStream for {}, {}, {}", address, handle, fd);
         let (tx, rx) = channel();
-        let (resp_tx, resp_rx) = channel();
         let acl_stream = ACLStream {
             address,
             handle,
             fd,
             should_stop: Arc::new(AtomicBool::new(false)),
-            cmd_sender: tx,
-            resp_sender: resp_tx,
+            sender: tx,
             subscriptions: Arc::new(Mutex::new(HashMap::new())),
         };
 
@@ -51,7 +56,7 @@ impl ACLStream {
             let stream = acl_stream.clone();
             thread::spawn(move || {
                 while !should_stop.load(Ordering::Relaxed) {
-                    stream.handle_iteration(&rx, &resp_rx).unwrap();
+                    stream.handle_iteration(&rx).unwrap();
                 }
             });
         }
@@ -59,29 +64,44 @@ impl ACLStream {
         acl_stream
     }
 
-    fn handle_iteration(&self, receiver: &Receiver<(Vec<u8>, Option<HandleFn>, bool)>,
-                        resp_rx: &Receiver<Vec<u8>>) -> nix::Result<()> {
-        let (mut data, handler, command) = receiver.recv().unwrap();
-
-        debug!("sending {:?} to {}", data, self.fd);
-
+    fn write_socket(&self, value: &mut [u8],
+                    receiver: &Receiver<StreamMessage>) -> nix::Result<Vec<u8>> {
         handle_error(unsafe {
-            write(self.fd, data.as_mut_ptr() as *mut c_void, data.len()) as i32
+            write(self.fd, value.as_mut_ptr() as *mut c_void, value.len()) as i32
         })?;
 
         loop {
-            let resp = resp_rx.recv().unwrap();
-
-            if resp == data {
-                // confirmation
-            } else if resp.len() > 0 && command && resp[0] == ATT_OP_WRITE_RESP {
-                break;
+            let message = receiver.recv().unwrap();
+            if let Data(rec) = message {
+                if rec != value {
+                    return Ok(rec);
+                }
             } else {
-                debug!("got resp: {:?}", resp);
-                handler.map(|h| h(self.handle, &resp));
-                break;
+                self.sender.send(message).unwrap();
             }
+        }
+    }
 
+    fn handle_iteration(&self, receiver: &Receiver<StreamMessage>) -> nix::Result<()> {
+        match receiver.recv().unwrap() {
+            Command(mut value) => {
+                debug!("sending command {:?} to {}", value, self.fd);
+
+                let result = self.write_socket(&mut value, receiver)?;
+                if result != [ATT_OP_WRITE_RESP] {
+                    warn!("unexpected response to command: {:?}", result)
+                }
+            },
+            Request(mut value, handler) => {
+                debug!("sending request {:?} to {}", value, self.fd);
+
+                let result = self.write_socket(&mut value, receiver)?;
+                handler.map(|h| h(self.handle, &result));
+            },
+            Data(value) => {
+                debug!("Received data {:?}", value);
+                // skip
+            }
         }
 
         Ok(())
@@ -89,19 +109,19 @@ impl ACLStream {
 
     pub fn write(&self, data: &mut [u8], handler: Option<HandleFn>) {
         // let mut packet = Protocol::acl(self.handle, ATT_CID, data);
-        self.cmd_sender.send((data.to_owned(), handler, false)).unwrap();
+        self.sender.send(Request(data.to_owned(), handler)).unwrap();
     }
 
     pub fn write_cmd(&self, data: &mut [u8]) {
         // let mut packet = Protocol::acl(self.handle, ATT_CID, data);
-        self.cmd_sender.send((data.to_owned(), None, true)).unwrap();
+        self.sender.send(Command(data.to_owned())).unwrap();
     }
 
     pub fn receive(&self, message: &ACLData) {
         // message.data
         // TODO: handle partial packets
         if message.cid == ATT_CID {
-            self.resp_sender.send(message.data.to_vec()).unwrap();
+            self.sender.send(Data(message.data.to_vec())).unwrap();
         }
     }
 }

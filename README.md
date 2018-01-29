@@ -1,5 +1,9 @@
 # Rumble
 
+[![Build Status](https://travis-ci.org/mwylde/rumble.svg?branch=master)](https://travis-ci.org/mwylde/rumble)
+[![Crates.io Version](https://img.shields.io/crates/v/rumble.svg)](https://crates.io/crates/rumble)
+[![docs](https://docs.rs/rumble/badge.svg)](https://docs.rs/rumble)
+
 Rumble is a Bluetooth Low Energy (BLE) central module library for Rust. 
 Currently only Linux (with the BlueZ bluetooth library) is supported, although 
 other operating systems may be supported in the future. Rumble interfaces with 

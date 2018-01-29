@@ -495,6 +495,12 @@ impl ConnectedAdapter {
                  std::mem::size_of::<SockaddrL2>() as u32)
         })?;
 
+        let mut opt = [1u8, 0];
+        handle_error(unsafe {
+            setsockopt(fd, SOL_BLUETOOTH, 4, opt.as_mut_ptr() as *mut c_void, 2)
+        })?;
+
+
         let addr = SockaddrL2 {
             l2_family: AF_BLUETOOTH as u16,
             l2_psm: 0,
@@ -588,12 +594,20 @@ impl ConnectedAdapter {
                     let mut devices = self_copy.discovered.lock().unwrap();
                     devices.get_mut(&address).as_mut().map(|ref mut d| {
                         let mut next = None;
+                        let mut char_set = d.characteristics.clone();
                         chars.into_iter().for_each(|mut c| {
                             c.end_handle = end;
                             next = Some(c.start_handle);
-                            d.characteristics
-                            d.characteristics.insert(c);
+                            char_set.insert(c);
                         });
+
+                        // fix the end handles
+                        let mut prev = 0xffff;
+                        d.characteristics = char_set.into_iter().rev().map(|mut c| {
+                            c.end_handle = prev;
+                            prev = c.start_handle - 1;
+                            c
+                        }).collect();
 
                         next.map(|next| {
                             if next < end {
@@ -656,7 +670,7 @@ impl ConnectedAdapter {
 
         let mut buf = BytesMut::with_capacity(7);
         buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
-        buf.put_u16::<LittleEndian>(char.value_handle);
+        buf.put_u16::<LittleEndian>(char.start_handle);
         buf.put_u16::<LittleEndian>(char.end_handle);
         buf.put_u16::<LittleEndian>(GATT_CLIENT_CHARAC_CFG_UUID);
         let self_copy = self.clone();

@@ -3,6 +3,7 @@ extern crate core;
 use std::thread;
 use std::boxed::Box;
 use std::sync::Arc;
+use std::time::Duration;
 
 use libc::*;
 
@@ -55,8 +56,20 @@ impl ACLStream {
             let should_stop = acl_stream.should_stop.clone();
             let stream = acl_stream.clone();
             thread::spawn(move || {
+                let mut msg = rx.recv().unwrap();
                 while !should_stop.load(Ordering::Relaxed) {
-                    stream.handle_iteration(&rx).unwrap();
+                    match stream.handle_iteration(&mut msg, &rx) {
+                        Ok(_) => msg = rx.recv().unwrap(),
+                        Err(nix::Error::Sys(nix::errno::ENOTCONN)) => {
+                            // retry message
+                            thread::sleep(Duration::from_millis(50));
+                            continue;
+                        }
+                        Err(e) => {
+                            panic!("Unhandled error {}", e);
+                        }
+                    }
+
                 }
             });
         }
@@ -82,24 +95,29 @@ impl ACLStream {
         }
     }
 
-    fn handle_iteration(&self, receiver: &Receiver<StreamMessage>) -> nix::Result<()> {
-        match receiver.recv().unwrap() {
-            Command(mut value) => {
+    fn handle_iteration(&self, msg: &mut StreamMessage,
+                        receiver: &Receiver<StreamMessage>) -> nix::Result<()> {
+        match *msg {
+            Command(ref mut value) => {
                 debug!("sending command {:?} to {}", value, self.fd);
 
-                let result = self.write_socket(&mut value, receiver)?;
+                let result = self.write_socket(value, receiver)?;
                 if result != [ATT_OP_WRITE_RESP] {
                     warn!("unexpected response to command: {:?}", result)
                 }
             },
-            Request(mut value, handler) => {
+            Request(ref mut value, ref handler) => {
                 debug!("sending request {:?} to {}", value, self.fd);
 
-                let result = self.write_socket(&mut value, receiver)?;
-                handler.map(|h| h(self.handle, &result));
+                let result = self.write_socket(value, receiver)?;
+                handler.iter().for_each(|h| h(self.handle, &result));
             },
-            Data(value) => {
+            Data(ref value) => {
                 debug!("Received data {:?}", value);
+                if value.len() == 3 && value[0] == ATT_OP_EXCHANGE_MTU_REQ {
+                    // write back that we don't support it?
+                    self.write_cmd(&mut [0x01, 0x02, 0x00, 0x00, 0x06])
+                }
                 // skip
             }
         }

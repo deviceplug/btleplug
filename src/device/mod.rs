@@ -55,9 +55,9 @@ pub struct Characteristic {
 impl Display for Characteristic {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "handle: 0x{:04X}, char properties: 0x{:02X}, \
-                   char value handle: 0x{:04X}, uuid: {:?}",
+                   char value handle: 0x{:04X}, end handle: 0x{:04X}, uuid: {:?}",
                self.start_handle, self.properties,
-               self.value_handle, self.uuid)
+               self.value_handle, self.end_handle, self.uuid)
     }
 }
 

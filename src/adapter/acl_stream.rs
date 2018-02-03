@@ -1,5 +1,3 @@
-extern crate core;
-
 use std::thread;
 use std::boxed::Box;
 use std::sync::Arc;
@@ -13,6 +11,8 @@ use adapter::BDAddr;
 use ::constants::*;
 use ::util::handle_error;
 
+use std::fmt;
+use std::fmt::{Debug, Formatter};
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -27,6 +27,16 @@ enum StreamMessage {
     Command(Vec<u8>),
     Request(Vec<u8>, Option<HandleFn>),
     Data(Vec<u8>),
+}
+
+impl Debug for StreamMessage {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            &Command(ref data) => write!(f, "Command({:?})", data),
+            &Request(ref data, ref cb) => write!(f, "Request({:?}, cb: {})", data, cb.is_some()),
+            &Data(ref data) => write!(f, "Data({:?})", data),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -77,20 +87,26 @@ impl ACLStream {
         acl_stream
     }
 
-    fn write_socket(&self, value: &mut [u8],
+    fn write_socket(&self, value: &mut [u8], command: bool,
                     receiver: &Receiver<StreamMessage>) -> nix::Result<Vec<u8>> {
         handle_error(unsafe {
             write(self.fd, value.as_mut_ptr() as *mut c_void, value.len()) as i32
         })?;
 
+        let mut skipped = vec![];
         loop {
             let message = receiver.recv().unwrap();
+            debug!("waiting for confirmation... {:?}", message);
             if let Data(rec) = message {
                 if rec != value {
+                    skipped.into_iter().for_each(|m|
+                        self.sender.send(m).unwrap());
                     return Ok(rec);
+                } else if command {
+                    return Ok(vec![]);
                 }
             } else {
-                self.sender.send(message).unwrap();
+                skipped.push(message);
             }
         }
     }
@@ -101,24 +117,30 @@ impl ACLStream {
             Command(ref mut value) => {
                 debug!("sending command {:?} to {}", value, self.fd);
 
-                let result = self.write_socket(value, receiver)?;
-                if result != [ATT_OP_WRITE_RESP] {
-                    warn!("unexpected response to command: {:?}", result)
-                }
+                self.write_socket(value, true, receiver)?;
             },
             Request(ref mut value, ref handler) => {
                 debug!("sending request {:?} to {}", value, self.fd);
 
-                let result = self.write_socket(value, receiver)?;
+                let result = self.write_socket(value, false, receiver)?;
                 handler.iter().for_each(|h| h(self.handle, &result));
             },
             Data(ref value) => {
                 debug!("Received data {:?}", value);
-                if value.len() == 3 && value[0] == ATT_OP_EXCHANGE_MTU_REQ {
-                    // write back that we don't support it?
-                    self.write_cmd(&mut [0x01, 0x02, 0x00, 0x00, 0x06])
+                if !value.is_empty() {
+                    match value[0] {
+                        ATT_OP_EXCHANGE_MTU_REQ => {
+                            // write back that we don't support it?
+                            self.write_cmd(&mut [0x01, 0x02, 0x00, 0x00, 0x06]);
+                        }
+                        ATT_OP_VALUE_NOTIFICATION => {
+
+                        }
+                        _ => {
+                            // skip
+                        }
+                    }
                 }
-                // skip
             }
         }
 

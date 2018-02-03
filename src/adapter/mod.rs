@@ -659,6 +659,8 @@ impl ConnectedAdapter {
         self.notify(device.address, char, true);
     }
 
+    // pub fn subscribe_with_callback(&self, device: &Device, char: &Characteristic, callback: )
+
     pub fn unsubscribe(&self, device: &Device, char: &Characteristic) {
         self.notify(device.address, char, false);
     }

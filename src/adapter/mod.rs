@@ -1,6 +1,3 @@
-extern crate core;
-
-mod parser;
 mod protocol;
 mod acl_stream;
 
@@ -23,7 +20,8 @@ use std::mem::size_of;
 use util::handle_error;
 use manager::Callback;
 use ::adapter::protocol::Protocol;
-use ::adapter::parser::{Decoder, Message};
+use ::protocol::hci;
+use ::protocol::att;
 use ::adapter::acl_stream::{ACLStream, HandleFn};
 use ::device::{Device, Characteristic, CharPropFlags};
 use ::constants::*;
@@ -378,7 +376,7 @@ impl ConnectedAdapter {
                 let mut new_cur: Option<Vec<u8>> = Some(vec![]);
                 {
                     let result = {
-                        Decoder::decode(&cur)
+                        hci::message(&cur)
                     };
 
                     match result {
@@ -392,7 +390,7 @@ impl ConnectedAdapter {
                             new_cur = None;
                         },
                         IResult::Error(err) => {
-                            debug!("parse error {}\nfrom: {:?}", err, cur);
+                            error!("parse error {}\nfrom: {:?}", err, cur);
                         }
                     }
                 };
@@ -403,13 +401,13 @@ impl ConnectedAdapter {
     }
 
 
-    fn handle(&self, message: Message) {
+    fn handle(&self, message: hci::Message) {
         debug!("got message {:?}", message);
 
         let mut discovered = self.discovered.lock().unwrap();
         match message {
-            Message::LEAdvertisingReport(info) => {
-                use ::adapter::parser::LEAdvertisingData::*;
+            hci::Message::LEAdvertisingReport(info) => {
+                use ::protocol::hci::LEAdvertisingData::*;
 
                 let device = discovered.entry(info.bdaddr)
                     .or_insert_with(|| {
@@ -446,7 +444,7 @@ impl ConnectedAdapter {
                     }
                 }
             }
-            Message::LEConnComplete(info) => {
+            hci::Message::LEConnComplete(info) => {
                 info!("connected to {:?}", info);
                 let fd = *self.device_fds.lock().unwrap().get(&info.bdaddr).unwrap();
 
@@ -458,7 +456,7 @@ impl ConnectedAdapter {
                     .entry(info.handle)
                     .or_insert(info.bdaddr);
             }
-            Message::ACLDataPacket(data) => {
+            hci::Message::ACLDataPacket(data) => {
                 let handles = self.handles.lock().unwrap();
                 let address = handles.get(&data.handle);
 
@@ -469,8 +467,8 @@ impl ConnectedAdapter {
                     });
                 });
             }
-            message => {
-                debug!("unhandled message {:?}", message);
+            _ => {
+                // skip
             }
         }
     }
@@ -588,7 +586,7 @@ impl ConnectedAdapter {
 
         let self_copy = self.clone();
         let handler = Box::new(move |_: u16, data: &[u8]| {
-            match Decoder::decode_characteristics(data).to_result() {
+            match att::characteristics(data).to_result() {
                 Ok(chars) => {
                     debug!("Chars: {:#?}", chars);
                     let mut devices = self_copy.discovered.lock().unwrap();
@@ -679,7 +677,7 @@ impl ConnectedAdapter {
         let char_copy = char.clone();
 
         stream.write(&mut *buf, Some(Box::new(move |_, data| {
-            match Decoder::decode_notify_response(data).to_result() {
+            match att::notify_response(data).to_result() {
                 Ok(resp) => {
                     debug!("got notify response: {:?}", resp);
 

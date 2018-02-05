@@ -17,7 +17,7 @@ use std::sync::mpsc::{channel, Sender, Receiver};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::collections::HashMap;
-use adapter::parser::ACLData;
+use ::protocol::hci::ACLData;
 
 use self::StreamMessage::*;
 

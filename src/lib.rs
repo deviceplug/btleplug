@@ -20,6 +20,7 @@ extern crate bitflags;
 pub mod adapter;
 pub mod manager;
 pub mod device;
+pub mod protocol;
 
 mod util;
 mod constants;

@@ -18,7 +18,6 @@ use std::thread;
 use std::mem::size_of;
 
 use util::handle_error;
-use manager::Callback;
 use ::adapter::protocol::Protocol;
 use ::protocol::hci;
 use ::protocol::att;
@@ -283,13 +282,23 @@ impl DeviceState {
         }
     }
 }
+#[derive(Debug, Copy, Clone)]
+pub enum Event {
+    DeviceDiscovered(BDAddr),
+    DeviceLost(BDAddr),
+    DeviceUpdated(BDAddr),
+    DeviceConnected(BDAddr),
+    DeviceDisconnected(BDAddr),
+}
+
+pub type EventHandler = Box<Fn(Event) + Send>;
 
 #[derive(Clone)]
 pub struct ConnectedAdapter {
     pub adapter: Adapter,
     adapter_fd: i32,
     should_stop: Arc<AtomicBool>,
-    callbacks: Arc<Mutex<Vec<Callback>>>,
+    event_handlers: Arc<Mutex<Vec<EventHandler>>>,
     discovered: Arc<Mutex<HashMap<BDAddr, DeviceState>>>,
     device_fds: Arc<Mutex<HashMap<BDAddr, i32>>>,
     streams: Arc<Mutex<HashMap<BDAddr, ACLStream>>>,
@@ -297,7 +306,7 @@ pub struct ConnectedAdapter {
 }
 
 impl ConnectedAdapter {
-    pub fn new(adapter: &Adapter, callbacks: Vec<Callback>) -> nix::Result<ConnectedAdapter> {
+    pub fn new(adapter: &Adapter) -> nix::Result<ConnectedAdapter> {
 
         let adapter_fd = handle_error(unsafe {
             socket(AF_BLUETOOTH, SOCK_RAW | SOCK_CLOEXEC /*| SOCK_NONBLOCK*/, 1)
@@ -320,7 +329,7 @@ impl ConnectedAdapter {
             adapter: adapter.clone(),
             adapter_fd,
             should_stop,
-            callbacks: Arc::new(Mutex::new(callbacks)),
+            event_handlers: Arc::new(Mutex::new(vec![])),
             discovered: Arc::new(Mutex::new(HashMap::new())),
             device_fds: Arc::new(Mutex::new(HashMap::new())),
             streams: Arc::new(Mutex::new(HashMap::new())),
@@ -332,6 +341,11 @@ impl ConnectedAdapter {
         connected.set_socket_filter()?;
 
         Ok(connected)
+    }
+
+    pub fn watch(&self, handler: EventHandler) {
+        let list = self.event_handlers.clone();
+        list.lock().unwrap().push(handler);
     }
 
     fn set_socket_filter(&self) -> nix::Result<()> {
@@ -401,6 +415,13 @@ impl ConnectedAdapter {
         });
     }
 
+    fn emit(&self, event: Event) {
+        let handlers = self.event_handlers.clone();
+        let vec = handlers.lock().unwrap();
+        for handler in (*vec).iter() {
+            handler(event.clone());
+        }
+    }
 
     fn handle(&self, message: hci::Message) {
         debug!("got message {:?}", message);
@@ -418,6 +439,12 @@ impl ConnectedAdapter {
                             else { AddressType::Public };
                         d
                     });
+
+                if device.discovery_count == 0 {
+                    self.emit(Event::DeviceDiscovered(info.bdaddr.clone()))
+                } else {
+                    self.emit(Event::DeviceUpdated(info.bdaddr.clone()))
+                }
 
                 device.discovery_count += 1;
 
@@ -447,6 +474,7 @@ impl ConnectedAdapter {
             }
             hci::Message::LEConnComplete(info) => {
                 info!("connected to {:?}", info);
+                self.emit(Event::DeviceConnected(info.bdaddr.clone()));
                 let fd = *self.device_fds.lock().unwrap().get(&info.bdaddr).unwrap();
 
                 self.streams.lock().unwrap()
@@ -548,8 +576,7 @@ impl ConnectedAdapter {
     }
 
     pub fn start_scan(&self) -> nix::Result<()> {
-        // self.set_scan_enabled(false).unwrap();
-        self.set_scan_params().unwrap();
+        self.set_scan_params()?;
         self.set_scan_enabled(true)
     }
 
@@ -762,7 +789,7 @@ impl Adapter {
         self.states.contains(&AdapterState::Up)
     }
 
-    pub fn connect(&self, callbacks: Vec<Callback>) -> nix::Result<ConnectedAdapter> {
-        ConnectedAdapter::new(self, callbacks)
+    pub fn connect(&self) -> nix::Result<ConnectedAdapter> {
+        ConnectedAdapter::new(self)
     }
 }

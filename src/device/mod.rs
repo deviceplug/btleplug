@@ -30,6 +30,8 @@ impl Debug for CharacteristicUUID {
     }
 }
 
+
+
 bitflags! {
     pub struct CharPropFlags: u8 {
         const BROADCAST = 0x01;

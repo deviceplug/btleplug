@@ -7,23 +7,12 @@ use nix;
 
 use util::handle_error;
 use adapter::{Adapter, HCIDevReq, ConnectedAdapter};
-use device::Device;
 use ::constants::*;
 
 // #define HCIDEVUP	_IOW('H', 201, int)
 ioctl!(write_int hci_dev_up with b'H', 201);
 // #define HCIDEVDOWN	_IOW('H', 202, int)
 ioctl!(write_int hci_dev_down with b'H', 202);
-
-pub enum Event {
-    AdapterEnabled(Adapter),
-    AdapterDisabled(Adapter),
-    DeviceDiscovered(Device),
-    DeviceConnected(Device),
-    DeviceDisconnected(Device),
-}
-
-pub type Callback = fn (Event) -> ();
 
 #[derive(Copy)]
 #[repr(C)]
@@ -94,7 +83,7 @@ impl Manager {
         Adapter::from_dev_id(*ctl, adapter.dev_id)
     }
 
-    pub fn connect(&self, adapter: &Adapter, callbacks: Vec<Callback>) -> nix::Result<ConnectedAdapter> {
-        ConnectedAdapter::new(adapter, callbacks)
+    pub fn connect(&self, adapter: &Adapter) -> nix::Result<ConnectedAdapter> {
+        ConnectedAdapter::new(adapter)
     }
 }

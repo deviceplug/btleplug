@@ -1,4 +1,3 @@
-mod protocol;
 mod acl_stream;
 
 use libc;
@@ -18,7 +17,6 @@ use std::thread;
 use std::mem::size_of;
 
 use util::handle_error;
-use ::adapter::protocol::Protocol;
 use ::protocol::hci;
 use ::protocol::att;
 use ::adapter::acl_stream::{ACLStream, HandleFn};
@@ -502,12 +500,12 @@ impl ConnectedAdapter {
         }
     }
 
-    pub fn connect(&self, device: &Device) -> nix::Result<()> {
+    pub fn connect(&self, address: BDAddr) -> nix::Result<()> {
         // let mut addr = device.address.clone();
         let fd = handle_error(unsafe {
             socket(AF_BLUETOOTH, SOCK_SEQPACKET, 0)
         })?;
-        self.device_fds.lock().unwrap().insert(device.address, fd);
+        self.device_fds.lock().unwrap().insert(address, fd);
 
         let local_addr = SockaddrL2 {
             l2_family: AF_BLUETOOTH as sa_family_t,
@@ -531,7 +529,7 @@ impl ConnectedAdapter {
         let addr = SockaddrL2 {
             l2_family: AF_BLUETOOTH as u16,
             l2_psm: 0,
-            l2_bdaddr: device.address,
+            l2_bdaddr: address,
             l2_cid: ATT_CID,
             l2_bdaddr_type: 1,
         };
@@ -555,6 +553,28 @@ impl ConnectedAdapter {
         Ok(())
     }
 
+    fn write(&self, message: &mut [u8]) -> nix::Result<()> {
+        debug!("writing({}) {:?}", self.adapter_fd, message);
+        let ptr = message.as_mut_ptr();
+        handle_error(unsafe {
+            write(self.adapter_fd, ptr as *mut _ as *mut c_void, message.len()) as i32
+        })?;
+        Ok(())
+    }
+
+    pub fn disconnect(&self, address: BDAddr) -> nix::Result<()> {
+        let handle = {
+            let stream = self.streams.lock().unwrap();
+            stream.get(&address).unwrap().handle
+        };
+
+        let mut data = BytesMut::with_capacity(3);
+        data.put_u16::<LittleEndian>(handle);
+        data.put_u8(HCI_OE_USER_ENDED_CONNECTION);
+        let mut buf = hci::hci_command(DISCONNECT_CMD, &*data);
+        self.write(&mut *buf)
+    }
+
     fn set_scan_params(&self) -> nix::Result<()> {
         let mut data = BytesMut::with_capacity(7);
         data.put_u8(1); // scan_type = active
@@ -562,8 +582,8 @@ impl ConnectedAdapter {
         data.put_u16::<LittleEndian>(0x0010); // window ms
         data.put_u8(0); // own_type = public
         data.put_u8(0); // filter_policy = public
-        let mut buf = Protocol::hci(LE_SET_SCAN_PARAMETERS_CMD, &*data);
-        Protocol::write(self.adapter_fd, &mut *buf)
+        let mut buf = hci::hci_command(LE_SET_SCAN_PARAMETERS_CMD, &*data);
+        self.write(&mut *buf)
     }
 
     fn set_scan_enabled(&self, enabled: bool) -> nix::Result<()> {
@@ -571,8 +591,8 @@ impl ConnectedAdapter {
         data.put_u8(if enabled { 1 } else { 0 }); // enabled
         data.put_u8(1); // filter duplicates
 
-        let mut buf = Protocol::hci(LE_SET_SCAN_ENABLE_CMD, &*data);
-        Protocol::write(self.adapter_fd, &mut *buf)
+        let mut buf = hci::hci_command(LE_SET_SCAN_ENABLE_CMD, &*data);
+        self.write(&mut *buf)
     }
 
     pub fn start_scan(&self) -> nix::Result<()> {
@@ -684,8 +704,6 @@ impl ConnectedAdapter {
     pub fn subscribe(&self, device: &Device, char: &Characteristic) {
         self.notify(device.address, char, true);
     }
-
-    // pub fn subscribe_with_callback(&self, device: &Device, char: &Characteristic, callback: )
 
     pub fn unsubscribe(&self, device: &Device, char: &Characteristic) {
         self.notify(device.address, char, false);

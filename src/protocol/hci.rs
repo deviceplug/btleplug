@@ -1,5 +1,7 @@
 use nom::{le_u8, le_u16, le_u32, le_u64, le_i8, IResult, Err, ErrorKind};
 use num::FromPrimitive;
+use bytes::{BytesMut, BufMut, LittleEndian};
+
 
 use ::adapter::{BDAddr, AddressType};
 use ::constants::*;
@@ -378,6 +380,8 @@ pub enum CommandType {
     LEConnectionUpdate = OCF_LE_CONN_UPDATE | (OGF_LE_CTL as u16) << 10,
     LEStartEncryption = OCF_LE_START_ENCRYPTION | (OGF_LE_CTL as u16) << 10,
 
+    Disconnect = 0x0406,
+
     AddDeviceToWhiteList = 0x2011,
     LEReadRemoteUsedFeatures = 0x2016,
 }}
@@ -705,4 +709,19 @@ pub fn message(i: &[u8]) -> IResult<&[u8], Message> {
         HCICommandPkt => hci_command_pkt(i),
         HCIAclDataPkt => hci_acldata_pkt(i),
     }
+}
+
+pub fn hci_command(command: u16, data: &[u8]) -> BytesMut {
+    let mut buf = BytesMut::with_capacity(4 + data.len());
+
+    // header
+    buf.put_u8(HCI_COMMAND_PKT);
+    buf.put_u16::<LittleEndian>(command);
+
+    // len
+    buf.put_u8(data.len() as u8);
+
+    // data
+    buf.put(data);
+    buf
 }

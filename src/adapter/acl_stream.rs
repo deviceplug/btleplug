@@ -79,8 +79,11 @@ impl ACLStream {
                             panic!("Unhandled error {}", e);
                         }
                     }
-
                 }
+
+                if let Err(err) = handle_error(unsafe { close(fd) }) {
+                    warn!("Failed to close socket {}: {}", fd, err);
+                };
             });
         }
 
@@ -163,5 +166,11 @@ impl ACLStream {
         if message.cid == ATT_CID {
             self.sender.send(Data(message.data.to_vec())).unwrap();
         }
+    }
+}
+
+impl Drop for ACLStream {
+    fn drop(&mut self) {
+        self.should_stop.clone().store(true, Ordering::Relaxed);
     }
 }

@@ -305,7 +305,6 @@ pub struct ConnectedAdapter {
 
 impl ConnectedAdapter {
     pub fn new(adapter: &Adapter) -> nix::Result<ConnectedAdapter> {
-
         let adapter_fd = handle_error(unsafe {
             socket(AF_BLUETOOTH, SOCK_RAW | SOCK_CLOEXEC /*| SOCK_NONBLOCK*/, 1)
         })?;
@@ -339,11 +338,6 @@ impl ConnectedAdapter {
         connected.set_socket_filter()?;
 
         Ok(connected)
-    }
-
-    pub fn watch(&self, handler: EventHandler) {
-        let list = self.event_handlers.clone();
-        list.lock().unwrap().push(handler);
     }
 
     fn set_socket_filter(&self) -> nix::Result<()> {
@@ -473,7 +467,8 @@ impl ConnectedAdapter {
             hci::Message::LEConnComplete(info) => {
                 info!("connected to {:?}", info);
                 self.emit(Event::DeviceConnected(info.bdaddr.clone()));
-                let fd = *self.device_fds.lock().unwrap().get(&info.bdaddr).unwrap();
+                let mut fds = self.device_fds.lock().unwrap();
+                let fd = fds.remove(&info.bdaddr).unwrap();
 
                 self.streams.lock().unwrap()
                     .entry(info.bdaddr)
@@ -493,64 +488,21 @@ impl ConnectedAdapter {
                         stream.receive(&data);
                     });
                 });
+            },
+            hci::Message::DisconnectComplete { handle, .. } => {
+                let mut streams = self.streams.lock().unwrap();
+                let mut handles = self.handles.lock().unwrap();
+
+                if let Some(address) = handles.get(&handle) {
+                    streams.remove(&address);
+                }
+
+                handles.remove(&handle);
             }
             _ => {
                 // skip
             }
         }
-    }
-
-    pub fn connect(&self, address: BDAddr) -> nix::Result<()> {
-        // let mut addr = device.address.clone();
-        let fd = handle_error(unsafe {
-            socket(AF_BLUETOOTH, SOCK_SEQPACKET, 0)
-        })?;
-        self.device_fds.lock().unwrap().insert(address, fd);
-
-        let local_addr = SockaddrL2 {
-            l2_family: AF_BLUETOOTH as sa_family_t,
-            l2_psm: 0,
-            l2_bdaddr: self.adapter.addr,
-            l2_cid: ATT_CID,
-            l2_bdaddr_type: self.adapter.typ.num() as u32,
-        };
-
-        handle_error(unsafe {
-            bind(fd, &local_addr as *const SockaddrL2 as *const sockaddr,
-                 std::mem::size_of::<SockaddrL2>() as u32)
-        })?;
-
-        let mut opt = [1u8, 0];
-        handle_error(unsafe {
-            setsockopt(fd, SOL_BLUETOOTH, 4, opt.as_mut_ptr() as *mut c_void, 2)
-        })?;
-
-
-        let addr = SockaddrL2 {
-            l2_family: AF_BLUETOOTH as u16,
-            l2_psm: 0,
-            l2_bdaddr: address,
-            l2_cid: ATT_CID,
-            l2_bdaddr_type: 1,
-        };
-
-        handle_error(unsafe {
-            connect(fd, &addr as *const SockaddrL2 as *const sockaddr,
-                    size_of::<SockaddrL2>() as u32)
-        })?;
-
-        let mut opts = L2CapOptions::default();
-
-        let mut len = size_of::<L2CapOptions>() as u32;
-        handle_error(unsafe {
-            getsockopt(fd, SOL_L2CAP, L2CAP_OPTIONS,
-                       &mut opts as *mut _ as *mut c_void,
-                       &mut len)
-        })?;
-
-        debug!("sock opts: {:#?}", opts);
-
-        Ok(())
     }
 
     fn write(&self, message: &mut [u8]) -> nix::Result<()> {
@@ -560,19 +512,6 @@ impl ConnectedAdapter {
             write(self.adapter_fd, ptr as *mut _ as *mut c_void, message.len()) as i32
         })?;
         Ok(())
-    }
-
-    pub fn disconnect(&self, address: BDAddr) -> nix::Result<()> {
-        let handle = {
-            let stream = self.streams.lock().unwrap();
-            stream.get(&address).unwrap().handle
-        };
-
-        let mut data = BytesMut::with_capacity(3);
-        data.put_u16::<LittleEndian>(handle);
-        data.put_u8(HCI_OE_USER_ENDED_CONNECTION);
-        let mut buf = hci::hci_command(DISCONNECT_CMD, &*data);
-        self.write(&mut *buf)
     }
 
     fn set_scan_params(&self) -> nix::Result<()> {
@@ -595,34 +534,11 @@ impl ConnectedAdapter {
         self.write(&mut *buf)
     }
 
-    pub fn start_scan(&self) -> nix::Result<()> {
-        self.set_scan_params()?;
-        self.set_scan_enabled(true)
-    }
-
     fn write_acl_packet(&self, address: BDAddr, data: &mut [u8], handler: Option<HandleFn>) {
         // TODO: improve error handling
         self.streams.lock().unwrap()
             .get(&address).unwrap()
             .write(data, handler)
-    }
-
-    pub fn discovered(&self) -> Vec<Device> {
-        let discovered = self.discovered.lock().unwrap();
-        discovered.values().map(|d| d.to_device()).collect()
-    }
-
-    pub fn device(&self, address: BDAddr) -> Option<Device> {
-        let discovered = self.discovered.lock().unwrap();
-        discovered.get(&address).map(|d| d.to_device())
-    }
-
-    pub fn discover_chars(&self, device: &Device) {
-        self.discover_chars_in_range(device, 0x0001, 0xFFFF);
-    }
-
-    pub fn discover_chars_in_range(&self, device: &Device, start: u16, end: u16) {
-        self.discover_chars_in_range_int(device.address, start, end);
     }
 
     fn discover_chars_in_range_int(&self, address: BDAddr, start: u16, end: u16) {
@@ -685,11 +601,6 @@ impl ConnectedAdapter {
         stream.write_cmd(&mut *buf);
     }
 
-    pub fn request(&self, address: BDAddr, char: &Characteristic, data: &[u8],
-                   handler: Option<HandleFn>) {
-        self.request_by_handle(address, char.value_handle, data, handler);
-    }
-
     fn request_by_handle(&self, address: BDAddr, handle: u16, data: &[u8],
                          handler: Option<HandleFn>) {
         let streams = self.streams.lock().unwrap();
@@ -699,14 +610,6 @@ impl ConnectedAdapter {
         buf.put_u16::<LittleEndian>(handle);
         buf.put(data);
         stream.write(&mut *buf, handler);
-    }
-
-    pub fn subscribe(&self, device: &Device, char: &Characteristic) {
-        self.notify(device.address, char, true);
-    }
-
-    pub fn unsubscribe(&self, device: &Device, char: &Characteristic) {
-        self.notify(device.address, char, false);
     }
 
     fn notify(&self, address: BDAddr, char: &Characteristic, enable: bool) {
@@ -763,6 +666,116 @@ impl ConnectedAdapter {
             };
 
         })));
+    }
+
+    /**********
+     Public API
+    ************/
+    pub fn start_scan(&self) -> nix::Result<()> {
+        self.set_scan_params()?;
+        self.set_scan_enabled(true)
+    }
+
+    pub fn discovered(&self) -> Vec<Device> {
+        let discovered = self.discovered.lock().unwrap();
+        discovered.values().map(|d| d.to_device()).collect()
+    }
+
+    pub fn connect(&self, address: BDAddr) -> nix::Result<()> {
+        // let mut addr = device.address.clone();
+        let fd = handle_error(unsafe {
+            socket(AF_BLUETOOTH, SOCK_SEQPACKET, 0)
+        })?;
+        self.device_fds.lock().unwrap().insert(address, fd);
+
+        let local_addr = SockaddrL2 {
+            l2_family: AF_BLUETOOTH as sa_family_t,
+            l2_psm: 0,
+            l2_bdaddr: self.adapter.addr,
+            l2_cid: ATT_CID,
+            l2_bdaddr_type: self.adapter.typ.num() as u32,
+        };
+
+        handle_error(unsafe {
+            bind(fd, &local_addr as *const SockaddrL2 as *const sockaddr,
+                 std::mem::size_of::<SockaddrL2>() as u32)
+        })?;
+
+        let mut opt = [1u8, 0];
+        handle_error(unsafe {
+            setsockopt(fd, SOL_BLUETOOTH, 4, opt.as_mut_ptr() as *mut c_void, 2)
+        })?;
+
+
+        let addr = SockaddrL2 {
+            l2_family: AF_BLUETOOTH as u16,
+            l2_psm: 0,
+            l2_bdaddr: address,
+            l2_cid: ATT_CID,
+            l2_bdaddr_type: 1,
+        };
+
+        handle_error(unsafe {
+            connect(fd, &addr as *const SockaddrL2 as *const sockaddr,
+                    size_of::<SockaddrL2>() as u32)
+        })?;
+
+        let mut opts = L2CapOptions::default();
+
+        let mut len = size_of::<L2CapOptions>() as u32;
+        handle_error(unsafe {
+            getsockopt(fd, SOL_L2CAP, L2CAP_OPTIONS,
+                       &mut opts as *mut _ as *mut c_void,
+                       &mut len)
+        })?;
+
+        debug!("sock opts: {:#?}", opts);
+
+        Ok(())
+    }
+
+    pub fn disconnect(&self, address: BDAddr) -> nix::Result<()> {
+        let handle = {
+            let stream = self.streams.lock().unwrap();
+            stream.get(&address).unwrap().handle
+        };
+
+        let mut data = BytesMut::with_capacity(3);
+        data.put_u16::<LittleEndian>(handle);
+        data.put_u8(HCI_OE_USER_ENDED_CONNECTION);
+        let mut buf = hci::hci_command(DISCONNECT_CMD, &*data);
+        self.write(&mut *buf)
+    }
+
+    pub fn device(&self, address: BDAddr) -> Option<Device> {
+        let discovered = self.discovered.lock().unwrap();
+        discovered.get(&address).map(|d| d.to_device())
+    }
+
+    pub fn discover_chars(&self, device: &Device) {
+        self.discover_chars_in_range(device, 0x0001, 0xFFFF);
+    }
+
+    pub fn discover_chars_in_range(&self, device: &Device, start: u16, end: u16) {
+        self.discover_chars_in_range_int(device.address, start, end);
+    }
+
+    pub fn request(&self, address: BDAddr, char: &Characteristic, data: &[u8],
+                   handler: Option<HandleFn>) {
+        self.request_by_handle(address, char.value_handle, data, handler);
+    }
+
+    pub fn watch(&self, handler: EventHandler) {
+        let list = self.event_handlers.clone();
+        list.lock().unwrap().push(handler);
+    }
+
+    pub fn subscribe(&self, device: &Device, char: &Characteristic) {
+        self.notify(device.address, char, true);
+    }
+
+    pub fn unsubscribe(&self, device: &Device, char: &Characteristic) {
+        self.notify(device.address, char, false);
     }
 }
 

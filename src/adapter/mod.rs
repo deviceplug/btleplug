@@ -418,50 +418,53 @@ impl ConnectedAdapter {
     fn handle(&self, message: hci::Message) {
         debug!("got message {:?}", message);
 
-        let mut discovered = self.discovered.lock().unwrap();
         match message {
             hci::Message::LEAdvertisingReport(info) => {
                 use ::protocol::hci::LEAdvertisingData::*;
 
-                let device = discovered.entry(info.bdaddr)
-                    .or_insert_with(|| {
-                        let mut d = DeviceState::default();
-                        d.address = info.bdaddr;
-                        d.address_type = if info.bdaddr_type == 1 { AddressType::Random }
-                            else { AddressType::Public };
-                        d
-                    });
+                let new = {
+                    let mut discovered = self.discovered.lock().unwrap();
 
-                if device.discovery_count == 0 {
+                    let device = discovered.entry(info.bdaddr)
+                        .or_insert_with(|| {
+                            let mut d = DeviceState::default();
+                            d.address = info.bdaddr;
+                            d.address_type = if info.bdaddr_type == 1 { AddressType::Random } else { AddressType::Public };
+                            d
+                        });
+
+                    device.discovery_count += 1;
+
+                    if info.evt_type == 4 {
+                        // discover event
+                        device.has_scan_response = true;
+                    } else {
+                        // TODO: reset service data
+                    }
+
+                    for datum in info.data {
+                        match datum {
+                            LocalName(name) => {
+                                device.local_name = Some(name);
+                            }
+                            TxPowerLevel(power) => {
+                                device.tx_power_level = Some(power);
+                            }
+                            ManufacturerSpecific(data) => {
+                                device.manufacturer_data = Some(data);
+                            }
+                            _ => {
+                                // skip for now
+                            }
+                        }
+                    }
+                    device.discovery_count == 1
+                };
+
+                if new {
                     self.emit(Event::DeviceDiscovered(info.bdaddr.clone()))
                 } else {
                     self.emit(Event::DeviceUpdated(info.bdaddr.clone()))
-                }
-
-                device.discovery_count += 1;
-
-                if info.evt_type == 4 {
-                    // discover event
-                    device.has_scan_response = true;
-                } else {
-                    // TODO: reset service data
-                }
-
-                for datum in info.data {
-                    match datum {
-                        LocalName(name) => {
-                            device.local_name = Some(name);
-                        }
-                        TxPowerLevel(power) => {
-                            device.tx_power_level = Some(power);
-                        }
-                        ManufacturerSpecific(data) => {
-                            device.manufacturer_data = Some(data);
-                        }
-                        _ => {
-                            // skip for now
-                        }
-                    }
                 }
             }
             hci::Message::LEConnComplete(info) => {
@@ -589,16 +592,6 @@ impl ConnectedAdapter {
         });
 
         self.write_acl_packet(address, &mut *buf, Some(handler));
-    }
-
-    pub fn command(&self, address: BDAddr, char: &Characteristic, data: &[u8]) {
-        let streams = self.streams.lock().unwrap();
-        let stream = streams.get(&address).unwrap();
-        let mut buf = BytesMut::with_capacity(3 + data.len());
-        buf.put_u8(ATT_OP_WRITE_CMD);
-        buf.put_u16::<LittleEndian>(char.value_handle);
-        buf.put(data);
-        stream.write_cmd(&mut *buf);
     }
 
     fn request_by_handle(&self, address: BDAddr, handle: u16, data: &[u8],
@@ -747,17 +740,27 @@ impl ConnectedAdapter {
         self.write(&mut *buf)
     }
 
+    pub fn command(&self, address: BDAddr, char: &Characteristic, data: &[u8]) {
+        let streams = self.streams.lock().unwrap();
+        let stream = streams.get(&address).unwrap();
+        let mut buf = BytesMut::with_capacity(3 + data.len());
+        buf.put_u8(ATT_OP_WRITE_CMD);
+        buf.put_u16::<LittleEndian>(char.value_handle);
+        buf.put(data);
+        stream.write_cmd(&mut *buf);
+    }
+
     pub fn device(&self, address: BDAddr) -> Option<Device> {
         let discovered = self.discovered.lock().unwrap();
         discovered.get(&address).map(|d| d.to_device())
     }
 
-    pub fn discover_chars(&self, device: &Device) {
-        self.discover_chars_in_range(device, 0x0001, 0xFFFF);
+    pub fn discover_chars(&self, address: BDAddr) {
+        self.discover_chars_in_range(address, 0x0001, 0xFFFF);
     }
 
-    pub fn discover_chars_in_range(&self, device: &Device, start: u16, end: u16) {
-        self.discover_chars_in_range_int(device.address, start, end);
+    pub fn discover_chars_in_range(&self, address: BDAddr, start: u16, end: u16) {
+        self.discover_chars_in_range_int(address, start, end);
     }
 
     pub fn request(&self, address: BDAddr, char: &Characteristic, data: &[u8],
@@ -770,12 +773,12 @@ impl ConnectedAdapter {
         list.lock().unwrap().push(handler);
     }
 
-    pub fn subscribe(&self, device: &Device, char: &Characteristic) {
-        self.notify(device.address, char, true);
+    pub fn subscribe(&self, address: BDAddr, char: &Characteristic) {
+        self.notify(address, char, true);
     }
 
-    pub fn unsubscribe(&self, device: &Device, char: &Characteristic) {
-        self.notify(device.address, char, false);
+    pub fn unsubscribe(&self, address: BDAddr, char: &Characteristic) {
+        self.notify(address, char, false);
     }
 }
 

@@ -54,6 +54,7 @@ impl AddressType {
 }
 
 #[derive(Debug, Copy)]
+#[repr(C)]
 pub struct HCIDevReq {
     pub dev_id: u16,
     pub dev_opt: u32,

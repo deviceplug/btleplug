@@ -2,7 +2,6 @@ mod acl_stream;
 
 use libc;
 use std;
-use libc::*;
 use std::ffi::CStr;
 use nix;
 use nom::IResult;
@@ -125,7 +124,7 @@ impl HCIDevStats {
 #[repr(C)]
 pub struct HCIDevInfo {
     pub dev_id : u16,
-    pub name : [c_char; 8],
+    pub name : [libc::c_char; 8],
     pub bdaddr : BDAddr,
     pub flags : u32,
     pub type_ : u8,
@@ -168,7 +167,7 @@ impl HCIDevInfo {
 #[derive(Copy, Debug)]
 #[repr(C)]
 pub struct SockaddrHCI {
-    hci_family: sa_family_t,
+    hci_family: libc::sa_family_t,
     hci_dev: u16,
     hci_channel: u16,
 }
@@ -180,7 +179,7 @@ impl Clone for SockaddrHCI {
 #[derive(Copy, Debug)]
 #[repr(C)]
 pub struct SockaddrL2 {
-    l2_family: sa_family_t,
+    l2_family: libc::sa_family_t,
     l2_psm: u16,
     l2_bdaddr: BDAddr,
     l2_cid: u16,
@@ -296,6 +295,7 @@ pub struct ConnectedAdapter {
     pub adapter: Adapter,
     adapter_fd: i32,
     should_stop: Arc<AtomicBool>,
+    scan_enabled: Arc<AtomicBool>,
     event_handlers: Arc<Mutex<Vec<EventHandler>>>,
     discovered: Arc<Mutex<HashMap<BDAddr, DeviceState>>>,
     device_fds: Arc<Mutex<HashMap<BDAddr, i32>>>,
@@ -306,17 +306,17 @@ pub struct ConnectedAdapter {
 impl ConnectedAdapter {
     pub fn new(adapter: &Adapter) -> nix::Result<ConnectedAdapter> {
         let adapter_fd = handle_error(unsafe {
-            socket(AF_BLUETOOTH, SOCK_RAW | SOCK_CLOEXEC /*| SOCK_NONBLOCK*/, 1)
+            libc::socket(libc::AF_BLUETOOTH, libc::SOCK_RAW | libc::SOCK_CLOEXEC, 1)
         })?;
 
         let addr = SockaddrHCI {
-            hci_family: AF_BLUETOOTH as u16,
+            hci_family: libc::AF_BLUETOOTH as u16,
             hci_dev: adapter.dev_id,
             hci_channel: 0,
         };
 
         handle_error(unsafe {
-            bind(adapter_fd, &addr as *const SockaddrHCI as *const sockaddr,
+            libc::bind(adapter_fd, &addr as *const SockaddrHCI as *const libc::sockaddr,
                  std::mem::size_of::<SockaddrHCI>() as u32)
         })?;
 
@@ -326,6 +326,7 @@ impl ConnectedAdapter {
             adapter: adapter.clone(),
             adapter_fd,
             should_stop,
+            scan_enabled: Arc::new(AtomicBool::new(false)),
             event_handlers: Arc::new(Mutex::new(vec![])),
             discovered: Arc::new(Mutex::new(HashMap::new())),
             device_fds: Arc::new(Mutex::new(HashMap::new())),
@@ -354,8 +355,8 @@ impl ConnectedAdapter {
         filter.put_u32::<LittleEndian>(opcode);
 
         handle_error(unsafe {
-            setsockopt(self.adapter_fd, SOL_HCI, HCI_FILTER,
-                       filter.as_mut_ptr() as *mut _ as *mut c_void,
+            libc::setsockopt(self.adapter_fd, SOL_HCI, HCI_FILTER,
+                       filter.as_mut_ptr() as *mut _ as *mut libc::c_void,
                        filter.len() as u32)
         })?;
         Ok(())
@@ -372,7 +373,7 @@ impl ConnectedAdapter {
             while !should_stop.load(Ordering::Relaxed) {
                 // debug!("reading");
                 let len = handle_error(unsafe {
-                    read(fd, buf.as_mut_ptr() as *mut _ as *mut c_void, buf.len()) as i32
+                    libc::read(fd, buf.as_mut_ptr() as *mut _ as *mut libc::c_void, buf.len()) as i32
                 }).unwrap_or(0) as usize;
                 if len == 0 {
                     continue;
@@ -512,7 +513,7 @@ impl ConnectedAdapter {
         debug!("writing({}) {:?}", self.adapter_fd, message);
         let ptr = message.as_mut_ptr();
         handle_error(unsafe {
-            write(self.adapter_fd, ptr as *mut _ as *mut c_void, message.len()) as i32
+            libc::write(self.adapter_fd, ptr as *mut _ as *mut libc::c_void, message.len()) as i32
         })?;
         Ok(())
     }
@@ -533,6 +534,7 @@ impl ConnectedAdapter {
         data.put_u8(if enabled { 1 } else { 0 }); // enabled
         data.put_u8(1); // filter duplicates
 
+        self.scan_enabled.clone().store(enabled, Ordering::Relaxed);
         let mut buf = hci::hci_command(LE_SET_SCAN_ENABLE_CMD, &*data);
         self.write(&mut *buf)
     }
@@ -669,6 +671,10 @@ impl ConnectedAdapter {
         self.set_scan_enabled(true)
     }
 
+    pub fn stop_scan(&self) -> nix::Result<()> {
+        self.set_scan_enabled(false)
+    }
+
     pub fn discovered(&self) -> Vec<Device> {
         let discovered = self.discovered.lock().unwrap();
         discovered.values().map(|d| d.to_device()).collect()
@@ -677,12 +683,12 @@ impl ConnectedAdapter {
     pub fn connect(&self, address: BDAddr) -> nix::Result<()> {
         // let mut addr = device.address.clone();
         let fd = handle_error(unsafe {
-            socket(AF_BLUETOOTH, SOCK_SEQPACKET, 0)
+            libc::socket(libc::AF_BLUETOOTH, libc::SOCK_SEQPACKET, 0)
         })?;
         self.device_fds.lock().unwrap().insert(address, fd);
 
         let local_addr = SockaddrL2 {
-            l2_family: AF_BLUETOOTH as sa_family_t,
+            l2_family: libc::AF_BLUETOOTH as libc::sa_family_t,
             l2_psm: 0,
             l2_bdaddr: self.adapter.addr,
             l2_cid: ATT_CID,
@@ -690,18 +696,18 @@ impl ConnectedAdapter {
         };
 
         handle_error(unsafe {
-            bind(fd, &local_addr as *const SockaddrL2 as *const sockaddr,
+            libc::bind(fd, &local_addr as *const SockaddrL2 as *const libc::sockaddr,
                  std::mem::size_of::<SockaddrL2>() as u32)
         })?;
 
         let mut opt = [1u8, 0];
         handle_error(unsafe {
-            setsockopt(fd, SOL_BLUETOOTH, 4, opt.as_mut_ptr() as *mut c_void, 2)
+            libc::setsockopt(fd, libc::SOL_BLUETOOTH, 4, opt.as_mut_ptr() as *mut libc::c_void, 2)
         })?;
 
 
         let addr = SockaddrL2 {
-            l2_family: AF_BLUETOOTH as u16,
+            l2_family: libc::AF_BLUETOOTH as u16,
             l2_psm: 0,
             l2_bdaddr: address,
             l2_cid: ATT_CID,
@@ -709,7 +715,7 @@ impl ConnectedAdapter {
         };
 
         handle_error(unsafe {
-            connect(fd, &addr as *const SockaddrL2 as *const sockaddr,
+            libc::connect(fd, &addr as *const SockaddrL2 as *const libc::sockaddr,
                     size_of::<SockaddrL2>() as u32)
         })?;
 
@@ -717,10 +723,15 @@ impl ConnectedAdapter {
 
         let mut len = size_of::<L2CapOptions>() as u32;
         handle_error(unsafe {
-            getsockopt(fd, SOL_L2CAP, L2CAP_OPTIONS,
-                       &mut opts as *mut _ as *mut c_void,
+            libc::getsockopt(fd, SOL_L2CAP, L2CAP_OPTIONS,
+                       &mut opts as *mut _ as *mut libc::c_void,
                        &mut len)
         })?;
+
+        // restart scanning if we were already, as connecting to a device seems to kill it
+        if self.clone().scan_enabled.load(Ordering::Relaxed) {
+            self.start_scan()?;
+        }
 
         debug!("sock opts: {:#?}", opts);
 
@@ -813,7 +824,7 @@ impl Adapter {
 
         unsafe {
             handle_error(libc::ioctl(ctl, HCI_GET_DEV_MAGIC as libc::c_ulong,
-                                     &mut di as (*mut HCIDevInfo) as (*mut c_void)))?;
+                                     &mut di as (*mut HCIDevInfo) as (*mut libc::c_void)))?;
         }
 
         Ok(Adapter::from_device_info(&di))

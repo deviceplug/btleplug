@@ -21,6 +21,7 @@ pub mod adapter;
 pub mod manager;
 pub mod device;
 pub mod protocol;
+pub mod api;
 
 mod util;
 mod constants;

@@ -1,5 +1,4 @@
 use std::thread;
-use std::boxed::Box;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -7,7 +6,6 @@ use libc::*;
 
 use nix;
 
-use adapter::BDAddr;
 use ::constants::*;
 use ::util::handle_error;
 
@@ -20,8 +18,8 @@ use std::collections::HashMap;
 use ::protocol::hci::ACLData;
 
 use self::StreamMessage::*;
-
-pub type HandleFn = Box<Fn(u16, &[u8]) + Send>;
+use api::BDAddr;
+use api::HandleFn;
 
 enum StreamMessage {
     Command(Vec<u8>),

@@ -1,9 +1,10 @@
-use std::collections::BTreeSet;
 use std::fmt;
-use std::fmt::{Display, Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
+use std::collections::BTreeSet;
 
-use api::BDAddr;
-use api::AddressType;
+use nix;
+
+use api::{AddressType, BDAddr, HandleFn};
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
 pub enum CharacteristicUUID {
@@ -62,27 +63,31 @@ impl Display for Characteristic {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Device {
+#[derive(Debug, Default)]
+pub struct Properties {
     pub address: BDAddr,
     pub address_type: AddressType,
     pub local_name: Option<String>,
     pub tx_power_level: Option<i8>,
     pub manufacturer_data: Option<Vec<u8>>,
-
-    // TODO service_data, service_uuids, solicitation_uuids
-    pub characteristics: BTreeSet<Characteristic>,
+    pub discovery_count: u32,
+    pub has_scan_response: bool,
 }
 
-impl Device {
-    pub fn new(address: BDAddr, address_type: AddressType) -> Device {
-        Device {
-            address,
-            address_type,
-            local_name: None,
-            tx_power_level: None,
-            manufacturer_data: None,
-            characteristics: BTreeSet::new(),
-        }
-    }
+pub trait Peripheral {
+    fn properties(&self) -> Properties;
+    fn characteristics(&self) -> BTreeSet<Characteristic>;
+    fn is_connected(&self) -> bool;
+
+    fn connect(&mut self) -> nix::Result<()>;
+    fn disconnect(&mut self) -> nix::Result<()>;
+
+    fn discover_characteristics(&mut self);
+    fn discover_characteristics_in_range(&mut self, start: u16, end: u16);
+
+    fn command(&self, characteristic: &Characteristic, data: &[u8]);
+    fn request(&self, characteristic: &Characteristic, data: &[u8], handler: Option<HandleFn>);
+
+    fn subscribe(&self, characteristic: &Characteristic);
+    fn unsubscribe(&self, characteristic: &Characteristic);
 }

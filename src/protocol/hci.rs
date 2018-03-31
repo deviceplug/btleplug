@@ -3,14 +3,14 @@ use num::FromPrimitive;
 use bytes::{BytesMut, BufMut, LittleEndian};
 
 
-use ::adapter::{BDAddr, AddressType};
+use ::api::{BDAddr, AddressType};
 use ::constants::*;
 use ::protocol::*;
 
 
 #[cfg(test)]
 mod tests {
-    use ::adapter::BDAddr;
+    use ::api::BDAddr;
     use nom::IResult;
     use super::*;
     use super::LEAdvertisingData::*;

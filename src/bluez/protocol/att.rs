@@ -1,6 +1,6 @@
 use nom::{le_u8, le_u16, IResult};
 
-use ::api::peripheral::{Characteristic, CharacteristicUUID, CharPropFlags};
+use ::api::{Characteristic, CharacteristicUUID, CharPropFlags};
 
 use bluez::constants::*;
 use bluez::protocol::*;

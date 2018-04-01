@@ -1,4 +1,5 @@
 mod acl_stream;
+mod peripheral;
 
 use libc;
 use std;
@@ -10,14 +11,10 @@ use std::collections::{HashSet, HashMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
-use std::mem::size_of;
 
 use ::Result;
-use api::{BDAddr, AddressType, host::Host};
-use api::HandleFn;
-use api::host::{EventHandler, Event};
-use api::peripheral::Peripheral;
-use api::peripheral::{Characteristic, CharPropFlags};
+use api::{Peripheral, Characteristic, CharPropFlags, EventHandler, Event, HandleFn,
+          BDAddr, AddressType, Host};
 
 use bluez::util::handle_error;
 use bluez::protocol::{hci, att};
@@ -128,37 +125,6 @@ impl Clone for SockaddrHCI {
     fn clone(&self) -> Self { *self }
 }
 
-#[derive(Copy, Debug)]
-#[repr(C)]
-pub struct SockaddrL2 {
-    l2_family: libc::sa_family_t,
-    l2_psm: u16,
-    l2_bdaddr: BDAddr,
-    l2_cid: u16,
-    l2_bdaddr_type: u32,
-}
-impl Clone for SockaddrL2 {
-    fn clone(&self) -> Self { *self }
-}
-
-
-const L2CAP_OPTIONS: i32 = 0x01;
-const SOL_L2CAP: i32 = 6;
-
-#[derive(Copy, Debug, Default)]
-#[repr(C)]
-struct L2CapOptions {
-    omtu: u16,
-    imtu: u16,
-    flush_to: u16,
-    mode: u8,
-    fcs : u8,
-    max_tx: u8,
-    txwin_size: u16,
-}
-impl Clone for L2CapOptions {
-    fn clone(&self) -> Self { *self }
-}
 
 #[derive(Debug, Copy, Clone)]
 pub enum AdapterType {
@@ -224,7 +190,7 @@ pub struct ConnectedAdapter {
     pub adapter: Adapter,
     adapter_fd: i32,
     should_stop: Arc<AtomicBool>,
-    scan_enabled: Arc<AtomicBool>,
+    pub scan_enabled: Arc<AtomicBool>,
     event_handlers: Arc<Mutex<Vec<EventHandler>>>,
     discovered: Arc<Mutex<HashMap<BDAddr, DeviceState>>>,
     device_fds: Arc<Mutex<HashMap<BDAddr, i32>>>,
@@ -405,8 +371,7 @@ impl ConnectedAdapter {
 
                 self.streams.lock().unwrap()
                     .entry(info.bdaddr)
-                    .or_insert_with(|| ACLStream::new(info.bdaddr,
-                                                      info.handle, fd));
+                    .or_insert_with(|| ACLStream::new(info.bdaddr, info.handle, fd));
                 self.handles.lock().unwrap()
                     .entry(info.handle)
                     .or_insert(info.bdaddr);
@@ -590,63 +555,6 @@ impl ConnectedAdapter {
         })));
     }
 
-    pub fn connect(&self, address: BDAddr) -> Result<()> {
-        // let mut addr = device.address.clone();
-        let fd = handle_error(unsafe {
-            libc::socket(libc::AF_BLUETOOTH, libc::SOCK_SEQPACKET, 0)
-        })?;
-        self.device_fds.lock().unwrap().insert(address, fd);
-
-        let local_addr = SockaddrL2 {
-            l2_family: libc::AF_BLUETOOTH as libc::sa_family_t,
-            l2_psm: 0,
-            l2_bdaddr: self.adapter.addr,
-            l2_cid: ATT_CID,
-            l2_bdaddr_type: self.adapter.typ.num() as u32,
-        };
-
-        handle_error(unsafe {
-            libc::bind(fd, &local_addr as *const SockaddrL2 as *const libc::sockaddr,
-                       std::mem::size_of::<SockaddrL2>() as u32)
-        })?;
-
-        let mut opt = [1u8, 0];
-        handle_error(unsafe {
-            libc::setsockopt(fd, libc::SOL_BLUETOOTH, 4, opt.as_mut_ptr() as *mut libc::c_void, 2)
-        })?;
-
-
-        let addr = SockaddrL2 {
-            l2_family: libc::AF_BLUETOOTH as u16,
-            l2_psm: 0,
-            l2_bdaddr: address,
-            l2_cid: ATT_CID,
-            l2_bdaddr_type: 1,
-        };
-
-        handle_error(unsafe {
-            libc::connect(fd, &addr as *const SockaddrL2 as *const libc::sockaddr,
-                          size_of::<SockaddrL2>() as u32)
-        })?;
-
-        let mut opts = L2CapOptions::default();
-
-        let mut len = size_of::<L2CapOptions>() as u32;
-        handle_error(unsafe {
-            libc::getsockopt(fd, SOL_L2CAP, L2CAP_OPTIONS,
-                             &mut opts as *mut _ as *mut libc::c_void,
-                             &mut len)
-        })?;
-
-        // restart scanning if we were already, as connecting to a device seems to kill it
-        if self.clone().scan_enabled.load(Ordering::Relaxed) {
-            self.start_scan()?;
-        }
-
-        debug!("sock opts: {:#?}", opts);
-
-        Ok(())
-    }
 
     pub fn disconnect(&self, address: BDAddr) -> Result<()> {
         let handle = {

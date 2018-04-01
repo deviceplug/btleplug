@@ -2,7 +2,7 @@ use std::thread;
 use std::sync::Arc;
 use std::time::Duration;
 
-use libc::*;
+use libc;
 
 use ::Result;
 
@@ -80,7 +80,7 @@ impl ACLStream {
                     }
                 }
 
-                if let Err(err) = handle_error(unsafe { close(fd) }) {
+                if let Err(err) = handle_error(unsafe { libc::close(fd) }) {
                     warn!("Failed to close socket {}: {}", fd, err);
                 };
             });
@@ -92,7 +92,7 @@ impl ACLStream {
     fn write_socket(&self, value: &mut [u8], command: bool,
                     receiver: &Receiver<StreamMessage>) -> Result<Vec<u8>> {
         handle_error(unsafe {
-            write(self.fd, value.as_mut_ptr() as *mut c_void, value.len()) as i32
+            libc::write(self.fd, value.as_mut_ptr() as *mut libc::c_void, value.len()) as i32
         })?;
 
         let mut skipped = vec![];

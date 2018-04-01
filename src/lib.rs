@@ -39,6 +39,9 @@ pub enum Error {
     #[fail(display = "The operation is not supported: {}", _0)]
     NotSupported(String),
 
+    #[fail(display = "Timed out after {} ms", _0)]
+    TimedOut(u32),
+
     #[fail(display = "{}", _0)]
     Other(String)
 }

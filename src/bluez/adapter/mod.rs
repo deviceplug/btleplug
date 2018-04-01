@@ -13,13 +13,18 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 use ::Result;
-use api::{Peripheral, Characteristic, CharPropFlags, EventHandler, Event, HandleFn,
+use api::{Characteristic, CharPropFlags, EventHandler, Event, HandleFn,
           BDAddr, AddressType, Host};
 
 use bluez::util::handle_error;
 use bluez::protocol::{hci, att};
 use bluez::adapter::acl_stream::ACLStream;
+use bluez::adapter::peripheral::Peripheral;
 use bluez::constants::*;
+use std::sync::mpsc::Sender;
+use std::sync::mpsc::Receiver;
+use std::sync::mpsc::channel;
+use api;
 
 
 #[derive(Debug, Copy)]
@@ -191,11 +196,8 @@ pub struct ConnectedAdapter {
     adapter_fd: i32,
     should_stop: Arc<AtomicBool>,
     pub scan_enabled: Arc<AtomicBool>,
-    event_handlers: Arc<Mutex<Vec<EventHandler>>>,
-    discovered: Arc<Mutex<HashMap<BDAddr, DeviceState>>>,
-    device_fds: Arc<Mutex<HashMap<BDAddr, i32>>>,
-    streams: Arc<Mutex<HashMap<BDAddr, ACLStream>>>,
-    handles: Arc<Mutex<HashMap<u16, BDAddr>>>,
+    event_txs: Arc<Mutex<Vec<Sender<Event>>>>,
+    peripherals: Arc<Mutex<HashMap<BDAddr, Peripheral>>>,
 }
 
 impl ConnectedAdapter {
@@ -222,11 +224,8 @@ impl ConnectedAdapter {
             adapter_fd,
             should_stop,
             scan_enabled: Arc::new(AtomicBool::new(false)),
-            event_handlers: Arc::new(Mutex::new(vec![])),
-            discovered: Arc::new(Mutex::new(HashMap::new())),
-            device_fds: Arc::new(Mutex::new(HashMap::new())),
-            streams: Arc::new(Mutex::new(HashMap::new())),
-            handles: Arc::new(Mutex::new(HashMap::new())),
+            event_txs: Arc::new(Mutex::new(vec![])),
+            peripherals: Arc::new(Mutex::new(HashMap::new())),
         };
 
         connected.add_raw_socket_reader(adapter_fd);
@@ -304,98 +303,63 @@ impl ConnectedAdapter {
     }
 
     fn emit(&self, event: Event) {
-        let handlers = self.event_handlers.clone();
-        let vec = handlers.lock().unwrap();
-        for handler in (*vec).iter() {
-            handler(event.clone());
-        }
+        let mut txs = self.event_txs.lock().unwrap();
+        txs.retain(|tx|{
+            // drop the tx if we see an error; that means the other end has hung up
+            tx.send(event.clone()).is_ok()
+        });
     }
 
     fn handle(&self, message: hci::Message) {
         debug!("got message {:?}", message);
 
+        let mut peripherals = self.peripherals.lock().unwrap();
+
         match message {
             hci::Message::LEAdvertisingReport(info) => {
                 use bluez::protocol::hci::LEAdvertisingData::*;
 
-                let new = {
-                    let mut discovered = self.discovered.lock().unwrap();
+                let mut new = false;
 
-                    let device = discovered.entry(info.bdaddr)
-                        .or_insert_with(|| {
-                            let mut d = DeviceState::default();
-                            d.address = info.bdaddr;
-                            d.address_type = if info.bdaddr_type == 1 { AddressType::Random } else { AddressType::Public };
-                            d
-                        });
+                let peripheral = peripherals.entry(info.bdaddr)
+                    .or_insert_with(|| {
+                        new = true;
+                        Peripheral::new(self.clone(), info.bdaddr)
+                    });
 
-                    device.discovery_count += 1;
+                let address = info.bdaddr.clone();
 
-                    if info.evt_type == 4 {
-                        // discover event
-                        device.has_scan_response = true;
-                    } else {
-                        // TODO: reset service data
-                    }
-
-                    for datum in info.data {
-                        match datum {
-                            LocalName(name) => {
-                                device.local_name = Some(name);
-                            }
-                            TxPowerLevel(power) => {
-                                device.tx_power_level = Some(power);
-                            }
-                            ManufacturerSpecific(data) => {
-                                device.manufacturer_data = Some(data);
-                            }
-                            _ => {
-                                // skip for now
-                            }
-                        }
-                    }
-                    device.discovery_count == 1
-                };
+                peripheral.handle_device_message(&hci::Message::LEAdvertisingReport(info));
 
                 if new {
-                    self.emit(Event::DeviceDiscovered(info.bdaddr.clone()))
+                    self.emit(Event::DeviceDiscovered(address.clone()))
                 } else {
-                    self.emit(Event::DeviceUpdated(info.bdaddr.clone()))
+                    self.emit(Event::DeviceUpdated(address.clone()))
                 }
             }
             hci::Message::LEConnComplete(info) => {
                 info!("connected to {:?}", info);
-                self.emit(Event::DeviceConnected(info.bdaddr.clone()));
-                let mut fds = self.device_fds.lock().unwrap();
-                let fd = fds.remove(&info.bdaddr).unwrap();
+                let address = info.bdaddr.clone();
 
-                self.streams.lock().unwrap()
-                    .entry(info.bdaddr)
-                    .or_insert_with(|| ACLStream::new(info.bdaddr, info.handle, fd));
-                self.handles.lock().unwrap()
-                    .entry(info.handle)
-                    .or_insert(info.bdaddr);
-            }
-            hci::Message::ACLDataPacket(data) => {
-                let handles = self.handles.lock().unwrap();
-                let address = handles.get(&data.handle);
-
-                address.map(|addr| {
-                    let streams = self.streams.lock().unwrap();
-                    streams.get(addr).map(|stream| {
-                        stream.receive(&data);
-                    });
-                });
-            },
-            hci::Message::DisconnectComplete { handle, .. } => {
-                let mut streams = self.streams.lock().unwrap();
-                let mut handles = self.handles.lock().unwrap();
-
-                if let Some(address) = handles.get(&handle) {
-                    streams.remove(&address);
+                match peripherals.get(&info.bdaddr) {
+                    Some(peripheral) => {
+                        peripheral.handle_device_message(&hci::Message::LEConnComplete(info))
+                    }
+                    // todo: there's probably a better way to handle this case
+                    None => warn!("Got connection for unknown device {}", info.bdaddr)
                 }
 
-                handles.remove(&handle);
+                self.emit(Event::DeviceConnected(address));
+            }
+            hci::Message::ACLDataPacket(data) => {
+                let message = hci::Message::ACLDataPacket(data);
+                for peripheral in peripherals.values() {
+                    // we don't know the handler => device mapping, so send to all and let them filter
+                    peripheral.handle_device_message(&message);
+                }
+            },
+            hci::Message::DisconnectComplete { handle, .. } => {
+                // TODO: handle disconnects
             }
             _ => {
                 // skip
@@ -433,183 +397,178 @@ impl ConnectedAdapter {
         self.write(&mut *buf)
     }
 
-    fn write_acl_packet(&self, address: BDAddr, data: &mut [u8], handler: Option<HandleFn>) {
-        // TODO: improve error handling
-        self.streams.lock().unwrap()
-            .get(&address).unwrap()
-            .write(data, handler)
-    }
-
-    fn discover_chars_in_range_int(&self, address: BDAddr, start: u16, end: u16) {
-        let mut buf = BytesMut::with_capacity(7);
-        buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
-        buf.put_u16::<LittleEndian>(start);
-        buf.put_u16::<LittleEndian>(end);
-        buf.put_u16::<LittleEndian>(GATT_CHARAC_UUID);
-
-        let self_copy = self.clone();
-        let handler = Box::new(move |_: u16, data: &[u8]| {
-            match att::characteristics(data).to_result() {
-                Ok(chars) => {
-                    debug!("Chars: {:#?}", chars);
-                    let mut devices = self_copy.discovered.lock().unwrap();
-                    devices.get_mut(&address).as_mut().map(|ref mut d| {
-                        let mut next = None;
-                        let mut char_set = d.characteristics.clone();
-                        chars.into_iter().for_each(|mut c| {
-                            c.end_handle = end;
-                            next = Some(c.start_handle);
-                            char_set.insert(c);
-                        });
-
-                        // fix the end handles
-                        let mut prev = 0xffff;
-                        d.characteristics = char_set.into_iter().rev().map(|mut c| {
-                            c.end_handle = prev;
-                            prev = c.start_handle - 1;
-                            c
-                        }).collect();
-
-                        next.map(|next| {
-                            if next < end {
-                                self_copy.discover_chars_in_range_int(address, next + 1, end);
-                            }
-                        });
-                    }).or_else(|| {
-                        warn!("received chars for unknown device: {}", address);
-                        None
-                    });
-                }
-                Err(err) => {
-                    error!("failed to parse chars: {:?}", err);
-                }
-            };
-        });
-
-        self.write_acl_packet(address, &mut *buf, Some(handler));
-    }
-
-    fn request_by_handle(&self, address: BDAddr, handle: u16, data: &[u8],
-                         handler: Option<HandleFn>) {
-        let streams = self.streams.lock().unwrap();
-        let stream = streams.get(&address).unwrap();
-        let mut buf = BytesMut::with_capacity(3 + data.len());
-        buf.put_u8(ATT_OP_WRITE_REQ);
-        buf.put_u16::<LittleEndian>(handle);
-        buf.put(data);
-        stream.write(&mut *buf, handler);
-    }
-
-    fn notify(&self, address: BDAddr, char: &Characteristic, enable: bool) {
-        info!("setting notify for {}/{:?} to {}", address, char.uuid, enable);
-        let streams = self.streams.lock().unwrap();
-        let stream = streams.get(&address).unwrap();
-
-        let mut buf = BytesMut::with_capacity(7);
-        buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
-        buf.put_u16::<LittleEndian>(char.start_handle);
-        buf.put_u16::<LittleEndian>(char.end_handle);
-        buf.put_u16::<LittleEndian>(GATT_CLIENT_CHARAC_CFG_UUID);
-        let self_copy = self.clone();
-        let char_copy = char.clone();
-
-        stream.write(&mut *buf, Some(Box::new(move |_, data| {
-            match att::notify_response(data).to_result() {
-                Ok(resp) => {
-                    debug!("got notify response: {:?}", resp);
-
-                    let use_notify = char_copy.properties.contains(CharPropFlags::NOTIFY);
-                    let use_indicate = char_copy.properties.contains(CharPropFlags::INDICATE);
-
-                    let mut value = resp.value;
-
-                    if enable {
-                        if use_notify {
-                            value |= 0x0001;
-                        } else if use_indicate {
-                            value |= 0x0002;
-                        }
-                    } else {
-                        if use_notify {
-                            value &= 0xFFFE;
-                        } else if use_indicate {
-                            value &= 0xFFFD;
-                        }
-                    }
-
-                    let mut value_buf = BytesMut::with_capacity(2);
-                    value_buf.put_u16::<LittleEndian>(value);
-                    self_copy.request_by_handle(address, resp.handle,
-                                                &*value_buf, Some(Box::new(|_, data| {
-                            if data.len() > 0 && data[0] == ATT_OP_WRITE_RESP {
-                                debug!("Got response from notify: {:?}", data);
-                            } else {
-                                warn!("Unexpected notify response: {:?}", data);
-                            }
-                        })));
-                }
-                Err(err) => {
-                    error!("failed to parse notify response: {:?}", err);
-                }
-            };
-        })));
-    }
-
-
-    pub fn disconnect(&self, address: BDAddr) -> Result<()> {
-        let handle = {
-            let stream = self.streams.lock().unwrap();
-            stream.get(&address).unwrap().handle
-        };
-
-        let mut data = BytesMut::with_capacity(3);
-        data.put_u16::<LittleEndian>(handle);
-        data.put_u8(HCI_OE_USER_ENDED_CONNECTION);
-        let mut buf = hci::hci_command(DISCONNECT_CMD, &*data);
-        self.write(&mut *buf)
-    }
-
-    pub fn command(&self, address: BDAddr, char: &Characteristic, data: &[u8]) {
-        let streams = self.streams.lock().unwrap();
-        let stream = streams.get(&address).unwrap();
-        let mut buf = BytesMut::with_capacity(3 + data.len());
-        buf.put_u8(ATT_OP_WRITE_CMD);
-        buf.put_u16::<LittleEndian>(char.value_handle);
-        buf.put(data);
-        stream.write_cmd(&mut *buf);
-    }
-
-//    fn device(&self, address: BDAddr) -> Option<Device> {
-//        let discovered = self.discovered.lock().unwrap();
-//        discovered.get(&address).map(|d| d.to_device())
+//    fn discover_chars_in_range_int(&self, address: BDAddr, start: u16, end: u16) {
+//        let mut buf = BytesMut::with_capacity(7);
+//        buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
+//        buf.put_u16::<LittleEndian>(start);
+//        buf.put_u16::<LittleEndian>(end);
+//        buf.put_u16::<LittleEndian>(GATT_CHARAC_UUID);
+//
+//        let self_copy = self.clone();
+//        let handler = Box::new(move |_: u16, data: &[u8]| {
+//            match att::characteristics(data).to_result() {
+//                Ok(chars) => {
+//                    debug!("Chars: {:#?}", chars);
+//                    let mut devices = self_copy.discovered.lock().unwrap();
+//                    devices.get_mut(&address).as_mut().map(|ref mut d| {
+//                        let mut next = None;
+//                        let mut char_set = d.characteristics.clone();
+//                        chars.into_iter().for_each(|mut c| {
+//                            c.end_handle = end;
+//                            next = Some(c.start_handle);
+//                            char_set.insert(c);
+//                        });
+//
+//                        // fix the end handles
+//                        let mut prev = 0xffff;
+//                        d.characteristics = char_set.into_iter().rev().map(|mut c| {
+//                            c.end_handle = prev;
+//                            prev = c.start_handle - 1;
+//                            c
+//                        }).collect();
+//
+//                        next.map(|next| {
+//                            if next < end {
+//                                self_copy.discover_chars_in_range_int(address, next + 1, end);
+//                            }
+//                        });
+//                    }).or_else(|| {
+//                        warn!("received chars for unknown device: {}", address);
+//                        None
+//                    });
+//                }
+//                Err(err) => {
+//                    error!("failed to parse chars: {:?}", err);
+//                }
+//            };
+//        });
+//
+//        self.write_acl_packet(address, &mut *buf, Some(handler));
 //    }
-
-    pub fn discover_chars(&self, address: BDAddr) {
-        self.discover_chars_in_range(address, 0x0001, 0xFFFF);
-    }
-
-    pub fn discover_chars_in_range(&self, address: BDAddr, start: u16, end: u16) {
-        self.discover_chars_in_range_int(address, start, end);
-    }
-
-    pub fn request(&self, address: BDAddr, char: &Characteristic, data: &[u8],
-               handler: Option<HandleFn>) {
-        self.request_by_handle(address, char.value_handle, data, handler);
-    }
-
-    pub fn subscribe(&self, address: BDAddr, char: &Characteristic) {
-        self.notify(address, char, true);
-    }
-
-    pub fn unsubscribe(&self, address: BDAddr, char: &Characteristic) {
-        self.notify(address, char, false);
-    }
+//
+//    fn request_by_handle(&self, address: BDAddr, handle: u16, data: &[u8],
+//                         handler: Option<HandleFn>) {
+//        let streams = self.streams.lock().unwrap();
+//        let stream = streams.get(&address).unwrap();
+//        let mut buf = BytesMut::with_capacity(3 + data.len());
+//        buf.put_u8(ATT_OP_WRITE_REQ);
+//        buf.put_u16::<LittleEndian>(handle);
+//        buf.put(data);
+//        stream.write(&mut *buf, handler);
+//    }
+//
+//    fn notify(&self, address: BDAddr, char: &Characteristic, enable: bool) {
+//        info!("setting notify for {}/{:?} to {}", address, char.uuid, enable);
+//        let streams = self.streams.lock().unwrap();
+//        let stream = streams.get(&address).unwrap();
+//
+//        let mut buf = BytesMut::with_capacity(7);
+//        buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
+//        buf.put_u16::<LittleEndian>(char.start_handle);
+//        buf.put_u16::<LittleEndian>(char.end_handle);
+//        buf.put_u16::<LittleEndian>(GATT_CLIENT_CHARAC_CFG_UUID);
+//        let self_copy = self.clone();
+//        let char_copy = char.clone();
+//
+//        stream.write(&mut *buf, Some(Box::new(move |_, data| {
+//            match att::notify_response(data).to_result() {
+//                Ok(resp) => {
+//                    debug!("got notify response: {:?}", resp);
+//
+//                    let use_notify = char_copy.properties.contains(CharPropFlags::NOTIFY);
+//                    let use_indicate = char_copy.properties.contains(CharPropFlags::INDICATE);
+//
+//                    let mut value = resp.value;
+//
+//                    if enable {
+//                        if use_notify {
+//                            value |= 0x0001;
+//                        } else if use_indicate {
+//                            value |= 0x0002;
+//                        }
+//                    } else {
+//                        if use_notify {
+//                            value &= 0xFFFE;
+//                        } else if use_indicate {
+//                            value &= 0xFFFD;
+//                        }
+//                    }
+//
+//                    let mut value_buf = BytesMut::with_capacity(2);
+//                    value_buf.put_u16::<LittleEndian>(value);
+//                    self_copy.request_by_handle(address, resp.handle,
+//                                                &*value_buf, Some(Box::new(|_, data| {
+//                            if data.len() > 0 && data[0] == ATT_OP_WRITE_RESP {
+//                                debug!("Got response from notify: {:?}", data);
+//                            } else {
+//                                warn!("Unexpected notify response: {:?}", data);
+//                            }
+//                        })));
+//                }
+//                Err(err) => {
+//                    error!("failed to parse notify response: {:?}", err);
+//                }
+//            };
+//        })));
+//    }
+//
+//
+//    pub fn disconnect(&self, address: BDAddr) -> Result<()> {
+//        let handle = {
+//            let stream = self.streams.lock().unwrap();
+//            stream.get(&address).unwrap().handle
+//        };
+//
+//        let mut data = BytesMut::with_capacity(3);
+//        data.put_u16::<LittleEndian>(handle);
+//        data.put_u8(HCI_OE_USER_ENDED_CONNECTION);
+//        let mut buf = hci::hci_command(DISCONNECT_CMD, &*data);
+//        self.write(&mut *buf)
+//    }
+//
+//    pub fn command(&self, address: BDAddr, char: &Characteristic, data: &[u8]) {
+//        let streams = self.streams.lock().unwrap();
+//        let stream = streams.get(&address).unwrap();
+//        let mut buf = BytesMut::with_capacity(3 + data.len());
+//        buf.put_u8(ATT_OP_WRITE_CMD);
+//        buf.put_u16::<LittleEndian>(char.value_handle);
+//        buf.put(data);
+//        stream.write_cmd(&mut *buf);
+//    }
+//
+////    fn device(&self, address: BDAddr) -> Option<Device> {
+////        let discovered = self.discovered.lock().unwrap();
+////        discovered.get(&address).map(|d| d.to_device())
+////    }
+//
+//    pub fn discover_chars(&self, address: BDAddr) {
+//        self.discover_chars_in_range(address, 0x0001, 0xFFFF);
+//    }
+//
+//    pub fn discover_chars_in_range(&self, address: BDAddr, start: u16, end: u16) {
+//        self.discover_chars_in_range_int(address, start, end);
+//    }
+//
+//    pub fn request(&self, address: BDAddr, char: &Characteristic, data: &[u8],
+//               handler: Option<HandleFn>) {
+//        self.request_by_handle(address, char.value_handle, data, handler);
+//    }
+//
+//    pub fn subscribe(&self, address: BDAddr, char: &Characteristic) {
+//        self.notify(address, char, true);
+//    }
+//
+//    pub fn unsubscribe(&self, address: BDAddr, char: &Characteristic) {
+//        self.notify(address, char, false);
+//    }
 }
 
 impl Host for ConnectedAdapter {
-    fn on_event(&self, handler: EventHandler) {
-        let list = self.event_handlers.clone();
-        list.lock().unwrap().push(handler);
+    fn event_stream(&self) -> Receiver<Event> {
+        let mut list = self.event_txs.lock().unwrap();
+        let (tx, rx) = channel();
+        (*list).push(tx);
+        rx
     }
 
     fn start_scan(&self) -> Result<()> {
@@ -621,11 +580,11 @@ impl Host for ConnectedAdapter {
         self.set_scan_enabled(false)
     }
 
-    fn peripherals(&self) -> Vec<Box<Peripheral>> {
+    fn peripherals(&self) -> Vec<Box<api::Peripheral>> {
         unimplemented!();
     }
 
-    fn peripheral(&self, _address: BDAddr) -> Option<Box<Peripheral>> {
+    fn peripheral(&self, _address: BDAddr) -> Option<Box<api::Peripheral>> {
         unimplemented!();
     }
 

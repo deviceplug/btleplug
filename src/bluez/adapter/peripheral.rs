@@ -16,6 +16,15 @@ use bluez::util::handle_error;
 use bluez::constants::*;
 use api::Event;
 use api::EventHandler;
+use ::Error;
+use std::thread;
+use bluez::protocol::hci;
+use api::AddressType;
+use std::sync::mpsc;
+use std::sync::mpsc::Sender;
+use std::sync::mpsc::Receiver;
+use std::sync::mpsc::channel;
+use std::time::Duration;
 
 #[derive(Copy, Debug)]
 #[repr(C)]
@@ -49,37 +58,91 @@ impl Clone for L2CapOptions {
 }
 
 #[derive(Clone)]
-struct Peripheral {
+pub struct Peripheral {
     c_adapter: ConnectedAdapter,
     address: BDAddr,
     properties: Arc<Mutex<Properties>>,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
     stream: Arc<Mutex<Option<ACLStream>>>,
-    event_handler: Arc<Mutex<Option<EventHandler>>>,
+    connection_tx: Arc<Mutex<Sender<u16>>>,
+    connection_rx: Arc<Mutex<Receiver<u16>>>,
 }
 
 impl Peripheral {
-    fn new(c_adapter: ConnectedAdapter, address: BDAddr, properties: Properties) {
-        let p = Peripheral {
+    pub fn new(c_adapter: ConnectedAdapter, address: BDAddr) -> Peripheral {
+        let (connection_tx, connection_rx) = channel();
+        Peripheral {
             c_adapter, address,
-            properties: Arc::new(Mutex::new(properties)),
+            properties: Arc::new(Mutex::new(Properties::default())),
             characteristics: Arc::new(Mutex::new(BTreeSet::new())),
             stream: Arc::new(Mutex::new(Option::None)),
-            event_handler: Arc::new(Mutex::new(Option::None)),
-        };
-
-        let p_clone = p.clone();
-        *p.event_handler.lock().unwrap() = Some(Box::new(move|event| {
-            p_clone.handle_system_event(event);
-        }));
-
-        c_adapter.on_event(*p.event_handler.lock().unwrap());
-
-        p
+            connection_tx: Arc::new(Mutex::new(connection_tx)),
+            connection_rx: Arc::new(Mutex::new(connection_rx)),
+        }
     }
 
-    pub fn handle_system_event(&self, event: Event) {
+    pub fn handle_device_message(&self, message: &hci::Message) {
+        match message {
+            &hci::Message::LEAdvertisingReport(ref info) => {
+                assert_eq!(self.address, info.bdaddr, "received message for wrong device");
+                use bluez::protocol::hci::LEAdvertisingData::*;
 
+                let mut properties = self.properties.lock().unwrap();
+
+                properties.discovery_count += 1;
+                properties.address_type = if info.bdaddr_type == 1 {
+                    AddressType::Random
+                } else {
+                    AddressType::Public
+                };
+
+                if info.evt_type == 4 {
+                    // discover event
+                    properties.has_scan_response = true;
+                } else {
+                    // TODO: reset service data
+                }
+
+                for datum in info.data.iter() {
+                    match datum {
+                        &LocalName(ref name) => {
+                            properties.local_name = Some(name.clone());
+                        }
+                        &TxPowerLevel(ref power) => {
+                            properties.tx_power_level = Some(power.clone());
+                        }
+                        &ManufacturerSpecific(ref data) => {
+                            properties.manufacturer_data = Some(data.clone());
+                        }
+                        _ => {
+                            // skip for now
+                        }
+                    }
+                }
+            }
+            &hci::Message::LEConnComplete(ref info) => {
+                assert_eq!(self.address, info.bdaddr, "received message for wrong device");
+
+                self.connection_tx.lock().unwrap().send(info.handle.clone()).unwrap();
+            }
+            &hci::Message::ACLDataPacket(ref data) => {
+                let handle = data.handle.clone();
+                self.stream.lock().unwrap().iter().map(|stream| {
+                    if stream.handle == handle {
+                        stream.receive(data);
+                    }
+                });
+            },
+            _ => {
+                // ignore
+            }
+        }
+    }
+
+    fn write_acl_packet(&self, data: &mut [u8], handler: Option<HandleFn>) {
+        // TODO: improve error handling
+//        self.stream.lock().unwrap().iter()
+//            .map(|s| s.write(data, handler));
     }
 }
 
@@ -161,8 +224,20 @@ impl api::Peripheral for Peripheral {
             self.c_adapter.start_scan()?;
         }
 
-        // create the acl stream that will communicate with the device
-
+        // wait until we get the connection notice
+        match self.connection_rx.lock().unwrap().recv_timeout(Duration::from_secs(1)) {
+            Ok(handle) => {
+                // create the acl stream that will communicate with the device
+                *stream = Some(ACLStream::new(self.address, handle, fd));
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                return Err(Error::TimedOut(1000));
+            }
+            err => {
+                // unexpected error
+                err.unwrap();
+            }
+        };
 
         Ok(())
     }

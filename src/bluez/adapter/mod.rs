@@ -12,16 +12,17 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::mem::size_of;
 
-use util::handle_error;
-use ::protocol::hci;
-use ::protocol::att;
-use ::adapter::acl_stream::ACLStream;
-use ::device::{Characteristic, CharPropFlags};
-use ::constants::*;
 use ::Result;
 use api::{BDAddr, AddressType, host::Host};
 use api::HandleFn;
+use api::host::{EventHandler, Event};
 use api::peripheral::Peripheral;
+use api::peripheral::{Characteristic, CharPropFlags};
+
+use bluez::util::handle_error;
+use bluez::protocol::{hci, att};
+use bluez::adapter::acl_stream::ACLStream;
+use bluez::constants::*;
 
 
 #[derive(Debug, Copy)]
@@ -218,17 +219,6 @@ struct DeviceState {
     characteristics: BTreeSet<Characteristic>,
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum Event {
-    DeviceDiscovered(BDAddr),
-    DeviceLost(BDAddr),
-    DeviceUpdated(BDAddr),
-    DeviceConnected(BDAddr),
-    DeviceDisconnected(BDAddr),
-}
-
-pub type EventHandler = Box<Fn(Event) + Send>;
-
 #[derive(Clone)]
 pub struct ConnectedAdapter {
     pub adapter: Adapter,
@@ -360,7 +350,7 @@ impl ConnectedAdapter {
 
         match message {
             hci::Message::LEAdvertisingReport(info) => {
-                use ::protocol::hci::LEAdvertisingData::*;
+                use bluez::protocol::hci::LEAdvertisingData::*;
 
                 let new = {
                     let mut discovered = self.discovered.lock().unwrap();
@@ -709,7 +699,7 @@ impl ConnectedAdapter {
 }
 
 impl Host for ConnectedAdapter {
-    fn watch(&self, handler: EventHandler) {
+    fn on_event(&self, handler: EventHandler) {
         let list = self.event_handlers.clone();
         list.lock().unwrap().push(handler);
     }

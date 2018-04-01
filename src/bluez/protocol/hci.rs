@@ -4,8 +4,8 @@ use bytes::{BytesMut, BufMut, LittleEndian};
 
 
 use ::api::{BDAddr, AddressType};
-use ::constants::*;
-use ::protocol::*;
+use bluez::constants::*;
+use bluez::protocol::*;
 
 
 #[cfg(test)]

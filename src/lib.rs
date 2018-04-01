@@ -22,14 +22,8 @@ extern crate failure_derive;
 
 use std::result;
 
-pub mod adapter;
-pub mod manager;
-pub mod device;
-pub mod protocol;
+pub mod bluez;
 pub mod api;
-
-mod util;
-mod constants;
 
 #[derive(Debug, Fail)]
 pub enum Error {

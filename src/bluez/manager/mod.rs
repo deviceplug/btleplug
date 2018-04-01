@@ -4,9 +4,9 @@ use libc;
 use libc::{c_void, SOCK_RAW, AF_BLUETOOTH};
 use std::mem;
 
-use util::handle_error;
-use adapter::{Adapter, HCIDevReq, ConnectedAdapter};
-use ::constants::*;
+use bluez::util::handle_error;
+use bluez::adapter::{Adapter, HCIDevReq, ConnectedAdapter};
+use bluez::constants::*;
 use ::Result;
 
 // #define HCIDEVUP	_IOW('H', 201, int)

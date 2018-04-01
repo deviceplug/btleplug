@@ -1,9 +1,9 @@
 use nom::{le_u8, le_u16, IResult};
 
-use ::constants::*;
-use ::device::{Characteristic, CharacteristicUUID, CharPropFlags};
+use ::api::peripheral::{Characteristic, CharacteristicUUID, CharPropFlags};
 
-use ::protocol::*;
+use bluez::constants::*;
+use bluez::protocol::*;
 
 #[cfg(test)]
 mod tests {

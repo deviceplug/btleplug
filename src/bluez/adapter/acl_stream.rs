@@ -4,9 +4,10 @@ use std::time::Duration;
 
 use libc::*;
 
-use ::constants::*;
-use ::util::handle_error;
 use ::Result;
+
+use bluez::constants::*;
+use bluez::util::handle_error;
 
 use std::fmt;
 use std::fmt::{Debug, Formatter};
@@ -14,7 +15,7 @@ use std::sync::mpsc::{channel, Sender, Receiver};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::collections::HashMap;
-use ::protocol::hci::ACLData;
+use bluez::protocol::hci::ACLData;
 
 use self::StreamMessage::*;
 use api::BDAddr;

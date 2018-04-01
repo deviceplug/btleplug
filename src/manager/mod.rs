@@ -1,13 +1,13 @@
 use std::sync::Mutex;
 
 use libc;
-use libc::{c_void, socket, SOCK_RAW, AF_BLUETOOTH};
+use libc::{c_void, SOCK_RAW, AF_BLUETOOTH};
 use std::mem;
-use nix;
 
 use util::handle_error;
 use adapter::{Adapter, HCIDevReq, ConnectedAdapter};
 use ::constants::*;
+use ::Result;
 
 // #define HCIDEVUP	_IOW('H', 201, int)
 ioctl!(write_int hci_dev_up with b'H', 201);
@@ -31,12 +31,12 @@ pub struct Manager {
 }
 
 impl Manager {
-    pub fn new() -> nix::Result<Manager> {
-        let fd = handle_error(unsafe { socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI) })?;
+    pub fn new() -> Result<Manager> {
+        let fd = handle_error(unsafe { libc::socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI) })?;
         Ok(Manager { ctl_fd: Mutex::new(fd) })
     }
 
-    pub fn adapters(&self) -> nix::Result<Vec<Adapter>> {
+    pub fn adapters(&self) -> Result<Vec<Adapter>> {
         let mut result: Vec<Adapter> = vec![];
 
         let ctl = self.ctl_fd.lock().unwrap();
@@ -62,20 +62,18 @@ impl Manager {
         Ok(result)
     }
 
-    pub fn update(&self, adapter: &Adapter) -> nix::Result<Adapter> {
+    pub fn update(&self, adapter: &Adapter) -> Result<Adapter> {
         let ctl = self.ctl_fd.lock().unwrap();
         Adapter::from_dev_id(*ctl, adapter.dev_id)
     }
 
-    pub fn down(&self, adapter: &Adapter) -> nix::Result<Adapter> {
+    pub fn down(&self, adapter: &Adapter) -> Result<Adapter> {
         let ctl = self.ctl_fd.lock().unwrap();
-        unsafe {
-            hci_dev_down(*ctl, adapter.dev_id as i32)?;
-        }
+        unsafe { hci_dev_down(*ctl, adapter.dev_id as i32)? };
         Adapter::from_dev_id(*ctl, adapter.dev_id)
     }
 
-    pub fn up(&self, adapter: &Adapter) -> nix::Result<Adapter> {
+    pub fn up(&self, adapter: &Adapter) -> Result<Adapter> {
         let ctl = self.ctl_fd.lock().unwrap();
         unsafe {
             hci_dev_up(*ctl, adapter.dev_id as i32)?;
@@ -83,7 +81,7 @@ impl Manager {
         Adapter::from_dev_id(*ctl, adapter.dev_id)
     }
 
-    pub fn connect(&self, adapter: &Adapter) -> nix::Result<ConnectedAdapter> {
+    pub fn connect(&self, adapter: &Adapter) -> Result<ConnectedAdapter> {
         ConnectedAdapter::new(adapter)
     }
 }

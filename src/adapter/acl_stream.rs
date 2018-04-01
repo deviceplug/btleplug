@@ -4,10 +4,9 @@ use std::time::Duration;
 
 use libc::*;
 
-use nix;
-
 use ::constants::*;
 use ::util::handle_error;
+use ::Result;
 
 use std::fmt;
 use std::fmt::{Debug, Formatter};
@@ -20,6 +19,7 @@ use ::protocol::hci::ACLData;
 use self::StreamMessage::*;
 use api::BDAddr;
 use api::HandleFn;
+use Error;
 
 enum StreamMessage {
     Command(Vec<u8>),
@@ -68,7 +68,7 @@ impl ACLStream {
                 while !should_stop.load(Ordering::Relaxed) {
                     match stream.handle_iteration(&mut msg, &rx) {
                         Ok(_) => msg = rx.recv().unwrap(),
-                        Err(nix::Error::Sys(nix::errno::ENOTCONN)) => {
+                        Err(Error::NotConnected) => {
                             // retry message
                             thread::sleep(Duration::from_millis(50));
                             continue;
@@ -89,7 +89,7 @@ impl ACLStream {
     }
 
     fn write_socket(&self, value: &mut [u8], command: bool,
-                    receiver: &Receiver<StreamMessage>) -> nix::Result<Vec<u8>> {
+                    receiver: &Receiver<StreamMessage>) -> Result<Vec<u8>> {
         handle_error(unsafe {
             write(self.fd, value.as_mut_ptr() as *mut c_void, value.len()) as i32
         })?;
@@ -113,7 +113,7 @@ impl ACLStream {
     }
 
     fn handle_iteration(&self, msg: &mut StreamMessage,
-                        receiver: &Receiver<StreamMessage>) -> nix::Result<()> {
+                        receiver: &Receiver<StreamMessage>) -> Result<()> {
         match *msg {
             Command(ref mut value) => {
                 debug!("sending command {:?} to {}", value, self.fd);

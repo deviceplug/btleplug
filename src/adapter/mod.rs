@@ -3,7 +3,6 @@ mod acl_stream;
 use libc;
 use std;
 use std::ffi::CStr;
-use nix;
 use nom::IResult;
 use bytes::{BytesMut, BufMut, LittleEndian};
 
@@ -17,8 +16,9 @@ use util::handle_error;
 use ::protocol::hci;
 use ::protocol::att;
 use ::adapter::acl_stream::ACLStream;
-use ::device::{Device, Characteristic, CharPropFlags};
+use ::device::{Characteristic, CharPropFlags};
 use ::constants::*;
+use ::Result;
 use api::{BDAddr, AddressType, host::Host};
 use api::HandleFn;
 use api::peripheral::Peripheral;
@@ -218,18 +218,6 @@ struct DeviceState {
     characteristics: BTreeSet<Characteristic>,
 }
 
-impl DeviceState {
-    fn to_device(&self) -> Device {
-        Device {
-            address: self.address,
-            address_type: self.address_type.clone(),
-            local_name: self.local_name.clone(),
-            tx_power_level: self.tx_power_level.clone(),
-            manufacturer_data: self.manufacturer_data.clone(),
-            characteristics: self.characteristics.clone(),
-        }
-    }
-}
 #[derive(Debug, Copy, Clone)]
 pub enum Event {
     DeviceDiscovered(BDAddr),
@@ -255,7 +243,7 @@ pub struct ConnectedAdapter {
 }
 
 impl ConnectedAdapter {
-    pub fn new(adapter: &Adapter) -> nix::Result<ConnectedAdapter> {
+    pub fn new(adapter: &Adapter) -> Result<ConnectedAdapter> {
         let adapter_fd = handle_error(unsafe {
             libc::socket(libc::AF_BLUETOOTH, libc::SOCK_RAW | libc::SOCK_CLOEXEC, 1)
         })?;
@@ -292,7 +280,7 @@ impl ConnectedAdapter {
         Ok(connected)
     }
 
-    fn set_socket_filter(&self) -> nix::Result<()> {
+    fn set_socket_filter(&self) -> Result<()> {
         let mut filter = BytesMut::with_capacity(14);
         let type_mask = (1 << HCI_COMMAND_PKT) | (1 << HCI_EVENT_PKT) | (1 << HCI_ACLDATA_PKT);
         let event_mask1 = (1 << EVT_DISCONN_COMPLETE) | (1 << EVT_ENCRYPT_CHANGE) |
@@ -460,7 +448,7 @@ impl ConnectedAdapter {
         }
     }
 
-    fn write(&self, message: &mut [u8]) -> nix::Result<()> {
+    fn write(&self, message: &mut [u8]) -> Result<()> {
         debug!("writing({}) {:?}", self.adapter_fd, message);
         let ptr = message.as_mut_ptr();
         handle_error(unsafe {
@@ -469,7 +457,7 @@ impl ConnectedAdapter {
         Ok(())
     }
 
-    fn set_scan_params(&self) -> nix::Result<()> {
+    fn set_scan_params(&self) -> Result<()> {
         let mut data = BytesMut::with_capacity(7);
         data.put_u8(1); // scan_type = active
         data.put_u16::<LittleEndian>(0x0010); // interval ms
@@ -480,7 +468,7 @@ impl ConnectedAdapter {
         self.write(&mut *buf)
     }
 
-    fn set_scan_enabled(&self, enabled: bool) -> nix::Result<()> {
+    fn set_scan_enabled(&self, enabled: bool) -> Result<()> {
         let mut data = BytesMut::with_capacity(2);
         data.put_u8(if enabled { 1 } else { 0 }); // enabled
         data.put_u8(1); // filter duplicates
@@ -612,7 +600,7 @@ impl ConnectedAdapter {
         })));
     }
 
-    fn connect(&self, address: BDAddr) -> nix::Result<()> {
+    pub fn connect(&self, address: BDAddr) -> Result<()> {
         // let mut addr = device.address.clone();
         let fd = handle_error(unsafe {
             libc::socket(libc::AF_BLUETOOTH, libc::SOCK_SEQPACKET, 0)
@@ -670,7 +658,7 @@ impl ConnectedAdapter {
         Ok(())
     }
 
-    fn disconnect(&self, address: BDAddr) -> nix::Result<()> {
+    pub fn disconnect(&self, address: BDAddr) -> Result<()> {
         let handle = {
             let stream = self.streams.lock().unwrap();
             stream.get(&address).unwrap().handle
@@ -683,7 +671,7 @@ impl ConnectedAdapter {
         self.write(&mut *buf)
     }
 
-    fn command(&self, address: BDAddr, char: &Characteristic, data: &[u8]) {
+    pub fn command(&self, address: BDAddr, char: &Characteristic, data: &[u8]) {
         let streams = self.streams.lock().unwrap();
         let stream = streams.get(&address).unwrap();
         let mut buf = BytesMut::with_capacity(3 + data.len());
@@ -698,24 +686,24 @@ impl ConnectedAdapter {
 //        discovered.get(&address).map(|d| d.to_device())
 //    }
 
-    fn discover_chars(&self, address: BDAddr) {
+    pub fn discover_chars(&self, address: BDAddr) {
         self.discover_chars_in_range(address, 0x0001, 0xFFFF);
     }
 
-    fn discover_chars_in_range(&self, address: BDAddr, start: u16, end: u16) {
+    pub fn discover_chars_in_range(&self, address: BDAddr, start: u16, end: u16) {
         self.discover_chars_in_range_int(address, start, end);
     }
 
-    fn request(&self, address: BDAddr, char: &Characteristic, data: &[u8],
+    pub fn request(&self, address: BDAddr, char: &Characteristic, data: &[u8],
                handler: Option<HandleFn>) {
         self.request_by_handle(address, char.value_handle, data, handler);
     }
 
-    fn subscribe(&self, address: BDAddr, char: &Characteristic) {
+    pub fn subscribe(&self, address: BDAddr, char: &Characteristic) {
         self.notify(address, char, true);
     }
 
-    fn unsubscribe(&self, address: BDAddr, char: &Characteristic) {
+    pub fn unsubscribe(&self, address: BDAddr, char: &Characteristic) {
         self.notify(address, char, false);
     }
 }
@@ -726,12 +714,12 @@ impl Host for ConnectedAdapter {
         list.lock().unwrap().push(handler);
     }
 
-    fn start_scan(&self) -> nix::Result<()> {
+    fn start_scan(&self) -> Result<()> {
         self.set_scan_params()?;
         self.set_scan_enabled(true)
     }
 
-    fn stop_scan(&self) -> nix::Result<()> {
+    fn stop_scan(&self) -> Result<()> {
         self.set_scan_enabled(false)
     }
 
@@ -739,7 +727,7 @@ impl Host for ConnectedAdapter {
         unimplemented!();
     }
 
-    fn peripheral(&self, address: BDAddr) -> Option<Box<Peripheral>> {
+    fn peripheral(&self, _address: BDAddr) -> Option<Box<Peripheral>> {
         unimplemented!();
     }
 
@@ -775,7 +763,7 @@ impl Adapter {
         }
     }
 
-    pub fn from_dev_id(ctl: i32, dev_id: u16) -> nix::Result<Adapter> {
+    pub fn from_dev_id(ctl: i32, dev_id: u16) -> Result<Adapter> {
         let mut di = HCIDevInfo::default();
         di.dev_id = dev_id;
 
@@ -791,7 +779,7 @@ impl Adapter {
         self.states.contains(&AdapterState::Up)
     }
 
-    pub fn connect(&self) -> nix::Result<ConnectedAdapter> {
+    pub fn connect(&self) -> Result<ConnectedAdapter> {
         ConnectedAdapter::new(self)
     }
 }

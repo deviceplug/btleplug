@@ -13,12 +13,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 use ::Result;
-use api::{Characteristic, CharPropFlags, EventHandler, Event, HandleFn,
-          BDAddr, AddressType, Host};
+use api::{Characteristic, Event, BDAddr, AddressType, Host};
 
 use bluez::util::handle_error;
-use bluez::protocol::{hci, att};
-use bluez::adapter::acl_stream::ACLStream;
+use bluez::protocol::hci;
 use bluez::adapter::peripheral::Peripheral;
 use bluez::constants::*;
 use std::sync::mpsc::Sender;
@@ -317,8 +315,6 @@ impl ConnectedAdapter {
 
         match message {
             hci::Message::LEAdvertisingReport(info) => {
-                use bluez::protocol::hci::LEAdvertisingData::*;
-
                 let mut new = false;
 
                 let peripheral = peripherals.entry(info.bdaddr)
@@ -358,7 +354,7 @@ impl ConnectedAdapter {
                     peripheral.handle_device_message(&message);
                 }
             },
-            hci::Message::DisconnectComplete { handle, .. } => {
+            hci::Message::DisconnectComplete { handle: _, .. } => {
                 // TODO: handle disconnects
             }
             _ => {
@@ -396,171 +392,6 @@ impl ConnectedAdapter {
         let mut buf = hci::hci_command(LE_SET_SCAN_ENABLE_CMD, &*data);
         self.write(&mut *buf)
     }
-
-//    fn discover_chars_in_range_int(&self, address: BDAddr, start: u16, end: u16) {
-//        let mut buf = BytesMut::with_capacity(7);
-//        buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
-//        buf.put_u16::<LittleEndian>(start);
-//        buf.put_u16::<LittleEndian>(end);
-//        buf.put_u16::<LittleEndian>(GATT_CHARAC_UUID);
-//
-//        let self_copy = self.clone();
-//        let handler = Box::new(move |_: u16, data: &[u8]| {
-//            match att::characteristics(data).to_result() {
-//                Ok(chars) => {
-//                    debug!("Chars: {:#?}", chars);
-//                    let mut devices = self_copy.discovered.lock().unwrap();
-//                    devices.get_mut(&address).as_mut().map(|ref mut d| {
-//                        let mut next = None;
-//                        let mut char_set = d.characteristics.clone();
-//                        chars.into_iter().for_each(|mut c| {
-//                            c.end_handle = end;
-//                            next = Some(c.start_handle);
-//                            char_set.insert(c);
-//                        });
-//
-//                        // fix the end handles
-//                        let mut prev = 0xffff;
-//                        d.characteristics = char_set.into_iter().rev().map(|mut c| {
-//                            c.end_handle = prev;
-//                            prev = c.start_handle - 1;
-//                            c
-//                        }).collect();
-//
-//                        next.map(|next| {
-//                            if next < end {
-//                                self_copy.discover_chars_in_range_int(address, next + 1, end);
-//                            }
-//                        });
-//                    }).or_else(|| {
-//                        warn!("received chars for unknown device: {}", address);
-//                        None
-//                    });
-//                }
-//                Err(err) => {
-//                    error!("failed to parse chars: {:?}", err);
-//                }
-//            };
-//        });
-//
-//        self.write_acl_packet(address, &mut *buf, Some(handler));
-//    }
-//
-//    fn request_by_handle(&self, address: BDAddr, handle: u16, data: &[u8],
-//                         handler: Option<HandleFn>) {
-//        let streams = self.streams.lock().unwrap();
-//        let stream = streams.get(&address).unwrap();
-//        let mut buf = BytesMut::with_capacity(3 + data.len());
-//        buf.put_u8(ATT_OP_WRITE_REQ);
-//        buf.put_u16::<LittleEndian>(handle);
-//        buf.put(data);
-//        stream.write(&mut *buf, handler);
-//    }
-//
-//    fn notify(&self, address: BDAddr, char: &Characteristic, enable: bool) {
-//        info!("setting notify for {}/{:?} to {}", address, char.uuid, enable);
-//        let streams = self.streams.lock().unwrap();
-//        let stream = streams.get(&address).unwrap();
-//
-//        let mut buf = BytesMut::with_capacity(7);
-//        buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
-//        buf.put_u16::<LittleEndian>(char.start_handle);
-//        buf.put_u16::<LittleEndian>(char.end_handle);
-//        buf.put_u16::<LittleEndian>(GATT_CLIENT_CHARAC_CFG_UUID);
-//        let self_copy = self.clone();
-//        let char_copy = char.clone();
-//
-//        stream.write(&mut *buf, Some(Box::new(move |_, data| {
-//            match att::notify_response(data).to_result() {
-//                Ok(resp) => {
-//                    debug!("got notify response: {:?}", resp);
-//
-//                    let use_notify = char_copy.properties.contains(CharPropFlags::NOTIFY);
-//                    let use_indicate = char_copy.properties.contains(CharPropFlags::INDICATE);
-//
-//                    let mut value = resp.value;
-//
-//                    if enable {
-//                        if use_notify {
-//                            value |= 0x0001;
-//                        } else if use_indicate {
-//                            value |= 0x0002;
-//                        }
-//                    } else {
-//                        if use_notify {
-//                            value &= 0xFFFE;
-//                        } else if use_indicate {
-//                            value &= 0xFFFD;
-//                        }
-//                    }
-//
-//                    let mut value_buf = BytesMut::with_capacity(2);
-//                    value_buf.put_u16::<LittleEndian>(value);
-//                    self_copy.request_by_handle(address, resp.handle,
-//                                                &*value_buf, Some(Box::new(|_, data| {
-//                            if data.len() > 0 && data[0] == ATT_OP_WRITE_RESP {
-//                                debug!("Got response from notify: {:?}", data);
-//                            } else {
-//                                warn!("Unexpected notify response: {:?}", data);
-//                            }
-//                        })));
-//                }
-//                Err(err) => {
-//                    error!("failed to parse notify response: {:?}", err);
-//                }
-//            };
-//        })));
-//    }
-//
-//
-//    pub fn disconnect(&self, address: BDAddr) -> Result<()> {
-//        let handle = {
-//            let stream = self.streams.lock().unwrap();
-//            stream.get(&address).unwrap().handle
-//        };
-//
-//        let mut data = BytesMut::with_capacity(3);
-//        data.put_u16::<LittleEndian>(handle);
-//        data.put_u8(HCI_OE_USER_ENDED_CONNECTION);
-//        let mut buf = hci::hci_command(DISCONNECT_CMD, &*data);
-//        self.write(&mut *buf)
-//    }
-//
-//    pub fn command(&self, address: BDAddr, char: &Characteristic, data: &[u8]) {
-//        let streams = self.streams.lock().unwrap();
-//        let stream = streams.get(&address).unwrap();
-//        let mut buf = BytesMut::with_capacity(3 + data.len());
-//        buf.put_u8(ATT_OP_WRITE_CMD);
-//        buf.put_u16::<LittleEndian>(char.value_handle);
-//        buf.put(data);
-//        stream.write_cmd(&mut *buf);
-//    }
-//
-////    fn device(&self, address: BDAddr) -> Option<Device> {
-////        let discovered = self.discovered.lock().unwrap();
-////        discovered.get(&address).map(|d| d.to_device())
-////    }
-//
-//    pub fn discover_chars(&self, address: BDAddr) {
-//        self.discover_chars_in_range(address, 0x0001, 0xFFFF);
-//    }
-//
-//    pub fn discover_chars_in_range(&self, address: BDAddr, start: u16, end: u16) {
-//        self.discover_chars_in_range_int(address, start, end);
-//    }
-//
-//    pub fn request(&self, address: BDAddr, char: &Characteristic, data: &[u8],
-//               handler: Option<HandleFn>) {
-//        self.request_by_handle(address, char.value_handle, data, handler);
-//    }
-//
-//    pub fn subscribe(&self, address: BDAddr, char: &Characteristic) {
-//        self.notify(address, char, true);
-//    }
-//
-//    pub fn unsubscribe(&self, address: BDAddr, char: &Characteristic) {
-//        self.notify(address, char, false);
-//    }
 }
 
 impl Host for ConnectedAdapter {
@@ -581,18 +412,13 @@ impl Host for ConnectedAdapter {
     }
 
     fn peripherals(&self) -> Vec<Box<api::Peripheral>> {
-        unimplemented!();
+        let l = self.peripherals.lock().unwrap();
+        l.clone().into_iter().map(|p| Box::new(p.1 as api::Peripheral)).collect()
     }
 
     fn peripheral(&self, _address: BDAddr) -> Option<Box<api::Peripheral>> {
         unimplemented!();
     }
-
-//    fn discovered(&self) -> Vec<Device> {
-//        let discovered = self.discovered.lock().unwrap();
-//        discovered.values().map(|d| d.to_device()).collect()
-//    }
-
 }
 
 #[derive(Debug, Clone)]

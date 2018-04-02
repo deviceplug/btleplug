@@ -22,8 +22,10 @@ use api::BDAddr;
 use api::HandleFn;
 use Error;
 
+pub type DoneFn = Box<Fn(Option<Error>) + Send>;
+
 enum StreamMessage {
-    Command(Vec<u8>),
+    Command(Vec<u8>, Option<DoneFn>),
     Request(Vec<u8>, Option<HandleFn>),
     Data(Vec<u8>),
 }
@@ -31,7 +33,7 @@ enum StreamMessage {
 impl Debug for StreamMessage {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            &Command(ref data) => write!(f, "Command({:?})", data),
+            &Command(ref data, ref _cb) => write!(f, "Command({:?})", data),
             &Request(ref data, ref cb) => write!(f, "Request({:?}, cb: {})", data, cb.is_some()),
             &Data(ref data) => write!(f, "Data({:?})", data),
         }
@@ -116,7 +118,7 @@ impl ACLStream {
     fn handle_iteration(&self, msg: &mut StreamMessage,
                         receiver: &Receiver<StreamMessage>) -> Result<()> {
         match *msg {
-            Command(ref mut value) => {
+            Command(ref mut value, ref _cb) => {
                 debug!("sending command {:?} to {}", value, self.fd);
 
                 self.write_socket(value, true, receiver)?;
@@ -133,7 +135,7 @@ impl ACLStream {
                     match value[0] {
                         ATT_OP_EXCHANGE_MTU_REQ => {
                             // write back that we don't support it?
-                            self.write_cmd(&mut [0x01, 0x02, 0x00, 0x00, 0x06]);
+                            self.write_cmd(&mut [0x01, 0x02, 0x00, 0x00, 0x06], None);
                         }
                         ATT_OP_VALUE_NOTIFICATION => {
 
@@ -154,9 +156,8 @@ impl ACLStream {
         self.sender.send(Request(data.to_owned(), handler)).unwrap();
     }
 
-    pub fn write_cmd(&self, data: &mut [u8]) {
-        // let mut packet = Protocol::acl(self.handle, ATT_CID, data);
-        self.sender.send(Command(data.to_owned())).unwrap();
+    pub fn write_cmd(&self, data: &mut [u8], on_done: Option<DoneFn>) {
+        self.sender.send(Command(data.to_owned(), on_done)).unwrap();
     }
 
     pub fn receive(&self, message: &ACLData) {

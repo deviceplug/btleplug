@@ -1,5 +1,5 @@
 pub mod manager;
-mod adapter;
+pub mod adapter;
 mod protocol;
 mod util;
 mod constants;

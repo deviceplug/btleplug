@@ -1,7 +1,7 @@
 use ::Result;
 
 use api;
-use api::{Characteristic, HandleFn, Properties, BDAddr, Host};
+use api::{Characteristic, CharPropFlags, HandleFn, Properties, BDAddr, Host};
 use std::mem::size_of;
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -14,10 +14,7 @@ use bluez::adapter::acl_stream::ACLStream;
 use bluez::adapter::ConnectedAdapter;
 use bluez::util::handle_error;
 use bluez::constants::*;
-use api::Event;
-use api::EventHandler;
 use ::Error;
-use std::thread;
 use bluez::protocol::hci;
 use api::AddressType;
 use std::sync::mpsc;
@@ -25,6 +22,9 @@ use std::sync::mpsc::Sender;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::channel;
 use std::time::Duration;
+use bytes::{BytesMut, BufMut};
+use bytes::LittleEndian;
+use bluez::protocol::att;
 
 #[derive(Copy, Debug)]
 #[repr(C)]
@@ -127,7 +127,7 @@ impl Peripheral {
             }
             &hci::Message::ACLDataPacket(ref data) => {
                 let handle = data.handle.clone();
-                self.stream.lock().unwrap().iter().map(|stream| {
+                self.stream.lock().unwrap().iter().for_each(|stream| {
                     if stream.handle == handle {
                         stream.receive(data);
                     }
@@ -139,14 +139,88 @@ impl Peripheral {
         }
     }
 
-    fn write_acl_packet(&self, data: &mut [u8], handler: Option<HandleFn>) {
-        // TODO: improve error handling
-//        self.stream.lock().unwrap().iter()
-//            .map(|s| s.write(data, handler));
+    fn request_by_handle(&self, handle: u16, data: &[u8], handler: Option<HandleFn>) -> Result<()> {
+        let l = self.stream.lock().unwrap();
+        let stream = l.as_ref().ok_or(Error::NotConnected)?;
+        let mut buf = BytesMut::with_capacity(3 + data.len());
+        buf.put_u8(ATT_OP_WRITE_REQ);
+        buf.put_u16::<LittleEndian>(handle);
+        buf.put(data);
+        stream.write(&mut *buf, handler);
+        Ok(())
     }
+
+    fn write_acl_packet(&self, data: &mut [u8], handler: Option<HandleFn>) -> Result<()> {
+        let l = self.stream.lock().unwrap();
+        let stream = l.as_ref().ok_or(Error::NotConnected)?;
+        stream.write(data, handler);
+        Ok(())
+    }
+
+    fn notify(&self, characteristic: &Characteristic, enable: bool) -> Result<()> {
+        info!("setting notify for {}/{:?} to {}", self.address, characteristic.uuid, enable);
+        let l = self.stream.lock().unwrap();
+        let stream = l.as_ref().ok_or(Error::NotConnected)?;
+
+        let mut buf = BytesMut::with_capacity(7);
+        buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
+        buf.put_u16::<LittleEndian>(characteristic.start_handle);
+        buf.put_u16::<LittleEndian>(characteristic.end_handle);
+        buf.put_u16::<LittleEndian>(GATT_CLIENT_CHARAC_CFG_UUID);
+        let self_copy = self.clone();
+        let char_copy = characteristic.clone();
+
+        stream.write(&mut *buf, Some(Box::new(move |_, data| {
+            match att::notify_response(data).to_result() {
+                Ok(resp) => {
+                    debug!("got notify response: {:?}", resp);
+
+                    let use_notify = char_copy.properties.contains(CharPropFlags::NOTIFY);
+                    let use_indicate = char_copy.properties.contains(CharPropFlags::INDICATE);
+
+                    let mut value = resp.value;
+
+                    if enable {
+                        if use_notify {
+                            value |= 0x0001;
+                        } else if use_indicate {
+                            value |= 0x0002;
+                        }
+                    } else {
+                        if use_notify {
+                            value &= 0xFFFE;
+                        } else if use_indicate {
+                            value &= 0xFFFD;
+                        }
+                    }
+
+                    let mut value_buf = BytesMut::with_capacity(2);
+                    value_buf.put_u16::<LittleEndian>(value);
+                    self_copy.request_by_handle(resp.handle,
+                                                &*value_buf, Some(Box::new(|_, data| {
+                            if data.len() > 0 && data[0] == ATT_OP_WRITE_RESP {
+                                debug!("Got response from notify: {:?}", data);
+                            } else {
+                                warn!("Unexpected notify response: {:?}", data);
+                            }
+                        }))).unwrap();
+                }
+                Err(err) => {
+                    error!("failed to parse notify response: {:?}", err);
+                }
+            };
+        })));
+
+        Ok(())
+    }
+
 }
 
 impl api::Peripheral for Peripheral {
+    fn address(&self) -> BDAddr {
+        self.address.clone()
+    }
+
     fn properties(&self) -> Properties {
         let l = self.properties.lock().unwrap();
         l.clone()
@@ -244,30 +318,112 @@ impl api::Peripheral for Peripheral {
 
 
     fn disconnect(&self) -> Result<()> {
-        unimplemented!()
+        let handle = {
+            let l = self.stream.lock().unwrap();
+            if l.is_none() {
+                // we're already disconnected
+                return Ok(());
+            }
+            l.as_ref().unwrap().handle
+        };
+
+        let mut data = BytesMut::with_capacity(3);
+        data.put_u16::<LittleEndian>(handle);
+        data.put_u8(HCI_OE_USER_ENDED_CONNECTION);
+        let mut buf = hci::hci_command(DISCONNECT_CMD, &*data);
+        self.c_adapter.write(&mut *buf)
     }
 
-    fn discover_characteristics(&self) {
-        unimplemented!()
+    fn discover_characteristics(&self) -> Result<()> {
+        self.discover_characteristics_in_range(0x0001, 0xFFFF)
     }
 
-    fn discover_characteristics_in_range(&self, start: u16, end: u16) {
-        unimplemented!()
+    fn discover_characteristics_in_range(&self, start: u16, end: u16) -> Result<()> {
+        let mut buf = BytesMut::with_capacity(7);
+        buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
+        buf.put_u16::<LittleEndian>(start);
+        buf.put_u16::<LittleEndian>(end);
+        buf.put_u16::<LittleEndian>(GATT_CHARAC_UUID);
+
+        let self_copy = self.clone();
+        let handler = Box::new(move |_: u16, data: &[u8]| {
+            match att::characteristics(data).to_result() {
+                Ok(chars) => {
+                    debug!("Chars: {:#?}", chars);
+                    let mut cur_chars = self_copy.characteristics.lock().unwrap();
+                    let mut next = None;
+                    let mut char_set = cur_chars.clone();
+                    chars.into_iter().for_each(|mut c| {
+                        c.end_handle = end;
+                        next = Some(c.start_handle);
+                        char_set.insert(c);
+                    });
+
+                    // fix the end handles
+                    let mut prev = 0xffff;
+                    *cur_chars = char_set.into_iter().rev().map(|mut c| {
+                        c.end_handle = prev;
+                        prev = c.start_handle - 1;
+                        c
+                    }).collect();
+
+                    next.map(|next| {
+                        if next < end {
+                            self_copy.discover_characteristics_in_range(next + 1, end).unwrap();
+                        }
+                    });
+                }
+                Err(err) => {
+                    error!("failed to parse chars: {:?}", err);
+                }
+            };
+        });
+
+        self.write_acl_packet(&mut *buf, Some(handler))
     }
 
-    fn command(&self, characteristic: &Characteristic, data: &[u8]) {
-        unimplemented!()
+    fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
+//        let pair = Arc::new((Mutex::new(None), Condvar::new()));
+//        let pair2 = pair.clone();
+//        let done = Box::new(move|error| {
+//            info!("Done: {:?}", error);
+//            let &(ref lock, ref cvar) = &*pair2;
+//            let mut done = lock.lock().unwrap();
+//            *done = Some(error);
+//            cvar.notify_one();
+//        });
+
+        {
+            let l = self.stream.lock().unwrap();
+            let stream = l.as_ref().ok_or(Error::NotConnected)?;
+            let mut buf = BytesMut::with_capacity(3 + data.len());
+            buf.put_u8(ATT_OP_WRITE_CMD);
+            buf.put_u16::<LittleEndian>(characteristic.value_handle);
+            buf.put(data);
+
+            stream.write_cmd(&mut *buf, None); //Some(done));
+        }
+
+        // wait until we're done
+//        let &(ref lock, ref cvar) = &*pair;
+//        let mut done = lock.lock().unwrap();
+//        while (*done).is_none() {
+//            done = cvar.wait(done).unwrap();
+//        }
+
+        Ok(())
     }
 
-    fn request(&self, characteristic: &Characteristic, data: &[u8], handler: Option<HandleFn>) {
-        unimplemented!()
+
+    fn request(&self, characteristic: &Characteristic, data: &[u8], handler: Option<HandleFn>) -> Result<()> {
+        self.request_by_handle(characteristic.value_handle, data, handler)
     }
 
-    fn subscribe(&self, characteristic: &Characteristic) {
-        unimplemented!()
+    fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
+        self.notify(characteristic, true)
     }
 
-    fn unsubscribe(&self, characteristic: &Characteristic) {
-        unimplemented!()
+    fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
+        self.notify(characteristic, false)
     }
 }

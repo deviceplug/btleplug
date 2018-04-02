@@ -127,6 +127,7 @@ pub struct Properties {
 }
 
 pub trait Peripheral: Send + Sync {
+    fn address(&self) -> BDAddr;
     fn properties(&self) -> Properties;
     fn characteristics(&self) -> BTreeSet<Characteristic>;
     fn is_connected(&self) -> bool;
@@ -134,14 +135,15 @@ pub trait Peripheral: Send + Sync {
     fn connect(&self) -> Result<()>;
     fn disconnect(&self) -> Result<()>;
 
-    fn discover_characteristics(&self);
-    fn discover_characteristics_in_range(&self, start: u16, end: u16);
+    fn discover_characteristics(&self) -> Result<()>;
+    fn discover_characteristics_in_range(&self, start: u16, end: u16) -> Result<()>;
 
-    fn command(&self, characteristic: &Characteristic, data: &[u8]);
-    fn request(&self, characteristic: &Characteristic, data: &[u8], handler: Option<HandleFn>);
+    fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()>;
+    fn request(&self, characteristic: &Characteristic, data: &[u8],
+               handler: Option<HandleFn>) -> Result<()>;
 
-    fn subscribe(&self, characteristic: &Characteristic);
-    fn unsubscribe(&self, characteristic: &Characteristic);
+    fn subscribe(&self, characteristic: &Characteristic) -> Result<()>;
+    fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()>;
 }
 
 #[derive(Debug, Copy, Clone)]

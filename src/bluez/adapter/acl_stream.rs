@@ -46,7 +46,7 @@ pub struct ACLStream {
     pub handle: u16,
     fd: i32,
     should_stop: Arc<AtomicBool>,
-    sender: Sender<StreamMessage>,
+    sender: Arc<Mutex<Sender<StreamMessage>>>,
     subscriptions: Arc<Mutex<HashMap<u16, Vec<HandleFn>>>>
 }
 
@@ -59,7 +59,7 @@ impl ACLStream {
             handle,
             fd,
             should_stop: Arc::new(AtomicBool::new(false)),
-            sender: tx,
+            sender: Arc::new(Mutex::new(tx)),
             subscriptions: Arc::new(Mutex::new(HashMap::new())),
         };
 
@@ -104,7 +104,7 @@ impl ACLStream {
             if let Data(rec) = message {
                 if rec != value {
                     skipped.into_iter().for_each(|m|
-                        self.sender.send(m).unwrap());
+                        self.send(m));
                     return Ok(rec);
                 } else if command {
                     return Ok(vec![]);
@@ -151,20 +151,25 @@ impl ACLStream {
         Ok(())
     }
 
+    fn send(&self, message: StreamMessage) {
+        let l = self.sender.lock().unwrap();
+        l.send(message).unwrap();
+    }
+
     pub fn write(&self, data: &mut [u8], handler: Option<HandleFn>) {
         // let mut packet = Protocol::acl(self.handle, ATT_CID, data);
-        self.sender.send(Request(data.to_owned(), handler)).unwrap();
+        self.send(Request(data.to_owned(), handler));
     }
 
     pub fn write_cmd(&self, data: &mut [u8], on_done: Option<DoneFn>) {
-        self.sender.send(Command(data.to_owned(), on_done)).unwrap();
+        self.send(Command(data.to_owned(), on_done));
     }
 
     pub fn receive(&self, message: &ACLData) {
         // message.data
         // TODO: handle partial packets
         if message.cid == ATT_CID {
-            self.sender.send(Data(message.data.to_vec())).unwrap();
+            self.send(Data(message.data.to_vec()));
         }
     }
 }

@@ -21,6 +21,7 @@ extern crate failure;
 extern crate failure_derive;
 
 use std::result;
+use std::time::Duration;
 
 pub mod bluez;
 pub mod api;
@@ -39,8 +40,8 @@ pub enum Error {
     #[fail(display = "The operation is not supported: {}", _0)]
     NotSupported(String),
 
-    #[fail(display = "Timed out after {} ms", _0)]
-    TimedOut(u32),
+    #[fail(display = "Timed out after {:?}", _0)]
+    TimedOut(Duration),
 
     #[fail(display = "{}", _0)]
     Other(String)

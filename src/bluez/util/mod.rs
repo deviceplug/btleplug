@@ -28,6 +28,7 @@ impl From<nix::Error> for Error {
 
 pub fn handle_error(v: i32) -> Result<i32> {
     if v < 0 {
+        debug!("got error {}", Errno::last());
         Err(errno_to_error(Errno::last()))
     } else {
         Ok(v)

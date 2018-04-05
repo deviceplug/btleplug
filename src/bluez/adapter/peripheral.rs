@@ -1,7 +1,7 @@
 use ::Result;
 
-use api;
-use api::{Characteristic, CharPropFlags, HandleFn, Properties, BDAddr, Host};
+use api::{Characteristic, CharPropFlags, HandleFn, Properties, BDAddr, Host,
+          Peripheral as ApiPeripheral};
 use std::mem::size_of;
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -25,6 +25,10 @@ use std::time::Duration;
 use bytes::{BytesMut, BufMut};
 use bytes::LittleEndian;
 use bluez::protocol::att;
+use std::fmt::Debug;
+use std::fmt::Formatter;
+use std::fmt;
+use std::sync::RwLock;
 
 #[derive(Copy, Debug)]
 #[repr(C)]
@@ -38,9 +42,6 @@ pub struct SockaddrL2 {
 impl Clone for SockaddrL2 {
     fn clone(&self) -> Self { *self }
 }
-
-const L2CAP_OPTIONS: i32 = 0x01;
-const SOL_L2CAP: i32 = 6;
 
 #[derive(Copy, Debug, Default)]
 #[repr(C)]
@@ -63,9 +64,18 @@ pub struct Peripheral {
     address: BDAddr,
     properties: Arc<Mutex<Properties>>,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
-    stream: Arc<Mutex<Option<ACLStream>>>,
+    stream: Arc<RwLock<Option<ACLStream>>>,
     connection_tx: Arc<Mutex<Sender<u16>>>,
     connection_rx: Arc<Mutex<Receiver<u16>>>,
+}
+
+impl Debug for Peripheral {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let connected = if self.is_connected() { " connected" } else { "" };
+        let properties = self.properties.lock().unwrap();
+        write!(f, "{} {}{}", self.address, properties.local_name.clone()
+            .unwrap_or("(unknown)".to_string()), connected)
+    }
 }
 
 impl Peripheral {
@@ -75,13 +85,14 @@ impl Peripheral {
             c_adapter, address,
             properties: Arc::new(Mutex::new(Properties::default())),
             characteristics: Arc::new(Mutex::new(BTreeSet::new())),
-            stream: Arc::new(Mutex::new(Option::None)),
+            stream: Arc::new(RwLock::new(Option::None)),
             connection_tx: Arc::new(Mutex::new(connection_tx)),
             connection_rx: Arc::new(Mutex::new(connection_rx)),
         }
     }
 
     pub fn handle_device_message(&self, message: &hci::Message) {
+        debug!("got device message: {:?}", message);
         match message {
             &hci::Message::LEAdvertisingReport(ref info) => {
                 assert_eq!(self.address, info.bdaddr, "received message for wrong device");
@@ -123,15 +134,23 @@ impl Peripheral {
             &hci::Message::LEConnComplete(ref info) => {
                 assert_eq!(self.address, info.bdaddr, "received message for wrong device");
 
+                debug!("got le conn complete {:?}", info);
                 self.connection_tx.lock().unwrap().send(info.handle.clone()).unwrap();
             }
             &hci::Message::ACLDataPacket(ref data) => {
+                debug!("got data packet for {}", self.address);
                 let handle = data.handle.clone();
-                self.stream.lock().unwrap().iter().for_each(|stream| {
-                    if stream.handle == handle {
-                        stream.receive(data);
+                match self.stream.try_read() {
+                    Ok(stream) => {
+                        stream.iter().for_each(|stream| {
+                            if stream.handle == handle {
+                                stream.receive(data);
+                            }
+                        });
                     }
-                });
+                    // TODO: maybe queue up these messages for once we have the stream?
+                    Err(e) => warn!("Failed to get lock for acl data packet: {}", e)
+                }
             },
             _ => {
                 // ignore
@@ -140,7 +159,7 @@ impl Peripheral {
     }
 
     fn request_by_handle(&self, handle: u16, data: &[u8], handler: Option<HandleFn>) -> Result<()> {
-        let l = self.stream.lock().unwrap();
+        let l = self.stream.read().unwrap();
         let stream = l.as_ref().ok_or(Error::NotConnected)?;
         let mut buf = BytesMut::with_capacity(3 + data.len());
         buf.put_u8(ATT_OP_WRITE_REQ);
@@ -151,7 +170,7 @@ impl Peripheral {
     }
 
     fn write_acl_packet(&self, data: &mut [u8], handler: Option<HandleFn>) -> Result<()> {
-        let l = self.stream.lock().unwrap();
+        let l = self.stream.read().unwrap();
         let stream = l.as_ref().ok_or(Error::NotConnected)?;
         stream.write(data, handler);
         Ok(())
@@ -159,7 +178,7 @@ impl Peripheral {
 
     fn notify(&self, characteristic: &Characteristic, enable: bool) -> Result<()> {
         info!("setting notify for {}/{:?} to {}", self.address, characteristic.uuid, enable);
-        let l = self.stream.lock().unwrap();
+        let l = self.stream.read().unwrap();
         let stream = l.as_ref().ok_or(Error::NotConnected)?;
 
         let mut buf = BytesMut::with_capacity(7);
@@ -216,7 +235,7 @@ impl Peripheral {
 
 }
 
-impl api::Peripheral for Peripheral {
+impl ApiPeripheral for Peripheral {
     fn address(&self) -> BDAddr {
         self.address.clone()
     }
@@ -232,13 +251,14 @@ impl api::Peripheral for Peripheral {
     }
 
     fn is_connected(&self) -> bool {
-        let l = self.stream.lock().unwrap();
-        l.is_some()
+//        let l = self.stream.read().unwrap();
+//        l.is_some()
+        true
     }
 
     fn connect(&self) -> Result<()> {
         // take lock on stream
-        let mut stream = self.stream.lock().unwrap();
+        let mut stream = self.stream.write().unwrap();
 
         if stream.is_some() {
             // we're already connected, just return
@@ -249,6 +269,7 @@ impl api::Peripheral for Peripheral {
         let fd = handle_error(unsafe {
             libc::socket(libc::AF_BLUETOOTH, libc::SOCK_SEQPACKET, 0)
         })?;
+        debug!("created socket {} to communicate with device", fd);
 
         let local_addr = SockaddrL2 {
             l2_family: libc::AF_BLUETOOTH as libc::sa_family_t,
@@ -263,12 +284,14 @@ impl api::Peripheral for Peripheral {
             libc::bind(fd, &local_addr as *const SockaddrL2 as *const libc::sockaddr,
                        size_of::<SockaddrL2>() as u32)
         })?;
+        debug!("bound to socket {}", fd);
 
         // configure it as a bluetooth socket
         let mut opt = [1u8, 0];
         handle_error(unsafe {
             libc::setsockopt(fd, libc::SOL_BLUETOOTH, 4, opt.as_mut_ptr() as *mut libc::c_void, 2)
         })?;
+        debug!("configured socket {}", fd);
 
         let addr = SockaddrL2 {
             l2_family: libc::AF_BLUETOOTH as u16,
@@ -282,30 +305,24 @@ impl api::Peripheral for Peripheral {
         handle_error(unsafe {
             libc::connect(fd, &addr as *const SockaddrL2 as *const libc::sockaddr,
                           size_of::<SockaddrL2>() as u32)
-        })?;
-
-        let mut opts = L2CapOptions::default();
-
-        let mut len = size_of::<L2CapOptions>() as u32;
-        handle_error(unsafe {
-            libc::getsockopt(fd, SOL_L2CAP, L2CAP_OPTIONS,
-                             &mut opts as *mut _ as *mut libc::c_void,
-                             &mut len)
-        })?;
+        }).unwrap();
+        debug!("connected to device {} over socket {}", self.address, fd);
 
         // restart scanning if we were already, as connecting to a device seems to kill it
         if self.c_adapter.scan_enabled.load(Ordering::Relaxed) {
             self.c_adapter.start_scan()?;
+            debug!("restarted scanning");
         }
 
         // wait until we get the connection notice
-        match self.connection_rx.lock().unwrap().recv_timeout(Duration::from_secs(1)) {
+        let timeout = Duration::from_secs(20);
+        match self.connection_rx.lock().unwrap().recv_timeout(timeout) {
             Ok(handle) => {
                 // create the acl stream that will communicate with the device
                 *stream = Some(ACLStream::new(self.address, handle, fd));
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                return Err(Error::TimedOut(1000));
+                return Err(Error::TimedOut(timeout.clone()));
             }
             err => {
                 // unexpected error
@@ -316,22 +333,24 @@ impl api::Peripheral for Peripheral {
         Ok(())
     }
 
-
     fn disconnect(&self) -> Result<()> {
-        let handle = {
-            let l = self.stream.lock().unwrap();
-            if l.is_none() {
-                // we're already disconnected
-                return Ok(());
-            }
-            l.as_ref().unwrap().handle
-        };
+        let mut l = self.stream.write().unwrap();
+
+        if l.is_none() {
+            // we're already disconnected
+            return Ok(());
+        }
+
+        let handle = l.as_ref().unwrap().handle;
 
         let mut data = BytesMut::with_capacity(3);
         data.put_u16::<LittleEndian>(handle);
         data.put_u8(HCI_OE_USER_ENDED_CONNECTION);
         let mut buf = hci::hci_command(DISCONNECT_CMD, &*data);
-        self.c_adapter.write(&mut *buf)
+        self.c_adapter.write(&mut *buf)?;
+
+        *l = None;
+        Ok(())
     }
 
     fn discover_characteristics(&self) -> Result<()> {
@@ -394,7 +413,7 @@ impl api::Peripheral for Peripheral {
 //        });
 
         {
-            let l = self.stream.lock().unwrap();
+            let l = self.stream.read().unwrap();
             let stream = l.as_ref().ok_or(Error::NotConnected)?;
             let mut buf = BytesMut::with_capacity(3 + data.len());
             buf.put_u8(ATT_OP_WRITE_CMD);

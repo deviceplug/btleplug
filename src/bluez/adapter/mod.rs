@@ -19,11 +19,7 @@ use bluez::util::handle_error;
 use bluez::protocol::hci;
 use bluez::adapter::peripheral::Peripheral;
 use bluez::constants::*;
-use std::sync::mpsc::Sender;
-use std::sync::mpsc::Receiver;
-use std::sync::mpsc::channel;
-use api;
-
+use api::EventHandler;
 
 #[derive(Debug, Copy)]
 #[repr(C)]
@@ -194,8 +190,8 @@ pub struct ConnectedAdapter {
     adapter_fd: i32,
     should_stop: Arc<AtomicBool>,
     pub scan_enabled: Arc<AtomicBool>,
-    event_txs: Arc<Mutex<Vec<Sender<Event>>>>,
     peripherals: Arc<Mutex<HashMap<BDAddr, Peripheral>>>,
+    event_handlers: Arc<Mutex<Vec<EventHandler>>>,
 }
 
 impl ConnectedAdapter {
@@ -222,7 +218,7 @@ impl ConnectedAdapter {
             adapter_fd,
             should_stop,
             scan_enabled: Arc::new(AtomicBool::new(false)),
-            event_txs: Arc::new(Mutex::new(vec![])),
+            event_handlers: Arc::new(Mutex::new(vec![])),
             peripherals: Arc::new(Mutex::new(HashMap::new())),
         };
 
@@ -301,31 +297,32 @@ impl ConnectedAdapter {
     }
 
     fn emit(&self, event: Event) {
-        let mut txs = self.event_txs.lock().unwrap();
-        txs.retain(|tx|{
-            // drop the tx if we see an error; that means the other end has hung up
-            tx.send(event.clone()).is_ok()
-        });
+        let handlers = self.event_handlers.clone();
+        let vec = handlers.lock().unwrap();
+        for handler in (*vec).iter() {
+            handler(event.clone());
+        }
     }
 
     fn handle(&self, message: hci::Message) {
         debug!("got message {:?}", message);
 
-        let mut peripherals = self.peripherals.lock().unwrap();
-
         match message {
             hci::Message::LEAdvertisingReport(info) => {
                 let mut new = false;
-
-                let peripheral = peripherals.entry(info.bdaddr)
-                    .or_insert_with(|| {
-                        new = true;
-                        Peripheral::new(self.clone(), info.bdaddr)
-                    });
-
                 let address = info.bdaddr.clone();
 
-                peripheral.handle_device_message(&hci::Message::LEAdvertisingReport(info));
+                {
+                    let mut peripherals = self.peripherals.lock().unwrap();
+                    let peripheral = peripherals.entry(info.bdaddr)
+                        .or_insert_with(|| {
+                            new = true;
+                            Peripheral::new(self.clone(), info.bdaddr)
+                        });
+
+
+                    peripheral.handle_device_message(&hci::Message::LEAdvertisingReport(info));
+                }
 
                 if new {
                     self.emit(Event::DeviceDiscovered(address.clone()))
@@ -336,8 +333,7 @@ impl ConnectedAdapter {
             hci::Message::LEConnComplete(info) => {
                 info!("connected to {:?}", info);
                 let address = info.bdaddr.clone();
-
-                match peripherals.get(&info.bdaddr) {
+                match self.peripheral(address) {
                     Some(peripheral) => {
                         peripheral.handle_device_message(&hci::Message::LEConnComplete(info))
                     }
@@ -349,6 +345,11 @@ impl ConnectedAdapter {
             }
             hci::Message::ACLDataPacket(data) => {
                 let message = hci::Message::ACLDataPacket(data);
+
+                // TODO this is a bit risky from a deadlock perspective (note mutexes are not
+                // reentrant in rust!)
+                let peripherals = self.peripherals.lock().unwrap();
+
                 for peripheral in peripherals.values() {
                     // we don't know the handler => device mapping, so send to all and let them filter
                     peripheral.handle_device_message(&message);
@@ -394,12 +395,10 @@ impl ConnectedAdapter {
     }
 }
 
-impl Host for ConnectedAdapter {
-    fn event_stream(&self) -> Receiver<Event> {
-        let mut list = self.event_txs.lock().unwrap();
-        let (tx, rx) = channel();
-        (*list).push(tx);
-        rx
+impl Host<Peripheral> for ConnectedAdapter {
+    fn on_event(&self, handler: EventHandler) {
+        let list = self.event_handlers.clone();
+        list.lock().unwrap().push(handler);
     }
 
     fn start_scan(&self) -> Result<()> {
@@ -411,13 +410,14 @@ impl Host for ConnectedAdapter {
         self.set_scan_enabled(false)
     }
 
-    fn peripherals(&self) -> Vec<Box<api::Peripheral>> {
+    fn peripherals(&self) -> Vec<Peripheral> {
         let l = self.peripherals.lock().unwrap();
-        l.clone().into_iter().map(|p| Box::new(p.1 as api::Peripheral)).collect()
+        l.values().map(|p| p.clone()).collect()
     }
 
-    fn peripheral(&self, _address: BDAddr) -> Option<Box<api::Peripheral>> {
-        unimplemented!();
+    fn peripheral(&self, address: BDAddr) -> Option<Peripheral> {
+        let l = self.peripherals.lock().unwrap();
+        l.get(&address).map(|p| p.clone())
     }
 }
 

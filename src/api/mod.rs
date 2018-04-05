@@ -3,7 +3,6 @@ use std::fmt::{Display, Formatter, Debug};
 
 use ::Result;
 use std::collections::BTreeSet;
-use std::sync::mpsc::Receiver;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum AddressType {
@@ -126,7 +125,7 @@ pub struct Properties {
     pub has_scan_response: bool,
 }
 
-pub trait Peripheral: Send + Sync {
+pub trait Peripheral: Send + Sync + Debug {
     fn address(&self) -> BDAddr;
     fn properties(&self) -> Properties;
     fn characteristics(&self) -> BTreeSet<Characteristic>;
@@ -157,12 +156,12 @@ pub enum Event {
 
 pub type EventHandler = Box<Fn(Event) + Send>;
 
-pub trait Host {
-    fn event_stream(&self) -> Receiver<Event>;
+pub trait Host<P : Peripheral> {
+    fn on_event(&self, handler: EventHandler);
 
     fn start_scan(&self) -> Result<()>;
     fn stop_scan(&self) -> Result<()>;
 
-    fn peripherals(&self) -> Vec<Box<Peripheral>>;
-    fn peripheral(&self, address: BDAddr) -> Option<Box<Peripheral>>;
+    fn peripherals(&self) -> Vec<P>;
+    fn peripheral(&self, address: BDAddr) -> Option<P>;
 }

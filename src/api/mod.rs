@@ -55,7 +55,10 @@ impl Debug for BDAddr {
     }
 }
 
-pub type HandleFn = Box<Fn(u16, &[u8]) + Send>;
+pub type Callback<T> = Box<Fn(Result<T>) + Send>;
+pub type CommandCallback = Callback<()>;
+pub type RequestCallback = Box<Fn(Result<&[u8]>) + Send>;
+
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
 pub enum CharacteristicUUID {
@@ -138,8 +141,10 @@ pub trait Peripheral: Send + Sync + Debug {
     fn discover_characteristics_in_range(&self, start: u16, end: u16) -> Result<()>;
 
     fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()>;
+    fn command_async(&self, characteristic: &Characteristic, data: &[u8], handler: Option<CommandCallback>);
+
     fn request(&self, characteristic: &Characteristic, data: &[u8],
-               handler: Option<HandleFn>) -> Result<()>;
+               handler: Option<RequestCallback>) -> Result<()>;
 
     fn subscribe(&self, characteristic: &Characteristic) -> Result<()>;
     fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()>;

@@ -14,19 +14,17 @@ use std::fmt::{Debug, Formatter};
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use std::collections::HashMap;
 use bluez::protocol::hci::ACLData;
 
 use self::StreamMessage::*;
 use api::BDAddr;
-use api::HandleFn;
 use Error;
+use api::CommandCallback;
+use api::RequestCallback;
 
-pub type DoneFn = Box<Fn(Option<Error>) + Send>;
-
-enum StreamMessage {
-    Command(Vec<u8>, Option<DoneFn>),
-    Request(Vec<u8>, Option<HandleFn>),
+enum StreamMessage  {
+    Command(Vec<u8>, Option<CommandCallback>),
+    Request(Vec<u8>, Option<RequestCallback>),
     Data(Vec<u8>),
 }
 
@@ -47,7 +45,6 @@ pub struct ACLStream {
     fd: i32,
     should_stop: Arc<AtomicBool>,
     sender: Arc<Mutex<Sender<StreamMessage>>>,
-    subscriptions: Arc<Mutex<HashMap<u16, Vec<HandleFn>>>>
 }
 
 impl ACLStream {
@@ -60,7 +57,6 @@ impl ACLStream {
             fd,
             should_stop: Arc::new(AtomicBool::new(false)),
             sender: Arc::new(Mutex::new(tx)),
-            subscriptions: Arc::new(Mutex::new(HashMap::new())),
         };
 
         {
@@ -118,16 +114,25 @@ impl ACLStream {
     fn handle_iteration(&self, msg: &mut StreamMessage,
                         receiver: &Receiver<StreamMessage>) -> Result<()> {
         match *msg {
-            Command(ref mut value, ref _cb) => {
+            Command(ref mut value, ref handler) => {
                 debug!("sending command {:?} to {}", value, self.fd);
 
-                self.write_socket(value, true, receiver)?;
+                let result = self.write_socket(value, true, receiver)
+                    .map(|_v| ());
+                if let &Some(ref f) = handler {
+                    f(result);
+                }
             },
             Request(ref mut value, ref handler) => {
                 debug!("sending request {:?} to {}", value, self.fd);
 
-                let result = self.write_socket(value, false, receiver)?;
-                handler.iter().for_each(|h| h(self.handle, &result));
+                let result = self.write_socket(value, false, receiver);
+                if let &Some(ref f) = handler {
+                    match result {
+                        Ok(v) => f(Ok(&v)),
+                        Err(e) => f(Err(e))
+                    }
+                }
             },
             Data(ref value) => {
                 debug!("Received data {:?}", value);
@@ -156,12 +161,12 @@ impl ACLStream {
         l.send(message).unwrap();
     }
 
-    pub fn write(&self, data: &mut [u8], handler: Option<HandleFn>) {
+    pub fn write(&self, data: &mut [u8], handler: Option<RequestCallback>) {
         // let mut packet = Protocol::acl(self.handle, ATT_CID, data);
         self.send(Request(data.to_owned(), handler));
     }
 
-    pub fn write_cmd(&self, data: &mut [u8], on_done: Option<DoneFn>) {
+    pub fn write_cmd(&self, data: &mut [u8], on_done: Option<CommandCallback>) {
         self.send(Command(data.to_owned(), on_done));
     }
 

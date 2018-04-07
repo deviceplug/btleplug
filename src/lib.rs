@@ -26,7 +26,7 @@ use std::time::Duration;
 pub mod bluez;
 pub mod api;
 
-#[derive(Debug, Fail)]
+#[derive(Debug, Fail, Clone)]
 pub enum Error {
     #[fail(display = "Permission denied")]
     PermissionDenied,

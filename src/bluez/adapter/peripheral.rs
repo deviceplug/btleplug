@@ -1,6 +1,6 @@
 use ::Result;
 
-use api::{Characteristic, CharPropFlags, HandleFn, Properties, BDAddr, Host,
+use api::{Characteristic, CharPropFlags, Callback, Properties, BDAddr, Host,
           Peripheral as ApiPeripheral};
 use std::mem::size_of;
 use std::collections::BTreeSet;
@@ -10,7 +10,7 @@ use std::sync::atomic::Ordering;
 
 use libc;
 
-use bluez::adapter::acl_stream::ACLStream;
+use bluez::adapter::acl_stream::{ACLStream};
 use bluez::adapter::ConnectedAdapter;
 use bluez::util::handle_error;
 use bluez::constants::*;
@@ -29,6 +29,11 @@ use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::fmt;
 use std::sync::RwLock;
+use std::collections::VecDeque;
+use bluez::protocol::hci::ACLData;
+use std::sync::Condvar;
+use api::RequestCallback;
+use api::CommandCallback;
 
 #[derive(Copy, Debug)]
 #[repr(C)]
@@ -67,6 +72,7 @@ pub struct Peripheral {
     stream: Arc<RwLock<Option<ACLStream>>>,
     connection_tx: Arc<Mutex<Sender<u16>>>,
     connection_rx: Arc<Mutex<Receiver<u16>>>,
+    message_queue: Arc<Mutex<VecDeque<ACLData>>>,
 }
 
 impl Debug for Peripheral {
@@ -88,6 +94,7 @@ impl Peripheral {
             stream: Arc::new(RwLock::new(Option::None)),
             connection_tx: Arc::new(Mutex::new(connection_tx)),
             connection_rx: Arc::new(Mutex::new(connection_rx)),
+            message_queue: Arc::new(Mutex::new(VecDeque::new())),
         }
     }
 
@@ -143,13 +150,26 @@ impl Peripheral {
                 match self.stream.try_read() {
                     Ok(stream) => {
                         stream.iter().for_each(|stream| {
+                            // first replay any messages we may have skipped during connection
+                            let mut queue = self.message_queue.lock().unwrap();
+                            while !queue.is_empty() {
+                                let msg = queue.pop_back().unwrap();
+                                if stream.handle == msg.handle {
+                                    stream.receive(&msg);
+                                }
+                            }
+
                             if stream.handle == handle {
                                 stream.receive(data);
                             }
                         });
                     }
-                    // TODO: maybe queue up these messages for once we have the stream?
-                    Err(e) => warn!("Failed to get lock for acl data packet: {}", e)
+                    Err(_e) => {
+                        // we can't access the stream right now because we're still connecting, so
+                        // we'll push the message onto a queue for now
+                        let mut queue = self.message_queue.lock().unwrap();
+                        queue.push_back(data.clone());
+                    }
                 }
             },
             _ => {
@@ -158,7 +178,7 @@ impl Peripheral {
         }
     }
 
-    fn request_by_handle(&self, handle: u16, data: &[u8], handler: Option<HandleFn>) -> Result<()> {
+    fn request_by_handle(&self, handle: u16, data: &[u8], handler: Option<RequestCallback>) -> Result<()> {
         let l = self.stream.read().unwrap();
         let stream = l.as_ref().ok_or(Error::NotConnected)?;
         let mut buf = BytesMut::with_capacity(3 + data.len());
@@ -169,7 +189,7 @@ impl Peripheral {
         Ok(())
     }
 
-    fn write_acl_packet(&self, data: &mut [u8], handler: Option<HandleFn>) -> Result<()> {
+    fn write_acl_packet(&self, data: &mut [u8], handler: Option<RequestCallback>) -> Result<()> {
         let l = self.stream.read().unwrap();
         let stream = l.as_ref().ok_or(Error::NotConnected)?;
         stream.write(data, handler);
@@ -189,9 +209,9 @@ impl Peripheral {
         let self_copy = self.clone();
         let char_copy = characteristic.clone();
 
-        stream.write(&mut *buf, Some(Box::new(move |_, data| {
-            match att::notify_response(data).to_result() {
-                Ok(resp) => {
+        stream.write(&mut *buf, Some(Box::new(move |data: Result<&[u8]>| {
+            match data.map(|d| att::notify_response(d).to_result()) {
+                Ok(Ok(resp)) => {
                     debug!("got notify response: {:?}", resp);
 
                     let use_notify = char_copy.properties.contains(CharPropFlags::NOTIFY);
@@ -216,13 +236,17 @@ impl Peripheral {
                     let mut value_buf = BytesMut::with_capacity(2);
                     value_buf.put_u16::<LittleEndian>(value);
                     self_copy.request_by_handle(resp.handle,
-                                                &*value_buf, Some(Box::new(|_, data| {
+                                                &*value_buf, Some(Box::new(|data| {
+                            let data = data.unwrap();
                             if data.len() > 0 && data[0] == ATT_OP_WRITE_RESP {
                                 debug!("Got response from notify: {:?}", data);
                             } else {
                                 warn!("Unexpected notify response: {:?}", data);
                             }
                         }))).unwrap();
+                }
+                Ok(Err(err)) => {
+                    error!("failed to send message: {:?}", err);
                 }
                 Err(err) => {
                     error!("failed to parse notify response: {:?}", err);
@@ -233,6 +257,29 @@ impl Peripheral {
         Ok(())
     }
 
+    fn wait_until_done<F, T: Clone + Send + 'static>(operation: F) -> Result<T> where F: Fn(Callback<T>) {
+        let pair = Arc::new((Mutex::new(None), Condvar::new()));
+        let pair2 = pair.clone();
+        let on_finish = Box::new(move|result: Result<T>| {
+            let &(ref lock, ref cvar) = &*pair2;
+            let mut done = lock.lock().unwrap();
+            *done = Some(result.clone());
+            cvar.notify_one();
+        });
+
+        operation(on_finish);
+
+        // wait until we're done
+        let &(ref lock, ref cvar) = &*pair;
+
+        let mut done = lock.lock().unwrap();
+        while (*done).is_none() {
+            done = cvar.wait(done).unwrap();
+        }
+
+        // TODO: this copy is avoidable
+        (*done).clone().unwrap()
+    }
 }
 
 impl ApiPeripheral for Peripheral {
@@ -365,7 +412,8 @@ impl ApiPeripheral for Peripheral {
         buf.put_u16::<LittleEndian>(GATT_CHARAC_UUID);
 
         let self_copy = self.clone();
-        let handler = Box::new(move |_: u16, data: &[u8]| {
+        let handler = Box::new(move |data: Result<&[u8]>| {
+            let data = data.unwrap();
             match att::characteristics(data).to_result() {
                 Ok(chars) => {
                     debug!("Chars: {:#?}", chars);
@@ -401,40 +449,30 @@ impl ApiPeripheral for Peripheral {
         self.write_acl_packet(&mut *buf, Some(handler))
     }
 
-    fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
-//        let pair = Arc::new((Mutex::new(None), Condvar::new()));
-//        let pair2 = pair.clone();
-//        let done = Box::new(move|error| {
-//            info!("Done: {:?}", error);
-//            let &(ref lock, ref cvar) = &*pair2;
-//            let mut done = lock.lock().unwrap();
-//            *done = Some(error);
-//            cvar.notify_one();
-//        });
+    fn command_async(&self, characteristic: &Characteristic, data: &[u8], handler: Option<CommandCallback>) {
+        let l = self.stream.read().unwrap();
+        match l.as_ref() {
+            Some(stream) => {
+                let mut buf = BytesMut::with_capacity(3 + data.len());
+                buf.put_u8(ATT_OP_WRITE_CMD);
+                buf.put_u16::<LittleEndian>(characteristic.value_handle);
+                buf.put(data);
 
-        {
-            let l = self.stream.read().unwrap();
-            let stream = l.as_ref().ok_or(Error::NotConnected)?;
-            let mut buf = BytesMut::with_capacity(3 + data.len());
-            buf.put_u8(ATT_OP_WRITE_CMD);
-            buf.put_u16::<LittleEndian>(characteristic.value_handle);
-            buf.put(data);
-
-            stream.write_cmd(&mut *buf, None); //Some(done));
+                stream.write_cmd(&mut *buf, handler);
+            }
+            None => {
+                handler.iter().for_each(|h| h(Err(Error::NotConnected)));
+            }
         }
-
-        // wait until we're done
-//        let &(ref lock, ref cvar) = &*pair;
-//        let mut done = lock.lock().unwrap();
-//        while (*done).is_none() {
-//            done = cvar.wait(done).unwrap();
-//        }
-
-        Ok(())
     }
 
+    fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
+        Peripheral::wait_until_done(|done: CommandCallback| {
+            self.command_async(characteristic, data, Some(done));
+        })
+    }
 
-    fn request(&self, characteristic: &Characteristic, data: &[u8], handler: Option<HandleFn>) -> Result<()> {
+    fn request(&self, characteristic: &Characteristic, data: &[u8], handler: Option<RequestCallback>) -> Result<()> {
         self.request_by_handle(characteristic.value_handle, data, handler)
     }
 

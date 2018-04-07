@@ -144,7 +144,7 @@ mod tests {
     }
 }
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ACLData {
     pub handle: u16,
     pub cid: u16,

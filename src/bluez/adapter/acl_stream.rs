@@ -15,12 +15,17 @@ use std::sync::mpsc::{channel, Sender, Receiver};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use bluez::protocol::hci::ACLData;
+use bluez::protocol::att;
 
 use self::StreamMessage::*;
 use api::BDAddr;
 use Error;
 use api::CommandCallback;
 use api::RequestCallback;
+use bluez::adapter::Adapter;
+use bytes::BytesMut;
+use bytes::LittleEndian;
+use bytes::BufMut;
 
 enum StreamMessage  {
     Command(Vec<u8>, Option<CommandCallback>),
@@ -40,6 +45,7 @@ impl Debug for StreamMessage {
 
 #[derive(Clone)]
 pub struct ACLStream {
+    adapter: Adapter,
     pub address: BDAddr,
     pub handle: u16,
     fd: i32,
@@ -48,10 +54,11 @@ pub struct ACLStream {
 }
 
 impl ACLStream {
-    pub fn new(address: BDAddr, handle: u16, fd: i32) -> ACLStream {
+    pub fn new(adapter: Adapter, address: BDAddr, handle: u16, fd: i32) -> ACLStream {
         info!("Creating new ACLStream for {}, {}, {}", address, handle, fd);
         let (tx, rx) = channel();
         let acl_stream = ACLStream {
+            adapter,
             address,
             handle,
             fd,
@@ -89,6 +96,7 @@ impl ACLStream {
 
     fn write_socket(&self, value: &mut [u8], command: bool,
                     receiver: &Receiver<StreamMessage>) -> Result<Vec<u8>> {
+        debug!("writing {:?}", value);
         handle_error(unsafe {
             libc::write(self.fd, value.as_mut_ptr() as *mut libc::c_void, value.len()) as i32
         })?;
@@ -128,28 +136,11 @@ impl ACLStream {
 
                 let result = self.write_socket(value, false, receiver);
                 if let &Some(ref f) = handler {
-                    match result {
-                        Ok(v) => f(Ok(&v)),
-                        Err(e) => f(Err(e))
-                    }
+                    f(result);
                 }
             },
             Data(ref value) => {
                 debug!("Received data {:?}", value);
-                if !value.is_empty() {
-                    match value[0] {
-                        ATT_OP_EXCHANGE_MTU_REQ => {
-                            // write back that we don't support it?
-                            self.write_cmd(&mut [0x01, 0x02, 0x00, 0x00, 0x06], None);
-                        }
-                        ATT_OP_VALUE_NOTIFICATION => {
-
-                        }
-                        _ => {
-                            // skip
-                        }
-                    }
-                }
             }
         }
 
@@ -171,10 +162,37 @@ impl ACLStream {
     }
 
     pub fn receive(&self, message: &ACLData) {
+        debug!("receive message: {:?}", message);
         // message.data
         // TODO: handle partial packets
         if message.cid == ATT_CID {
-            self.send(Data(message.data.to_vec()));
+            let value = message.data.to_vec();
+            if !value.is_empty() {
+                match value[0] {
+                    ATT_OP_EXCHANGE_MTU_REQ => {
+                        let request = att::mtu_request(&value).to_result().unwrap();
+                        // is the client MTU smaller than ours?
+                        if request.client_rx_mtu <= self.adapter.info.acl_mtu {
+                            debug!("sending MTU: {}", self.adapter.info.acl_mtu);
+                            // it is, send confirmation
+                            let mut buf = BytesMut::with_capacity(3);
+                            buf.put_u8(ATT_OP_EXCHANGE_MTU_RESP);
+                            buf.put_u16::<LittleEndian>(self.adapter.info.acl_mtu);
+                            self.write_cmd(&mut buf, None);
+                        } else {
+                            // TODO: reduce our MTU to client's
+                            error!("client's MTU is larger than ours");
+                            self.write_cmd(&mut [0x01, 0x02, 0x00, 0x00, 0x06], None);
+                        }
+                    }
+                    ATT_OP_VALUE_NOTIFICATION => {
+                        debug!("value notification: {:?}", value);
+                    }
+                    _ => {
+                        self.send(Data(value));
+                    }
+                }
+            }
         }
     }
 }

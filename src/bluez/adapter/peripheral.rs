@@ -99,7 +99,6 @@ impl Peripheral {
     }
 
     pub fn handle_device_message(&self, message: &hci::Message) {
-        debug!("got device message: {:?}", message);
         match message {
             &hci::Message::LEAdvertisingReport(ref info) => {
                 assert_eq!(self.address, info.bdaddr, "received message for wrong device");
@@ -145,21 +144,12 @@ impl Peripheral {
                 self.connection_tx.lock().unwrap().send(info.handle.clone()).unwrap();
             }
             &hci::Message::ACLDataPacket(ref data) => {
-                debug!("got data packet for {}", self.address);
                 let handle = data.handle.clone();
                 match self.stream.try_read() {
                     Ok(stream) => {
                         stream.iter().for_each(|stream| {
-                            // first replay any messages we may have skipped during connection
-                            let mut queue = self.message_queue.lock().unwrap();
-                            while !queue.is_empty() {
-                                let msg = queue.pop_back().unwrap();
-                                if stream.handle == msg.handle {
-                                    stream.receive(&msg);
-                                }
-                            }
-
                             if stream.handle == handle {
+                                debug!("got data packet for {}: {:?}", self.address, data);
                                 stream.receive(data);
                             }
                         });
@@ -178,15 +168,22 @@ impl Peripheral {
         }
     }
 
-    fn request_by_handle(&self, handle: u16, data: &[u8], handler: Option<RequestCallback>) -> Result<()> {
+    fn request_by_handle(&self, handle: u16, data: &[u8], handler: Option<RequestCallback>) {
         let l = self.stream.read().unwrap();
-        let stream = l.as_ref().ok_or(Error::NotConnected)?;
-        let mut buf = BytesMut::with_capacity(3 + data.len());
-        buf.put_u8(ATT_OP_WRITE_REQ);
-        buf.put_u16::<LittleEndian>(handle);
-        buf.put(data);
-        stream.write(&mut *buf, handler);
-        Ok(())
+        match l.as_ref().ok_or(Error::NotConnected) {
+            Ok(stream) => {
+                let mut buf = BytesMut::with_capacity(3 + data.len());
+                buf.put_u8(ATT_OP_WRITE_REQ);
+                buf.put_u16::<LittleEndian>(handle);
+                buf.put(data);
+                stream.write(&mut *buf, handler);
+            }
+            Err(err) => {
+                if let Some(h) = handler {
+                    h(Err(err));
+                }
+            }
+        }
     }
 
     fn write_acl_packet(&self, data: &mut [u8], handler: Option<RequestCallback>) -> Result<()> {
@@ -209,55 +206,57 @@ impl Peripheral {
         let self_copy = self.clone();
         let char_copy = characteristic.clone();
 
-        stream.write(&mut *buf, Some(Box::new(move |data: Result<&[u8]>| {
-            match data.map(|d| att::notify_response(d).to_result()) {
-                Ok(Ok(resp)) => {
-                    debug!("got notify response: {:?}", resp);
+        stream.write(&mut *buf, Some(Box::new(move |data: Result<Vec<u8>>| {
+            match data {
+                Ok(data) => {
+                    match att::notify_response(&data).to_result() {
+                        Ok(resp) => {
+                            let use_notify = char_copy.properties.contains(CharPropFlags::NOTIFY);
+                            let use_indicate = char_copy.properties.contains(CharPropFlags::INDICATE);
 
-                    let use_notify = char_copy.properties.contains(CharPropFlags::NOTIFY);
-                    let use_indicate = char_copy.properties.contains(CharPropFlags::INDICATE);
+                            let mut value = resp.value;
 
-                    let mut value = resp.value;
+                            if enable {
+                                if use_notify {
+                                    value |= 0x0001;
+                                } else if use_indicate {
+                                    value |= 0x0002;
+                                }
+                            } else {
+                                if use_notify {
+                                    value &= 0xFFFE;
+                                } else if use_indicate {
+                                    value &= 0xFFFD;
+                                }
+                            }
 
-                    if enable {
-                        if use_notify {
-                            value |= 0x0001;
-                        } else if use_indicate {
-                            value |= 0x0002;
+                            let mut value_buf = BytesMut::with_capacity(2);
+                            value_buf.put_u16::<LittleEndian>(value);
+                            self_copy.request_by_handle(resp.handle,
+                                                        &*value_buf, Some(Box::new(|data| {
+                                    let data = data.unwrap();
+                                    if data.len() > 0 && data[0] == ATT_OP_WRITE_RESP {
+                                        debug!("Got response from notify: {:?}", data);
+                                    } else {
+                                        warn!("Unexpected notify response: {:?}", data);
+                                    }
+                                })));
                         }
-                    } else {
-                        if use_notify {
-                            value &= 0xFFFE;
-                        } else if use_indicate {
-                            value &= 0xFFFD;
+                        Err(err) => {
+                            error!("failed to parse notify response: {:?}", err);
                         }
                     }
-
-                    let mut value_buf = BytesMut::with_capacity(2);
-                    value_buf.put_u16::<LittleEndian>(value);
-                    self_copy.request_by_handle(resp.handle,
-                                                &*value_buf, Some(Box::new(|data| {
-                            let data = data.unwrap();
-                            if data.len() > 0 && data[0] == ATT_OP_WRITE_RESP {
-                                debug!("Got response from notify: {:?}", data);
-                            } else {
-                                warn!("Unexpected notify response: {:?}", data);
-                            }
-                        }))).unwrap();
-                }
-                Ok(Err(err)) => {
-                    error!("failed to send message: {:?}", err);
                 }
                 Err(err) => {
-                    error!("failed to parse notify response: {:?}", err);
+                    error!("failed to send message: {:?}", err);
                 }
-            };
+            }
         })));
 
         Ok(())
     }
 
-    fn wait_until_done<F, T: Clone + Send + 'static>(operation: F) -> Result<T> where F: Fn(Callback<T>) {
+    fn wait_until_done<F, T: Clone + Send + 'static>(operation: F) -> Result<T> where F: for<'a> Fn(Callback<T>) {
         let pair = Arc::new((Mutex::new(None), Condvar::new()));
         let pair2 = pair.clone();
         let on_finish = Box::new(move|result: Result<T>| {
@@ -298,9 +297,8 @@ impl ApiPeripheral for Peripheral {
     }
 
     fn is_connected(&self) -> bool {
-//        let l = self.stream.read().unwrap();
-//        l.is_some()
-        true
+        let l = self.stream.try_read();
+        return l.is_ok() && l.unwrap().is_some();
     }
 
     fn connect(&self) -> Result<()> {
@@ -366,7 +364,19 @@ impl ApiPeripheral for Peripheral {
         match self.connection_rx.lock().unwrap().recv_timeout(timeout) {
             Ok(handle) => {
                 // create the acl stream that will communicate with the device
-                *stream = Some(ACLStream::new(self.address, handle, fd));
+                let s = ACLStream::new(self.c_adapter.adapter.clone(),
+                                       self.address, handle, fd);
+
+                // replay missed messages
+                let mut queue = self.message_queue.lock().unwrap();
+                while !queue.is_empty() {
+                    let msg = queue.pop_back().unwrap();
+                    if s.handle == msg.handle {
+                        s.receive(&msg);
+                    }
+                }
+
+                *stream = Some(s);
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 return Err(Error::TimedOut(timeout.clone()));
@@ -405,6 +415,7 @@ impl ApiPeripheral for Peripheral {
     }
 
     fn discover_characteristics_in_range(&self, start: u16, end: u16) -> Result<()> {
+        info!("discovering chars in range [{}, {}]", start, end);
         let mut buf = BytesMut::with_capacity(7);
         buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
         buf.put_u16::<LittleEndian>(start);
@@ -412,33 +423,41 @@ impl ApiPeripheral for Peripheral {
         buf.put_u16::<LittleEndian>(GATT_CHARAC_UUID);
 
         let self_copy = self.clone();
-        let handler = Box::new(move |data: Result<&[u8]>| {
+        let handler = Box::new(move |data: Result<Vec<u8>>| {
             let data = data.unwrap();
-            match att::characteristics(data).to_result() {
-                Ok(chars) => {
-                    debug!("Chars: {:#?}", chars);
-                    let mut cur_chars = self_copy.characteristics.lock().unwrap();
-                    let mut next = None;
-                    let mut char_set = cur_chars.clone();
-                    chars.into_iter().for_each(|mut c| {
-                        c.end_handle = end;
-                        next = Some(c.start_handle);
-                        char_set.insert(c);
-                    });
+            match att::characteristics(&data).to_result() {
+                Ok(result) => {
+                    match result {
+                        Ok(chars) => {
+                            info!("Chars: {:#?}", chars);
+                            let mut cur_chars = self_copy.characteristics.lock().unwrap();
+                            let mut next = None;
+                            let mut char_set = cur_chars.clone();
+                            chars.into_iter().for_each(|mut c| {
+                                c.end_handle = end;
+                                next = Some(c.start_handle);
+                                char_set.insert(c);
+                            });
 
-                    // fix the end handles
-                    let mut prev = 0xffff;
-                    *cur_chars = char_set.into_iter().rev().map(|mut c| {
-                        c.end_handle = prev;
-                        prev = c.start_handle - 1;
-                        c
-                    }).collect();
+                            // fix the end handles
+                            let mut prev = 0xffff;
+                            *cur_chars = char_set.into_iter().rev().map(|mut c| {
+                                c.end_handle = prev;
+                                prev = c.start_handle - 1;
+                                c
+                            }).collect();
 
-                    next.map(|next| {
-                        if next < end {
-                            self_copy.discover_characteristics_in_range(next + 1, end).unwrap();
+                            next.map(|next| {
+                                if next < end {
+                                    self_copy.discover_characteristics_in_range(next + 1, end).unwrap();
+                                }
+                            });
                         }
-                    });
+                        Err(err) => {
+                            // this generally means we should stop iterating
+                            debug!("got error: {:?}", err);
+                        }
+                    }
                 }
                 Err(err) => {
                     error!("failed to parse chars: {:?}", err);
@@ -472,8 +491,14 @@ impl ApiPeripheral for Peripheral {
         })
     }
 
-    fn request(&self, characteristic: &Characteristic, data: &[u8], handler: Option<RequestCallback>) -> Result<()> {
-        self.request_by_handle(characteristic.value_handle, data, handler)
+    fn request_async(&self, characteristic: &Characteristic, data: &[u8], handler: Option<RequestCallback>) {
+        self.request_by_handle(characteristic.value_handle, data, handler);
+    }
+
+    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<Vec<u8>> {
+        Peripheral::wait_until_done(|done: RequestCallback| {
+            self.request_by_handle(characteristic.value_handle, &data, Some(done));
+        })
     }
 
     fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {

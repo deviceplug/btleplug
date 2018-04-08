@@ -7,13 +7,13 @@ use std::ffi::CStr;
 use nom::IResult;
 use bytes::{BytesMut, BufMut, LittleEndian};
 
-use std::collections::{HashSet, HashMap, BTreeSet};
+use std::collections::{HashSet, HashMap};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 use ::Result;
-use api::{Characteristic, Event, BDAddr, AddressType, Host};
+use api::{Event, BDAddr, Host};
 
 use bluez::util::handle_error;
 use bluez::protocol::hci;
@@ -32,7 +32,7 @@ impl Clone for HCIDevReq {
     fn clone(&self) -> Self { *self }
 }
 
-#[derive(Copy)]
+#[derive(Copy, Debug)]
 #[repr(C)]
 pub struct HCIDevStats {
     pub err_rx : u32,
@@ -68,7 +68,7 @@ impl HCIDevStats {
     }
 }
 
-#[derive(Copy)]
+#[derive(Copy, Debug)]
 #[repr(C)]
 pub struct HCIDevInfo {
     pub dev_id : u16,
@@ -170,18 +170,6 @@ impl AdapterState {
 
         set
     }
-}
-
-#[derive(Debug, Default)]
-struct DeviceState {
-    address: BDAddr,
-    address_type: AddressType,
-    local_name: Option<String>,
-    tx_power_level: Option<i8>,
-    manufacturer_data: Option<Vec<u8>>,
-    discovery_count: u32,
-    has_scan_response: bool,
-    characteristics: BTreeSet<Characteristic>,
 }
 
 #[derive(Clone)]
@@ -428,6 +416,7 @@ pub struct Adapter {
     pub addr: BDAddr,
     pub typ: AdapterType,
     pub states: HashSet<AdapterState>,
+    pub info: HCIDevInfo,
 }
 
 // #define HCIGETDEVINFO	_IOR('H', 211, int)
@@ -437,12 +426,14 @@ static HCI_GET_DEV_MAGIC: usize = (2u32 << 0i32 + 8i32 + 8i32 + 14i32 |
 
 impl Adapter {
     pub fn from_device_info(di: &HCIDevInfo) -> Adapter {
+        info!("DevInfo: {:?}", di);
         Adapter {
             name: String::from(unsafe { CStr::from_ptr(di.name.as_ptr()).to_str().unwrap() }),
             dev_id: 0,
             addr: di.bdaddr,
             typ: AdapterType::parse((di.type_ & 0x30) >> 4),
             states: AdapterState::parse(di.flags),
+            info: di.clone(),
         }
     }
 

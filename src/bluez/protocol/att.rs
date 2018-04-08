@@ -15,7 +15,7 @@ mod tests {
         let buf = [9, 7, 2, 0, 2, 3, 0, 0, 42, 4, 0, 2, 5, 0, 1, 42, 6, 0, 10, 7, 0, 2, 42];
         assert_eq!(characteristics(&buf), IResult::Done(
             &[][..],
-            vec![
+            Ok(vec![
                 Characteristic {
                     start_handle: 2,
                     value_handle: 3,
@@ -38,6 +38,19 @@ mod tests {
                     properties: CharPropFlags::READ | CharPropFlags::WRITE
                 },
             ]
+        )))
+    }
+
+    #[test]
+    fn test_error() {
+        let buf = [1, 8, 32, 0, 10];
+        assert_eq!(characteristics(&buf), IResult::Done(
+            &[][..],
+            Err(ErrorResponse {
+                request_opcode: 0x08,
+                handle: 0x20,
+                error_code: 0x0a,
+            })
         ))
     }
 }
@@ -60,6 +73,36 @@ named!(pub notify_response<&[u8], NotifyResponse>,
       )
    ));
 
+#[derive(Debug, PartialEq)]
+pub struct ExchangeMTURequest {
+    pub client_rx_mtu: u16,
+}
+
+named!(pub mtu_request<&[u8], ExchangeMTURequest>,
+    do_parse!(
+      op: tag!(&[ATT_OP_EXCHANGE_MTU_REQ]) >>
+      client_rx_mtu: le_u16 >>
+      (
+        ExchangeMTURequest { client_rx_mtu }
+      )
+    ));
+
+#[derive(Debug, PartialEq)]
+pub struct ErrorResponse {
+    request_opcode: u8,
+    handle: u16,
+    error_code: u8,
+}
+
+named!(pub error_response<&[u8], ErrorResponse>,
+    do_parse!(
+        request_opcode: le_u8 >>
+        handle: le_u16 >>
+        error_code: le_u8 >>
+        (
+           ErrorResponse { request_opcode, handle, error_code }
+        )
+));
 
 fn characteristic(i: &[u8], b16_uuid: bool) -> IResult<&[u8], Characteristic> {
     let (i, start_handle) = try_parse!(i, le_u16);
@@ -80,19 +123,22 @@ fn characteristic(i: &[u8], b16_uuid: bool) -> IResult<&[u8], Characteristic> {
     })
 }
 
-pub fn characteristics(i: &[u8]) -> IResult<&[u8], Vec<Characteristic>> {
+pub fn characteristics(i: &[u8]) -> IResult<&[u8], Result<Vec<Characteristic>, ErrorResponse>> {
     let (i, opcode) = try_parse!(i, le_u8);
 
     let (i, result) = match opcode {
+        ATT_OP_ERROR_RESP => {
+            try_parse!(i, map!(error_response, |r| Err(r)))
+        }
         ATT_OP_READ_BY_TYPE_RESP => {
             let (i, rec_len) = try_parse!(i, le_u8);
             let num = i.len() / rec_len as usize;
             let b16_uuid = rec_len == 7;
-            try_parse!(i, count!(apply!(characteristic, b16_uuid), num))
+            try_parse!(i, map!(count!(apply!(characteristic, b16_uuid), num), |r| Ok(r)))
         }
         x => {
-            warn!("unhandled characteristics op type {}", x);
-            (&[][..], vec![])
+            warn!("unhandled characteristics op type {} for {:?}", x, i);
+            (&[][..], Ok(vec![]))
         }
     };
 

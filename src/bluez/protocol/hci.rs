@@ -178,6 +178,7 @@ bitflags! {
 pub enum Message {
     LEAdvertisingReport(LEAdvertisingInfo),
     LEConnComplete(LEConnInfo),
+    LEConnUpdate(LEConnUpdateInfo),
     LEReadRemoteUsedFeaturesComplete {
         status: HCIStatus,
         handle: u16,
@@ -257,6 +258,16 @@ pub struct LEConnInfo {
     pub supervision_timeout: u16,
     pub master_clock_accuracy: u8,
 }
+
+#[derive(Debug, PartialEq)]
+pub struct LEConnUpdateInfo {
+    pub status: HCIStatus,
+    pub handle: u16,
+    pub interval: u16,
+    pub latency: u16,
+    pub supervision_timeout: u16,
+}
+
 
 enum_from_primitive! {
 #[derive(Debug, PartialEq)]
@@ -548,6 +559,20 @@ named!(le_read_remote_used_features_complete<&[u8], Message>,
     )
 );
 
+named!(le_conn_update_complete<&[u8], Message>,
+    do_parse!(
+        status: map_opt!(le_u8, |b| HCIStatus::from_u8(b)) >>
+        handle: le_u16 >>
+        interval: le_u16 >>
+        latency: le_u16 >>
+        supervision_timeout: le_u16 >>
+        (
+          Message::LEConnUpdate(LEConnUpdateInfo {
+            status, handle, interval, latency, supervision_timeout
+          })
+        )
+));
+
 fn le_meta_event(i: &[u8]) -> IResult<&[u8], Message> {
     let (i, le_type) = try_parse!(i, map_opt!(le_u8, |b| LEEventType::from_u8(b)));
     let (i, result) = match le_type {
@@ -560,9 +585,8 @@ fn le_meta_event(i: &[u8]) -> IResult<&[u8], Message> {
         LEEventType::LEReadRemoteUsedFeaturesComplete => {
             try_parse!(i, le_read_remote_used_features_complete)
         }
-        _ => {
-            warn!("Unhandled le_type {:?}", le_type);
-            return IResult::Error(Err::Code(ErrorKind::Custom(1)))
+        LEEventType::LEConnUpdateComplete => {
+            try_parse!(i, le_conn_update_complete)
         }
     };
     IResult::Done(i, result)

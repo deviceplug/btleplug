@@ -57,7 +57,7 @@ impl Debug for BDAddr {
 
 pub type Callback<T> = Box<Fn(Result<T>) + Send>;
 pub type CommandCallback = Callback<()>;
-pub type RequestCallback = Box<Fn(Result<&[u8]>) + Send>;
+pub type RequestCallback = Callback<Vec<u8>>;
 
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
@@ -140,11 +140,11 @@ pub trait Peripheral: Send + Sync + Debug {
     fn discover_characteristics(&self) -> Result<()>;
     fn discover_characteristics_in_range(&self, start: u16, end: u16) -> Result<()>;
 
-    fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()>;
     fn command_async(&self, characteristic: &Characteristic, data: &[u8], handler: Option<CommandCallback>);
+    fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()>;
 
-    fn request(&self, characteristic: &Characteristic, data: &[u8],
-               handler: Option<RequestCallback>) -> Result<()>;
+    fn request_async(&self, characteristic: &Characteristic, data: &[u8], handler: Option<RequestCallback>);
+    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<Vec<u8>>;
 
     fn subscribe(&self, characteristic: &Characteristic) -> Result<()>;
     fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()>;

@@ -23,10 +23,13 @@ pub const HCI_OE_USER_ENDED_CONNECTION: u8 = 0x13;
 pub const SOL_HCI: i32 = 0;
 
 pub const ATT_CID: u16 = 4;
+pub const ATT_OP_ERROR_RESP: u8 = 0x01;
 pub const ATT_OP_EXCHANGE_MTU_REQ: u8 = 0x02;
+pub const ATT_OP_EXCHANGE_MTU_RESP: u8 = 0x03;
 pub const ATT_OP_READ_BY_TYPE_REQ: u8 = 0x08;
 pub const ATT_OP_READ_BY_TYPE_RESP: u8 = 0x09;
 pub const ATT_OP_READ_BY_GROUP_REQ: u8 = 0x10;
+pub const ATT_OP_READ_BY_GROUP_RESP: u8 = 0x11;
 pub const ATT_OP_WRITE_REQ: u8 = 0x12;
 pub const ATT_OP_WRITE_RESP: u8 = 0x13;
 pub const ATT_OP_VALUE_NOTIFICATION: u8 = 0x1b;

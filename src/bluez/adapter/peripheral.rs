@@ -34,6 +34,8 @@ use bluez::protocol::hci::ACLData;
 use std::sync::Condvar;
 use api::RequestCallback;
 use api::CommandCallback;
+use api::UUID;
+use api::UUID::B16;
 
 #[derive(Copy, Debug)]
 #[repr(C)]
@@ -168,15 +170,11 @@ impl Peripheral {
         }
     }
 
-    fn request_by_handle(&self, handle: u16, data: &[u8], handler: Option<RequestCallback>) {
+    fn request_raw_async(&self, data: &mut[u8], handler: Option<RequestCallback>) {
         let l = self.stream.read().unwrap();
         match l.as_ref().ok_or(Error::NotConnected) {
             Ok(stream) => {
-                let mut buf = BytesMut::with_capacity(3 + data.len());
-                buf.put_u8(ATT_OP_WRITE_REQ);
-                buf.put_u16::<LittleEndian>(handle);
-                buf.put(data);
-                stream.write(&mut *buf, handler);
+                stream.write(&mut *data, handler);
             }
             Err(err) => {
                 if let Some(h) = handler {
@@ -186,11 +184,20 @@ impl Peripheral {
         }
     }
 
-    fn write_acl_packet(&self, data: &mut [u8], handler: Option<RequestCallback>) -> Result<()> {
-        let l = self.stream.read().unwrap();
-        let stream = l.as_ref().ok_or(Error::NotConnected)?;
-        stream.write(data, handler);
-        Ok(())
+    fn request_raw(&self, data: &mut [u8]) -> Result<Vec<u8>> {
+        Peripheral::wait_until_done(|done: RequestCallback| {
+            // TODO this copy can be avoided
+            let mut data = data.to_vec();
+            self.request_raw_async(&mut data, Some(done));
+        })
+    }
+
+    fn request_by_handle(&self, handle: u16, data: &[u8], handler: Option<RequestCallback>) {
+        let mut buf = BytesMut::with_capacity(3 + data.len());
+        buf.put_u8(ATT_OP_WRITE_REQ);
+        buf.put_u16::<LittleEndian>(handle);
+        buf.put(data);
+        self.request_raw_async(&mut buf, handler);
     }
 
     fn notify(&self, characteristic: &Characteristic, enable: bool) -> Result<()> {
@@ -198,13 +205,12 @@ impl Peripheral {
         let l = self.stream.read().unwrap();
         let stream = l.as_ref().ok_or(Error::NotConnected)?;
 
-        let mut buf = BytesMut::with_capacity(7);
-        buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
-        buf.put_u16::<LittleEndian>(characteristic.start_handle);
-        buf.put_u16::<LittleEndian>(characteristic.end_handle);
-        buf.put_u16::<LittleEndian>(GATT_CLIENT_CHARAC_CFG_UUID);
-        let self_copy = self.clone();
+        let mut buf = att::read_by_type_req(characteristic.start_handle,
+                                            characteristic.end_handle,
+                                            B16(GATT_CLIENT_CHARAC_CFG_UUID));
+
         let char_copy = characteristic.clone();
+        let self_copy = self.clone();
 
         stream.write(&mut *buf, Some(Box::new(move |data: Result<Vec<u8>>| {
             match data {
@@ -410,62 +416,63 @@ impl ApiPeripheral for Peripheral {
         Ok(())
     }
 
-    fn discover_characteristics(&self) -> Result<()> {
+    fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
         self.discover_characteristics_in_range(0x0001, 0xFFFF)
     }
 
-    fn discover_characteristics_in_range(&self, start: u16, end: u16) -> Result<()> {
-        info!("discovering chars in range [{}, {}]", start, end);
-        let mut buf = BytesMut::with_capacity(7);
-        buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
-        buf.put_u16::<LittleEndian>(start);
-        buf.put_u16::<LittleEndian>(end);
-        buf.put_u16::<LittleEndian>(GATT_CHARAC_UUID);
+    fn discover_characteristics_in_range(&self, start: u16, end: u16) -> Result<Vec<Characteristic>> {
+        let mut results = vec![];
+        let mut start = start;
+        loop {
+            info!("discovering chars in range [{}, {}]", start, end);
 
-        let self_copy = self.clone();
-        let handler = Box::new(move |data: Result<Vec<u8>>| {
-            let data = data.unwrap();
+            let mut buf = att::read_by_type_req(start, end, B16(GATT_CHARAC_UUID));
+            let data = self.request_raw(&mut buf)?;
+
             match att::characteristics(&data).to_result() {
                 Ok(result) => {
                     match result {
                         Ok(chars) => {
                             info!("Chars: {:#?}", chars);
-                            let mut cur_chars = self_copy.characteristics.lock().unwrap();
-                            let mut next = None;
-                            let mut char_set = cur_chars.clone();
-                            chars.into_iter().for_each(|mut c| {
-                                c.end_handle = end;
-                                next = Some(c.start_handle);
-                                char_set.insert(c);
-                            });
 
-                            // fix the end handles
-                            let mut prev = 0xffff;
-                            *cur_chars = char_set.into_iter().rev().map(|mut c| {
-                                c.end_handle = prev;
-                                prev = c.start_handle - 1;
-                                c
-                            }).collect();
+                            // TODO this copy can be removed
+                            results.extend(chars.clone());
 
-                            next.map(|next| {
-                                if next < end {
-                                    self_copy.discover_characteristics_in_range(next + 1, end).unwrap();
+                            if let Some(ref last) = chars.iter().last() {
+                                info!("last char: {}", last);
+                                if last.start_handle < end - 1 {
+                                    start = last.start_handle + 1;
+                                    continue;
                                 }
-                            });
+                            }
+                            break;
                         }
                         Err(err) => {
                             // this generally means we should stop iterating
                             debug!("got error: {:?}", err);
+                            break;
                         }
                     }
                 }
                 Err(err) => {
                     error!("failed to parse chars: {:?}", err);
+                    return Err(Error::Other(format!("failed to parse characteristics response {:?}",
+                                                    err)));
                 }
-            };
-        });
+            }
+        }
 
-        self.write_acl_packet(&mut *buf, Some(handler))
+        // fix the end handles (we don't get them directly from device, so we have to infer)
+        for i in 0..results.len() {
+            (*results.get_mut(i).unwrap()).end_handle =
+                results.get(i + 1).map(|c| c.end_handle).unwrap_or(end);
+        }
+
+        // update our cache
+        let mut lock = self.characteristics.lock().unwrap();
+        results.iter().for_each(|c| { lock.insert(c.clone());});
+
+        Ok(results)
     }
 
     fn command_async(&self, characteristic: &Characteristic, data: &[u8], handler: Option<CommandCallback>) {
@@ -500,6 +507,19 @@ impl ApiPeripheral for Peripheral {
             self.request_by_handle(characteristic.value_handle, &data, Some(done));
         })
     }
+
+    fn read_by_type_async(&self, characteristic: &Characteristic, uuid: UUID,
+                          handler: Option<RequestCallback>) {
+        let mut buf = att::read_by_type_req(characteristic.start_handle, characteristic.end_handle, uuid);
+        self.request_raw_async(&mut buf, handler);
+    }
+
+    fn read_by_type(&self, characteristic: &Characteristic, uuid: UUID) -> Result<Vec<u8>> {
+        Peripheral::wait_until_done(|done: RequestCallback| {
+            self.read_by_type_async(characteristic, uuid, Some(done));
+        })
+    }
+
 
     fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
         self.notify(characteristic, true)

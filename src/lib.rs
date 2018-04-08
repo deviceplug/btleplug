@@ -44,7 +44,7 @@ pub enum Error {
     TimedOut(Duration),
 
     #[fail(display = "{}", _0)]
-    Other(String)
+    Other(String),
 }
 
 // Rumble Result type

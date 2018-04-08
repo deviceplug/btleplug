@@ -3,6 +3,8 @@ use std::fmt::{Display, Formatter, Debug};
 
 use ::Result;
 use std::collections::BTreeSet;
+use api::UUID::B16;
+use api::UUID::B128;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum AddressType {
@@ -31,14 +33,10 @@ impl AddressType {
     }
 }
 
-#[derive(Copy, Hash, Eq, PartialEq, Default)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Default)]
 #[repr(C)]
 pub struct BDAddr {
     pub address: [ u8 ; 6usize ]
-}
-
-impl Clone for BDAddr {
-    fn clone(&self) -> Self { *self }
 }
 
 impl Display for BDAddr {
@@ -60,17 +58,26 @@ pub type CommandCallback = Callback<()>;
 pub type RequestCallback = Callback<Vec<u8>>;
 
 
-#[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
-pub enum CharacteristicUUID {
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone)]
+pub enum UUID {
     B16(u16),
     B128([u8; 16]),
 }
 
-impl Display for CharacteristicUUID {
+impl UUID {
+    pub fn size(&self) -> usize {
+        match *self {
+            B16(_) => 2,
+            B128(_) => 16,
+        }
+    }
+}
+
+impl Display for UUID {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
-            CharacteristicUUID::B16(u) => write!(f, "{:02X}:{:02X}", u >> 8, u & 0xFF),
-            CharacteristicUUID::B128(a) => {
+            B16(u) => write!(f, "{:02X}:{:02X}", u >> 8, u & 0xFF),
+            B128(a) => {
                 for i in (1..a.len()).rev() {
                     write!(f, "{:02X}:", a[i])?;
                 }
@@ -80,7 +87,7 @@ impl Display for CharacteristicUUID {
     }
 }
 
-impl Debug for CharacteristicUUID {
+impl Debug for UUID {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         (self as &Display).fmt(f)
     }
@@ -104,7 +111,7 @@ pub struct Characteristic {
     pub start_handle: u16,
     pub end_handle: u16,
     pub value_handle: u16,
-    pub uuid: CharacteristicUUID,
+    pub uuid: UUID,
     pub properties: CharPropFlags,
 }
 
@@ -137,14 +144,21 @@ pub trait Peripheral: Send + Sync + Debug {
     fn connect(&self) -> Result<()>;
     fn disconnect(&self) -> Result<()>;
 
-    fn discover_characteristics(&self) -> Result<()>;
-    fn discover_characteristics_in_range(&self, start: u16, end: u16) -> Result<()>;
+    fn discover_characteristics(&self) -> Result<Vec<Characteristic>>;
+    fn discover_characteristics_in_range(&self, start: u16, end: u16) -> Result<Vec<Characteristic>>;
 
     fn command_async(&self, characteristic: &Characteristic, data: &[u8], handler: Option<CommandCallback>);
     fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()>;
 
-    fn request_async(&self, characteristic: &Characteristic, data: &[u8], handler: Option<RequestCallback>);
-    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<Vec<u8>>;
+    fn request_async(&self, characteristic: &Characteristic,
+                     data: &[u8], handler: Option<RequestCallback>);
+    fn request(&self, characteristic: &Characteristic,
+               data: &[u8]) -> Result<Vec<u8>>;
+
+    fn read_by_type_async(&self, characteristic: &Characteristic,
+                          uuid: UUID, handler: Option<RequestCallback>);
+    fn read_by_type(&self, characteristic: &Characteristic,
+                    uuid: UUID) -> Result<Vec<u8>>;
 
     fn subscribe(&self, characteristic: &Characteristic) -> Result<()>;
     fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()>;

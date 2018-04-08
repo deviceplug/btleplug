@@ -1,9 +1,11 @@
 use nom::{le_u8, le_u16, IResult};
 
-use ::api::{Characteristic, CharacteristicUUID, CharPropFlags};
+use ::api::{Characteristic, UUID, CharPropFlags};
 
 use bluez::constants::*;
 use bluez::protocol::*;
+use bytes::{BytesMut, BufMut};
+use bytes::LittleEndian;
 
 #[cfg(test)]
 mod tests {
@@ -20,21 +22,21 @@ mod tests {
                     start_handle: 2,
                     value_handle: 3,
                     end_handle: 0xFFFF,
-                    uuid: CharacteristicUUID::B16(0x2A00),
+                    uuid: UUID::B16(0x2A00),
                     properties: CharPropFlags::READ
                 },
                 Characteristic {
                     start_handle: 4,
                     value_handle: 5,
                     end_handle: 0xFFFF,
-                    uuid: CharacteristicUUID::B16(0x2A01),
+                    uuid: UUID::B16(0x2A01),
                     properties: CharPropFlags::READ
                 },
                 Characteristic {
                     start_handle: 6,
                     value_handle: 7,
                     end_handle: 0xFFFF,
-                    uuid: CharacteristicUUID::B16(0x2A02),
+                    uuid: UUID::B16(0x2A02),
                     properties: CharPropFlags::READ | CharPropFlags::WRITE
                 },
             ]
@@ -109,9 +111,9 @@ fn characteristic(i: &[u8], b16_uuid: bool) -> IResult<&[u8], Characteristic> {
     let (i, properties) = try_parse!(i, le_u8);
     let (i, value_handle) = try_parse!(i, le_u16);
     let (i, uuid) = if b16_uuid {
-        try_parse!(i, map!(le_u16, |b| CharacteristicUUID::B16(b)))
+        try_parse!(i, map!(le_u16, |b| UUID::B16(b)))
     } else {
-        try_parse!(i, map!(parse_uuid_128, |b| CharacteristicUUID::B128(b)))
+        try_parse!(i, map!(parse_uuid_128, |b| UUID::B128(b)))
     };
 
     IResult::Done(i, Characteristic {
@@ -145,3 +147,14 @@ pub fn characteristics(i: &[u8]) -> IResult<&[u8], Result<Vec<Characteristic>, E
     IResult::Done(i, result)
 }
 
+pub fn read_by_type_req(start_handle: u16, end_handle: u16, uuid: UUID) -> Vec<u8> {
+    let mut buf = BytesMut::with_capacity(3 + uuid.size());
+    buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
+    buf.put_u16::<LittleEndian>(start_handle);
+    buf.put_u16::<LittleEndian>(end_handle);
+    match uuid {
+        UUID::B16(u) => buf.put_u16::<LittleEndian>(u),
+        UUID::B128(u) => buf.put_slice(&u),
+    }
+    buf.to_vec()
+}

@@ -1,6 +1,6 @@
 use nom::{le_u8, le_u16, IResult};
 
-use ::api::{Characteristic, UUID, CharPropFlags};
+use ::api::{Characteristic, UUID, CharPropFlags, ValueNotification};
 
 use bluez::constants::*;
 use bluez::protocol::*;
@@ -103,6 +103,16 @@ named!(pub error_response<&[u8], ErrorResponse>,
         error_code: le_u8 >>
         (
            ErrorResponse { request_opcode, handle, error_code }
+        )
+));
+
+named!(pub value_notification<&[u8], ValueNotification>,
+    do_parse!(
+        op: tag!(&[ATT_OP_VALUE_NOTIFICATION]) >>
+        handle: le_u16 >>
+        value: many1!(le_u8) >>
+        (
+           ValueNotification { handle, value }
         )
 ));
 

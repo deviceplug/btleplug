@@ -393,7 +393,8 @@ pub enum CommandType {
 
     Disconnect = 0x0406,
 
-    AddDeviceToWhiteList = 0x2011,
+    LEAddDeviceToWhiteList = 0x2011,
+    LERemoveDeviceFromWhiteList = 0x2012,
     LEReadRemoteUsedFeatures = 0x2016,
 }}
 

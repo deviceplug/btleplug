@@ -26,6 +26,7 @@ use bluez::adapter::Adapter;
 use bytes::BytesMut;
 use bytes::LittleEndian;
 use bytes::BufMut;
+use api::NotificationHandler;
 
 enum StreamMessage  {
     Command(Vec<u8>, Option<CommandCallback>),
@@ -51,6 +52,7 @@ pub struct ACLStream {
     fd: i32,
     should_stop: Arc<AtomicBool>,
     sender: Arc<Mutex<Sender<StreamMessage>>>,
+    notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
 }
 
 impl ACLStream {
@@ -64,6 +66,7 @@ impl ACLStream {
             fd,
             should_stop: Arc::new(AtomicBool::new(false)),
             sender: Arc::new(Mutex::new(tx)),
+            notification_handlers: Arc::new(Mutex::new(vec![])),
         };
 
         {
@@ -80,7 +83,7 @@ impl ACLStream {
                             continue;
                         }
                         Err(e) => {
-                            panic!("Unhandled error {}", e);
+                            error!("Unhandled error {}", e);
                         }
                     }
                 }
@@ -161,6 +164,11 @@ impl ACLStream {
         self.send(Command(data.to_owned(), on_done));
     }
 
+    pub fn on_notification(&self, handler: NotificationHandler) {
+        let mut list = self.notification_handlers.lock().unwrap();
+        list.push(handler);
+    }
+
     pub fn receive(&self, message: &ACLData) {
         debug!("receive message: {:?}", message);
         // message.data
@@ -187,6 +195,15 @@ impl ACLStream {
                     }
                     ATT_OP_VALUE_NOTIFICATION => {
                         debug!("value notification: {:?}", value);
+                        match att::value_notification(&value).to_result() {
+                            Ok(notification) => {
+                                let handlers = self.notification_handlers.lock().unwrap();
+                                handlers.iter().for_each(|h| h(notification.clone()));
+                            }
+                            Err(err) => {
+                                error!("failed to parse notification: {:?}", err);
+                            }
+                        }
                     }
                     _ => {
                         self.send(Data(value));

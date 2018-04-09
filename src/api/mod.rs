@@ -53,10 +53,17 @@ impl Debug for BDAddr {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct ValueNotification {
+    pub handle: u16,
+    pub value: Vec<u8>,
+}
+
 pub type Callback<T> = Box<Fn(Result<T>) + Send>;
 pub type CommandCallback = Callback<()>;
 pub type RequestCallback = Callback<Vec<u8>>;
 
+pub type NotificationHandler = Box<Fn(ValueNotification) + Send>;
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone)]
 pub enum UUID {
@@ -162,6 +169,8 @@ pub trait Peripheral: Send + Sync + Debug {
 
     fn subscribe(&self, characteristic: &Characteristic) -> Result<()>;
     fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()>;
+
+    fn on_notification(&self, handler: NotificationHandler);
 }
 
 #[derive(Debug, Copy, Clone)]

@@ -36,6 +36,7 @@ use api::RequestCallback;
 use api::CommandCallback;
 use api::UUID;
 use api::UUID::B16;
+use api::NotificationHandler;
 
 #[derive(Copy, Debug)]
 #[repr(C)]
@@ -202,64 +203,51 @@ impl Peripheral {
 
     fn notify(&self, characteristic: &Characteristic, enable: bool) -> Result<()> {
         info!("setting notify for {}/{:?} to {}", self.address, characteristic.uuid, enable);
-        let l = self.stream.read().unwrap();
-        let stream = l.as_ref().ok_or(Error::NotConnected)?;
+        let mut buf = att::read_by_type_req(
+            characteristic.start_handle, characteristic.end_handle, B16(GATT_CLIENT_CHARAC_CFG_UUID));
 
-        let mut buf = att::read_by_type_req(characteristic.start_handle,
-                                            characteristic.end_handle,
-                                            B16(GATT_CLIENT_CHARAC_CFG_UUID));
+        let data = self.request_raw(&mut buf)?;
 
-        let char_copy = characteristic.clone();
-        let self_copy = self.clone();
+        match att::notify_response(&data).to_result() {
+            Ok(resp) => {
+                let use_notify = characteristic.properties.contains(CharPropFlags::NOTIFY);
+                let use_indicate = characteristic.properties.contains(CharPropFlags::INDICATE);
 
-        stream.write(&mut *buf, Some(Box::new(move |data: Result<Vec<u8>>| {
-            match data {
-                Ok(data) => {
-                    match att::notify_response(&data).to_result() {
-                        Ok(resp) => {
-                            let use_notify = char_copy.properties.contains(CharPropFlags::NOTIFY);
-                            let use_indicate = char_copy.properties.contains(CharPropFlags::INDICATE);
+                let mut value = resp.value;
 
-                            let mut value = resp.value;
-
-                            if enable {
-                                if use_notify {
-                                    value |= 0x0001;
-                                } else if use_indicate {
-                                    value |= 0x0002;
-                                }
-                            } else {
-                                if use_notify {
-                                    value &= 0xFFFE;
-                                } else if use_indicate {
-                                    value &= 0xFFFD;
-                                }
-                            }
-
-                            let mut value_buf = BytesMut::with_capacity(2);
-                            value_buf.put_u16::<LittleEndian>(value);
-                            self_copy.request_by_handle(resp.handle,
-                                                        &*value_buf, Some(Box::new(|data| {
-                                    let data = data.unwrap();
-                                    if data.len() > 0 && data[0] == ATT_OP_WRITE_RESP {
-                                        debug!("Got response from notify: {:?}", data);
-                                    } else {
-                                        warn!("Unexpected notify response: {:?}", data);
-                                    }
-                                })));
-                        }
-                        Err(err) => {
-                            error!("failed to parse notify response: {:?}", err);
-                        }
+                if enable {
+                    if use_notify {
+                        value |= 0x0001;
+                    } else if use_indicate {
+                        value |= 0x0002;
+                    }
+                } else {
+                    if use_notify {
+                        value &= 0xFFFE;
+                    } else if use_indicate {
+                        value &= 0xFFFD;
                     }
                 }
-                Err(err) => {
-                    error!("failed to send message: {:?}", err);
+
+                let mut value_buf = BytesMut::with_capacity(2);
+                value_buf.put_u16::<LittleEndian>(value);
+                let data = Peripheral::wait_until_done(|done: RequestCallback| {
+                    self.request_by_handle(resp.handle, &*value_buf, Some(done))
+                })?;
+
+                if data.len() > 0 && data[0] == ATT_OP_WRITE_RESP {
+                    debug!("Got response from notify: {:?}", data);
+                    return Ok(());
+                } else {
+                    warn!("Unexpected notify response: {:?}", data);
+                    return Err(Error::Other("Failed to set notify".to_string()));
                 }
             }
-        })));
-
-        Ok(())
+            Err(err) => {
+                debug!("failed to parse notify response: {:?}", err);
+                return Err(Error::Other("failed to get characteristic state".to_string()));
+            }
+        };
     }
 
     fn wait_until_done<F, T: Clone + Send + 'static>(operation: F) -> Result<T> where F: for<'a> Fn(Callback<T>) {
@@ -424,7 +412,7 @@ impl ApiPeripheral for Peripheral {
         let mut results = vec![];
         let mut start = start;
         loop {
-            info!("discovering chars in range [{}, {}]", start, end);
+            debug!("discovering chars in range [{}, {}]", start, end);
 
             let mut buf = att::read_by_type_req(start, end, B16(GATT_CHARAC_UUID));
             let data = self.request_raw(&mut buf)?;
@@ -433,13 +421,12 @@ impl ApiPeripheral for Peripheral {
                 Ok(result) => {
                     match result {
                         Ok(chars) => {
-                            info!("Chars: {:#?}", chars);
+                            debug!("Chars: {:#?}", chars);
 
                             // TODO this copy can be removed
                             results.extend(chars.clone());
 
                             if let Some(ref last) = chars.iter().last() {
-                                info!("last char: {}", last);
                                 if last.start_handle < end - 1 {
                                     start = last.start_handle + 1;
                                     continue;
@@ -504,7 +491,7 @@ impl ApiPeripheral for Peripheral {
 
     fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<Vec<u8>> {
         Peripheral::wait_until_done(|done: RequestCallback| {
-            self.request_by_handle(characteristic.value_handle, &data, Some(done));
+            self.request_async(characteristic, data, Some(done));
         })
     }
 
@@ -527,5 +514,18 @@ impl ApiPeripheral for Peripheral {
 
     fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
         self.notify(characteristic, false)
+    }
+
+    fn on_notification(&self, handler: NotificationHandler) {
+        // TODO handle the disconnected case better
+        let l = self.stream.read().unwrap();
+        match l.as_ref() {
+            Some(stream) => {
+                stream.on_notification(handler);
+            }
+            None => {
+                error!("tried to subscribe to notifications, but not yet connected")
+            }
+        }
     }
 }

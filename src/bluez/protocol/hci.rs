@@ -1,17 +1,20 @@
 use nom::{le_u8, le_u16, le_u32, le_u64, le_i8, IResult, Err, ErrorKind};
 use num::FromPrimitive;
+use bytes::{BytesMut, BufMut, LittleEndian};
 
-use ::adapter::{BDAddr, AddressType};
-use ::constants::*;
-use ::protocol::*;
+
+use ::api::{BDAddr, AddressType};
+use bluez::constants::*;
+use bluez::protocol::*;
 
 
 #[cfg(test)]
 mod tests {
-    use ::adapter::BDAddr;
+    use ::api::BDAddr;
     use nom::IResult;
     use super::*;
     use super::LEAdvertisingData::*;
+    use super::HCIStatus;
 
     #[test]
     fn test_decode_device_discovery() {
@@ -122,7 +125,7 @@ mod tests {
             &[][..],
             Message::CommandStatus {
                 command: CommandType::LEReadRemoteUsedFeatures,
-                status: 0,
+                status: HCIStatus::Success,
             }
         ));
     }
@@ -133,7 +136,7 @@ mod tests {
         assert_eq!(message(&buf), IResult::Done(
             &[][..],
             Message::LEReadRemoteUsedFeaturesComplete {
-                status: 0,
+                status: HCIStatus::Success,
                 handle: 64,
                 flags: LEFeatureFlags::LE_ENCRYPTION,
             }
@@ -141,7 +144,7 @@ mod tests {
     }
 }
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ACLData {
     pub handle: u16,
     pub cid: u16,
@@ -171,13 +174,13 @@ bitflags! {
     }
 }
 
-
 #[derive(Debug, PartialEq)]
 pub enum Message {
     LEAdvertisingReport(LEAdvertisingInfo),
     LEConnComplete(LEConnInfo),
+    LEConnUpdate(LEConnUpdateInfo),
     LEReadRemoteUsedFeaturesComplete {
-        status: u8,
+        status: HCIStatus,
         handle: u16,
         flags: LEFeatureFlags,
     },
@@ -190,9 +193,14 @@ pub enum Message {
         command: CommandType,
         data: Vec<u8>,
     },
+    DisconnectComplete {
+        status: HCIStatus,
+        handle: u16,
+        reason: HCIStatus,
+    },
     CommandStatus {
         command: CommandType,
-        status: u8,
+        status: HCIStatus,
     },
     ACLDataPacket(ACLData),
     ACLDataContinuation {
@@ -251,6 +259,88 @@ pub struct LEConnInfo {
     pub master_clock_accuracy: u8,
 }
 
+#[derive(Debug, PartialEq)]
+pub struct LEConnUpdateInfo {
+    pub status: HCIStatus,
+    pub handle: u16,
+    pub interval: u16,
+    pub latency: u16,
+    pub supervision_timeout: u16,
+}
+
+
+enum_from_primitive! {
+#[derive(Debug, PartialEq)]
+#[repr(u8)]
+pub enum HCIStatus {
+    ACLConnectionAlreadyExists = 0x0B,
+    AuthenticationFialure = 0x05,
+    ChannelAssessmentNotSupported = 0x2E,
+    CommandDisallowed = 0x0C,
+    CoarseClockAdjustRejected = 0x40,
+    ConnectionAcceptanceTimeoutExceeded = 0x10,
+    ConnectionFailuedtoEstablish = 0x3E,
+    ConnectionLimitExceeded = 0x09,
+    ConnectionRejectedDuetoLimitedResources = 0x0D,
+    ConnectionRejectedNoSuitableChannelFound = 0x39,
+    ConnectionRejectedForSecurityReasons = 0x0E,
+    ConnectionRejectedDuetoUnacceptableBDADDR = 0x0F,
+    ConnectionTerminatedByLocalHost = 0x16,
+    ConnectionTerminatedDuetoMICFailure = 0x3D,
+    ConnectionTimeout = 0x08,
+    ControllerBusy = 0x3A,
+    DifferentTransactionCollision = 0x2A,
+    DirectedAdvertisingTimeout = 0x3C,
+    EncryptModeNotAcceptable = 0x25,
+    ExtendedInquiryResponseTooLarge = 0x36,
+    HostBusyPairing = 0x38,
+    HardwareFailure = 0x03,
+    InstantPassed = 0x28,
+    InsufficientSecurity = 0x2F,
+    InvalidHCICommandParameters = 0x12,
+    InvalidLMPParamaters = 0x1E,
+    LinkKeyCanNotBeChanged = 0x26,
+    LMPErrorTransactionCollision = 0x23,
+    LMPLLResponseTimeout = 0x22,
+    LMPDUNotAllowed = 0x24,
+    MACConnectionFailed = 0x3F,
+    MemoryCapabilityExceeded = 0x07,
+    PageTimeout = 0x04,
+    PairingNotAllowed = 0x18,
+    PairingWithUnitKeyNotSupported = 0x29,
+    ParamaterOutOfMandatoryRange = 0x30,
+    PinKeyMissing = 0x06,
+    QOSReject = 0x2D,
+    QOSUnacceptableParameter = 0x2C,
+    RemoteDeviceTerminatedConnectionDueToLowResources = 0x14,
+    RemoteDeviceTerminatedConnectionDuetoPowerOff = 0x15,
+    RemoteUserTerminatedConnection = 0x13,
+    RepeatedAttempts = 0x17,
+    RequestQOSNotSupported = 0x27,
+    Reserved2B = 0x2B,
+    Reserved31 = 0x31,
+    Reserved33 = 0x33,
+    ReservedSlotViolation = 0x34,
+    RoleChangeNotAllowed = 0x21,
+    RoleSwitchFailed = 0x35,
+    RoleSwitchPending = 0x32,
+    SCOAirModeRejected = 0x1D,
+    SCOIntervalRejected = 0x1C,
+    SCOOffsetRejected = 0x1B,
+    SimplePairingNotSupportedByHost = 0x37,
+    SynchonousConnectionLimitExceeded = 0x0A,
+    UnacceptableConnectionParameters = 0x3B,
+    UnknownConnectionID = 0x02,
+    UnknownHCICommand = 0x01,
+    UnknownLMPPDU = 0x19,
+    UnspecifiedError = 0x1F,
+    UnsupportedParamter = 0x11,
+    UnsupportedLMPParameterValue = 0x20,
+    UnsupportedRemoteFeature = 0x1A,
+    Success = 0x00,
+}
+}
+
 enum_from_primitive! {
 #[derive(Debug, PartialEq)]
 #[repr(u8)]
@@ -301,7 +391,10 @@ pub enum CommandType {
     LEConnectionUpdate = OCF_LE_CONN_UPDATE | (OGF_LE_CTL as u16) << 10,
     LEStartEncryption = OCF_LE_START_ENCRYPTION | (OGF_LE_CTL as u16) << 10,
 
-    AddDeviceToWhiteList = 0x2011,
+    Disconnect = 0x0406,
+
+    LEAddDeviceToWhiteList = 0x2011,
+    LERemoveDeviceFromWhiteList = 0x2012,
     LEReadRemoteUsedFeatures = 0x2016,
 }}
 
@@ -455,7 +548,7 @@ named!(le_conn_complete<&[u8], LEConnInfo>,
 
 named!(le_read_remote_used_features_complete<&[u8], Message>,
     do_parse!(
-      status: le_u8 >>
+      status: map_opt!(le_u8, |b| HCIStatus::from_u8(b)) >>
       handle: le_u16 >>
       flags: le_u64 >>
       (
@@ -466,6 +559,20 @@ named!(le_read_remote_used_features_complete<&[u8], Message>,
       )
     )
 );
+
+named!(le_conn_update_complete<&[u8], Message>,
+    do_parse!(
+        status: map_opt!(le_u8, |b| HCIStatus::from_u8(b)) >>
+        handle: le_u16 >>
+        interval: le_u16 >>
+        latency: le_u16 >>
+        supervision_timeout: le_u16 >>
+        (
+          Message::LEConnUpdate(LEConnUpdateInfo {
+            status, handle, interval, latency, supervision_timeout
+          })
+        )
+));
 
 fn le_meta_event(i: &[u8]) -> IResult<&[u8], Message> {
     let (i, le_type) = try_parse!(i, map_opt!(le_u8, |b| LEEventType::from_u8(b)));
@@ -479,9 +586,8 @@ fn le_meta_event(i: &[u8]) -> IResult<&[u8], Message> {
         LEEventType::LEReadRemoteUsedFeaturesComplete => {
             try_parse!(i, le_read_remote_used_features_complete)
         }
-        _ => {
-            warn!("Unhandled le_type {:?}", le_type);
-            return IResult::Error(Err::Code(ErrorKind::Custom(1)))
+        LEEventType::LEConnUpdateComplete => {
+            try_parse!(i, le_conn_update_complete)
         }
     };
     IResult::Done(i, result)
@@ -508,9 +614,7 @@ fn cmd_complete(i: &[u8]) -> IResult<&[u8], Message> {
         },
         CommandType::LESetScanParameters => LESetScanParameters,
         CommandType::LESetScanEnabled => {
-            // TODO: not 100% sure about this
-            let enabled = status == 0;
-            LESetScanEnabled { enabled }
+            LESetScanEnabled { enabled: status == 1 }
         },
         CommandType::ReadRSSI => {
             let (i, handle) = try_parse!(i, le_u16);
@@ -529,6 +633,19 @@ fn cmd_complete(i: &[u8]) -> IResult<&[u8], Message> {
     IResult::Done(&i, Message::HCICommandComplete(result))
 }
 
+named!(disconnect_complete<&[u8], Message>,
+    do_parse!(
+      status: map_opt!(le_u8, |b| HCIStatus::from_u8(b)) >>
+      handle: le_u16 >>
+      reason: map_opt!(le_u8, |b| HCIStatus::from_u8(b)) >>
+      (
+          Message::DisconnectComplete {
+              status, handle, reason
+          }
+      )
+    )
+);
+
 fn hci_event_pkt(i: &[u8]) -> IResult<&[u8], Message> {
     use self::HCIEventSubType::*;
     let (i, sub_type) = try_parse!(i, map_opt!(le_u8, |b| HCIEventSubType::from_u8(b)));
@@ -537,15 +654,16 @@ fn hci_event_pkt(i: &[u8]) -> IResult<&[u8], Message> {
         LEMetaEvent => try_parse!(data, le_meta_event).1,
         CmdComplete => try_parse!(data, cmd_complete).1,
         CmdStatus => {
-            let (data, status) = try_parse!(data, le_u8);
+            let (data, status) = try_parse!(data, map_opt!(le_u8, |b| HCIStatus::from_u8(b)));
             let (data, _) = try_parse!(data, le_u8);
             let (_, command) = try_parse!(data, map_opt!(le_u16, |b| CommandType::from_u16(b)));
             Message::CommandStatus {
                 command, status,
             }
         },
+        DisconnComplete => try_parse!(data, disconnect_complete).1,
         _ => {
-            warn!("unhandled HCIEventPkt subtype {:?}", sub_type);
+            warn!("Unhandled HCIEventPkt subtype {:?}", sub_type);
             return IResult::Error(Err::Code(ErrorKind::Custom(4)))
         }
     };
@@ -616,4 +734,19 @@ pub fn message(i: &[u8]) -> IResult<&[u8], Message> {
         HCICommandPkt => hci_command_pkt(i),
         HCIAclDataPkt => hci_acldata_pkt(i),
     }
+}
+
+pub fn hci_command(command: u16, data: &[u8]) -> BytesMut {
+    let mut buf = BytesMut::with_capacity(4 + data.len());
+
+    // header
+    buf.put_u8(HCI_COMMAND_PKT);
+    buf.put_u16::<LittleEndian>(command);
+
+    // len
+    buf.put_u8(data.len() as u8);
+
+    // data
+    buf.put(data);
+    buf
 }

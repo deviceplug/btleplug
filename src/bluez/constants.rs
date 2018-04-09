@@ -17,16 +17,19 @@ pub const HCI_CHANNEL_LOGGING: u16 = 4;
 pub const ACL_START_NO_FLUSH: u16 = 0x00;
 pub const ACL_CONT: u16  = 0x01;
 pub const ACL_START: u16 = 0x02;
-
+pub const HCI_OE_USER_ENDED_CONNECTION: u8 = 0x13;
 
 // bluetooth.h
 pub const SOL_HCI: i32 = 0;
 
 pub const ATT_CID: u16 = 4;
+pub const ATT_OP_ERROR_RESP: u8 = 0x01;
 pub const ATT_OP_EXCHANGE_MTU_REQ: u8 = 0x02;
+pub const ATT_OP_EXCHANGE_MTU_RESP: u8 = 0x03;
 pub const ATT_OP_READ_BY_TYPE_REQ: u8 = 0x08;
 pub const ATT_OP_READ_BY_TYPE_RESP: u8 = 0x09;
 pub const ATT_OP_READ_BY_GROUP_REQ: u8 = 0x10;
+pub const ATT_OP_READ_BY_GROUP_RESP: u8 = 0x11;
 pub const ATT_OP_WRITE_REQ: u8 = 0x12;
 pub const ATT_OP_WRITE_RESP: u8 = 0x13;
 pub const ATT_OP_VALUE_NOTIFICATION: u8 = 0x1b;
@@ -53,6 +56,8 @@ pub const OCF_RESET: u16 = 0x0003;
 pub const OCF_READ_LE_HOST_SUPPORTED: u16 = 0x006C;
 pub const OCF_WRITE_LE_HOST_SUPPORTED: u16 = 0x006D;
 
+pub const OGF_LINK_CTL: u8 = 0x01;
+pub const OCF_DISCONNECT: u16 = 0x0006;
 
 pub const OGF_INFO_PARAM: u8 = 0x04;
 pub const OCF_READ_LOCAL_VERSION: u16 = 0x0001;
@@ -74,6 +79,7 @@ pub const LE_SET_SCAN_PARAMETERS_CMD: u16 =
 pub const LE_SET_SCAN_ENABLE_CMD: u16 = OCF_LE_SET_SCAN_ENABLE |
     (OGF_LE_CTL as u16) << 10;
 pub const LE_CREATE_CONN_CMD: u16 = OCF_LE_CREATE_CONN | ((OGF_LE_CTL as u16) << 10);
+pub const DISCONNECT_CMD: u16 = OCF_DISCONNECT | (OGF_LINK_CTL as u16) << 10;
 
 pub const BTPROTO_HCI: i32 = 1;
 

@@ -1,6 +1,6 @@
 use ::Result;
 
-use api::{Characteristic, CharPropFlags, Callback, Properties, BDAddr, Host,
+use api::{Characteristic, CharPropFlags, Callback, PeripheralProperties, BDAddr, Central,
           Peripheral as ApiPeripheral};
 use std::mem::size_of;
 use std::collections::BTreeSet;
@@ -37,6 +37,7 @@ use api::CommandCallback;
 use api::UUID;
 use api::UUID::B16;
 use api::NotificationHandler;
+use std::fmt::Display;
 
 #[derive(Copy, Debug)]
 #[repr(C)]
@@ -70,7 +71,7 @@ impl Clone for L2CapOptions {
 pub struct Peripheral {
     c_adapter: ConnectedAdapter,
     address: BDAddr,
-    properties: Arc<Mutex<Properties>>,
+    properties: Arc<Mutex<PeripheralProperties>>,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
     stream: Arc<RwLock<Option<ACLStream>>>,
     connection_tx: Arc<Mutex<Sender<u16>>>,
@@ -78,7 +79,7 @@ pub struct Peripheral {
     message_queue: Arc<Mutex<VecDeque<ACLData>>>,
 }
 
-impl Debug for Peripheral {
+impl Display for Peripheral {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let connected = if self.is_connected() { " connected" } else { "" };
         let properties = self.properties.lock().unwrap();
@@ -87,12 +88,22 @@ impl Debug for Peripheral {
     }
 }
 
+impl Debug for Peripheral {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let connected = if self.is_connected() { " connected" } else { "" };
+        let properties = self.properties.lock().unwrap();
+        let characteristics = self.characteristics.lock().unwrap();
+        write!(f, "{} properties: {:?}, characteristics: {:?} {}", self.address, *properties,
+               *characteristics, connected)
+    }
+}
+
 impl Peripheral {
     pub fn new(c_adapter: ConnectedAdapter, address: BDAddr) -> Peripheral {
         let (connection_tx, connection_rx) = channel();
         Peripheral {
             c_adapter, address,
-            properties: Arc::new(Mutex::new(Properties::default())),
+            properties: Arc::new(Mutex::new(PeripheralProperties::default())),
             characteristics: Arc::new(Mutex::new(BTreeSet::new())),
             stream: Arc::new(RwLock::new(Option::None)),
             connection_tx: Arc::new(Mutex::new(connection_tx)),
@@ -280,7 +291,7 @@ impl ApiPeripheral for Peripheral {
         self.address.clone()
     }
 
-    fn properties(&self) -> Properties {
+    fn properties(&self) -> PeripheralProperties {
         let l = self.properties.lock().unwrap();
         l.clone()
     }

@@ -1,25 +1,3 @@
-# Rumble
-
-[![Build Status](https://travis-ci.org/mwylde/rumble.svg?branch=master)](https://travis-ci.org/mwylde/rumble)
-[![Crates.io Version](https://img.shields.io/crates/v/rumble.svg)](https://crates.io/crates/rumble)
-[![docs](https://docs.rs/rumble/badge.svg)](https://docs.rs/rumble)
-
-Rumble is a Bluetooth Low Energy (BLE) central module library for Rust. 
-Currently only Linux (with the BlueZ bluetooth library) is supported, although 
-other operating systems may be supported in the future. Rumble interfaces with 
-BlueZ using its socket interface rather than DBus. This offers much more control 
-and reliability over the DBus interface, and does not require running BlueZ in 
-experimental mode for BLE.
-
-As of version 0.2, the API is becoming more stable and the library itself more
-useful. You should still expect to encounter bugs, limitations, and odd behaviors.
-Pull requests (and wireshark traces) welcome!
-
-## Usage
-
-An example of how to use the library to control some BLE smart lights:
-
-```rust
 extern crate rumble;
 extern crate rand;
 
@@ -72,4 +50,3 @@ pub fn main() {
         thread::sleep(Duration::from_millis(200));
     }
 }
-```

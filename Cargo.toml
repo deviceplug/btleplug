@@ -30,3 +30,6 @@ backtrace = "0.3.5"
 [dependencies.nom]
 version = "^3.2"
 features = ["verbose-errors"]
+
+[dev-dependencies]
+rand = "0.4.2"

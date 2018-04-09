@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 use ::Result;
-use api::{Event, BDAddr, Host};
+use api::{CentralEvent, BDAddr, Central};
 
 use bluez::util::handle_error;
 use bluez::protocol::hci;
@@ -21,16 +21,6 @@ use bluez::adapter::peripheral::Peripheral;
 use bluez::constants::*;
 use api::EventHandler;
 
-#[derive(Debug, Copy)]
-#[repr(C)]
-pub struct HCIDevReq {
-    pub dev_id: u16,
-    pub dev_opt: u32,
-}
-
-impl Clone for HCIDevReq {
-    fn clone(&self) -> Self { *self }
-}
 
 #[derive(Copy, Debug)]
 #[repr(C)]
@@ -114,7 +104,7 @@ impl HCIDevInfo {
 
 #[derive(Copy, Debug)]
 #[repr(C)]
-pub struct SockaddrHCI {
+struct SockaddrHCI {
     hci_family: libc::sa_family_t,
     hci_dev: u16,
     hci_channel: u16,
@@ -172,6 +162,7 @@ impl AdapterState {
     }
 }
 
+/// The [`Central`](../../api/trait.Central.html) implementation for BlueZ.
 #[derive(Clone)]
 pub struct ConnectedAdapter {
     pub adapter: Adapter,
@@ -284,7 +275,7 @@ impl ConnectedAdapter {
         });
     }
 
-    fn emit(&self, event: Event) {
+    fn emit(&self, event: CentralEvent) {
         let handlers = self.event_handlers.clone();
         let vec = handlers.lock().unwrap();
         for handler in (*vec).iter() {
@@ -313,9 +304,9 @@ impl ConnectedAdapter {
                 }
 
                 if new {
-                    self.emit(Event::DeviceDiscovered(address.clone()))
+                    self.emit(CentralEvent::DeviceDiscovered(address.clone()))
                 } else {
-                    self.emit(Event::DeviceUpdated(address.clone()))
+                    self.emit(CentralEvent::DeviceUpdated(address.clone()))
                 }
             }
             hci::Message::LEConnComplete(info) => {
@@ -329,7 +320,7 @@ impl ConnectedAdapter {
                     None => warn!("Got connection for unknown device {}", info.bdaddr)
                 }
 
-                self.emit(Event::DeviceConnected(address));
+                self.emit(CentralEvent::DeviceConnected(address));
             }
             hci::Message::ACLDataPacket(data) => {
                 let message = hci::Message::ACLDataPacket(data);
@@ -383,7 +374,7 @@ impl ConnectedAdapter {
     }
 }
 
-impl Host<Peripheral> for ConnectedAdapter {
+impl Central<Peripheral> for ConnectedAdapter {
     fn on_event(&self, handler: EventHandler) {
         let list = self.event_handlers.clone();
         list.lock().unwrap().push(handler);
@@ -409,13 +400,26 @@ impl Host<Peripheral> for ConnectedAdapter {
     }
 }
 
+/// Adapter represents a physical bluetooth interface in your system, for example a bluetooth
+/// dongle.
 #[derive(Debug, Clone)]
 pub struct Adapter {
+    /// The name of the adapter.
     pub name: String,
+
+    /// The device id of the adapter.
     pub dev_id: u16,
+
+    /// The address of the adapter.
     pub addr: BDAddr,
+
+    /// The type of the adapater.
     pub typ: AdapterType,
+
+    /// The set of states that the adapater is in.
     pub states: HashSet<AdapterState>,
+
+    /// Properties of the adapter.
     pub info: HCIDevInfo,
 }
 

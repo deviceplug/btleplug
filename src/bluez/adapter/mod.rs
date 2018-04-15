@@ -85,7 +85,7 @@ impl HCIDevInfo {
     pub fn default() -> HCIDevInfo {
         HCIDevInfo {
             dev_id: 0,
-            name: [0i8; 8],
+            name: [0 as libc::c_char; 8],
             bdaddr: BDAddr { address: [0u8; 6] },
             flags: 0u32,
             type_: 0u8,
@@ -219,7 +219,7 @@ impl ConnectedAdapter {
         filter.put_u32::<LittleEndian>(type_mask);
         filter.put_u32::<LittleEndian>(event_mask1);
         filter.put_u32::<LittleEndian>(event_mask2);
-        filter.put_u32::<LittleEndian>(opcode);
+        filter.put_u16::<LittleEndian>(opcode);
 
         handle_error(unsafe {
             libc::setsockopt(self.adapter_fd, SOL_HCI, HCI_FILTER,

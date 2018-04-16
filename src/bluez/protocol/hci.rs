@@ -384,6 +384,9 @@ pub enum CommandType {
     ReadBDAddr = OCF_READ_BD_ADDR | (OGF_INFO_PARAM as u16) << 10,
     ReadRSSI = OCF_READ_RSSI | (OGF_STATUS_PARAM as u16) << 10,
 
+    ChangeLocalName = 0x0C13,
+    WriteExtendedInquiryResponse = 0x0C52,
+
     LESetEventMask = OCF_LE_SET_EVENT_MASK | (OGF_LE_CTL as u16) << 10,
     LESetScanParameters = OCF_LE_SET_SCAN_PARAMETERS | (OGF_LE_CTL as u16) << 10,
     LESetScanEnabled = OCF_LE_SET_SCAN_ENABLE | (OGF_LE_CTL as u16) << 10,
@@ -391,11 +394,13 @@ pub enum CommandType {
     LEConnectionUpdate = OCF_LE_CONN_UPDATE | (OGF_LE_CTL as u16) << 10,
     LEStartEncryption = OCF_LE_START_ENCRYPTION | (OGF_LE_CTL as u16) << 10,
 
-    Disconnect = 0x0406,
-
+    LESetAdvertisingData = 0x2008,
+    LESetScanResponseData = 0x2009,
     LEAddDeviceToWhiteList = 0x2011,
     LERemoveDeviceFromWhiteList = 0x2012,
     LEReadRemoteUsedFeatures = 0x2016,
+
+    Disconnect = 0x0406,
 }}
 
 #[allow(dead_code)]
@@ -730,9 +735,9 @@ pub fn message(i: &[u8]) -> IResult<&[u8], Message> {
 
     let (i, typ) = try_parse!(i, map_opt!(le_u8, |b| EventType::from_u8(b)));
     match typ {
-        HCIEventPkt => hci_event_pkt(i),
-        HCICommandPkt => hci_command_pkt(i),
-        HCIAclDataPkt => hci_acldata_pkt(i),
+        HCICommandPkt => hci_command_pkt(i), // 1
+        HCIAclDataPkt => hci_acldata_pkt(i), // 2
+        HCIEventPkt => hci_event_pkt(i),     // 4
     }
 }
 

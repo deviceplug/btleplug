@@ -248,7 +248,7 @@ dependencies = [
 
 [[package]]
 name = "rumble"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "backtrace 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitflags 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",

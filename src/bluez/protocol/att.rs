@@ -5,7 +5,6 @@ use ::api::{Characteristic, UUID, CharPropFlags, ValueNotification};
 use bluez::constants::*;
 use bluez::protocol::*;
 use bytes::{BytesMut, BufMut};
-use bytes::LittleEndian;
 
 #[cfg(test)]
 mod tests {
@@ -160,10 +159,10 @@ pub fn characteristics(i: &[u8]) -> IResult<&[u8], Result<Vec<Characteristic>, E
 pub fn read_by_type_req(start_handle: u16, end_handle: u16, uuid: UUID) -> Vec<u8> {
     let mut buf = BytesMut::with_capacity(3 + uuid.size());
     buf.put_u8(ATT_OP_READ_BY_TYPE_REQ);
-    buf.put_u16::<LittleEndian>(start_handle);
-    buf.put_u16::<LittleEndian>(end_handle);
+    buf.put_u16_le(start_handle);
+    buf.put_u16_le(end_handle);
     match uuid {
-        UUID::B16(u) => buf.put_u16::<LittleEndian>(u),
+        UUID::B16(u) => buf.put_u16_le(u),
         UUID::B128(u) => buf.put_slice(&u),
     }
     buf.to_vec()

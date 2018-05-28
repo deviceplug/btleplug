@@ -24,7 +24,6 @@ use api::CommandCallback;
 use api::RequestCallback;
 use bluez::adapter::Adapter;
 use bytes::BytesMut;
-use bytes::LittleEndian;
 use bytes::BufMut;
 use api::NotificationHandler;
 
@@ -185,7 +184,7 @@ impl ACLStream {
                             // it is, send confirmation
                             let mut buf = BytesMut::with_capacity(3);
                             buf.put_u8(ATT_OP_EXCHANGE_MTU_RESP);
-                            buf.put_u16::<LittleEndian>(self.adapter.info.acl_mtu);
+                            buf.put_u16_le(self.adapter.info.acl_mtu);
                             self.write_cmd(&mut buf, None);
                         } else {
                             // TODO: reduce our MTU to client's

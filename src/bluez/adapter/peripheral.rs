@@ -23,7 +23,6 @@ use std::sync::mpsc::Receiver;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 use bytes::{BytesMut, BufMut};
-use bytes::LittleEndian;
 use bluez::protocol::att;
 use std::fmt::Debug;
 use std::fmt::Formatter;
@@ -207,7 +206,7 @@ impl Peripheral {
     fn request_by_handle(&self, handle: u16, data: &[u8], handler: Option<RequestCallback>) {
         let mut buf = BytesMut::with_capacity(3 + data.len());
         buf.put_u8(ATT_OP_WRITE_REQ);
-        buf.put_u16::<LittleEndian>(handle);
+        buf.put_u16_le(handle);
         buf.put(data);
         self.request_raw_async(&mut buf, handler);
     }
@@ -241,7 +240,7 @@ impl Peripheral {
                 }
 
                 let mut value_buf = BytesMut::with_capacity(2);
-                value_buf.put_u16::<LittleEndian>(value);
+                value_buf.put_u16_le(value);
                 let data = Peripheral::wait_until_done(|done: RequestCallback| {
                     self.request_by_handle(resp.handle, &*value_buf, Some(done))
                 })?;
@@ -406,7 +405,7 @@ impl ApiPeripheral for Peripheral {
         let handle = l.as_ref().unwrap().handle;
 
         let mut data = BytesMut::with_capacity(3);
-        data.put_u16::<LittleEndian>(handle);
+        data.put_u16_le(handle);
         data.put_u8(HCI_OE_USER_ENDED_CONNECTION);
         let mut buf = hci::hci_command(DISCONNECT_CMD, &*data);
         self.c_adapter.write(&mut *buf)?;
@@ -479,7 +478,7 @@ impl ApiPeripheral for Peripheral {
             Some(stream) => {
                 let mut buf = BytesMut::with_capacity(3 + data.len());
                 buf.put_u8(ATT_OP_WRITE_CMD);
-                buf.put_u16::<LittleEndian>(characteristic.value_handle);
+                buf.put_u16_le(characteristic.value_handle);
                 buf.put(data);
 
                 stream.write_cmd(&mut *buf, handler);

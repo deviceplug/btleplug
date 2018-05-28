@@ -1,6 +1,6 @@
 use nom::{le_u8, le_u16, le_u32, le_u64, le_i8, IResult, Err, ErrorKind};
 use num::FromPrimitive;
-use bytes::{BytesMut, BufMut, LittleEndian};
+use bytes::{BytesMut, BufMut};
 
 
 use ::api::{BDAddr, AddressType};
@@ -746,7 +746,7 @@ pub fn hci_command(command: u16, data: &[u8]) -> BytesMut {
 
     // header
     buf.put_u8(HCI_COMMAND_PKT);
-    buf.put_u16::<LittleEndian>(command);
+    buf.put_u16_le(command);
 
     // len
     buf.put_u8(data.len() as u8);

@@ -5,7 +5,7 @@ use libc;
 use std;
 use std::ffi::CStr;
 use nom::IResult;
-use bytes::{BytesMut, BufMut, LittleEndian};
+use bytes::{BytesMut, BufMut};
 
 use std::collections::{HashSet, HashMap};
 use std::sync::{Arc, Mutex};
@@ -216,10 +216,10 @@ impl ConnectedAdapter {
         let event_mask2 = 1 << (EVT_LE_META_EVENT - 32);
         let opcode = 0;
 
-        filter.put_u32::<LittleEndian>(type_mask);
-        filter.put_u32::<LittleEndian>(event_mask1);
-        filter.put_u32::<LittleEndian>(event_mask2);
-        filter.put_u16::<LittleEndian>(opcode);
+        filter.put_u32_le(type_mask);
+        filter.put_u32_le(event_mask1);
+        filter.put_u32_le(event_mask2);
+        filter.put_u16_le(opcode);
 
         handle_error(unsafe {
             libc::setsockopt(self.adapter_fd, SOL_HCI, HCI_FILTER,
@@ -355,8 +355,8 @@ impl ConnectedAdapter {
     fn set_scan_params(&self) -> Result<()> {
         let mut data = BytesMut::with_capacity(7);
         data.put_u8(1); // scan_type = active
-        data.put_u16::<LittleEndian>(0x0010); // interval ms
-        data.put_u16::<LittleEndian>(0x0010); // window ms
+        data.put_u16_le(0x0010); // interval ms
+        data.put_u16_le(0x0010); // window ms
         data.put_u8(0); // own_type = public
         data.put_u8(0); // filter_policy = public
         let mut buf = hci::hci_command(LE_SET_SCAN_PARAMETERS_CMD, &*data);

@@ -175,8 +175,15 @@ impl Peripheral {
                     }
                 }
             },
-            _ => {
-                // ignore
+            &hci::Message::DisconnectComplete {..} => {
+                // destroy our stream
+                debug!("removing stream for {} due to disconnect", self.address);
+                let mut stream = self.stream.write().unwrap();
+                *stream = None;
+                // TODO clean up our sockets
+            },
+            msg => {
+                debug!("ignored message {:?}", msg);
             }
         }
     }

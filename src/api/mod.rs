@@ -176,7 +176,7 @@ pub struct PeripheralProperties {
 /// Peripheral is the device that you would like to communicate with (the "server" of BLE). This
 /// struct contains both the current state of the device (its properties, characteristics, etc.)
 /// as well as functions for communication.
-pub trait Peripheral: Send + Sync + Debug {
+pub trait Peripheral: Send + Sync + Clone + Debug {
     /// Returns the address of the peripheral.
     fn address(&self) -> BDAddr;
 
@@ -265,7 +265,7 @@ pub enum CentralEvent {
 pub type EventHandler = Box<Fn(CentralEvent) + Send>;
 
 /// Central is the "client" of BLE. It's able to scan for and establish connections to peripherals.
-pub trait Central<P : Peripheral> {
+pub trait Central<P : Peripheral>: Send + Sync + Clone {
     /// Registers a function that will receive notifications when events occur for this Central
     /// module. See [`Event`](enum.CentralEvent.html) for the full set of events. Note that the
     /// handler will be called in a common thread, so it should not block.

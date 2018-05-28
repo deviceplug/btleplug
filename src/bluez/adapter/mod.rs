@@ -170,6 +170,7 @@ pub struct ConnectedAdapter {
     should_stop: Arc<AtomicBool>,
     pub scan_enabled: Arc<AtomicBool>,
     peripherals: Arc<Mutex<HashMap<BDAddr, Peripheral>>>,
+    handle_map: Arc<Mutex<HashMap<u16, BDAddr>>>,
     event_handlers: Arc<Mutex<Vec<EventHandler>>>,
 }
 
@@ -199,6 +200,7 @@ impl ConnectedAdapter {
             scan_enabled: Arc::new(AtomicBool::new(false)),
             event_handlers: Arc::new(Mutex::new(vec![])),
             peripherals: Arc::new(Mutex::new(HashMap::new())),
+            handle_map: Arc::new(Mutex::new(HashMap::new())),
         };
 
         connected.add_raw_socket_reader(adapter_fd);
@@ -276,6 +278,7 @@ impl ConnectedAdapter {
     }
 
     fn emit(&self, event: CentralEvent) {
+        debug!("emitted {:?}", event);
         let handlers = self.event_handlers.clone();
         let vec = handlers.lock().unwrap();
         for handler in (*vec).iter() {
@@ -312,6 +315,7 @@ impl ConnectedAdapter {
             hci::Message::LEConnComplete(info) => {
                 info!("connected to {:?}", info);
                 let address = info.bdaddr.clone();
+                let handle = info.handle.clone();
                 match self.peripheral(address) {
                     Some(peripheral) => {
                         peripheral.handle_device_message(&hci::Message::LEConnComplete(info))
@@ -319,6 +323,9 @@ impl ConnectedAdapter {
                     // todo: there's probably a better way to handle this case
                     None => warn!("Got connection for unknown device {}", info.bdaddr)
                 }
+
+                let mut handles = self.handle_map.lock().unwrap();
+                handles.insert(handle, address);
 
                 self.emit(CentralEvent::DeviceConnected(address));
             }
@@ -334,8 +341,20 @@ impl ConnectedAdapter {
                     peripheral.handle_device_message(&message);
                 }
             },
-            hci::Message::DisconnectComplete { handle: _, .. } => {
-                // TODO: handle disconnects
+            hci::Message::DisconnectComplete { handle, .. } => {
+                let mut handles = self.handle_map.lock().unwrap();
+                match handles.remove(&handle) {
+                    Some(addr) => {
+                        match self.peripheral(addr) {
+                            Some(peripheral) => peripheral.handle_device_message(&message),
+                            None => warn!("got disconnect for unknown device {}", addr),
+                        };
+                        self.emit(CentralEvent::DeviceDisconnected(addr));
+                    }
+                    None => {
+                        warn!("got disconnect for unknown handle {}", handle);
+                    }
+                }
             }
             _ => {
                 // skip

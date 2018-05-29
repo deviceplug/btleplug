@@ -76,6 +76,9 @@ extern crate log;
 #[macro_use]
 extern crate nix;
 
+#[cfg(target_os = "windows")]
+extern crate winrt;
+
 extern crate bytes;
 #[macro_use] extern crate enum_primitive;
 extern crate num;
@@ -93,7 +96,10 @@ extern crate failure_derive;
 use std::result;
 use std::time::Duration;
 
+#[cfg(target_os = "linux")]
 pub mod bluez;
+#[cfg(target_os = "windows")]
+pub mod winrtble;
 pub mod api;
 
 #[derive(Debug, Fail, Clone)]

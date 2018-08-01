@@ -11,7 +11,6 @@ use bluez::protocol::*;
 #[cfg(test)]
 mod tests {
     use ::api::BDAddr;
-    use nom::IResult;
     use super::*;
     use super::LEAdvertisingData::*;
     use super::HCIStatus;
@@ -36,7 +35,7 @@ mod tests {
             }
         );
 
-        assert_eq!(message(&buf), IResult::Done(&[][..], expected));
+        assert_eq!(message(&buf), Ok((&[][..], expected)));
     }
 
     #[test]
@@ -61,21 +60,21 @@ mod tests {
             }
         );
 
-        assert_eq!(message(&buf), IResult::Done(&[][..], expected));
+        assert_eq!(message(&buf), Ok((&[][..], expected)));
     }
 
     #[test]
     fn test_bd_addr() {
         let buf = [192u8,74,150,234,218,116];
-        assert_eq!(bd_addr(&buf), IResult::Done(&[][..],BDAddr {
-            address: [192, 74, 150, 234, 218, 116]}))
+        assert_eq!(bd_addr(&buf), Ok((&[][..],BDAddr {
+            address: [192, 74, 150, 234, 218, 116]})))
     }
 
     #[test]
     fn test_le_advertising_info() {
-        let buf = [1, 4,0,192,74,150,234,218,116,11,2,1,6,7,2,240,255,229,255,224,255];
+        let buf = [1,4,0,192,74,150,234,218,116,11,2,1,6,7,2,240,255,229,255,224,255];
 
-        assert_eq!(le_advertising_info(&buf), IResult::Done(&[][..], LEAdvertisingInfo {
+        assert_eq!(le_advertising_info(&buf), Ok((&[][..], LEAdvertisingInfo {
             evt_type: 4,
             bdaddr_type: 0,
             bdaddr: BDAddr {
@@ -87,27 +86,27 @@ mod tests {
                 ServiceClassUUID16(65520),
                 ServiceClassUUID16(65509),
                 ServiceClassUUID16(65504)],
-        }));
+        })));
     }
 
     #[test]
     fn test_le_advertising_data() {
         let buf = [7, 2, 240, 255, 229, 255, 224, 255];
 
-        assert_eq!(le_advertising_data(&buf), IResult::Done(&[][..],
+        assert_eq!(le_advertising_data(&buf), Ok((&[][..],
                                                             vec![ServiceClassUUID16(65520),
                                                                  ServiceClassUUID16(65509),
-                                                                 ServiceClassUUID16(65504)]));
+                                                                 ServiceClassUUID16(65504)])));
 
         let buf = [18,9,76,69,68,66,108,117,101,45,69,65,57,55,66,55,65,51,32];
-        assert_eq!(le_advertising_data(&buf), IResult::Done(&[][..], vec![
-            LocalName(String::from("LEDBlue-EA97B7A3 "))]));
+        assert_eq!(le_advertising_data(&buf), Ok((&[][..], vec![
+            LocalName(String::from("LEDBlue-EA97B7A3 "))])));
     }
 
     #[test]
     fn test_acl_data_packet() {
         let buf = [2, 64, 32, 9, 0, 5, 0, 4, 0, 1, 16, 1, 0, 16];
-        assert_eq!(message(&buf), IResult::Done(
+        assert_eq!(message(&buf), Ok((
             &[][..],
             Message::ACLDataPacket(ACLData {
                 handle: 64,
@@ -115,32 +114,32 @@ mod tests {
                 data: vec![1, 16, 1, 0, 16],
                 len: 5,
             }),
-        ))
+        )))
     }
 
     #[test]
     fn test_cmd_status() {
         let buf = [4, 15, 4, 0, 1, 22, 32];
-        assert_eq!(message(&buf), IResult::Done(
+        assert_eq!(message(&buf), Ok((
             &[][..],
             Message::CommandStatus {
                 command: CommandType::LEReadRemoteUsedFeatures,
                 status: HCIStatus::Success,
             }
-        ));
+        )));
     }
 
     #[test]
     fn test_recv_le_meta() {
         let buf = [4, 62, 12, 4, 0, 64, 0, 1, 0, 0, 0, 0, 0, 0, 0];
-        assert_eq!(message(&buf), IResult::Done(
+        assert_eq!(message(&buf), Ok((
             &[][..],
             Message::LEReadRemoteUsedFeaturesComplete {
                 status: HCIStatus::Success,
                 handle: 64,
                 flags: LEFeatureFlags::LE_ENCRYPTION,
             }
-        ))
+        )))
     }
 }
 
@@ -504,17 +503,17 @@ fn le_advertising_data(i: &[u8]) -> IResult<&[u8], Vec<LEAdvertisingData>> {
             (&i[len as usize..], vec![])
         }
     };
-    IResult::Done(i, result)
+    Ok((i, result))
 }
 
 named!(le_advertising_info<&[u8], LEAdvertisingInfo>,
     do_parse!(
        // TODO: support counts other than 1
-       count: le_u8 >>
+       _count: le_u8 >>
        evt_type: le_u8 >>
        bdaddr_type: le_u8 >>
        bdaddr: bd_addr >>
-       data: length_value!(le_u8, fold_many0!(le_advertising_data, Vec::new(), |mut acc: Vec<_>, x| {
+       data: length_value!(le_u8, fold_many0!(complete!(le_advertising_data), Vec::new(), |mut acc: Vec<_>, x| {
            acc.extend(x);
            acc
        })) >>
@@ -535,7 +534,7 @@ named!(bd_addr<&[u8], BDAddr>,
 
 named!(le_conn_complete<&[u8], LEConnInfo>,
     do_parse!(
-       skip: le_u8 >>
+       _skip: le_u8 >>
        handle: le_u16 >>
        role: le_u8 >>
        bdaddr_type: le_u8 >>
@@ -595,7 +594,7 @@ fn le_meta_event(i: &[u8]) -> IResult<&[u8], Message> {
             try_parse!(i, le_conn_update_complete)
         }
     };
-    IResult::Done(i, result)
+    Ok((i, result))
 }
 
 fn cmd_complete(i: &[u8]) -> IResult<&[u8], Message> {
@@ -635,7 +634,7 @@ fn cmd_complete(i: &[u8]) -> IResult<&[u8], Message> {
         }
     };
 
-    IResult::Done(&i, Message::HCICommandComplete(result))
+    Ok((&i, Message::HCICommandComplete(result)))
 }
 
 named!(disconnect_complete<&[u8], Message>,
@@ -669,10 +668,10 @@ fn hci_event_pkt(i: &[u8]) -> IResult<&[u8], Message> {
         DisconnComplete => try_parse!(data, disconnect_complete).1,
         _ => {
             warn!("Unhandled HCIEventPkt subtype {:?}", sub_type);
-            return IResult::Error(Err::Code(ErrorKind::Custom(4)))
+            return Err(Err::Error(error_position!(i, ErrorKind::Custom(4))));
         }
     };
-    IResult::Done(i, result)
+    Ok((i, result))
 }
 
 fn hci_command_pkt(i: &[u8]) -> IResult<&[u8], Message> {
@@ -694,7 +693,7 @@ fn hci_command_pkt(i: &[u8]) -> IResult<&[u8], Message> {
             }
         }
     };
-    IResult::Done(i, result)
+    Ok((i, result))
 }
 
 fn hci_acldata_pkt(i: &[u8]) -> IResult<&[u8], Message> {
@@ -724,10 +723,10 @@ fn hci_acldata_pkt(i: &[u8]) -> IResult<&[u8], Message> {
         },
         x => {
             warn!("unknown flag type: {}", x);
-            return IResult::Error(Err::Code(ErrorKind::Custom(11)));
+            return Err(Err::Error(error_position!(i, ErrorKind::Custom(11))));
         }
     };
-    IResult::Done(i, message)
+    Ok((i, message))
 }
 
 pub fn message(i: &[u8]) -> IResult<&[u8], Message> {

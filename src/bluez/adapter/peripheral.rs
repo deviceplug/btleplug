@@ -126,6 +126,8 @@ impl Peripheral {
                     AddressType::Public
                 };
 
+                properties.address = info.bdaddr;
+
                 if info.evt_type == 4 {
                     // discover event
                     properties.has_scan_response = true;

@@ -363,7 +363,7 @@ impl ApiPeripheral for Peripheral {
         handle_error(unsafe {
             libc::connect(fd, &addr as *const SockaddrL2 as *const libc::sockaddr,
                           size_of::<SockaddrL2>() as u32)
-        }).unwrap();
+        })?;
         debug!("connected to device {} over socket {}", self.address, fd);
 
         // restart scanning if we were already, as connecting to a device seems to kill it

@@ -8,13 +8,12 @@ use bytes::{BytesMut, BufMut};
 
 #[cfg(test)]
 mod tests {
-    use nom::IResult;
     use super::*;
 
     #[test]
     fn test_characteristics() {
         let buf = [9, 7, 2, 0, 2, 3, 0, 0, 42, 4, 0, 2, 5, 0, 1, 42, 6, 0, 10, 7, 0, 2, 42];
-        assert_eq!(characteristics(&buf), IResult::Done(
+        assert_eq!(characteristics(&buf), Ok((
             &[][..],
             Ok(vec![
                 Characteristic {
@@ -39,20 +38,20 @@ mod tests {
                     properties: CharPropFlags::READ | CharPropFlags::WRITE
                 },
             ]
-        )))
+        ))))
     }
 
     #[test]
     fn test_error() {
         let buf = [1, 8, 32, 0, 10];
-        assert_eq!(characteristics(&buf), IResult::Done(
+        assert_eq!(characteristics(&buf), Ok((
             &[][..],
             Err(ErrorResponse {
                 request_opcode: 0x08,
                 handle: 0x20,
                 error_code: 0x0a,
             })
-        ))
+        )))
     }
 }
 
@@ -65,7 +64,7 @@ pub struct NotifyResponse {
 
 named!(pub notify_response<&[u8], NotifyResponse>,
    do_parse!(
-      op: tag!(&[ATT_OP_READ_BY_TYPE_RESP]) >>
+      _op: tag!(&[ATT_OP_READ_BY_TYPE_RESP]) >>
       typ: le_u8 >>
       handle: le_u16 >>
       value: le_u16 >>
@@ -81,7 +80,7 @@ pub struct ExchangeMTURequest {
 
 named!(pub mtu_request<&[u8], ExchangeMTURequest>,
     do_parse!(
-      op: tag!(&[ATT_OP_EXCHANGE_MTU_REQ]) >>
+      _op: tag!(&[ATT_OP_EXCHANGE_MTU_REQ]) >>
       client_rx_mtu: le_u16 >>
       (
         ExchangeMTURequest { client_rx_mtu }
@@ -107,7 +106,7 @@ named!(pub error_response<&[u8], ErrorResponse>,
 
 named!(pub value_notification<&[u8], ValueNotification>,
     do_parse!(
-        op: tag!(&[ATT_OP_VALUE_NOTIFICATION]) >>
+        _op: tag!(&[ATT_OP_VALUE_NOTIFICATION]) >>
         handle: le_u16 >>
         value: many1!(le_u8) >>
         (
@@ -125,13 +124,13 @@ fn characteristic(i: &[u8], b16_uuid: bool) -> IResult<&[u8], Characteristic> {
         try_parse!(i, map!(parse_uuid_128, |b| UUID::B128(b)))
     };
 
-    IResult::Done(i, Characteristic {
+    Ok((i, Characteristic {
         start_handle,
         value_handle,
         end_handle: 0xFFFF,
         uuid,
         properties: CharPropFlags::from_bits_truncate(properties),
-    })
+    }))
 }
 
 pub fn characteristics(i: &[u8]) -> IResult<&[u8], Result<Vec<Characteristic>, ErrorResponse>> {
@@ -153,7 +152,7 @@ pub fn characteristics(i: &[u8]) -> IResult<&[u8], Result<Vec<Characteristic>, E
         }
     };
 
-    IResult::Done(i, result)
+    Ok((i, result))
 }
 
 pub fn read_by_type_req(start_handle: u16, end_handle: u16, uuid: UUID) -> Vec<u8> {

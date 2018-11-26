@@ -28,7 +28,7 @@ failure_derive = "0.1.1"
 backtrace = "0.3.5"
 
 [dependencies.nom]
-version = "^3.2"
+version = "^4.0"
 features = ["verbose-errors"]
 
 [dev-dependencies]

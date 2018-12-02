@@ -55,7 +55,7 @@ impl Debug for BDAddr {
 }
 
 /// A notification sent from a peripheral due to a change in a value.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ValueNotification {
     /// The handle that has changed.
     pub handle: u16,

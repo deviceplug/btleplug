@@ -42,6 +42,18 @@ mod tests {
     }
 
     #[test]
+    fn test_value_notification() {
+        let buf = [27, 46, 0, 165, 17, 5, 0, 0, 130, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        assert_eq!(value_notification(&buf), Ok((
+            &[][..],
+            ValueNotification {
+                handle: 46,
+                value: vec![165, 17, 5, 0, 0, 130, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            })
+        ));
+    }
+
+    #[test]
     fn test_error() {
         let buf = [1, 8, 32, 0, 10];
         assert_eq!(characteristics(&buf), Ok((
@@ -108,7 +120,7 @@ named!(pub value_notification<&[u8], ValueNotification>,
     do_parse!(
         _op: tag!(&[ATT_OP_VALUE_NOTIFICATION]) >>
         handle: le_u16 >>
-        value: many1!(le_u8) >>
+        value: many1!(complete!(le_u8)) >>
         (
            ValueNotification { handle, value }
         )

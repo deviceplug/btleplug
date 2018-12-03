@@ -2,6 +2,7 @@ use std::sync::Mutex;
 
 use libc;
 use libc::{c_void, SOCK_RAW, AF_BLUETOOTH};
+use nix::sys::ioctl::ioctl_param_type;
 use std::mem;
 
 use bluez::util::handle_error;
@@ -14,9 +15,9 @@ struct HciIoctls {}
 // in a private struct to hide
 impl HciIoctls {
     // #define HCIDEVUP	_IOW('H', 201, int)
-    ioctl!(write_int hci_dev_up with b'H', 201);
+    ioctl_write_int!(hci_dev_up, b'H', 201);
     // #define HCIDEVDOWN	_IOW('H', 202, int)
-    ioctl!(write_int hci_dev_down with b'H', 202);
+    ioctl_write_int!(hci_dev_down, b'H', 202);
 }
 
 #[derive(Debug, Copy)]
@@ -92,7 +93,7 @@ impl Manager {
     /// Disables an adapter.
     pub fn down(&self, adapter: &Adapter) -> Result<Adapter> {
         let ctl = self.ctl_fd.lock().unwrap();
-        unsafe { HciIoctls::hci_dev_down(*ctl, adapter.dev_id as i32)? };
+        unsafe { HciIoctls::hci_dev_down(*ctl, adapter.dev_id as ioctl_param_type)? };
         Adapter::from_dev_id(*ctl, adapter.dev_id)
     }
 
@@ -100,7 +101,7 @@ impl Manager {
     pub fn up(&self, adapter: &Adapter) -> Result<Adapter> {
         let ctl = self.ctl_fd.lock().unwrap();
         unsafe {
-            HciIoctls::hci_dev_up(*ctl, adapter.dev_id as i32)?;
+            HciIoctls::hci_dev_up(*ctl, adapter.dev_id as ioctl_param_type)?;
         }
         Adapter::from_dev_id(*ctl, adapter.dev_id)
     }

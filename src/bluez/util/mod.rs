@@ -1,14 +1,14 @@
 use nix;
-use nix::Errno;
+use nix::errno::Errno;
 
 use ::Result;
 use Error;
 
 fn errno_to_error(errno: Errno) -> Error {
     match errno {
-        nix::Errno::EPERM => Error::PermissionDenied,
-        nix::Errno::ENODEV => Error::DeviceNotFound,
-        nix::Errno::ENOTCONN => Error::NotConnected,
+        Errno::EPERM => Error::PermissionDenied,
+        Errno::ENODEV => Error::DeviceNotFound,
+        Errno::ENOTCONN => Error::NotConnected,
         _ => Error::Other(errno.to_string())
     }
 }

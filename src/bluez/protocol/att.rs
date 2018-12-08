@@ -65,6 +65,12 @@ mod tests {
             })
         )))
     }
+
+    #[test]
+    fn test_read_req() {
+        let expected: Vec<u8> = vec![0x0A, 0x25, 0x00];
+        assert_eq!(expected, read_req(0x0025));
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -176,5 +182,12 @@ pub fn read_by_type_req(start_handle: u16, end_handle: u16, uuid: UUID) -> Vec<u
         UUID::B16(u) => buf.put_u16_le(u),
         UUID::B128(u) => buf.put_slice(&u),
     }
+    buf.to_vec()
+}
+
+pub fn read_req(handle: u16) -> Vec<u8> {
+    let mut buf = BytesMut::with_capacity(3);
+    buf.put_u8(ATT_OP_READ_REQ);
+    buf.put_u16_le(handle);
     buf.to_vec()
 }

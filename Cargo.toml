@@ -16,7 +16,7 @@ keywords = ["bluetooth", "BLE", "IOT", "bluez"]
 categories = ["network-programming", "hardware-support"]
 
 [dependencies]
-libc = "0.2.33"
+libc = "0.2.45"
 nix = "0.12.0"
 bytes = "0.4"
 num = "0.1.41"

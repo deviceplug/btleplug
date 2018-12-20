@@ -83,7 +83,3 @@ pub const DISCONNECT_CMD: u16 = OCF_DISCONNECT | (OGF_LINK_CTL as u16) << 10;
 
 pub const BTPROTO_HCI: i32 = 1;
 
-// #define HCIGETDEVLIST	_IOR('H', 210, int)
-pub static HCI_GET_DEV_LIST_MAGIC: usize = (2u32 << 0i32 + 8i32 + 8i32 + 14i32 |
-    (b'H' as (i32) << 0i32 + 8i32) as (u32) | (210i32 << 0i32) as (u32)) as
-    (usize) | 4 /* (sizeof(i32)) */ << 0i32 + 8i32 + 8i32;

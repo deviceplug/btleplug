@@ -19,6 +19,7 @@ use bluez::util::handle_error;
 use bluez::protocol::hci;
 use bluez::adapter::peripheral::Peripheral;
 use bluez::constants::*;
+use bluez::ioctl;
 use api::EventHandler;
 
 
@@ -442,11 +443,6 @@ pub struct Adapter {
     pub info: HCIDevInfo,
 }
 
-// #define HCIGETDEVINFO	_IOR('H', 211, int)
-static HCI_GET_DEV_MAGIC: usize = (2u32 << 0i32 + 8i32 + 8i32 + 14i32 |
-    (b'H' as (i32) << 0i32 + 8i32) as (u32) | (211i32 << 0i32) as (u32)) as (usize) |
-    4 /* (sizeof(i32)) */ << 0i32 + 8i32 + 8i32;
-
 impl Adapter {
     pub fn from_device_info(di: &HCIDevInfo) -> Adapter {
         info!("DevInfo: {:?}", di);
@@ -465,8 +461,7 @@ impl Adapter {
         di.dev_id = dev_id;
 
         unsafe {
-            handle_error(libc::ioctl(ctl, HCI_GET_DEV_MAGIC as libc::c_ulong,
-                                     &mut di as (*mut HCIDevInfo) as (*mut libc::c_void)))?;
+            ioctl::hci_get_dev_info(ctl, &mut di)?;
         }
 
         Ok(Adapter::from_device_info(&di))

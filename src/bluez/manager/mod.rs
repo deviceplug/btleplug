@@ -1,28 +1,21 @@
+use std::slice::Iter;
+use std::iter::Take;
 use std::sync::Mutex;
 
 use libc;
-use libc::{c_void, SOCK_RAW, AF_BLUETOOTH};
+use libc::{SOCK_RAW, AF_BLUETOOTH};
 use nix::sys::ioctl::ioctl_param_type;
 use std::mem;
 
 use bluez::util::handle_error;
 use bluez::adapter::{Adapter, ConnectedAdapter};
 use bluez::constants::*;
+use bluez::ioctl;
 use ::Result;
-
-struct HciIoctls {}
-
-// in a private struct to hide
-impl HciIoctls {
-    // #define HCIDEVUP	_IOW('H', 201, int)
-    ioctl_write_int!(hci_dev_up, b'H', 201);
-    // #define HCIDEVDOWN	_IOW('H', 202, int)
-    ioctl_write_int!(hci_dev_down, b'H', 202);
-}
 
 #[derive(Debug, Copy)]
 #[repr(C)]
-struct HCIDevReq {
+pub struct HCIDevReq {
     pub dev_id: u16,
     pub dev_opt: u32,
 }
@@ -31,17 +24,40 @@ impl Clone for HCIDevReq {
     fn clone(&self) -> Self { *self }
 }
 
+impl Default for HCIDevReq {
+    fn default() -> Self {
+        HCIDevReq {
+            dev_id: 0,
+            dev_opt: 0,
+        }
+    }
+}
+
 #[derive(Copy)]
 #[repr(C)]
-struct HCIDevListReq {
+pub struct HCIDevListReq {
     dev_num: u16,
-    dev_reqs: [HCIDevReq; 0],
+    dev_reqs: [HCIDevReq; 16],
+}
+
+impl HCIDevListReq {
+    pub fn iter(&self) -> Take<Iter<HCIDevReq>> {
+        self.dev_reqs.iter().take(self.dev_num as usize)
+    }
 }
 
 impl Clone for HCIDevListReq {
     fn clone(&self) -> Self { *self }
 }
 
+impl Default for HCIDevListReq {
+    fn default() -> Self {
+        HCIDevListReq {
+            dev_num: 16u16,
+            dev_reqs: unsafe { mem::zeroed() },
+        }
+    }
+}
 
 /// This struct is the interface into BlueZ. It can be used to list, manage, and connect to bluetooth
 /// adapters.
@@ -63,22 +79,15 @@ impl Manager {
 
         let ctl = self.ctl_fd.lock().unwrap();
 
-        let mut buf = vec![0u8; 16usize *
-            mem::size_of::<HCIDevReq>() + mem::size_of::<u16>()];
-        let dl: *mut HCIDevListReq = buf.as_mut_ptr() as (*mut HCIDevListReq);
-        let dr: *mut HCIDevReq;
+        let mut dev_list = HCIDevListReq::default();
 
         unsafe {
-            (*dl).dev_num = 16u16;
-            dr = (*dl).dev_reqs.as_mut_ptr();
+            ioctl::hci_get_dev_list(*ctl, &mut dev_list)?;
+        }
 
-            handle_error(
-                libc::ioctl(*ctl, HCI_GET_DEV_LIST_MAGIC as libc::c_ulong, dl as (*mut c_void)))?;
-
-            for i in 0..(*dl).dev_num {
-                result.push(Adapter::from_dev_id(*ctl,
-                                                 (*dr.offset(i as isize)).dev_id)?);
-            }
+        for dev_req in dev_list.iter() {
+            let adapter = Adapter::from_dev_id(*ctl, dev_req.dev_id)?;
+            result.push(adapter);
         }
 
         Ok(result)
@@ -93,7 +102,7 @@ impl Manager {
     /// Disables an adapter.
     pub fn down(&self, adapter: &Adapter) -> Result<Adapter> {
         let ctl = self.ctl_fd.lock().unwrap();
-        unsafe { HciIoctls::hci_dev_down(*ctl, adapter.dev_id as ioctl_param_type)? };
+        unsafe { ioctl::hci_dev_down(*ctl, adapter.dev_id as ioctl_param_type)? };
         Adapter::from_dev_id(*ctl, adapter.dev_id)
     }
 
@@ -101,7 +110,7 @@ impl Manager {
     pub fn up(&self, adapter: &Adapter) -> Result<Adapter> {
         let ctl = self.ctl_fd.lock().unwrap();
         unsafe {
-            HciIoctls::hci_dev_up(*ctl, adapter.dev_id as ioctl_param_type)?;
+            ioctl::hci_dev_up(*ctl, adapter.dev_id as ioctl_param_type)?;
         }
         Adapter::from_dev_id(*ctl, adapter.dev_id)
     }

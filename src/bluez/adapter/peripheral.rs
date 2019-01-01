@@ -514,6 +514,17 @@ impl ApiPeripheral for Peripheral {
         })
     }
 
+    fn read_async(&self, characteristic: &Characteristic, handler: Option<RequestCallback>) {
+        let mut buf = att::read_req(characteristic.value_handle);
+        self.request_raw_async(&mut buf, handler);
+    }
+
+    fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
+        Peripheral::wait_until_done(|done: RequestCallback| {
+            self.read_async(characteristic, Some(done));
+        })
+    }
+
     fn read_by_type_async(&self, characteristic: &Characteristic, uuid: UUID,
                           handler: Option<RequestCallback>) {
         let mut buf = att::read_by_type_req(characteristic.start_handle, characteristic.end_handle, uuid);

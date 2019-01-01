@@ -225,6 +225,14 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     fn request(&self, characteristic: &Characteristic,
                data: &[u8]) -> Result<Vec<u8>>;
 
+    /// Sends a request (read) to the device. Takes an optional callback with either an error if
+    /// the request was not accepted or the response from the device.
+    fn read_async(&self, characteristic: &Characteristic, handler: Option<RequestCallback>);
+
+    /// Sends a request (read) to the device. Synchronously returns either an error if the request
+    /// was not accepted or the response from the device.
+    fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>>;
+
     /// Sends a read-by-type request to device for the range of handles covered by the
     /// characteristic and for the specified declaration UUID. See
     /// [here](https://www.bluetooth.com/specifications/gatt/declarations) for valid UUIDs.

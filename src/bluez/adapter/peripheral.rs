@@ -292,43 +292,8 @@ impl Peripheral {
         // TODO: this copy is avoidable
         (*done).clone().unwrap()
     }
-}
 
-impl ApiPeripheral for Peripheral {
-    fn address(&self) -> BDAddr {
-        self.address.clone()
-    }
-
-    fn properties(&self) -> PeripheralProperties {
-        let l = self.properties.lock().unwrap();
-        l.clone()
-    }
-
-    fn characteristics(&self) -> BTreeSet<Characteristic> {
-        let l = self.characteristics.lock().unwrap();
-        l.clone()
-    }
-
-    fn is_connected(&self) -> bool {
-        let l = self.stream.try_read();
-        return l.is_ok() && l.unwrap().is_some();
-    }
-
-    fn connect(&self) -> Result<()> {
-        // take lock on stream
-        let mut stream = self.stream.write().unwrap();
-
-        if stream.is_some() {
-            // we're already connected, just return
-            return Ok(());
-        }
-
-        // create the socket on which we'll communicate with the device
-        let fd = handle_error(unsafe {
-            libc::socket(libc::AF_BLUETOOTH, libc::SOCK_SEQPACKET, 0)
-        })?;
-        debug!("created socket {} to communicate with device", fd);
-
+    fn setup_connection(&self, fd: i32) -> Result<u16> {
         let local_addr = SockaddrL2 {
             l2_family: libc::AF_BLUETOOTH as libc::sa_family_t,
             l2_psm: 0,
@@ -376,6 +341,57 @@ impl ApiPeripheral for Peripheral {
         let timeout = Duration::from_secs(20);
         match self.connection_rx.lock().unwrap().recv_timeout(timeout) {
             Ok(handle) => {
+                return Ok(handle);
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                return Err(Error::TimedOut(timeout.clone()));
+            }
+            err => {
+                // unexpected error
+                err.unwrap();
+                unreachable!();
+            }
+        };
+    }
+}
+
+impl ApiPeripheral for Peripheral {
+    fn address(&self) -> BDAddr {
+        self.address.clone()
+    }
+
+    fn properties(&self) -> PeripheralProperties {
+        let l = self.properties.lock().unwrap();
+        l.clone()
+    }
+
+    fn characteristics(&self) -> BTreeSet<Characteristic> {
+        let l = self.characteristics.lock().unwrap();
+        l.clone()
+    }
+
+    fn is_connected(&self) -> bool {
+        let l = self.stream.try_read();
+        return l.is_ok() && l.unwrap().is_some();
+    }
+
+    fn connect(&self) -> Result<()> {
+        // take lock on stream
+        let mut stream = self.stream.write().unwrap();
+
+        if stream.is_some() {
+            // we're already connected, just return
+            return Ok(());
+        }
+
+        // create the socket on which we'll communicate with the device
+        let fd = handle_error(unsafe {
+            libc::socket(libc::AF_BLUETOOTH, libc::SOCK_SEQPACKET, 0)
+        })?;
+        debug!("created socket {} to communicate with device", fd);
+
+        match self.setup_connection(fd) {
+            Ok(handle) => {
                 // create the acl stream that will communicate with the device
                 let s = ACLStream::new(self.c_adapter.adapter.clone(),
                                        self.address, handle, fd);
@@ -391,17 +407,18 @@ impl ApiPeripheral for Peripheral {
 
                 *stream = Some(s);
             }
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                return Err(Error::TimedOut(timeout.clone()));
+            Err(e) => {
+                // close the socket we opened
+                debug!("Failed to connect ({}), closing socket {}", e, fd);
+                handle_error(unsafe { libc::close(fd) })?;
+                return Err(e)
             }
-            err => {
-                // unexpected error
-                err.unwrap();
-            }
-        };
+        }
 
         Ok(())
     }
+
+
 
     fn disconnect(&self) -> Result<()> {
         let mut l = self.stream.write().unwrap();

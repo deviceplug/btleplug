@@ -1,6 +1,6 @@
 [package]
 name = "rumble"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["Micah Wylde <micah@micahw.com>"]
 license = "MIT/Apache-2.0"
 repository = "https://github.com/mwylde/rumble"

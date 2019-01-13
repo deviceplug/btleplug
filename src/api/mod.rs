@@ -284,6 +284,16 @@ pub trait Central<P : Peripheral>: Send + Sync + Clone {
     /// to subscribers of `on_event` and will be available via `peripherals()`.
     fn start_scan(&self) -> Result<()>;
 
+    /// Control whether to use active or passive scan mode to find BLE devices. Active mode scan
+    /// notifies advertises about the scan, whereas passive scan only receives data from the
+    /// advertiser. Defaults to use active mode.
+    fn active(&self, enabled: bool);
+
+    /// Control whether to filter multiple advertisements by the same peer device. Receving
+    // can be useful for some applications. E.g. when using scan to collect information from
+    /// beacons that update data frequently. Defaults to filter duplicate advertisements.
+    fn filter_duplicates(&self, enabled: bool);
+
     /// Stops scanning for BLE devices.
     fn stop_scan(&self) -> Result<()>;
 

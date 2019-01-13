@@ -170,6 +170,8 @@ pub struct ConnectedAdapter {
     adapter_fd: i32,
     should_stop: Arc<AtomicBool>,
     pub scan_enabled: Arc<AtomicBool>,
+    pub active: Arc<AtomicBool>,
+    pub filter_duplicates: Arc<AtomicBool>,
     peripherals: Arc<Mutex<HashMap<BDAddr, Peripheral>>>,
     handle_map: Arc<Mutex<HashMap<u16, BDAddr>>>,
     event_handlers: Arc<Mutex<Vec<EventHandler>>>,
@@ -197,6 +199,8 @@ impl ConnectedAdapter {
         let connected = ConnectedAdapter {
             adapter: adapter.clone(),
             adapter_fd,
+            active: Arc::new(AtomicBool::new(false)),
+            filter_duplicates: Arc::new(AtomicBool::new(false)),
             should_stop,
             scan_enabled: Arc::new(AtomicBool::new(false)),
             event_handlers: Arc::new(Mutex::new(vec![])),
@@ -374,7 +378,7 @@ impl ConnectedAdapter {
 
     fn set_scan_params(&self) -> Result<()> {
         let mut data = BytesMut::with_capacity(7);
-        data.put_u8(1); // scan_type = active
+        data.put_u8(if self.active.load(Ordering::Relaxed) { 1 } else { 0 }); // scan_type = active or passive
         data.put_u16_le(0x0010); // interval ms
         data.put_u16_le(0x0010); // window ms
         data.put_u8(0); // own_type = public
@@ -386,7 +390,7 @@ impl ConnectedAdapter {
     fn set_scan_enabled(&self, enabled: bool) -> Result<()> {
         let mut data = BytesMut::with_capacity(2);
         data.put_u8(if enabled { 1 } else { 0 }); // enabled
-        data.put_u8(1); // filter duplicates
+        data.put_u8(if self.filter_duplicates.load(Ordering::Relaxed) { 1 } else { 0 }); // filter duplicates
 
         self.scan_enabled.clone().store(enabled, Ordering::Relaxed);
         let mut buf = hci::hci_command(LE_SET_SCAN_ENABLE_CMD, &*data);
@@ -398,6 +402,14 @@ impl Central<Peripheral> for ConnectedAdapter {
     fn on_event(&self, handler: EventHandler) {
         let list = self.event_handlers.clone();
         list.lock().unwrap().push(handler);
+    }
+
+    fn active(&self, enabled: bool) {
+        self.active.clone().store(enabled, Ordering::Relaxed);
+    }
+
+    fn filter_duplicates(&self, enabled: bool) {
+        self.active.clone().store(enabled, Ordering::Relaxed);
     }
 
     fn start_scan(&self) -> Result<()> {

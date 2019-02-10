@@ -103,6 +103,19 @@ mod tests {
             LocalName(String::from("LEDBlue-EA97B7A3 "))])));
     }
 
+
+    #[test]
+    fn test_broken_le_advertising_data() {
+        let buf = [0, 0x21, 240, 255, 229, 255, 224, 255];
+        assert!(le_advertising_data(&buf).is_err());
+        let buf = [1, 0x16, 240, 255, 229, 255, 224, 255];
+        assert!(le_advertising_data(&buf).is_err());
+        let buf = [3, 0x20, 240, 255, 229, 255, 224, 255];
+        assert!(le_advertising_data(&buf).is_err());
+        let buf = [3, 0x21, 240, 255, 229, 255, 224, 255];
+        assert!(le_advertising_data(&buf).is_err());
+    }
+
     #[test]
     fn test_acl_data_packet() {
         let buf = [2, 64, 32, 9, 0, 5, 0, 4, 0, 1, 16, 1, 0, 16];
@@ -438,6 +451,10 @@ fn le_advertising_data(i: &[u8]) -> IResult<&[u8], Vec<LEAdvertisingData>> {
     let (i, len) = try_parse!(i, le_u8);
     let (i, typ) = try_parse!(i, le_u8);
 
+    if len < 1 {
+        return Err(Err::Error(error_position!(i, ErrorKind::Custom(4))));
+    }
+
     let len = len as usize - 1;
     // let mut result = vec![];
     let (i, result)= match typ {
@@ -473,18 +490,28 @@ fn le_advertising_data(i: &[u8]) -> IResult<&[u8], Vec<LEAdvertisingData>> {
                 |b| SolicitationUUID128(b)), len / 16))
         }
         0x16 => {
+            if len < 2 {
+                return Err(Err::Error(error_position!(i, ErrorKind::Custom(4))));
+            }
+
             try_parse!(i, do_parse!(
                 uuid: le_u16 >>
                 data: count!(le_u8, len - 2) >>
                 (vec![ServiceData16(uuid, data)])))
         }
         0x20 => {
+            if len < 4 {
+                return Err(Err::Error(error_position!(i, ErrorKind::Custom(4))));
+            }
             try_parse!(i, do_parse!(
                 uuid: le_u32 >>
                 data: count!(le_u8, len - 4) >>
                 (vec![ServiceData32(uuid, data)])))
         }
         0x21 => {
+            if len < 16 {
+                return Err(Err::Error(error_position!(i, ErrorKind::Custom(4))));
+            }
             try_parse!(i, do_parse!(
                 uuid: parse_uuid_128 >>
                 data: count!(le_u8, len - 16) >>

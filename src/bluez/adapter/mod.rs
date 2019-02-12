@@ -409,7 +409,7 @@ impl Central<Peripheral> for ConnectedAdapter {
     }
 
     fn filter_duplicates(&self, enabled: bool) {
-        self.active.clone().store(enabled, Ordering::Relaxed);
+        self.filter_duplicates.clone().store(enabled, Ordering::Relaxed);
     }
 
     fn start_scan(&self) -> Result<()> {

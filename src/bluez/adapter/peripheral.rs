@@ -45,7 +45,7 @@ pub struct SockaddrL2 {
     l2_psm: u16,
     l2_bdaddr: BDAddr,
     l2_cid: u16,
-    l2_bdaddr_type: u32,
+    l2_bdaddr_type: u8,
 }
 impl Clone for SockaddrL2 {
     fn clone(&self) -> Self { *self }
@@ -299,7 +299,7 @@ impl Peripheral {
             l2_psm: 0,
             l2_bdaddr: self.c_adapter.adapter.addr,
             l2_cid: ATT_CID,
-            l2_bdaddr_type: self.c_adapter.adapter.typ.num() as u32,
+            l2_bdaddr_type: self.c_adapter.adapter.typ.num() as u8,
         };
 
         // bind to the socket

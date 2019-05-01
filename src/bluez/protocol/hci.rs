@@ -114,6 +114,8 @@ mod tests {
         assert!(le_advertising_data(&buf).is_err());
         let buf = [3, 0x21, 240, 255, 229, 255, 224, 255];
         assert!(le_advertising_data(&buf).is_err());
+        let buf = [3, 0xFE];
+        assert!(le_advertising_data(&buf).is_err());
     }
 
     #[test]
@@ -527,7 +529,11 @@ fn le_advertising_data(i: &[u8]) -> IResult<&[u8], Vec<LEAdvertisingData>> {
         _ => {
             // skip this field
             debug!("Unknown field type {} in {:?}", typ, i);
-            (&i[len as usize..], vec![])
+            if len < i.len() {
+                (&i[len as usize..], vec![])
+            } else {
+                return Err(Err::Error(error_position!(i, ErrorKind::Custom(4))));
+            }
         }
     };
     Ok((i, result))

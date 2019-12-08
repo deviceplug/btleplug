@@ -321,7 +321,7 @@ impl Peripheral {
             l2_psm: 0,
             l2_bdaddr: self.address,
             l2_cid: ATT_CID,
-            l2_bdaddr_type: 1,
+            l2_bdaddr_type: self.properties.lock().unwrap().address_type.num() as u8,
         };
 
         // connect to the device

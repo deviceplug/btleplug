@@ -223,7 +223,7 @@ impl ApiPeripheral for Peripheral {
         let ble_characteristics = self.ble_characteristics.lock().unwrap();
         if let Some(ble_characteristic) = ble_characteristics.get(&characteristic.uuid) {
             return ble_characteristic.read_value();
-        } else 
+        } else {
             Err(Error::NotSupported("read_by_type".into()))
         }
     }

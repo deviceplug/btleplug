@@ -198,7 +198,7 @@ impl ApiPeripheral for Peripheral {
     fn request_async(&self, _characteristic: &Characteristic,
                      _data: &[u8], _handler: Option<RequestCallback>) {
 
-                     }
+    }
 
     /// Sends a request (write) to the device. Synchronously returns either an error if the request
     /// was not accepted or the response from the device.
@@ -261,5 +261,12 @@ impl ApiPeripheral for Peripheral {
     fn on_notification(&self, handler: NotificationHandler) {
         let mut list = self.notification_handlers.lock().unwrap();
         list.push(handler);
+    }
+
+    fn read_async(&self, characteristic: &Characteristic, handler: Option<RequestCallback>) {
+    }
+
+    fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
+        Ok(vec!())
     }
 }

@@ -59,4 +59,10 @@ impl Central<Peripheral> for Adapter {
         let l = self.peripherals.lock().unwrap();
         l.get(&address).cloned()
     }
+
+    fn active(&self, enabled: bool) {
+    }
+
+    fn filter_duplicates(&self, enabled: bool) {
+    }
 }

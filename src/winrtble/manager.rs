@@ -1,4 +1,3 @@
-use winrt::RuntimeContext;
 use winrt::RtAsyncOperation;
 use winrt::windows::devices::radios::{Radio, RadioKind};
 use winrtble::adapter::Adapter;
@@ -6,13 +5,11 @@ use ::Result;
 use ::Error;
 
 pub struct Manager {
-    _rt: RuntimeContext,
 }
 
 impl Manager {
-    pub fn new() -> Manager {
-        let _rt = RuntimeContext::init();
-        Manager { _rt }
+    pub fn new() -> Self {
+        Self {}
     }
 
     pub fn adapters(&self) -> Result<Adapter> {

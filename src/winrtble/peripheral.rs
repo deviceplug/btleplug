@@ -190,7 +190,12 @@ impl ApiPeripheral for Peripheral {
     /// Sends a command (write without response) to the characteristic. Synchronously returns a
     /// `Result` with an error set if the command was not accepted by the device.
     fn command(&self, _characteristic: &Characteristic, _data: &[u8]) -> Result<()> {
-        Ok(())
+        let ble_characteristics = self.ble_characteristics.lock().unwrap();
+        if let Some(ble_characteristic) = ble_characteristics.get(&_characteristic.uuid) {
+            return ble_characteristic.write_value(_data);
+        } else {
+            Err(Error::NotSupported("read_by_type".into()))
+        }
     }
 
     /// Sends a request (write) to the device. Takes an optional callback with either an error if

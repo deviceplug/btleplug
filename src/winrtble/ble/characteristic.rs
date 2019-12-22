@@ -1,12 +1,12 @@
 use ::Result;
 use ::Error;
-use winrt::ComPtr;
+use winrt::{ComPtr, RtDefaultConstructible};
 use winrt::windows::devices::bluetooth::genericattributeprofile::{GattCommunicationStatus, GattCharacteristic, GattValueChangedEventArgs, GattClientCharacteristicConfigurationDescriptorValue};
-use winrt::windows::storage::streams::DataReader;
+use winrt::windows::storage::streams::{DataReader, DataWriter};
 use winrt::RtAsyncOperation;
 use winrt::windows::foundation::{ TypedEventHandler, EventRegistrationToken };
 
-pub type NotifiyEventHandler = Box<Fn(Vec<u8>) + Send>;
+pub type NotifiyEventHandler = Box<dyn Fn(Vec<u8>) + Send>;
 
 pub struct BLECharacteristic {
     characteristic: ComPtr<GattCharacteristic>,
@@ -19,6 +19,18 @@ unsafe impl Sync for BLECharacteristic {}
 impl BLECharacteristic {
     pub fn new(characteristic: ComPtr<GattCharacteristic>) -> Self {
         BLECharacteristic { characteristic, notify_token: None }
+    }
+
+    pub fn write_value(&self, data: &[u8]) -> Result<()> {
+        let writer = DataWriter::new();
+        writer.write_bytes(data);
+        let buffer = writer.detach_buffer().unwrap().unwrap();
+        let result = self.characteristic.write_value_async(&buffer).unwrap().blocking_get().unwrap();
+        if result == GattCommunicationStatus::Success {
+            Ok(())
+        } else {
+            Err(Error::NotSupported("get_status".into()))
+        }
     }
 
     pub fn read_value(&self) -> Result<Vec<u8>> {

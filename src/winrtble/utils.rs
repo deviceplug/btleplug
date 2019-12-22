@@ -42,20 +42,25 @@ pub fn to_address(addr: BDAddr) -> u64 {
     address
 }
 
+// If we want to get this into Bluez format, we've got to flip everything into a U128.
 pub fn to_uuid(uuid: &Guid) -> UUID {
     let mut array = [0u8; 16];
     for i in 0..4 {
-        array[i] = (uuid.Data1 >> (8 * i)) as u8;
+        array[i + 12] = (uuid.Data1 >> (8 * i)) as u8;
     }
+    println!("{:?}", array);
     for i in 0..2 {
-        array[i + 4] = (uuid.Data2 >> (8 * i)) as u8;
+        array[i + 10] = (uuid.Data2 >> (8 * i)) as u8;
     }
+    println!("{:?}", array);
     for i in 0..2 {
-        array[i + 6] = (uuid.Data3 >> (8 * i)) as u8;
+        array[i + 8] = (uuid.Data3 >> (8 * i)) as u8;
     }
+    println!("{:?}", array);
     for i in 0..8 {
-        array[i + 8] = uuid.Data4[i];
+        array[i] = uuid.Data4[7-i];
     }
+    println!("{:?}", array);
     UUID::B128(array)
 }
 

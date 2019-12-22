@@ -1,4 +1,4 @@
-use api::Central;
+use api::{Central, CentralEvent};
 use winrtble::peripheral::Peripheral;
 use api::EventHandler;
 use api::BDAddr;
@@ -22,6 +22,15 @@ impl Adapter {
         let event_handlers = Arc::new(Mutex::new(Vec::new()));
         Adapter { watcher, peripherals, event_handlers }
     }
+
+    pub fn emit(&self, event: CentralEvent) {
+        debug!("emitted {:?}", event);
+        let handlers = self.event_handlers.clone();
+        let vec = handlers.lock().unwrap();
+        for handler in (*vec).iter() {
+            handler(event.clone());
+        }
+    }
 }
 
 impl Central<Peripheral> for Adapter {
@@ -33,6 +42,7 @@ impl Central<Peripheral> for Adapter {
     fn start_scan(&self) -> Result<()> {
         let peripherals = self.peripherals.clone();
         let watcher = self.watcher.lock().unwrap();
+        let adapter = self.clone();
         watcher.start(Box::new(move |args| {
             let bluetooth_address = args.get_bluetooth_address().unwrap();
             let address = utils::to_addr(bluetooth_address);
@@ -40,6 +50,7 @@ impl Central<Peripheral> for Adapter {
             let peripheral = peripherals.entry(address).or_insert_with(|| {
                 Peripheral::new(address)
             });
+            adapter.emit(CentralEvent::DeviceDiscovered(address));
             peripheral.update_properties(&args);
         }))
     }

@@ -51,21 +51,16 @@ impl Peripheral {
     pub fn update_properties(&self, args: &BluetoothLEAdvertisementReceivedEventArgs) {
         let mut properties = self.properties.lock().unwrap();
         let advertisement = args.get_advertisement().unwrap().unwrap();
-        properties.local_name = advertisement.get_local_name().ok().and_then(|n| 
-            if !n.is_empty() {
-                Some(n.to_string()) 
-            } else {
-                None 
-            }
-        );
 
         properties.discovery_count += 1;
-        // windows does not provide the address type in the advertisement event args but only in the device object
-        // https://social.msdn.microsoft.com/Forums/en-US/c71d51a2-56a1-425a-9063-de44fda48766/bluetooth-address-public-or-random?forum=wdk
-        properties.address_type = AddressType::default();
-        properties.has_scan_response = args.get_advertisement_type().unwrap() == BluetoothLEAdvertisementType::ScanResponse;
-        properties.tx_power_level = args.get_raw_signal_strength_in_dbm().ok().map(|rssi| rssi as i8);
-        properties.manufacturer_data = if let Ok(Some(manufacturer_data)) = advertisement.get_manufacturer_data() {
+
+        // Advertisements are cumulative: set/replace data only if it's set
+        if let Ok(name) = advertisement.get_local_name() {
+            if !name.is_empty() {
+                properties.local_name = Some(name.to_string());
+            }
+        }
+        if let Ok(Some(manufacturer_data)) = advertisement.get_manufacturer_data() {
             let mut data = Vec::new();
             for i in &manufacturer_data {
                 let d = i.unwrap();
@@ -79,10 +74,14 @@ impl Peripheral {
                 input[1] = (company_id >> 8) as u8;
                 data.append(&mut input);
             }
-            Some(data)
-        } else {
-            None
-        };
+            properties.manufacturer_data = Some(data)
+        }
+
+        // windows does not provide the address type in the advertisement event args but only in the device object
+        // https://social.msdn.microsoft.com/Forums/en-US/c71d51a2-56a1-425a-9063-de44fda48766/bluetooth-address-public-or-random?forum=wdk
+        properties.address_type = AddressType::default();
+        properties.has_scan_response = args.get_advertisement_type().unwrap() == BluetoothLEAdvertisementType::ScanResponse;
+        properties.tx_power_level = args.get_raw_signal_strength_in_dbm().ok().map(|rssi| rssi as i8);
     }
 }
 

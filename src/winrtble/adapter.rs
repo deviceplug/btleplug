@@ -48,10 +48,10 @@ impl Central<Peripheral> for Adapter {
             let address = utils::to_addr(bluetooth_address);
             let mut peripherals = peripherals.lock().unwrap();
             let peripheral = peripherals.entry(address).or_insert_with(|| {
-                Peripheral::new(address)
+                Peripheral::new(adapter.clone(), address)
             });
-            adapter.emit(CentralEvent::DeviceDiscovered(address));
             peripheral.update_properties(&args);
+            adapter.emit(CentralEvent::DeviceDiscovered(address));
         }))
     }
 

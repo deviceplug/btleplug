@@ -61,9 +61,9 @@ impl BLECharacteristic {
         });
         let token = self.characteristic.add_value_changed(&value_handler).unwrap();
         self.notify_token = Some(token);
-        let config = GattClientCharacteristicConfigurationDescriptorValue::Indicate;
+        let config = GattClientCharacteristicConfigurationDescriptorValue::Notify;
         let status = self.characteristic.write_client_characteristic_configuration_descriptor_async(config).unwrap().blocking_get().unwrap();
-        println!("{:?}", status);
+        println!("subscribe {:?}", status);
         Ok(())
     }
 
@@ -74,7 +74,7 @@ impl BLECharacteristic {
         self.notify_token = None;
         let config = GattClientCharacteristicConfigurationDescriptorValue::None;
         let status = self.characteristic.write_client_characteristic_configuration_descriptor_async(config).unwrap().blocking_get().unwrap();
-        println!("{:?}", status);
+        println!("unsubscribe {:?}", status);
         Ok(())
     }
 }

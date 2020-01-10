@@ -1,4 +1,4 @@
-use api::AddressType;
+use api::{AddressType, CentralEvent};
 use api::BDAddr;
 use std::fmt::Debug;
 use std::fmt::Display;
@@ -23,10 +23,12 @@ use api::Characteristic;
 use api::ValueNotification;
 use winrtble::ble::device::BLEDevice;
 use winrtble::ble::characteristic::BLECharacteristic;
+use winrtble::adapter::Adapter;
 
 #[derive(Clone)]
 pub struct Peripheral {
     device: Arc<Mutex<Option<BLEDevice>>>,
+    adapter: Adapter,
     address: BDAddr,
     properties: Arc<Mutex<PeripheralProperties>>,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
@@ -36,7 +38,7 @@ pub struct Peripheral {
 }
 
 impl Peripheral {
-    pub fn new(address: BDAddr) -> Self {
+    pub fn new(adapter: Adapter, address: BDAddr) -> Self {
         let device = Arc::new(Mutex::new(None));
         let mut properties = PeripheralProperties::default();
         properties.address = address;
@@ -45,7 +47,7 @@ impl Peripheral {
         let connected = Arc::new(AtomicBool::new(false));
         let ble_characteristics = Arc::new(Mutex::new(HashMap::new()));
         let notification_handlers = Arc::new(Mutex::new(Vec::new()));
-        Peripheral{ device, address, properties, characteristics, connected, ble_characteristics, notification_handlers }
+        Peripheral{ device, adapter, address, properties, characteristics, connected, ble_characteristics, notification_handlers }
     }
 
     pub fn update_properties(&self, args: &BluetoothLEAdvertisementReceivedEventArgs) {
@@ -141,6 +143,7 @@ impl ApiPeripheral for Peripheral {
         device.connect()?;
         let mut d = self.device.lock().unwrap();
         *d = Some(device);
+        self.adapter.emit(CentralEvent::DeviceConnected(self.address));
         Ok(())
     }
 
@@ -149,6 +152,7 @@ impl ApiPeripheral for Peripheral {
         let winrt_error = |e| Error::Other(format!("{:?}", e));
         let mut device = self.device.lock().map_err(winrt_error)?;
         *device = None;
+        self.adapter.emit(CentralEvent::DeviceDisconnected(self.address));
         Ok(())
     }
 

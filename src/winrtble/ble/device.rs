@@ -6,7 +6,7 @@ use winrt::windows::devices::bluetooth::genericattributeprofile::{GattCommunicat
 use winrt::windows::foundation::{TypedEventHandler, EventRegistrationToken};
 use ::Result;
 use ::Error;
-use api::BDAddr;
+use api::{BDAddr, CentralEvent};
 use winrtble::utils;
 
 pub type ConnectedEventHandler = Box<Fn(bool) + Send>;

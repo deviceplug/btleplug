@@ -1,18 +1,18 @@
 [package]
-name = "rumble"
-version = "0.3.0"
-authors = ["Micah Wylde <micah@micahw.com>"]
+name = "btleplug"
+version = "0.4.0"
+authors = ["Nonpolynomial <kyle@nonpolynomial.com>"]
 license = "MIT/Apache-2.0"
-repository = "https://github.com/mwylde/rumble"
-homepage = "https://github.com/mwylde/rumble"
+repository = "https://github.com/deviceplug/btleplug"
+homepage = "https://github.com/deviceplug/btleplug"
 
 description = """
-A Rust Bluetooth Low Energy (BLE) central module
-library, currently supporting Linux/Bluez
+A Cross-Platform Rust Bluetooth Low Energy (BLE) GATT
+library.
 """
 
 readme = "README.md"
-keywords = ["bluetooth", "BLE", "IOT", "bluez"]
+keywords = ["bluetooth", "BLE", "IOT", "bluez", "winrt", "corebluetooth"]
 categories = ["network-programming", "hardware-support"]
 
 [dependencies]

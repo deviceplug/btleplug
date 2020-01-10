@@ -1,8 +1,20 @@
-# Rumble
+# btleplug
 
-[![Build Status](https://travis-ci.org/mwylde/rumble.svg?branch=master)](https://travis-ci.org/mwylde/rumble)
-[![Crates.io Version](https://img.shields.io/crates/v/rumble.svg)](https://crates.io/crates/rumble)
-[![docs](https://docs.rs/rumble/badge.svg)](https://docs.rs/rumble)
+btleplug is a fork of the seemingly-abandoned
+[rumble](https://github.com/mwylde/rumble) Rust BLE library. Our goal
+is the bring in some of the outstanding PRs from that project, expand
+the platform support to MacOS (Partial WinRT/UWP support is already in
+thanks to PRs in rumble), and possibly make the API surface more
+ergonomic for being a truly cross-platform library.
+
+Oh and async might happen to because why not.
+
+Thanks to @mwylde and all the other rumble contributors for getting
+the library as far as it is now!
+
+## Old README Content:
+
+### Rumble
 
 Rumble is a Bluetooth Low Energy (BLE) central module library for Rust. 
 Currently only Linux (with the BlueZ bluetooth library) is supported, although 
@@ -15,7 +27,7 @@ As of version 0.2, the API is becoming more stable and the library itself more
 useful. You should still expect to encounter bugs, limitations, and odd behaviors.
 Pull requests (and wireshark traces) welcome!
 
-## Usage
+### Usage
 
 An example of how to use the library to control some BLE smart lights:
 

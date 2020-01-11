@@ -43,7 +43,7 @@ The libraries we're forking include:
     because it expects to be embedded in a Cocoa application with a
     main event queue.
   - Project seems to be abandoned.
-- [blurmac](https://github.com/servo/devices) ([alternative repo?](https://github.com/akosthekiss/blurdroid))
+- [blurdroid](https://github.com/servo/devices) ([alternative repo?](https://github.com/akosthekiss/blurdroid))
   - Same as blurmac, developed for Servo, but handles Android 4.4+'s
     BTLE stack via JNI calls.
   - Project seems to be abandoned.
@@ -80,33 +80,80 @@ Beyond that, some of our other goals are:
   [cxx](https://github.com/dtolnay/cxx).
 - Provide both async and sync versions of as many APIs as possible
   (once again, depending on platform API capabilities)
+- Possibly create a WASM compatible layer using
+  [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen) and
+  [WebBluetooth](https://webbluetoothcg.github.io/web-bluetooth/)
 
-## Platform Feature Table
+## Platform Status
+
+- **Linux**
+  - Device enumeration and characteristic/services implemented, works
+    ok enough. 
+  - Please file bugs and missing features if you find them.
+- **Windows**
+  - Device enumeration and some characteristic/service functions
+    implemented. Usable but definitely missing functionality. 
+  - Please file bugs and missing features if you find them.
+- **MacOS**
+  - Got a blurmac example up and running, now need to integrate it
+    into the library. 
+  - Tracking issue [here](https://github.com/deviceplug/btleplug/issues/2)
+  - Please hold off on filing more issues until base implementation is
+    landed.
+- **Android**
+  - A rust android library exists (the aforementioned
+    [blurdroid](https://github.com/servo/devices)), but getting a PoC
+    up and tested is going to require some work. **Definitely looking
+    for help**. 
+  - Tracking issue
+    [here](https://github.com/deviceplug/btleplug/issues/8). 
+  - Please hold off on filing more issues until base implementation is
+    landed.
+- **iOS**
+  - Trying to figure out if the macOS implementation will translate. 
+  - [Tracking issue here](https://github.com/deviceplug/btleplug/issues/12)
+  - Please hold off on filing more issues until base implementation is
+    landed.
+- **WASM/WebBluetooth**
+  - This seems more useful for a stunt hack than anything, but I love
+    a good stunt hack.
+  - We'd probably want
+    [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen) to
+    support WebBluetooth via its API extensions, and just build a shim
+    on top of that?
+  - [Tracking issue here](https://github.com/deviceplug/btleplug/issues/13)
+  - Please hold off on filing more issues until base implementation is
+    landed.
+
+### Platform Feature Table
 
 - X: Completed and released
 - O: In development
 - Blank: Not started
 
-| Feature | Windows | MacOS | Linux | Android | iOS |
-|---------|---------|-------|-------|---------|-----|
-| Bring Up Adapter |X||X|||
-| Handle Multiple Adapters ||||||
-| Discover Devices |X||X|||
-| └ Discover Service List ||||||
-| └ Discover Name ||||||
-| └ Discover Manufacturer Data ||||||
-| └ Discover Services ||| [O](https://github.com/deviceplug/btleplug/issues/11) |||
-| GATT Server Connect ||||||
-| GATT Server Connect Event ||||||
-| GATT Server Disconnect ||||||
-| GATT Server Disconnect Event ||||||
-| Write Characteristic ||||||
-| Read Characteristic ||||||
-| Subscribe to Characteristic ||||||
-| Unsubscribe from Characteristic ||||||
-| Get Characteristic Notification ||||||
-| Read Descriptor ||||||
-| Write Descriptor ||||||
+| Feature | Windows | MacOS | Linux |
+|---------|---------|-------|-------|
+| Bring Up Adapter |X||X|
+| Handle Multiple Adapters |||X|
+| Discover Devices |X||X|
+| └ Discover Services ||| [O](https://github.com/deviceplug/btleplug/issues/11) |
+| └ Discover Name |X||X|
+| └ Discover Manufacturer Data |X||X|
+| GATT Server Connect |X||X|
+| GATT Server Connect Event |X||X|
+| GATT Server Disconnect |X||X|
+| GATT Server Disconnect Event |X||X|
+| Write to Characteristic (Sync) |X||X|
+| Read from Characteristic (Async) |||X|
+| Write to Characteristic (Sync) |X||X|
+| Read from Characteristic (Async) |X|||
+| Subscribe to Characteristic (Sync) |X||X|
+| Subscribe to Characteristic (Async) ||||
+| Unsubscribe from Characteristic (Sync) ||||
+| Unsubscribe from Characteristic (Async) ||||
+| Get Characteristic Notification Event |X||X|
+| Read Descriptor ||||
+| Write Descriptor ||||
 
 ## Old rumble README Content
 

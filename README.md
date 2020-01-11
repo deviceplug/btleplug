@@ -9,9 +9,13 @@ ergonomic for being a truly cross-platform library.
 
 Oh and async might happen to because why not.
 
-Thanks to @mwylde and all the other rumble contributors for getting
-the library as far as it is now!
+btleplug is meant to be *host mode only*. If you are interested in
+peripheral BTLE (i.e. acting like a Bluetooth LE device instead of
+connecting to one), check out
+[bluster](https://github.com/dfrankland/bluster/tree/master/src).
 
+This library **DOES NOT SUPPORT BLUETOOTH 2/CLASSIC**. There are no
+plans to add BT2/Classic support.
 
 ## A Whole New World of Bluetooth Copypasta
 
@@ -84,6 +88,17 @@ Beyond that, some of our other goals are:
 | Bring Up Adapter |X||X|||
 | Handle Multiple Adapters ||||||
 | Discover Devices |X||X|||
+| └ Discover Service List ||||||
+| └ Discover Name ||||||
+| └ Discover Manufacturer/Service Data ||||||
+| GATT Server Connect ||||||
+| GATT Server Connect Event ||||||
+| GATT Server Disconnect ||||||
+| GATT Server Disconnect Event ||||||
+| Write Characteristic ||||||
+| Read Characteristic ||||||
+| Subscribe to Characteristic ||||||
+| Unsubscribe from Characteristic ||||||
 
 ## Old rumble README Content
 

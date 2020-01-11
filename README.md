@@ -83,6 +83,10 @@ Beyond that, some of our other goals are:
 
 ## Platform Feature Table
 
+- X: Completed and released
+- O: In development
+- Blank: Not started
+
 | Feature | Windows | MacOS | Linux | Android | iOS |
 |---------|---------|-------|-------|---------|-----|
 | Bring Up Adapter |X||X|||
@@ -90,7 +94,8 @@ Beyond that, some of our other goals are:
 | Discover Devices |X||X|||
 | └ Discover Service List ||||||
 | └ Discover Name ||||||
-| └ Discover Manufacturer/Service Data ||||||
+| └ Discover Manufacturer Data ||||||
+| └ Discover Services ||| [O](https://github.com/deviceplug/btleplug/issues/11) |||
 | GATT Server Connect ||||||
 | GATT Server Connect Event ||||||
 | GATT Server Disconnect ||||||
@@ -99,6 +104,9 @@ Beyond that, some of our other goals are:
 | Read Characteristic ||||||
 | Subscribe to Characteristic ||||||
 | Unsubscribe from Characteristic ||||||
+| Get Characteristic Notification ||||||
+| Read Descriptor ||||||
+| Write Descriptor ||||||
 
 ## Old rumble README Content
 

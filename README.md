@@ -1,12 +1,3 @@
-# IMPORTANT NOTE
-
-This version of btleplug is being uploaded to crates to secure the
-module name in the packaging system. This version is functionally
-similar to rumble, and has all of the Linux and some basic Win10
-support. However, it is still extremely experimental. We recommend
-waiting until 0.4.0 (hopefully out Late Jan-Early Feb 2020) to start
-actually using the library.
-
 # btleplug
 
 btleplug is a fork of the seemingly-abandoned

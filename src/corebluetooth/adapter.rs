@@ -34,10 +34,6 @@ impl BluetoothAdapter {
         let manager = cb::centralmanager(delegate);
         let adapter = BluetoothAdapter { manager: manager, delegate: delegate };
 
-        // NOTE: start discovery at once, servo leaves close to no time to do a proper discovery
-        // in a BluetoothDiscoverySession
-        adapter.start_discovery().unwrap();
-
         Ok(adapter)
     }
 

@@ -224,6 +224,22 @@ pub mod io {
 
 pub mod cb {
     use super::*;
+    use std::ffi::CString;
+
+    pub enum dispatch_object_s {}
+    pub type dispatch_queue_t = *mut dispatch_object_s;
+    pub type dispatch_queue_attr_t = *const dispatch_object_s;
+    pub const DISPATCH_QUEUE_SERIAL: dispatch_queue_attr_t = 0 as dispatch_queue_attr_t;
+
+    #[link(name = "AppKit", kind = "framework")]
+    #[link(name = "Foundation", kind = "framework")]
+    #[link(name = "CoreBluetooth", kind = "framework")]
+    extern "C" {
+        pub fn dispatch_queue_create(
+            label: *const c_char,
+            attr: dispatch_queue_attr_t,
+        ) -> dispatch_queue_t;
+    }
 
     mod link {
         use super::*;
@@ -240,8 +256,11 @@ pub mod cb {
 
     pub fn centralmanager(delegate: *mut Object /*CBCentralManagerDelegate* */) -> *mut Object /*CBCentralManager* */ {
         unsafe {
-            let cbcentralmanager: *mut Object = msg_send![Class::get("CBCentralManager").unwrap(), alloc];
-            msg_send![cbcentralmanager, initWithDelegate:delegate queue:nil];
+            let mut cbcentralmanager: *mut Object = msg_send![Class::get("CBCentralManager").unwrap(), alloc];
+            let label = CString::new("CBqueue").unwrap();
+            let queue = dispatch_queue_create(label.as_ptr(), DISPATCH_QUEUE_SERIAL);
+
+            cbcentralmanager = msg_send![cbcentralmanager, initWithDelegate:delegate queue:queue];
             cbcentralmanager
         }
     }

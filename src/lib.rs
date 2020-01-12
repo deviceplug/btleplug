@@ -79,6 +79,10 @@ extern crate nix;
 #[cfg(target_os = "windows")]
 extern crate winrt;
 
+#[cfg(any(target_os = "macos", target_os="ios"))]
+#[macro_use]
+extern crate objc;
+
 extern crate bytes;
 #[macro_use] extern crate enum_primitive;
 extern crate num;

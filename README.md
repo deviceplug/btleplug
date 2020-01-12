@@ -1,5 +1,11 @@
 # btleplug
 
+[![Crates.io Version](https://img.shields.io/crates/v/btleplug)](https://crates.io/crates/btleplug)
+[![Crates.io Downloads](https://img.shields.io/crates/d/btleplug)](https://crates.io/crates/btleplug)
+[![Crates.io License](https://img.shields.io/crates/l/btleplug)](https://crates.io/crates/btleplug)
+
+[![Github donate button](https://img.shields.io/badge/github-donate-ff69b4.svg)](https://www.github.com/sponsors/qdot)
+
 btleplug is a fork of the seemingly-abandoned
 [rumble](https://github.com/mwylde/rumble) Rust BLE library. Our goal
 is the bring in some of the outstanding PRs from that project, expand
@@ -9,9 +15,9 @@ ergonomic for being a truly cross-platform library.
 
 Oh and async might happen to because why not.
 
-btleplug is meant to be *host mode only*. If you are interested in
-peripheral BTLE (i.e. acting like a Bluetooth LE device instead of
-connecting to one), check out
+btleplug is meant to be *host/central mode only*. If you are
+interested in peripheral BTLE (i.e. acting like a Bluetooth LE device
+instead of connecting to one), check out
 [bluster](https://github.com/dfrankland/bluster/tree/master/src).
 
 This library **DOES NOT SUPPORT BLUETOOTH 2/CLASSIC**. There are no

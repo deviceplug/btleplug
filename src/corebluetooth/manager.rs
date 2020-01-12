@@ -6,8 +6,7 @@
 // for full license information.
 
 use super::adapter::Adapter;
-use ::Result;
-use ::Error;
+use crate::Result;
 
 pub struct Manager {
 }

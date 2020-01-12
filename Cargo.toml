@@ -5,7 +5,7 @@ authors = ["Nonpolynomial <kyle@nonpolynomial.com>"]
 license = "MIT/Apache-2.0/BSD-3-Clause"
 repository = "https://github.com/deviceplug/btleplug"
 homepage = "https://github.com/deviceplug/btleplug"
-
+edition = "2018"
 description = """
 A Cross-Platform Rust Bluetooth Low Energy (BLE) GATT
 library.
@@ -18,8 +18,6 @@ categories = ["hardware-support"]
 [lib]
 name = "btleplug"
 path = "src/lib.rs"
-# Might be needed for CoreBluetooth only?
-# crate-type = ["rlib"]
 
 [dependencies]
 libc = "0.2.45"

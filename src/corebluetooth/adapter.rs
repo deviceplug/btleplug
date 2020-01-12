@@ -1,6 +1,5 @@
-use api::{Central, CentralEvent, EventHandler, BDAddr};
-use ::Result;
-use std::collections::HashMap;
+use crate::api::{Central, CentralEvent, EventHandler, BDAddr};
+use crate::Result;
 use std::sync::{Arc, Mutex};
 use super::ble::adapter::BluetoothAdapter;
 use super::peripheral::Peripheral;

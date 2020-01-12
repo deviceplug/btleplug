@@ -5,26 +5,19 @@
 // Licensed under the BSD 3-Clause license. See LICENSE file in the project root
 // for full license information.
 
-use api::{AddressType, CentralEvent};
-use api::BDAddr;
-use std::fmt::Debug;
-use std::fmt::Display;
-use std::fmt::Formatter;
-use std::fmt;
-use api::PeripheralProperties;
-use api::CommandCallback;
-use api::NotificationHandler;
-use api::RequestCallback;
-use api::UUID;
-use std::collections::BTreeSet;
-use std::collections::HashMap;
-use ::Result;
-use api::{Peripheral as ApiPeripheral};
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
-use ::Error;
-use api::Characteristic;
-use api::ValueNotification;
+use crate::api::{
+    AddressType, CentralEvent, BDAddr, PeripheralProperties, CommandCallback,
+    NotificationHandler, RequestCallback, UUID, Peripheral as ApiPeripheral,
+    Characteristic, ValueNotification
+};
+use std::{
+    fmt::{self, Debug, Display, Formatter},
+    collections::{BTreeSet, HashMap},
+    sync::{
+        Arc, Mutex, atomic::{AtomicBool, Ordering}
+    }
+};
+use crate::{Result, Error};
 use super::adapter::Adapter;
 
 #[derive(Clone)]

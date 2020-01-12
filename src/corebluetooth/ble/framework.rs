@@ -237,8 +237,11 @@ pub mod cb {
     use super::*;
     use std::ffi::CString;
 
+    #[allow(non_camel_case_types)]
     pub enum dispatch_object_s {}
+    #[allow(non_camel_case_types)]
     pub type dispatch_queue_t = *mut dispatch_object_s;
+    #[allow(non_camel_case_types)]
     pub type dispatch_queue_attr_t = *const dispatch_object_s;
     pub const DISPATCH_QUEUE_SERIAL: dispatch_queue_attr_t = 0 as dispatch_queue_attr_t;
 

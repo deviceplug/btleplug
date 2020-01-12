@@ -87,7 +87,6 @@ extern crate libc;
 #[macro_use]
 extern crate log;
 
-#[macro_use]
 extern crate nix;
 
 #[cfg(target_os = "windows")]
@@ -104,10 +103,9 @@ extern crate objc;
 extern crate cocoa;
 
 extern crate bytes;
-#[macro_use] extern crate enum_primitive;
+extern crate enum_primitive;
 extern crate num;
 
-#[macro_use]
 extern crate nom;
 
 #[macro_use]

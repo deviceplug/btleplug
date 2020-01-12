@@ -12,7 +12,7 @@ library.
 """
 
 readme = "README.md"
-keywords = ["bluetooth", "BLE", "IOT", "bluez", "winrt", "uwp", "corebluetooth"]
+keywords = ["bluetooth", "BLE", "bluez", "uwp", "corebluetooth"]
 categories = ["hardware-support"]
 
 [dependencies]

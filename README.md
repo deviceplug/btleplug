@@ -237,3 +237,10 @@ pub fn main() {
     }
 }
 ```
+
+## License
+
+BTLEPlug is covered under a BSD 3-Clause License, with some parts from
+Rumble/Blurmac covered under MIT/Apache dual license, and BSD 3-Clause
+licenses, respectively. See LICENSE.md for more info and copyright
+information.

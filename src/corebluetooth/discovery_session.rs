@@ -8,7 +8,7 @@
 use std::error::Error;
 use std::sync::Arc;
 
-use adapter::BluetoothAdapter;
+use super::adapter::BluetoothAdapter;
 
 
 #[derive(Clone, Debug)]

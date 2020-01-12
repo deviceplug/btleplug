@@ -11,9 +11,10 @@ use std::sync::{Once};
 use objc::declare::ClassDecl;
 use objc::runtime::{Class, Object, Protocol, Sel};
 
-use framework::{nil, cb, ns};
-use utils::{NO_PERIPHERAL_FOUND, cbx, nsx, wait};
-
+use super::{
+    framework::{nil, cb, ns},
+    utils::{NO_PERIPHERAL_FOUND, cbx, nsx, wait},
+};
 
 pub mod bm {
     use super::*;

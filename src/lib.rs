@@ -110,6 +110,8 @@ use std::time::Duration;
 pub mod bluez;
 #[cfg(target_os = "windows")]
 pub mod winrtble;
+#[cfg(any(target_os = "macos", target_os="ios"))]
+pub mod corebluetooth;
 pub mod api;
 
 #[derive(Debug, Fail, Clone)]

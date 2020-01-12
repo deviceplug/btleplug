@@ -7,7 +7,7 @@
 
 use std::error::Error;
 
-use utils::NOT_SUPPORTED_ERROR;
+use super::utils::NOT_SUPPORTED_ERROR;
 
 
 #[derive(Clone, Debug)]

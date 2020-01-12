@@ -13,7 +13,7 @@ use std::thread;
 
 use objc::runtime::Object;
 
-use framework::{nil, cb, ns};
+use super::framework::{nil, cb, ns};
 
 
 pub const NOT_SUPPORTED_ERROR: &'static str = "Error! Not supported by blurmac!";

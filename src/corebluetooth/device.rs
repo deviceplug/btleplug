@@ -11,10 +11,12 @@ use std::sync::Arc;
 
 use objc::runtime::Object;
 
-use adapter::BluetoothAdapter;
-use delegate::{bm, bmx};
-use framework::{nil, cb, ns};
-use utils::{NO_PERIPHERAL_FOUND, NOT_SUPPORTED_ERROR, cbx, nsx, wait};
+use super::{
+    adapter::BluetoothAdapter,
+    delegate::{bm, bmx},
+    framework::{nil, cb, ns},
+    utils::{NO_PERIPHERAL_FOUND, NOT_SUPPORTED_ERROR, cbx, nsx, wait}
+};
 
 
 #[derive(Clone, Debug)]

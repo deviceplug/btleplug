@@ -10,10 +10,12 @@ use std::sync::Arc;
 
 use objc::runtime::Object;
 
-use delegate::bmx;
-use device::BluetoothDevice;
-use framework::{nil, cb, ns};
-use utils::{NO_SERVICE_FOUND, cbx, wait};
+use super::{
+    delegate::bmx,
+    device::BluetoothDevice,
+    framework::{nil, cb, ns},
+    utils::{NO_SERVICE_FOUND, cbx, wait}
+};
 
 
 #[derive(Clone, Debug)]

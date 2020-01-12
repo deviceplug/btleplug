@@ -5,13 +5,6 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-#![feature(integer_atomics)]
-
-#[macro_use]
-extern crate log;
-#[macro_use]
-extern crate objc;
-
 mod adapter;
 mod delegate;
 mod discovery_session;
@@ -21,10 +14,3 @@ mod gatt_characteristic;
 mod gatt_descriptor;
 mod framework;
 mod utils;
-
-pub use adapter::BluetoothAdapter;
-pub use discovery_session::BluetoothDiscoverySession;
-pub use device::BluetoothDevice;
-pub use gatt_service::BluetoothGATTService;
-pub use gatt_characteristic::BluetoothGATTCharacteristic;
-pub use gatt_descriptor::BluetoothGATTDescriptor;

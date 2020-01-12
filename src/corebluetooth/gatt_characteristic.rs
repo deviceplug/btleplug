@@ -5,17 +5,21 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use std::error::Error;
-use std::os::raw::c_uint;
-use std::slice;
-use std::sync::Arc;
+use std::{
+    error::Error,
+    os::raw::c_uint,
+    slice,
+    sync::Arc,
+};
 
 use objc::runtime::{NO, Object, YES};
 
-use delegate::bmx;
-use framework::{nil, cb, ns};
-use gatt_service::BluetoothGATTService;
-use utils::{NO_CHARACTERISTIC_FOUND, NOT_SUPPORTED_ERROR, cbx, wait};
+use super::{
+    delegate::bmx,
+    framework::{nil, cb, ns},
+    gatt_service::BluetoothGATTService,
+    utils::{NO_CHARACTERISTIC_FOUND, NOT_SUPPORTED_ERROR, cbx, wait}
+};
 
 
 #[derive(Clone, Debug)]

@@ -10,9 +10,11 @@ use std::os::raw::c_int;
 
 use objc::runtime::{Object, YES};
 
-use delegate::bm;
-use framework::{cb, io, ns};
-use utils::{NOT_SUPPORTED_ERROR, nsx};
+use super::{
+    delegate::bm,
+    framework::{cb, io, ns},
+    utils::{NOT_SUPPORTED_ERROR, nsx}
+};
 
 
 #[derive(Clone, Debug)]

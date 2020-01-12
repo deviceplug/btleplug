@@ -32,6 +32,8 @@ bitflags = "1.0.1"
 failure = "0.1.1"
 failure_derive = "0.1.1"
 backtrace = "0.3.5"
+cocoa = "0.20.0"
+objc = "0.2"
 
 [dependencies.nom]
 version = "^4.0"
@@ -41,8 +43,9 @@ features = ["verbose-errors"]
 version = "0.6.0"
 features = ["windows-devices", "windows-storage"]
 
-[dependencies.objc]
+[target.'cfg(macos)'.dependencies]
 objc = "0.2"
+cocoa = "0.20.0"
 
 [dev-dependencies]
 rand = "0.4.2"

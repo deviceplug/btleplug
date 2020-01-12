@@ -83,6 +83,12 @@ extern crate winrt;
 #[macro_use]
 extern crate objc;
 
+// We won't actually use anything specifically out of this crate. However, if we
+// want the CoreBluetooth code to compile, we need the objc protocols
+// (specifically, the core bluetooth protocols) exposed by it.
+#[cfg(any(target_os = "macos", target_os="ios"))]
+extern crate cocoa;
+
 extern crate bytes;
 #[macro_use] extern crate enum_primitive;
 extern crate num;

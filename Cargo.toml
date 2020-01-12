@@ -15,6 +15,12 @@ readme = "README.md"
 keywords = ["bluetooth", "BLE", "bluez", "uwp", "corebluetooth"]
 categories = ["hardware-support"]
 
+[lib]
+name = "btleplug"
+path = "src/lib.rs"
+# Might be needed for CoreBluetooth only?
+# crate-type = ["rlib"]
+
 [dependencies]
 libc = "0.2.45"
 nix = "0.12.0"
@@ -34,6 +40,9 @@ features = ["verbose-errors"]
 [dependencies.winrt]
 version = "0.6.0"
 features = ["windows-devices", "windows-storage"]
+
+[dependencies.objc]
+objc = "0.2"
 
 [dev-dependencies]
 rand = "0.4.2"

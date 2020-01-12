@@ -1,7 +1,0 @@
-os: osx
-
-language: rust
-rust:
-  - nightly
-script:
-  - cargo build --verbose

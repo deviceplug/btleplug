@@ -1,3 +1,17 @@
+// btleplug Source Code File
+//
+// Copyright 2020 Nonpolynomial Labs LLC. All rights reserved.
+//
+// Licensed under the BSD 3-Clause license. See LICENSE file in the project root
+// for full license information.
+//
+// Some portions of this file are taken and/or modified from Rumble
+// (https://github.com/mwylde/rumble), using a dual MIT/Apache License under the
+// following copyright:
+//
+// Copyright (c) 2014 The Rust Project Developers
+
+
 //! Rumble is a Bluetooth Low Energy (BLE) central module library for Rust.
 //! Currently only Linux (with the BlueZ bluetooth library) is supported, although
 //! other operating systems may be supported in the future. Rumble interfaces with

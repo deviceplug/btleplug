@@ -6,7 +6,7 @@
 // according to those terms.
 
 use std::error::Error;
-use std::sync::{Once, ONCE_INIT};
+use std::sync::{Once};
 
 use objc::declare::ClassDecl;
 use objc::runtime::{Class, Object, Protocol, Sel};
@@ -24,10 +24,10 @@ pub mod bm {
 
     fn delegate_class() -> &'static Class {
         trace!("delegate_class");
-        static REGISTER_DELEGATE_CLASS: Once = ONCE_INIT;
+        static REGISTER_DELEGATE_CLASS: Once = Once::new();
+        let mut decl = ClassDecl::new("BlurMacDelegate", Class::get("NSObject").unwrap()).unwrap();
 
         REGISTER_DELEGATE_CLASS.call_once(|| {
-            let mut decl = ClassDecl::new("BlurMacDelegate", Class::get("NSObject").unwrap()).unwrap();
             decl.add_protocol(Protocol::get("CBCentralManagerDelegate").unwrap());
 
             decl.add_ivar::<*mut Object>(DELEGATE_PERIPHERALS_IVAR); /* NSMutableDictionary<NSString*, BlurMacPeripheralData*>* */
@@ -246,7 +246,7 @@ pub mod bm {
 pub mod bmx {
     use super::*;
 
-    pub fn peripheraldata(delegate: *mut Object, peripheral: *mut Object) -> Result<*mut Object, Box<Error>> {
+    pub fn peripheraldata(delegate: *mut Object, peripheral: *mut Object) -> Result<*mut Object, Box<dyn Error>> {
         let peripherals = bm::delegate_peripherals(delegate);
         let data = ns::dictionary_objectforkey(peripherals, ns::uuid_uuidstring(cb::peer_identifier(peripheral)));
         if data == nil {
@@ -256,7 +256,7 @@ pub mod bmx {
         Ok(data)
     }
 
-    pub fn peripheralevents(delegate: *mut Object, peripheral: *mut Object) -> Result<*mut Object, Box<Error>> {
+    pub fn peripheralevents(delegate: *mut Object, peripheral: *mut Object) -> Result<*mut Object, Box<dyn Error>> {
         let data = peripheraldata(delegate, peripheral)?;
         Ok(ns::dictionary_objectforkey(data, nsx::string_from_str(bm::PERIPHERALDATA_EVENTSKEY)))
     }

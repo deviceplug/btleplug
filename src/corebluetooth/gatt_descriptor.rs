@@ -22,23 +22,23 @@ impl BluetoothGATTDescriptor {
         String::new()
     }
 
-    pub fn get_uuid(&self) -> Result<String, Box<Error>> {
+    pub fn get_uuid(&self) -> Result<String, Box<dyn Error>> {
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn get_value(&self) -> Result<Vec<u8>, Box<Error>> {
+    pub fn get_value(&self) -> Result<Vec<u8>, Box<dyn Error>> {
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn get_flags(&self) -> Result<Vec<String>, Box<Error>> {
+    pub fn get_flags(&self) -> Result<Vec<String>, Box<dyn Error>> {
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn read_value(&self) -> Result<Vec<u8>, Box<Error>> {
+    pub fn read_value(&self) -> Result<Vec<u8>, Box<dyn Error>> {
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn write_value(&self, _values: Vec<u8>) -> Result<(), Box<Error>> {
+    pub fn write_value(&self, _values: Vec<u8>) -> Result<(), Box<dyn Error>> {
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 }

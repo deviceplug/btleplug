@@ -7,7 +7,7 @@
 
 use std::error::Error;
 use std::ffi::{CStr, CString};
-use std::sync::atomic::{AtomicU64, Ordering, ATOMIC_U64_INIT};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time;
 use std::thread;
 
@@ -78,7 +78,7 @@ pub mod wait {
 
     pub type Timestamp = u64;
 
-    static TIMESTAMP: AtomicU64 = ATOMIC_U64_INIT;
+    static TIMESTAMP: AtomicU64 = AtomicU64::new(0);
 
     pub fn get_timestamp() -> Timestamp {
         TIMESTAMP.fetch_add(1, Ordering::SeqCst)
@@ -88,7 +88,7 @@ pub mod wait {
         ns::number_withunsignedlonglong(get_timestamp())
     }
 
-    pub fn wait_or_timeout<F>(mut f: F) -> Result<(), Box<Error>>
+    pub fn wait_or_timeout<F>(mut f: F) -> Result<(), Box<dyn Error>>
         where F: FnMut() -> bool {
 
         let now = time::Instant::now();

@@ -58,7 +58,7 @@ impl BluetoothGATTService {
         self.get_uuid().unwrap_or(String::new())
     }
 
-    pub fn get_uuid(&self) -> Result<String, Box<Error>> {
+    pub fn get_uuid(&self) -> Result<String, Box<dyn Error>> {
         trace!("BluetoothGATTService::get_uuid");
         if self.service == nil {
             return Err(Box::from(NO_SERVICE_FOUND));
@@ -69,7 +69,7 @@ impl BluetoothGATTService {
         Ok(uuid_string)
     }
 
-    pub fn is_primary(&self) -> Result<bool, Box<Error>> {
+    pub fn is_primary(&self) -> Result<bool, Box<dyn Error>> {
         trace!("BluetoothGATTService::is_primary");
         if self.service == nil {
             return Err(Box::from(NO_SERVICE_FOUND));
@@ -82,7 +82,7 @@ impl BluetoothGATTService {
         Ok(true)
     }
 
-    pub fn get_includes(&self) -> Result<Vec<String>, Box<Error>> {
+    pub fn get_includes(&self) -> Result<Vec<String>, Box<dyn Error>> {
         trace!("BluetoothGATTService::get_includes");
         if self.service == nil {
             return Err(Box::from(NO_SERVICE_FOUND));
@@ -100,7 +100,7 @@ impl BluetoothGATTService {
         Ok(v)
     }
 
-    pub fn get_gatt_characteristics(&self) -> Result<Vec<String>, Box<Error>> {
+    pub fn get_gatt_characteristics(&self) -> Result<Vec<String>, Box<dyn Error>> {
         trace!("BluetoothGATTService::get_gatt_characteristics");
         if self.service == nil {
             return Err(Box::from(NO_SERVICE_FOUND));

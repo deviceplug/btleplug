@@ -108,13 +108,13 @@ pub mod ns {
 
     pub fn mutabledictionary_removeobjectforkey(nsmutdict: *mut Object, key: *mut Object) {
         unsafe {
-            msg_send![nsmutdict, removeObjectForKey:key];
+            let _: () = msg_send![nsmutdict, removeObjectForKey:key];
         }
     }
 
     pub fn mutabledictionary_setobject_forkey(nsmutdict: *mut Object, object: *mut Object, key: *mut Object) {
         unsafe {
-            msg_send![nsmutdict, setObject:object forKey:key];
+            let _: () = msg_send![nsmutdict, setObject:object forKey:key];
         }
     }
 
@@ -248,25 +248,25 @@ pub mod cb {
 
     pub fn centralmanager_scanforperipherals_options(cbcentralmanager: *mut Object, options: *mut Object /* NSDictionary<NSString*,id> */) {
         unsafe {
-            msg_send![cbcentralmanager, scanForPeripheralsWithServices:nil options:options];
+            let _: () = msg_send![cbcentralmanager, scanForPeripheralsWithServices:nil options:options];
         }
     }
 
     pub fn centralmanager_stopscan(cbcentralmanager: *mut Object) {
         unsafe {
-            msg_send![cbcentralmanager, stopScan];
+            let _: () = msg_send![cbcentralmanager, stopScan];
         }
     }
 
     pub fn centralmanager_connectperipheral(cbcentralmanager: *mut Object, peripheral: *mut Object /* CBPeripheral* */) {
         unsafe {
-            msg_send![cbcentralmanager, connectPeripheral:peripheral options:nil];
+            let _: () = msg_send![cbcentralmanager, connectPeripheral:peripheral options:nil];
         }
     }
 
     pub fn centralmanager_cancelperipheralconnection(cbcentralmanager: *mut Object, peripheral: *mut Object /* CBPeripheral* */) {
         unsafe {
-            msg_send![cbcentralmanager, cancelPeripheralConnection:peripheral];
+            let _: () = msg_send![cbcentralmanager, cancelPeripheralConnection:peripheral];
         }
     }
 
@@ -297,19 +297,19 @@ pub mod cb {
 
     pub fn peripheral_setdelegate(cbperipheral: *mut Object, delegate: *mut Object /* CBPeripheralDelegate* */) {
         unsafe {
-            msg_send![cbperipheral, setDelegate:delegate];
+            let _: () = msg_send![cbperipheral, setDelegate:delegate];
         }
     }
 
     pub fn peripheral_discoverservices(cbperipheral: *mut Object) {
         unsafe {
-            msg_send![cbperipheral, discoverServices:nil];
+            let _: () = msg_send![cbperipheral, discoverServices:nil];
         }
     }
 
     pub fn peripheral_discoverincludedservicesforservice(cbperipheral: *mut Object, service: *mut Object /* CBService* */) {
         unsafe {
-            msg_send![cbperipheral, discoverIncludedServices:nil forService:service];
+            let _: () = msg_send![cbperipheral, discoverIncludedServices:nil forService:service];
         }
     }
 
@@ -322,31 +322,31 @@ pub mod cb {
 
     pub fn peripheral_discovercharacteristicsforservice(cbperipheral: *mut Object, service: *mut Object /* CBService* */) {
         unsafe {
-            msg_send![cbperipheral, discoverCharacteristics:nil forService:service];
+            let _: () = msg_send![cbperipheral, discoverCharacteristics:nil forService:service];
         }
     }
 
     pub fn peripheral_readvalueforcharacteristic(cbperipheral: *mut Object, characteristic: *mut Object /* CBCharacteristic* */) {
         unsafe {
-            msg_send![cbperipheral, readValueForCharacteristic:characteristic];
+            let _: () = msg_send![cbperipheral, readValueForCharacteristic:characteristic];
         }
     }
 
     pub fn peripheral_writevalue_forcharacteristic(cbperipheral: *mut Object, value: *mut Object /* NSData* */, characteristic: *mut Object /* CBCharacteristic* */) {
         unsafe {
-            msg_send![cbperipheral, writeValue:value forCharacteristic:characteristic type:0]; // CBCharacteristicWriteWithResponse from CBPeripheral.h
+            let _: () = msg_send![cbperipheral, writeValue:value forCharacteristic:characteristic type:0]; // CBCharacteristicWriteWithResponse from CBPeripheral.h
         }
     }
 
     pub fn peripheral_setnotifyvalue_forcharacteristic(cbperipheral: *mut Object, value: BOOL, characteristic: *mut Object /* CBCharacteristic* */) {
         unsafe {
-            msg_send![cbperipheral, setNotifyValue:value forCharacteristic:characteristic];
+            let _: () = msg_send![cbperipheral, setNotifyValue:value forCharacteristic:characteristic];
         }
     }
 
     pub fn peripheral_discoverdescriptorsforcharacteristic(cbperipheral: *mut Object, characteristic: *mut Object /* CBCharacteristic* */) {
         unsafe {
-            msg_send![cbperipheral, discoverDescriptorsForCharacteristic:characteristic];
+            let _: () = msg_send![cbperipheral, discoverDescriptorsForCharacteristic:characteristic];
         }
     }
 

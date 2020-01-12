@@ -57,7 +57,7 @@ impl BluetoothDevice {
         self.get_address().unwrap_or(String::new())
     }
 
-    pub fn get_address(&self) -> Result<String, Box<Error>> {
+    pub fn get_address(&self) -> Result<String, Box<dyn Error>> {
         trace!("BluetoothDevice::get_address");
         if self.peripheral == nil {
             return Err(Box::from(NO_PERIPHERAL_FOUND));
@@ -69,7 +69,7 @@ impl BluetoothDevice {
         Ok(uuid_string)
     }
 
-    pub fn get_name(&self) -> Result<String, Box<Error>> {
+    pub fn get_name(&self) -> Result<String, Box<dyn Error>> {
         trace!("BluetoothDevice::get_name");
         if self.peripheral == nil {
             return Err(Box::from(NO_PERIPHERAL_FOUND));
@@ -81,7 +81,7 @@ impl BluetoothDevice {
         Ok(name)
     }
 
-    pub fn get_uuids(&self) -> Result<Vec<String>, Box<Error>> {
+    pub fn get_uuids(&self) -> Result<Vec<String>, Box<dyn Error>> {
         trace!("BluetoothDevice::get_uuids");
         if self.peripheral == nil {
             return Err(Box::from(NO_PERIPHERAL_FOUND));
@@ -100,7 +100,7 @@ impl BluetoothDevice {
 
     }
 
-    pub fn connect(&self) -> Result<(), Box<Error>> {
+    pub fn connect(&self) -> Result<(), Box<dyn Error>> {
         trace!("BluetoothDevice::connect");
         if self.peripheral == nil {
             return Err(Box::from(NO_PERIPHERAL_FOUND));
@@ -110,7 +110,7 @@ impl BluetoothDevice {
         Ok(())
     }
 
-    pub fn disconnect(&self) -> Result<(), Box<Error>> {
+    pub fn disconnect(&self) -> Result<(), Box<dyn Error>> {
         trace!("BluetoothDevice::disconnect");
         if self.peripheral == nil {
             return Err(Box::from(NO_PERIPHERAL_FOUND));
@@ -120,7 +120,7 @@ impl BluetoothDevice {
         Ok(())
     }
 
-    pub fn is_connected(&self) -> Result<bool, Box<Error>> {
+    pub fn is_connected(&self) -> Result<bool, Box<dyn Error>> {
         trace!("BluetoothDevice::is_connected");
         if self.peripheral == nil {
             return Err(Box::from(NO_PERIPHERAL_FOUND));
@@ -131,7 +131,7 @@ impl BluetoothDevice {
         Ok(state == cb::PERIPHERALSTATE_CONNECTED)
     }
 
-    pub fn get_gatt_services(&self) -> Result<Vec<String>, Box<Error>> {
+    pub fn get_gatt_services(&self) -> Result<Vec<String>, Box<dyn Error>> {
         trace!("BluetoothDevice::get_gatt_services");
         if self.peripheral == nil {
             return Err(Box::from(NO_PERIPHERAL_FOUND));
@@ -153,113 +153,113 @@ impl BluetoothDevice {
 
     // Not supported
 
-    pub fn get_rssi(&self) -> Result<i16, Box<Error>> {
+    pub fn get_rssi(&self) -> Result<i16, Box<dyn Error>> {
         warn!("BluetoothDevice::get_rssi not supported by BlurMac");
         // TODO: Now available from peripheral data in BluetoothAdapter.
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn get_tx_power(&self) -> Result<i16, Box<Error>> {
+    pub fn get_tx_power(&self) -> Result<i16, Box<dyn Error>> {
         warn!("BluetoothDevice::get_tx_power not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn get_manufacturer_data(&self) -> Result<HashMap<u16, Vec<u8>>, Box<Error>> {
+    pub fn get_manufacturer_data(&self) -> Result<HashMap<u16, Vec<u8>>, Box<dyn Error>> {
         warn!("BluetoothDevice::get_manufacturer_data not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn get_service_data(&self) -> Result<HashMap<String, Vec<u8>>, Box<Error>> {
+    pub fn get_service_data(&self) -> Result<HashMap<String, Vec<u8>>, Box<dyn Error>> {
         warn!("BluetoothDevice::get_service_data not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn get_icon(&self) -> Result<String, Box<Error>> {
+    pub fn get_icon(&self) -> Result<String, Box<dyn Error>> {
         warn!("BluetoothDevice::get_icon not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn get_class(&self) -> Result<u32, Box<Error>> {
+    pub fn get_class(&self) -> Result<u32, Box<dyn Error>> {
         warn!("BluetoothDevice::get_class not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn get_appearance(&self) -> Result<u16, Box<Error>> {
+    pub fn get_appearance(&self) -> Result<u16, Box<dyn Error>> {
         warn!("BluetoothDevice::get_appearance not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn is_paired(&self) -> Result<bool, Box<Error>> {
+    pub fn is_paired(&self) -> Result<bool, Box<dyn Error>> {
         warn!("BluetoothDevice::is_paired not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn is_trusted(&self) -> Result<bool, Box<Error>> {
+    pub fn is_trusted(&self) -> Result<bool, Box<dyn Error>> {
         warn!("BluetoothDevice::is_trusted not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn is_blocked(&self) -> Result<bool, Box<Error>> {
+    pub fn is_blocked(&self) -> Result<bool, Box<dyn Error>> {
         warn!("BluetoothDevice::is_blocked not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn get_alias(&self) -> Result<String, Box<Error>> {
+    pub fn get_alias(&self) -> Result<String, Box<dyn Error>> {
         warn!("BluetoothDevice::get_alias not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn set_alias(&self, _value: String) -> Result<(), Box<Error>> {
+    pub fn set_alias(&self, _value: String) -> Result<(), Box<dyn Error>> {
         warn!("BluetoothDevice::set_alias not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn is_legacy_pairing(&self) -> Result<bool, Box<Error>> {
+    pub fn is_legacy_pairing(&self) -> Result<bool, Box<dyn Error>> {
         warn!("BluetoothDevice::is_legacy_pairing not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn get_vendor_id_source(&self) -> Result<String, Box<Error>> {
+    pub fn get_vendor_id_source(&self) -> Result<String, Box<dyn Error>> {
         warn!("BluetoothDevice::get_vendor_id_source not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn get_vendor_id(&self) -> Result<u32, Box<Error>> {
+    pub fn get_vendor_id(&self) -> Result<u32, Box<dyn Error>> {
         warn!("BluetoothDevice::get_vendor_id not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn get_product_id(&self) -> Result<u32, Box<Error>> {
+    pub fn get_product_id(&self) -> Result<u32, Box<dyn Error>> {
         warn!("BluetoothDevice::get_product_id not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn get_device_id(&self) -> Result<u32, Box<Error>> {
+    pub fn get_device_id(&self) -> Result<u32, Box<dyn Error>> {
         warn!("BluetoothDevice::get_device_id not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn get_modalias(&self) -> Result<(String, u32, u32, u32), Box<Error>> {
+    pub fn get_modalias(&self) -> Result<(String, u32, u32, u32), Box<dyn Error>> {
         warn!("BluetoothDevice::get_modalias not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn connect_profile(&self, _uuid: String) -> Result<(), Box<Error>> {
+    pub fn connect_profile(&self, _uuid: String) -> Result<(), Box<dyn Error>> {
         warn!("BluetoothDevice::connect_profile not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn disconnect_profile(&self, _uuid: String) -> Result<(), Box<Error>> {
+    pub fn disconnect_profile(&self, _uuid: String) -> Result<(), Box<dyn Error>> {
         warn!("BluetoothDevice::disconnect_profile not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn pair(&self) -> Result<(), Box<Error>> {
+    pub fn pair(&self) -> Result<(), Box<dyn Error>> {
         warn!("BluetoothDevice::pair not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn cancel_pairing(&self) -> Result<(), Box<Error>> {
+    pub fn cancel_pairing(&self) -> Result<(), Box<dyn Error>> {
         warn!("BluetoothDevice::cancel_pairing not supported by BlurMac");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }

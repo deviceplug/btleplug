@@ -57,7 +57,7 @@ impl BluetoothGATTCharacteristic {
         self.get_uuid().unwrap_or(String::new())
     }
 
-    pub fn get_uuid(&self) -> Result<String, Box<Error>> {
+    pub fn get_uuid(&self) -> Result<String, Box<dyn Error>> {
         trace!("BluetoothGATTCharacteristic::get_uuid");
         if self.characteristic == nil {
             return Err(Box::from(NO_CHARACTERISTIC_FOUND));
@@ -68,7 +68,7 @@ impl BluetoothGATTCharacteristic {
         Ok(uuid_string)
     }
 
-    pub fn get_value(&self) -> Result<Vec<u8>, Box<Error>> {
+    pub fn get_value(&self) -> Result<Vec<u8>, Box<dyn Error>> {
         trace!("BluetoothGATTCharacteristic::get_value");
         if self.characteristic == nil {
             return Err(Box::from(NO_CHARACTERISTIC_FOUND));
@@ -86,7 +86,7 @@ impl BluetoothGATTCharacteristic {
         Ok(v)
     }
 
-    pub fn read_value(&self) -> Result<Vec<u8>, Box<Error>> {
+    pub fn read_value(&self) -> Result<Vec<u8>, Box<dyn Error>> {
         trace!("BluetoothGATTCharacteristic::read_value");
         if self.characteristic == nil {
             return Err(Box::from(NO_CHARACTERISTIC_FOUND));
@@ -106,7 +106,7 @@ impl BluetoothGATTCharacteristic {
         self.get_value()
     }
 
-    pub fn write_value(&self, values: Vec<u8>) -> Result<(), Box<Error>> {
+    pub fn write_value(&self, values: Vec<u8>) -> Result<(), Box<dyn Error>> {
         trace!("BluetoothGATTCharacteristic::write_value");
         if self.characteristic == nil {
             return Err(Box::from(NO_CHARACTERISTIC_FOUND));
@@ -126,7 +126,7 @@ impl BluetoothGATTCharacteristic {
         Ok(())
     }
 
-    pub fn is_notifying(&self) -> Result<bool, Box<Error>> {
+    pub fn is_notifying(&self) -> Result<bool, Box<dyn Error>> {
         trace!("BluetoothGATTCharacteristic::is_notifying");
         if self.characteristic == nil {
             return Err(Box::from(NO_CHARACTERISTIC_FOUND));
@@ -137,7 +137,7 @@ impl BluetoothGATTCharacteristic {
         Ok(notifying != NO)
     }
 
-    pub fn start_notify(&self) -> Result<(), Box<Error>> {
+    pub fn start_notify(&self) -> Result<(), Box<dyn Error>> {
         trace!("BluetoothGATTCharacteristic::start_notify");
         if self.characteristic == nil {
             return Err(Box::from(NO_CHARACTERISTIC_FOUND));
@@ -147,7 +147,7 @@ impl BluetoothGATTCharacteristic {
         Ok(())
     }
 
-    pub fn stop_notify(&self) -> Result<(), Box<Error>> {
+    pub fn stop_notify(&self) -> Result<(), Box<dyn Error>> {
         trace!("BluetoothGATTCharacteristic::stop_notify");
         if self.characteristic == nil {
             return Err(Box::from(NO_CHARACTERISTIC_FOUND));
@@ -157,12 +157,12 @@ impl BluetoothGATTCharacteristic {
         Ok(())
     }
 
-    pub fn get_gatt_descriptors(&self) -> Result<Vec<String>, Box<Error>> {
+    pub fn get_gatt_descriptors(&self) -> Result<Vec<String>, Box<dyn Error>> {
         warn!("BluetoothGATTCharacteristic::get_gatt_descriptors");
         Err(Box::from(NOT_SUPPORTED_ERROR))
     }
 
-    pub fn get_flags(&self) -> Result<Vec<String>, Box<Error>> {
+    pub fn get_flags(&self) -> Result<Vec<String>, Box<dyn Error>> {
         trace!("BluetoothGATTCharacteristic::get_flags");
         if self.characteristic == nil {
             return Err(Box::from(NO_CHARACTERISTIC_FOUND));

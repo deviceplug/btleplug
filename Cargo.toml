@@ -12,8 +12,8 @@ library.
 """
 
 readme = "README.md"
-keywords = ["bluetooth", "BLE", "IOT", "bluez", "winrt", "corebluetooth"]
-categories = ["network-programming", "hardware-support"]
+keywords = ["bluetooth", "BLE", "IOT", "bluez", "winrt", "uwp", "corebluetooth"]
+categories = ["hardware-support"]
 
 [dependencies]
 libc = "0.2.45"

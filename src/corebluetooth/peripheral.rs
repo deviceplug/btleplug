@@ -18,17 +18,39 @@ use std::{
     }
 };
 use crate::{Result, Error};
-use super::adapter::Adapter;
+use super::{
+    adapter::{Adapter, uuid_to_bdaddr},
+    ble::{
+        adapter::BluetoothAdapter,
+        device::BluetoothDevice,
+    },
+};
 
 #[derive(Clone)]
 pub struct Peripheral {
     notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
+    uuid: String,
+    device: BluetoothDevice,
+    properties: PeripheralProperties
 }
 
 impl Peripheral {
-    pub fn new(adapter: Adapter, address: BDAddr) -> Self {
+    pub fn new(adapter: Arc<BluetoothAdapter>, uuid: &String) -> Self {
+        // Since we're building the object, we have an active advertisement.
+        // Build properties now.
+        let device = BluetoothDevice::new(adapter, uuid);
+        let props = PeripheralProperties {
+            address: uuid_to_bdaddr(uuid),
+            address_type: AddressType::Random,
+            local_name: device.get_name().unwrap(),
+            tx_power_level: None,
+            manufacturer_data: None,
+            discovery_count: 1,
+            has_scan_response: true,
+        };
         Peripheral{
-            notification_handlers: Arc::new(Mutex::new(Vec::new()))
+            notification_handlers: Arc::new(Mutex::new(Vec::new())),
+            uuid: uuid.to_string()
         }
     }
 }
@@ -57,8 +79,7 @@ impl Debug for Peripheral {
 impl ApiPeripheral for Peripheral {
     /// Returns the address of the peripheral.
     fn address(&self) -> BDAddr {
-        //self.address.clone()
-        BDAddr::default()
+        uuid_to_bdaddr(&self.uuid)
     }
 
     /// Returns the set of properties associated with the peripheral. These may be updated over time

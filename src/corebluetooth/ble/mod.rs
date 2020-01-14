@@ -16,12 +16,12 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-pub mod adapter;
-pub mod delegate;
-pub mod discovery_session;
-pub mod device;
-pub mod gatt_service;
-pub mod gatt_characteristic;
-pub mod gatt_descriptor;
-pub mod framework;
-pub mod utils;
+pub(crate) mod adapter;
+pub(crate) mod delegate;
+pub(crate) mod discovery_session;
+pub(crate) mod device;
+pub(crate) mod gatt_service;
+pub(crate) mod gatt_characteristic;
+pub(crate) mod gatt_descriptor;
+pub(crate) mod framework;
+pub(crate) mod utils;

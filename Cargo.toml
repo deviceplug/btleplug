@@ -18,6 +18,7 @@ categories = ["hardware-support"]
 [lib]
 name = "btleplug"
 path = "src/lib.rs"
+# crate-type = ["staticlib"]
 
 [dependencies]
 libc = "0.2.45"
@@ -32,6 +33,7 @@ failure_derive = "0.1.1"
 backtrace = "0.3.5"
 cocoa = "0.20.0"
 objc = "0.2"
+async-std = { version = "1.4.0", features = ["unstable"] }
 
 [dependencies.nom]
 version = "^4.0"
@@ -42,6 +44,10 @@ version = "0.6.0"
 features = ["windows-devices", "windows-storage"]
 
 [target.'cfg(macos)'.dependencies]
+objc = "0.2"
+cocoa = "0.20.0"
+
+[target.'cfg(ios)'.dependencies]
 objc = "0.2"
 cocoa = "0.20.0"
 

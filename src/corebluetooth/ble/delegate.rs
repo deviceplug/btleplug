@@ -19,13 +19,26 @@
 use std::error::Error;
 use std::sync::{Once};
 
-use objc::declare::ClassDecl;
-use objc::runtime::{Class, Object, Protocol, Sel};
+use objc::{
+    declare::ClassDecl,
+    runtime::{Class, Object, Protocol, Sel}
+};
 
 use super::{
     framework::{nil, cb, ns},
     utils::{NO_PERIPHERAL_FOUND, cbx, nsx, wait},
 };
+
+use libc::c_void;
+use async_std::{
+    task,
+    sync::{channel, Sender, Receiver}
+};
+
+pub enum DelegateMessage {
+    DidUpdateState,
+    DiscoveredPeripheral(String, String),
+}
 
 pub mod bm {
     use super::*;
@@ -33,6 +46,8 @@ pub mod bm {
     // BlurMacDelegate : CBCentralManagerDelegate, CBPeripheralDelegate
 
     const DELEGATE_PERIPHERALS_IVAR: &'static str = "_peripherals";
+    const DELEGATE_SENDER_IVAR: &'static str = "_sender";
+    const DELEGATE_RECEIVER_IVAR: &'static str = "_receiver";
 
     fn delegate_class() -> &'static Class {
         trace!("delegate_class");
@@ -43,8 +58,9 @@ pub mod bm {
             decl.add_protocol(Protocol::get("CBCentralManagerDelegate").unwrap());
 
             decl.add_ivar::<*mut Object>(DELEGATE_PERIPHERALS_IVAR); /* NSMutableDictionary<NSString*, BlurMacPeripheralData*>* */
-
-            unsafe {
+            decl.add_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR); /* async_std::sync::Sender<DelegateMessage>* */
+            decl.add_ivar::<*mut c_void>(DELEGATE_RECEIVER_IVAR); /* async_std::sync::Receiver<DelegateMessage>* */
+             unsafe {
                 decl.add_method(sel!(init), delegate_init as extern fn(&mut Object, Sel) -> *mut Object);
                 decl.add_method(sel!(centralManagerDidUpdateState:), delegate_centralmanagerdidupdatestate as extern fn(&mut Object, Sel, *mut Object));
                 // decl.add_method(sel!(centralManager:willRestoreState:), delegate_centralmanager_willrestorestate as extern fn(&mut Object, Sel, *mut Object, *mut Object));
@@ -67,17 +83,37 @@ pub mod bm {
         Class::get("BlurMacDelegate").unwrap()
     }
 
+    extern fn delegate_get_sender_clone(delegate: &mut Object) -> Sender<DelegateMessage> {
+        unsafe {
+            (*(*(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR) as *mut Sender<DelegateMessage>)).clone()
+        }
+    }
+
     extern fn delegate_init(delegate: &mut Object, _cmd: Sel) -> *mut Object {
         trace!("delegate_init");
+        let (sender, recv) = channel::<DelegateMessage>(256);
+        // TODO Should these maybe be Option<T>, so we can denote when we've
+        // dropped? Not quite sure how delegate lifetime works here.
+        let sendbox = Box::new(sender);
+        let recvbox = Box::new(recv);
         unsafe {
+            trace!("Storing off ivars!");
             delegate.set_ivar::<*mut Object>(DELEGATE_PERIPHERALS_IVAR, ns::mutabledictionary());
+            delegate.set_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR, Box::into_raw(sendbox) as *mut c_void);
+            delegate.set_ivar::<*mut c_void>(DELEGATE_RECEIVER_IVAR, Box::into_raw(recvbox) as *mut c_void);
         }
         delegate
     }
 
-    extern fn delegate_centralmanagerdidupdatestate(_delegate: &mut Object, _cmd: Sel, _central: *mut Object) {
+    extern fn delegate_centralmanagerdidupdatestate(delegate: &mut Object, _cmd: Sel, _central: *mut Object) {
         trace!("delegate_centralmanagerdidupdatestate");
-        // NOTE: this is a no-op but kept because it is a required method of the protocol
+        unsafe {
+            let sender = delegate_get_sender_clone(delegate);
+            task::block_on(async {
+                sender.send(DelegateMessage::DidUpdateState).await;
+            });
+            trace!("actually sent!");
+        }
     }
 
     // extern fn delegate_centralmanager_willrestorestate(_delegate: &mut Object, _cmd: Sel, _central: *mut Object, _dict: *mut Object) {
@@ -101,25 +137,36 @@ pub mod bm {
 
     extern fn delegate_centralmanager_diddiscoverperipheral_advertisementdata_rssi(delegate: &mut Object, _cmd: Sel, _central: *mut Object, peripheral: *mut Object, adv_data: *mut Object, rssi: *mut Object) {
         trace!("delegate_centralmanager_diddiscoverperipheral_advertisementdata_rssi {}", cbx::peripheral_debug(peripheral));
-        let peripherals = delegate_peripherals(delegate);
+        // let peripherals = delegate_peripherals(delegate);
         let uuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-        let mut data = ns::dictionary_objectforkey(peripherals, uuid_nsstring);
-        if data == nil {
-            data = ns::mutabledictionary();
-            ns::mutabledictionary_setobject_forkey(peripherals, data, uuid_nsstring);
-        }
+        // let mut data = ns::dictionary_objectforkey(peripherals, uuid_nsstring);
+        // if data == nil {
+        //     data = ns::mutabledictionary();
+        //     ns::mutabledictionary_setobject_forkey(peripherals, data, uuid_nsstring);
+        // }
 
-        ns::mutabledictionary_setobject_forkey(data, ns::object_copy(peripheral), nsx::string_from_str(PERIPHERALDATA_PERIPHERALKEY));
+        // ns::mutabledictionary_setobject_forkey(data, ns::object_copy(peripheral), nsx::string_from_str(PERIPHERALDATA_PERIPHERALKEY));
 
-        ns::mutabledictionary_setobject_forkey(data, rssi, nsx::string_from_str(PERIPHERALDATA_RSSIKEY));
+        // ns::mutabledictionary_setobject_forkey(data, rssi, nsx::string_from_str(PERIPHERALDATA_RSSIKEY));
 
-        let cbuuids_nsarray = ns::dictionary_objectforkey(adv_data, unsafe { cb::ADVERTISEMENTDATASERVICEUUIDSKEY });
-        if cbuuids_nsarray != nil {
-            ns::mutabledictionary_setobject_forkey(data, cbuuids_nsarray, nsx::string_from_str(PERIPHERALDATA_UUIDSKEY));
-        }
+        // let cbuuids_nsarray = ns::dictionary_objectforkey(adv_data, unsafe { cb::ADVERTISEMENTDATASERVICEUUIDSKEY });
+        // if cbuuids_nsarray != nil {
+        //     ns::mutabledictionary_setobject_forkey(data, cbuuids_nsarray, nsx::string_from_str(PERIPHERALDATA_UUIDSKEY));
+        // }
 
-        if ns::dictionary_objectforkey(data, nsx::string_from_str(PERIPHERALDATA_EVENTSKEY)) == nil {
-            ns::mutabledictionary_setobject_forkey(data, ns::mutabledictionary(), nsx::string_from_str(PERIPHERALDATA_EVENTSKEY));
+        // if ns::dictionary_objectforkey(data, nsx::string_from_str(PERIPHERALDATA_EVENTSKEY)) == nil {
+        //     ns::mutabledictionary_setobject_forkey(data, ns::mutabledictionary(), nsx::string_from_str(PERIPHERALDATA_EVENTSKEY));
+        // }
+        let uuid_str = nsx::string_to_string(uuid_nsstring);
+        let name = nsx::string_to_string(cb::peripheral_name(peripheral));
+        info!("Discovered device: {}", name);
+        unsafe {
+            let sender = delegate_get_sender_clone(delegate);
+            
+            task::block_on(async {
+                sender.send(DelegateMessage::DiscoveredPeripheral(uuid_str, name)).await;
+            });
+            trace!("actually sent!");
         }
     }
 
@@ -238,6 +285,22 @@ pub mod bm {
         unsafe {
             let peripherals: *mut Object = *(&mut *delegate).get_ivar::<*mut Object>(DELEGATE_PERIPHERALS_IVAR);
             peripherals
+        }
+    }
+
+    pub fn delegate_receiver_clone(delegate: *mut Object) -> Receiver<DelegateMessage> {
+        unsafe {
+            // Just clone here and return, so we don't have to worry about
+            // accidentally screwing up ownership by passing the bare pointer
+            // outside.
+            (*(*(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_RECEIVER_IVAR) as *mut Receiver<DelegateMessage>)).clone()
+        }
+    }
+
+    pub fn delegate_drop_channel(delegate: *mut Object) {
+        unsafe {
+            let _ = Box::from_raw(*(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_RECEIVER_IVAR) as *mut Receiver<DelegateMessage>);
+            let _ = Box::from_raw(*(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR) as *mut Sender<DelegateMessage>);
         }
     }
 

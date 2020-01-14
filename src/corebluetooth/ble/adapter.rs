@@ -16,8 +16,10 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use std::error::Error;
-use std::os::raw::c_int;
+use std::{
+    error::Error,
+    os::raw::c_int,
+};
 
 use objc::runtime::{Object, YES};
 
@@ -27,12 +29,17 @@ use super::{
     utils::{NOT_SUPPORTED_ERROR, nsx}
 };
 
-
 #[derive(Clone, Debug)]
 pub struct BluetoothAdapter {
     pub(crate) manager: *mut Object,
     pub(crate) delegate: *mut Object,
 }
+
+use async_std::{
+    task,
+    prelude::StreamExt,
+};
+
 // TODO: implement std::fmt::Debug and/or std::fmt::Display instead of derive?
 
 unsafe impl Send for BluetoothAdapter {}
@@ -40,11 +47,22 @@ unsafe impl Sync for BluetoothAdapter {}
 
 impl BluetoothAdapter {
     pub fn init() -> Result<BluetoothAdapter, Box<dyn Error>> {
-        trace!("BluetoothAdapter::init");
+        info!("BluetoothAdapter::init");
         let delegate = bm::delegate();
         let manager = cb::centralmanager(delegate);
-        let adapter = BluetoothAdapter { manager: manager, delegate: delegate };
-
+        let adapter = BluetoothAdapter {
+            manager: manager,
+            delegate: delegate,
+        };
+        info!("Done with init");
+        let mut recv = bm::delegate_receiver_clone(delegate);
+        info!("Waiting for event!");
+        task::block_on(async move {
+            // TODO Make sure we actually get the thing we're waiting on (a
+            // state update message)
+            recv.next().await.unwrap()
+        });
+        info!("Got event!");
         Ok(adapter)
     }
 
@@ -125,7 +143,7 @@ impl BluetoothAdapter {
         Ok(())
     }
 
-    fn stop_discovery(&self) -> Result<(), Box<dyn Error>> {
+    pub fn stop_discovery(&self) -> Result<(), Box<dyn Error>> {
         trace!("BluetoothAdapter::stop_discovery");
         cb::centralmanager_stopscan(self.manager);
         Ok(())
@@ -214,5 +232,6 @@ impl Drop for BluetoothAdapter {
         trace!("BluetoothAdapter::drop");
         // NOTE: stop discovery only here instead of in BluetoothDiscoverySession
         self.stop_discovery().unwrap();
+        bm::delegate_drop_channel(self.delegate);
     }
 }

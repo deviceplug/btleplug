@@ -3,24 +3,27 @@ use crate::Result;
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::convert::TryInto;
-use super::ble::{
-    adapter::BluetoothAdapter,
-    delegate::{
-        bm,
-        DelegateMessage,
-    },
-};
+// use super::ble::{
+//     adapter::BluetoothAdapter,
+//     delegate::{
+//         bm,
+//         DelegateMessage,
+//     },
+// };
 use super::peripheral::Peripheral;
+use super::internal::{run_corebluetooth_thread, CoreBluetoothMessage};
 use async_std::{
     task,
     prelude::StreamExt,
+    sync::channel,
 };
 
 #[derive(Clone)]
 pub struct Adapter {
-    adapter: Arc<BluetoothAdapter>,
+    //adapter: Arc<BluetoothAdapter>,
     event_handlers: Arc<Mutex<Vec<EventHandler>>>,
     peripherals: Arc<Mutex<HashMap<BDAddr, Peripheral>>>,
+    sender: crossbeam::crossbeam_channel::Sender<CoreBluetoothMessage>,
 }
 
 pub fn uuid_to_bdaddr(uuid: &String) -> BDAddr {
@@ -31,40 +34,44 @@ pub fn uuid_to_bdaddr(uuid: &String) -> BDAddr {
 
 impl Adapter {
     pub fn new() -> Self {
-
-        let adapter = Arc::new(BluetoothAdapter::init().unwrap());
-        let adapter_clone = adapter.clone();
+        let (sender, receiver) = channel(256);
+        let adapter_sender = run_corebluetooth_thread(sender);
         // Since init currently blocked until the state update, we know the
         // receiver is dropped after that. We can pick it up here and make it
         // part of our event loop to update our peripherals.
-
+        info!("Waiting on adapter connect");
+        task::block_on(async {
+            receiver.recv().await.unwrap()
+        });
+        info!("Waiting on adapter connected");
         let event_handlers = Arc::new(Mutex::new(Vec::new()));
         let peripherals = Arc::new(Mutex::new(HashMap::new()));
         let handler_clone = event_handlers.clone();
         let peripherals_clone = peripherals.clone();
-        let mut recv = bm::delegate_receiver_clone(adapter.delegate);
+        // let mut recv = bm::delegate_receiver_clone(adapter.delegate);
 
-        task::spawn(async move{
-            loop {
-                // TODO We should probably have the sender throw out None on
-                // Drop to clean this up?
-                match recv.next().await.unwrap() {
-                    DelegateMessage::DiscoveredPeripheral(uuid, name) => {
-                        // TODO Gotta change uuid into a BDAddr for now. Expand
-                        // library identifier type. :(
-                        let id = uuid_to_bdaddr(&uuid);
-                        let mut p = peripherals_clone.lock().unwrap();
-                        p.insert(id, Peripheral::new(adapter_clone.clone(), &uuid));
-                    },
-                    _ => {}
-                }
-            }
-        });
+        // task::spawn(async move{
+        //     loop {
+        //         // TODO We should probably have the sender throw out None on
+        //         // Drop to clean this up?
+        //         match recv.next().await.unwrap() {
+        //             DelegateMessage::DiscoveredPeripheral(uuid, name) => {
+        //                 // TODO Gotta change uuid into a BDAddr for now. Expand
+        //                 // library identifier type. :(
+        //                 let id = uuid_to_bdaddr(&uuid);
+        //                 let mut p = peripherals_clone.lock().unwrap();
+        //                 p.insert(id, Peripheral::new(adapter_clone.clone(), &uuid));
+        //             },
+        //             _ => {}
+        //         }
+        //     }
+        // });
 
         Adapter {
             event_handlers,
-            adapter,
+            //adapter,
             peripherals,
+            sender: adapter_sender
         }
     }
 
@@ -85,12 +92,14 @@ impl Central<Peripheral> for Adapter {
     }
 
     fn start_scan(&self) -> Result<()> {
-        self.adapter.start_discovery();
+        info!("Starting CoreBluetooth Scan");
+        self.sender.send(CoreBluetoothMessage::StartScanning);
         Ok(())
     }
 
     fn stop_scan(&self) -> Result<()> {
-        self.adapter.stop_discovery();
+        info!("Stopping CoreBluetooth Scan");
+        self.sender.send(CoreBluetoothMessage::StopScanning);
         Ok(())
     }
 

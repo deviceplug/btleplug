@@ -20,37 +20,38 @@ use std::{
 use crate::{Result, Error};
 use super::{
     adapter::{Adapter, uuid_to_bdaddr},
-    ble::{
-        adapter::BluetoothAdapter,
-        device::BluetoothDevice,
-    },
+    // ble::{
+    //     adapter::BluetoothAdapter,
+    //     device::BluetoothDevice,
+    // },
 };
 
 #[derive(Clone)]
 pub struct Peripheral {
     notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
-    uuid: String,
-    device: BluetoothDevice,
-    properties: PeripheralProperties
+    // uuid: String,
+    // device: BluetoothDevice,
+    // properties: PeripheralProperties
 }
 
 impl Peripheral {
-    pub fn new(adapter: Arc<BluetoothAdapter>, uuid: &String) -> Self {
+    pub fn new() -> Self {
         // Since we're building the object, we have an active advertisement.
         // Build properties now.
-        let device = BluetoothDevice::new(adapter, uuid);
-        let props = PeripheralProperties {
-            address: uuid_to_bdaddr(uuid),
-            address_type: AddressType::Random,
-            local_name: device.get_name().unwrap(),
-            tx_power_level: None,
-            manufacturer_data: None,
-            discovery_count: 1,
-            has_scan_response: true,
-        };
+        // let device = BluetoothDevice::new(adapter, uuid);
+        // let properties = PeripheralProperties {
+        //     address: uuid_to_bdaddr(uuid),
+        //     address_type: AddressType::Random,
+        //     local_name: "", //device.get_name().unwrap(),
+        //     tx_power_level: None,
+        //     manufacturer_data: None,
+        //     discovery_count: 1,
+        //     has_scan_response: true,
+        // };
         Peripheral{
+            // properties
             notification_handlers: Arc::new(Mutex::new(Vec::new())),
-            uuid: uuid.to_string()
+            // uuid: uuid.to_string()
         }
     }
 }
@@ -79,7 +80,8 @@ impl Debug for Peripheral {
 impl ApiPeripheral for Peripheral {
     /// Returns the address of the peripheral.
     fn address(&self) -> BDAddr {
-        uuid_to_bdaddr(&self.uuid)
+        //uuid_to_bdaddr(&self.uuid)
+        BDAddr::default()
     }
 
     /// Returns the set of properties associated with the peripheral. These may be updated over time

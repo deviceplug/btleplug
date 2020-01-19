@@ -6,25 +6,24 @@
 // for full license information.
 
 use crate::api::{
-    AddressType, CentralEvent, BDAddr, PeripheralProperties, CommandCallback,
+    BDAddr, PeripheralProperties, CommandCallback,
     NotificationHandler, RequestCallback, UUID, Peripheral as ApiPeripheral,
-    Characteristic, ValueNotification
+    Characteristic
 };
 use std::{
     fmt::{self, Debug, Display, Formatter},
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeSet},
     sync::{
-        Arc, Mutex, atomic::{AtomicBool, Ordering}
+        Arc, Mutex
     }
 };
 use crate::{Result, Error};
-use super::{
-    adapter::{Adapter, uuid_to_bdaddr},
-    // ble::{
-    //     adapter::BluetoothAdapter,
-    //     device::BluetoothDevice,
-    // },
-};
+// use super::{
+//     // ble::{
+//     //     adapter::BluetoothAdapter,
+//     //     device::BluetoothDevice,
+//     // },
+// };
 
 #[derive(Clone)]
 pub struct Peripheral {
@@ -35,7 +34,7 @@ pub struct Peripheral {
 }
 
 impl Peripheral {
-    pub fn new() -> Self {
+    pub fn new(uuid: String) -> Self {
         // Since we're building the object, we have an active advertisement.
         // Build properties now.
         // let device = BluetoothDevice::new(adapter, uuid);

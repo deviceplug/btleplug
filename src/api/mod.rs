@@ -134,6 +134,14 @@ bitflags! {
     }
 }
 
+impl CharPropFlags {
+    pub fn new() -> Self {
+        Self {
+            bits: 0
+        }
+    }
+}
+
 /// A Bluetooth characteristic. Characteristics are the main way you will interact with other
 /// bluetooth devices. Characteristics are identified by a UUID which may be standardized
 /// (like 0x2803, which identifies a characteristic for reading heart rate measurements) but more

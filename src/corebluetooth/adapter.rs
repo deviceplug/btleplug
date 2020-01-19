@@ -3,15 +3,8 @@ use crate::Result;
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::convert::TryInto;
-// use super::ble::{
-//     adapter::BluetoothAdapter,
-//     delegate::{
-//         bm,
-//         DelegateMessage,
-//     },
-// };
 use super::peripheral::Peripheral;
-use super::internal::{run_corebluetooth_thread, CoreBluetoothMessage};
+use super::internal::{run_corebluetooth_thread, CoreBluetoothMessage, CoreBluetoothEvent};
 use async_std::{
     task,
     prelude::StreamExt,
@@ -34,7 +27,7 @@ pub fn uuid_to_bdaddr(uuid: &String) -> BDAddr {
 
 impl Adapter {
     pub fn new() -> Self {
-        let (sender, receiver) = channel(256);
+        let (sender, mut receiver) = channel(256);
         let adapter_sender = run_corebluetooth_thread(sender);
         // Since init currently blocked until the state update, we know the
         // receiver is dropped after that. We can pick it up here and make it
@@ -48,24 +41,28 @@ impl Adapter {
         let peripherals = Arc::new(Mutex::new(HashMap::new()));
         let handler_clone = event_handlers.clone();
         let peripherals_clone = peripherals.clone();
-        // let mut recv = bm::delegate_receiver_clone(adapter.delegate);
 
-        // task::spawn(async move{
-        //     loop {
-        //         // TODO We should probably have the sender throw out None on
-        //         // Drop to clean this up?
-        //         match recv.next().await.unwrap() {
-        //             DelegateMessage::DiscoveredPeripheral(uuid, name) => {
-        //                 // TODO Gotta change uuid into a BDAddr for now. Expand
-        //                 // library identifier type. :(
-        //                 let id = uuid_to_bdaddr(&uuid);
-        //                 let mut p = peripherals_clone.lock().unwrap();
-        //                 p.insert(id, Peripheral::new(adapter_clone.clone(), &uuid));
-        //             },
-        //             _ => {}
-        //         }
-        //     }
-        // });
+        task::spawn(async move{
+            loop {
+                // TODO We should probably have the sender throw out None on
+                // Drop to clean this up?
+                let msg = receiver.next().await;
+                if msg.is_none() {
+                    break;
+                } else {
+                    match msg.unwrap() {
+                        CoreBluetoothEvent::DeviceDiscovered(uuid, name) => {
+                            // TODO Gotta change uuid into a BDAddr for now. Expand
+                            // library identifier type. :(
+                            let id = uuid_to_bdaddr(&uuid);
+                            let mut p = peripherals_clone.lock().unwrap();
+                            //p.insert(id, Peripheral::new(adapter_clone.clone(), &uuid));
+                        },
+                        _ => {}
+                    }
+                }
+            }
+        });
 
         Adapter {
             event_handlers,

@@ -16,3 +16,4 @@ mod utils;
 pub mod manager;
 pub mod adapter;
 pub mod peripheral;
+mod future;

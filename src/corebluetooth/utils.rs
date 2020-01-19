@@ -16,11 +16,7 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use std::error::Error;
 use std::ffi::{CStr, CString};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time;
-use std::thread;
 
 use objc::runtime::Object;
 

@@ -21,7 +21,10 @@ use std::{
     collections::HashMap,
     str::FromStr
 };
-use crossbeam::crossbeam_channel::{bounded, Receiver, Sender};
+use async_std::{
+    task,
+    sync::{channel, Sender, Receiver},
+};
 
 use objc::{
     declare::ClassDecl,
@@ -46,6 +49,8 @@ pub enum CentralDelegateEvent {
     DiscoveredIncludedServices(Uuid, HashMap<Uuid, StrongPtr>),
     // Peripheral UUID, HashMap Characteristic Uuid to StrongPtr
     DiscoveredCharacteristics(Uuid, HashMap<Uuid, StrongPtr>),
+    ConnectedDevice(Uuid),
+    DisconnectedDevice(Uuid),
     // TODO Deal with descriptors at some point, but not a huge worry at the moment.
     // DiscoveredDescriptors(String, )
 }
@@ -139,9 +144,16 @@ pub mod CentralDelegate {
         }
     }
 
+    extern fn send_delegate_event(delegate: &mut Object, event: CentralDelegateEvent) {
+        let sender = delegate_get_sender_clone(delegate);
+        task::block_on(async {
+            sender.send(event).await;
+        });
+    }
+
     extern fn delegate_init(delegate: &mut Object, _cmd: Sel) -> *mut Object {
         trace!("delegate_init");
-        let (sender, recv) = bounded::<CentralDelegateEvent>(256);
+        let (sender, recv) = channel::<CentralDelegateEvent>(256);
         // TODO Should these maybe be Option<T>, so we can denote when we've
         // dropped? Not quite sure how delegate lifetime works here.
         let sendbox = Box::new(sender);
@@ -162,8 +174,7 @@ pub mod CentralDelegate {
 
     extern fn delegate_centralmanagerdidupdatestate(delegate: &mut Object, _cmd: Sel, _central: *mut Object) {
         trace!("delegate_centralmanagerdidupdatestate");
-        let sender = delegate_get_sender_clone(delegate);
-        sender.send(CentralDelegateEvent::DidUpdateState);
+        send_delegate_event(delegate, CentralDelegateEvent::DidUpdateState);
     }
 
     // extern fn delegate_centralmanager_willrestorestate(_delegate: &mut Object, _cmd: Sel, _central: *mut Object, _dict: *mut Object) {
@@ -174,6 +185,9 @@ pub mod CentralDelegate {
         trace!("delegate_centralmanager_didconnectperipheral {}", CoreBluetoothUtils::peripheral_debug(peripheral));
         cb::peripheral_setdelegate(peripheral, delegate);
         cb::peripheral_discoverservices(peripheral);
+        let uuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
+        let uuid = Uuid::from_str(&NSStringUtils::string_to_string(uuid_nsstring)).unwrap();
+        send_delegate_event(delegate, CentralDelegateEvent::ConnectedDevice(uuid));
     }
 
     extern fn delegate_centralmanager_diddisconnectperipheral_error(delegate: &mut Object, _cmd: Sel, _central: *mut Object, peripheral: *mut Object, _error: *mut Object) {
@@ -190,12 +204,11 @@ pub mod CentralDelegate {
         let uuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
         let uuid_str = NSStringUtils::string_to_string(uuid_nsstring);
         let name = NSStringUtils::string_to_string(cb::peripheral_name(peripheral));
-        let sender = delegate_get_sender_clone(delegate);
         let held_peripheral;
         unsafe {
             held_peripheral = StrongPtr::retain(peripheral);
         }
-        sender.send(CentralDelegateEvent::DiscoveredPeripheral(held_peripheral));
+        send_delegate_event(delegate, CentralDelegateEvent::DiscoveredPeripheral(held_peripheral));
     }
 
     ////////////////////////////////////////////////////////////////
@@ -228,8 +241,7 @@ pub mod CentralDelegate {
             }
             let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
             let puuid_str = NSStringUtils::string_to_string(puuid_nsstring);
-            let sender = delegate_get_sender_clone(delegate);
-            sender.send(CentralDelegateEvent::DiscoveredServices(Uuid::from_str(&puuid_str).unwrap(), service_map));
+            send_delegate_event(delegate, CentralDelegateEvent::DiscoveredServices(Uuid::from_str(&puuid_str).unwrap(), service_map));
         }
     }
 
@@ -264,8 +276,7 @@ pub mod CentralDelegate {
             }
             let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
             let puuid_str = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
-            let sender = delegate_get_sender_clone(delegate);
-            sender.send(CentralDelegateEvent::DiscoveredCharacteristics(puuid_str, char_map));
+            send_delegate_event(delegate, CentralDelegateEvent::DiscoveredCharacteristics(puuid_str, char_map));
         }
     }
 

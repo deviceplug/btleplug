@@ -18,8 +18,9 @@
 
 use std::{
     sync::Once,
-    collections::HashMap,
-    str::FromStr
+    collections::{HashMap},
+    str::FromStr,
+    slice,
 };
 use async_std::{
     task,
@@ -51,6 +52,9 @@ pub enum CentralDelegateEvent {
     DiscoveredCharacteristics(Uuid, HashMap<Uuid, StrongPtr>),
     ConnectedDevice(Uuid),
     DisconnectedDevice(Uuid),
+    CharacteristicSubscribed(Uuid, Uuid),
+    CharacteristicUnsubscribed(Uuid, Uuid),
+    CharacteristicNotified(Uuid, Uuid, Vec<u8>),
     // TODO Deal with descriptors at some point, but not a huge worry at the moment.
     // DiscoveredDescriptors(String, )
 }
@@ -126,6 +130,8 @@ pub mod CentralDelegate {
                 //                 delegate_peripheral_diddiscoverdescriptorsforcharacteristic_error as extern fn(&mut Object, Sel, *mut Object, *mut Object, *mut Object));
                 decl.add_method(sel!(peripheral:didUpdateValueForCharacteristic:error:),
                                 delegate_peripheral_didupdatevalueforcharacteristic_error as extern fn(&mut Object, Sel, *mut Object, *mut Object, *mut Object));
+                decl.add_method(sel!(peripheral:didUpdateNotificationStateForCharacteristic:error:),
+                                delegate_peripheral_didupdatenotificationstateforcharacteristic_error as extern fn(&mut Object, Sel, *mut Object, *mut Object, *mut Object));
                 decl.add_method(sel!(peripheral:didWriteValueForCharacteristic:error:),
                                 delegate_peripheral_didwritevalueforcharacteristic_error as extern fn(&mut Object, Sel, *mut Object, *mut Object, *mut Object));
                 decl.add_method(sel!(peripheral:didReadRSSI:error:),
@@ -137,6 +143,12 @@ pub mod CentralDelegate {
 
         Class::get("BtlePlugCentralManagerDelegate").unwrap()
     }
+
+    ////////////////////////////////////////////////////////////////
+    //
+    // Utility functions
+    //
+    ////////////////////////////////////////////////////////////////
 
     extern fn delegate_get_sender_clone(delegate: &mut Object) -> Sender<CentralDelegateEvent> {
         unsafe {
@@ -164,6 +176,21 @@ pub mod CentralDelegate {
             delegate.set_ivar::<*mut c_void>(DELEGATE_RECEIVER_IVAR, Box::into_raw(recvbox) as *mut c_void);
         }
         delegate
+    }
+
+    extern fn get_characteristic_value(characteristic: *mut Object) -> Vec<u8> {
+        info!("Getting data!");
+        let value = cb::characteristic_value(characteristic);
+        let length = ns::data_length(value);
+        if length == 0 {
+            info!("data is 0?");
+            return vec!();
+        }
+
+        let bytes = ns::data_bytes(value);
+        let v = unsafe { slice::from_raw_parts(bytes, length as usize).to_vec() };
+        info!("BluetoothGATTCharacteristic::get_value -> {:?}", v);
+        v
     }
 
     ////////////////////////////////////////////////////////////////
@@ -267,22 +294,28 @@ pub mod CentralDelegate {
                 // cb::peripheral_discoverdescriptorsforcharacteristic(peripheral, c);
                 // Create the map entry we'll need to export.
                 let uuid = cb::uuid_uuidstring(cb::attribute_uuid(c));
-                let uuid_str = Uuid::from_str(&NSStringUtils::string_to_string(uuid)).unwrap();
+                let uuid = Uuid::from_str(&NSStringUtils::string_to_string(uuid)).unwrap();
                 let held_char;
                 unsafe {
                     held_char = StrongPtr::retain(c);
                 }
-                char_map.insert(uuid_str, held_char);
+                char_map.insert(uuid, held_char);
             }
             let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-            let puuid_str = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
-            send_delegate_event(delegate, CentralDelegateEvent::DiscoveredCharacteristics(puuid_str, char_map));
+            let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
+            send_delegate_event(delegate, CentralDelegateEvent::DiscoveredCharacteristics(puuid, char_map));
         }
     }
 
     extern fn delegate_peripheral_didupdatevalueforcharacteristic_error(delegate: &mut Object, _cmd: Sel, peripheral: *mut Object, characteristic: *mut Object, error: *mut Object) {
         trace!("delegate_peripheral_didupdatevalueforcharacteristic_error {} {} {}", CoreBluetoothUtils::peripheral_debug(peripheral), CoreBluetoothUtils::characteristic_debug(characteristic), if error != nil {"error"} else {""});
         if error == nil {
+            let v = get_characteristic_value(characteristic);
+            let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
+            let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
+            let cuuid_nsstring = cb::uuid_uuidstring(cb::attribute_uuid(characteristic));
+            let cuuid = Uuid::from_str(&NSStringUtils::string_to_string(cuuid_nsstring)).unwrap();
+            send_delegate_event(delegate, CentralDelegateEvent::CharacteristicNotified(puuid, cuuid, v));
             // Notify BluetoothGATTCharacteristic::read_value that read was successful.
         }
     }
@@ -293,10 +326,19 @@ pub mod CentralDelegate {
         }
     }
 
-    // extern fn delegate_peripheral_didupdatenotificationstateforcharacteristic_error(_delegate: &mut Object, _cmd: Sel, _peripheral: *mut Object, _characteristic: *mut Object, _error: *mut Object) {
-    //     trace!("delegate_peripheral_didupdatenotificationstateforcharacteristic_error");
-    //     // TODO: this is where notifications should be handled...
-    // }
+    extern fn delegate_peripheral_didupdatenotificationstateforcharacteristic_error(delegate: &mut Object, _cmd: Sel, peripheral: *mut Object, characteristic: *mut Object, error: *mut Object) {
+        trace!("delegate_peripheral_didupdatenotificationstateforcharacteristic_error");
+        // TODO check for error here
+        let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
+        let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
+        let cuuid_nsstring = cb::uuid_uuidstring(cb::attribute_uuid(characteristic));
+        let cuuid = Uuid::from_str(&NSStringUtils::string_to_string(cuuid_nsstring)).unwrap();
+        if cb::characteristic_isnotifying(characteristic) == objc::runtime::YES {
+            send_delegate_event(delegate, CentralDelegateEvent::CharacteristicSubscribed(puuid, cuuid));
+        } else {
+            send_delegate_event(delegate, CentralDelegateEvent::CharacteristicUnsubscribed(puuid, cuuid));
+        }
+    }
 
     // extern fn delegate_peripheral_diddiscoverdescriptorsforcharacteristic_error(_delegate: &mut Object, _cmd: Sel, _peripheral: *mut Object, _characteristic: *mut Object, _error: *mut Object) {
     //     info!("delegate_peripheral_diddiscoverdescriptorsforcharacteristic_error");

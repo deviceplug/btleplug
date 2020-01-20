@@ -9,14 +9,15 @@ use crate::{
     api::{
         AddressType, BDAddr, PeripheralProperties, CommandCallback,
         NotificationHandler, RequestCallback, UUID, Peripheral as ApiPeripheral,
-        Characteristic, CentralEvent, EventHandler
+        Characteristic, CentralEvent, EventHandler, ValueNotification
     },
     Result, Error
 };
 use super::{
     adapter::uuid_to_bdaddr,
     internal::{
-        CoreBluetoothEvent, CoreBluetoothMessage, CoreBluetoothReplyFuture, CoreBluetoothReply,
+        CoreBluetoothMessage, CoreBluetoothReplyFuture,
+        CoreBluetoothReply, CBPeripheralEvent,
     }
 };
 use std::{
@@ -30,6 +31,7 @@ use std::{
 use async_std::{
     sync::{Receiver, Sender},
     task,
+    prelude::StreamExt,
 };
 use uuid::Uuid;
 
@@ -40,7 +42,7 @@ pub struct Peripheral {
     uuid: Uuid,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
     properties: PeripheralProperties,
-    event_receiver: Receiver<CoreBluetoothEvent>,
+    event_receiver: Receiver<CBPeripheralEvent>,
     message_sender: Sender<CoreBluetoothMessage>,
     // We're not actually holding a peripheral object here, that's held out in
     // the objc thread. We'll just communicate with it through our
@@ -48,7 +50,7 @@ pub struct Peripheral {
 }
 
 impl Peripheral {
-    pub fn new(uuid: Uuid, local_name: String, adapter_handlers: Arc<Mutex<Vec<EventHandler>>>, event_receiver: Receiver<CoreBluetoothEvent>, message_sender: Sender<CoreBluetoothMessage>) -> Self {
+    pub fn new(uuid: Uuid, local_name: String, adapter_handlers: Arc<Mutex<Vec<EventHandler>>>, event_receiver: Receiver<CBPeripheralEvent>, message_sender: Sender<CoreBluetoothMessage>) -> Self {
         // Since we're building the object, we have an active advertisement.
         // Build properties now.
         let properties = PeripheralProperties {
@@ -62,11 +64,36 @@ impl Peripheral {
             discovery_count: 1,
             has_scan_response: true,
         };
+        let notification_handlers = Arc::new(Mutex::new(Vec::<NotificationHandler>::new()));
+        let mut er_clone = event_receiver.clone();
+        let nh_clone = notification_handlers.clone();
+        task::spawn(async move {
+            let emit = |event: ValueNotification| {
+                let vec = nh_clone.lock().unwrap();
+                for handler in (*vec).iter() {
+                    handler(event.clone());
+                }
+            };
+            loop {
+                match er_clone.next().await.unwrap() {
+                    CBPeripheralEvent::Notification(uuid, data) => {
+                        let mut id = *uuid.as_bytes();
+                        id.reverse();
+                        emit(ValueNotification {
+                            uuid: UUID::B128(id),
+                            handle: None,
+                            value: data,
+                        });
+                    },
+                    _ => error!("Unhandled CBPeripheralEvent"),
+                }
+            }
+        });
         Self {
             properties,
             adapter_handlers,
             characteristics: Arc::new(Mutex::new(BTreeSet::new())),
-            notification_handlers: Arc::new(Mutex::new(Vec::new())),
+            notification_handlers,
             uuid,
             event_receiver,
             message_sender,
@@ -236,7 +263,7 @@ impl ApiPeripheral for Peripheral {
             let fut = CoreBluetoothReplyFuture::default();
             self.message_sender.send(CoreBluetoothMessage::Subscribe(self.uuid, get_apple_uuid(characteristic.uuid), fut.get_state_clone())).await;
             match fut.await {
-                CoreBluetoothReply::Ok => {},
+                CoreBluetoothReply::Ok => info!("subscribed!"),
                 _ => panic!("Didn't subscribe!"),
             }
         });
@@ -247,7 +274,15 @@ impl ApiPeripheral for Peripheral {
     /// This is a synchronous call.
     fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
         info!("Trying to unsubscribe!");
-        Err(Error::NotSupported("unsubscribe".into()))
+        task::block_on(async {
+            let fut = CoreBluetoothReplyFuture::default();
+            self.message_sender.send(CoreBluetoothMessage::Unsubscribe(self.uuid, get_apple_uuid(characteristic.uuid), fut.get_state_clone())).await;
+            match fut.await {
+                CoreBluetoothReply::Ok => {},
+                _ => panic!("Didn't unsubscribe!"),
+            }
+        });
+        Ok(())
     }
 
     /// Registers a handler that will be called when value notification messages are received from

@@ -71,8 +71,9 @@ impl Debug for BDAddr {
 /// A notification sent from a peripheral due to a change in a value.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ValueNotification {
+    pub uuid: UUID,
     /// The handle that has changed.
-    pub handle: u16,
+    pub handle: Option<u16>,
     /// The new value of the handle.
     pub value: Vec<u8>,
 }
@@ -153,11 +154,11 @@ impl CharPropFlags {
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
 pub struct Characteristic {
     /// The start of the handle range that contains this characteristic.
-    pub start_handle: u16,
+    pub start_handle: Option<u16>,
     /// The end of the handle range that contains this characteristic.
-    pub end_handle: u16,
+    pub end_handle: Option<u16>,
     /// The value handle of the characteristic.
-    pub value_handle: u16,
+    pub value_handle: Option<u16>,
     /// The UUID for this characteristic. This uniquely identifies its behavior.
     pub uuid: UUID,
     /// The set of properties for this characteristic, which indicate what functionality it
@@ -168,10 +169,8 @@ pub struct Characteristic {
 
 impl Display for Characteristic {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "handle: 0x{:04X}, char properties: 0x{:02X}, \
-                   char value handle: 0x{:04X}, end handle: 0x{:04X}, uuid: {:?}",
-               self.start_handle, self.properties,
-               self.value_handle, self.end_handle, self.uuid)
+        write!(f, "uuid: {:?}, char properties: {:?}",
+               self.properties, self.uuid)
     }
 }
 

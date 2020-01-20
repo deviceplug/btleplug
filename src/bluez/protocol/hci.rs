@@ -10,20 +10,28 @@
 // following copyright:
 //
 // Copyright (c) 2014 The Rust Project Developers
-
+//
+// *************************************************************
+//
+// NOTE: DO NOT AUTOIDENT THIS FILE. IT WILL MESS UP THE MACROS.
+// I DON'T KNOW WHY.
+//
+// *************************************************************
 use nom::{le_u8, le_u16, le_u32, le_u64, le_i8, IResult, Err, ErrorKind};
 use num::FromPrimitive;
 use bytes::{BytesMut, BufMut};
 
 
-use ::api::{BDAddr, AddressType};
-use bluez::constants::*;
-use bluez::protocol::*;
+use crate::api::{BDAddr, AddressType};
+use crate::bluez::{
+    constants::*,
+    protocol::*,
+};
 
 
 #[cfg(test)]
 mod tests {
-    use ::api::BDAddr;
+    use crate::api::BDAddr;
     use super::*;
     use super::LEAdvertisingData::*;
     use super::HCIStatus;

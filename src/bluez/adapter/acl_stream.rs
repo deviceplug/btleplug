@@ -11,34 +11,36 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use std::thread;
-use std::sync::Arc;
-use std::time::Duration;
 
 use libc;
 
-use ::Result;
+use crate::{
+    bluez::{
+        constants::*,
+        util::handle_error,
+        protocol::hci::ACLData,
+        protocol::att,
+        adapter::Adapter,
+    },
+    Error,
+    Result,
+    api::{CommandCallback, RequestCallback, BDAddr, NotificationHandler, Characteristic},
+};
 
-use bluez::constants::*;
-use bluez::util::handle_error;
+use std::{
+    fmt::{self, Debug, Formatter},
+    sync::{
+        mpsc::{channel, Sender, Receiver},
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+        Arc,
+    },
+    collections::BTreeSet,
+    thread,
+    time::Duration,
+};
 
-use std::fmt;
-use std::fmt::{Debug, Formatter};
-use std::sync::mpsc::{channel, Sender, Receiver};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
-use bluez::protocol::hci::ACLData;
-use bluez::protocol::att;
-
-use self::StreamMessage::*;
-use api::BDAddr;
-use Error;
-use api::CommandCallback;
-use api::RequestCallback;
-use bluez::adapter::Adapter;
-use bytes::BytesMut;
-use bytes::BufMut;
-use api::NotificationHandler;
+use bytes::{BytesMut, BufMut};
 
 enum StreamMessage  {
     Command(Vec<u8>, Option<CommandCallback>),

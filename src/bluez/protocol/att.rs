@@ -13,10 +13,10 @@
 
 use nom::{le_u8, le_u16, IResult};
 
-use ::api::{Characteristic, UUID, CharPropFlags, ValueNotification};
+use crate::api::{Characteristic, UUID, CharPropFlags, ValueNotification};
 
-use bluez::constants::*;
-use bluez::protocol::*;
+use crate::bluez::constants::*;
+use crate::bluez::protocol::*;
 use bytes::{BytesMut, BufMut};
 
 #[cfg(test)]

@@ -28,14 +28,14 @@
 //! An example of how to use the library to control some BLE smart lights:
 //!
 //! ```rust,no_run
-//! extern crate rumble;
+//! extern crate btleplug;
 //! extern crate rand;
 //! 
 //! use std::thread;
 //! use std::time::Duration;
 //! use rand::{Rng, thread_rng};
-//! use rumble::bluez::manager::Manager;
-//! use rumble::api::{UUID, Central, Peripheral};
+//! use btleplug::bluez::manager::Manager;
+//! use btleplug::api::{UUID, Central, Peripheral};
 //! 
 //! pub fn main() {
 //!     let manager = Manager::new().unwrap();
@@ -87,6 +87,7 @@ extern crate libc;
 #[macro_use]
 extern crate log;
 
+#[macro_use]
 extern crate nix;
 
 #[cfg(target_os = "windows")]
@@ -103,9 +104,11 @@ extern crate objc;
 extern crate cocoa;
 
 extern crate bytes;
+#[macro_use]
 extern crate enum_primitive;
 extern crate num;
 
+#[macro_use]
 extern crate nom;
 
 #[macro_use]

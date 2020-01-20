@@ -11,45 +11,40 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use ::Result;
+use crate::{
+    Result,
+    Error,
+    api::{Characteristic, CharPropFlags, Callback, PeripheralProperties, BDAddr, Central,
+          Peripheral as ApiPeripheral, AddressType, RequestCallback, CommandCallback,
+          UUID, UUID::B16, NotificationHandler},
+    bluez::{
+        adapter::acl_stream::{ACLStream},
+        adapter::ConnectedAdapter,
+        util::handle_error,
+        constants::*,
+        protocol::{ hci, att, hci::ACLData}
+    },
+};
 
-use api::{Characteristic, CharPropFlags, Callback, PeripheralProperties, BDAddr, Central,
-          Peripheral as ApiPeripheral};
-use std::mem::size_of;
-use std::collections::BTreeSet;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::atomic::Ordering;
+use std::{
+    mem::size_of,
+    collections::{BTreeSet, VecDeque},
+    sync::{
+        Arc,
+        Mutex,
+        atomic::Ordering,
+        mpsc::{
+            self, Sender, Receiver, channel,
+        },
+        RwLock,
+        Condvar,
+    },
+    fmt::{Debug, Formatter, self, Display},
+    time::Duration,
+};
 
 use libc;
-
-use bluez::adapter::acl_stream::{ACLStream};
-use bluez::adapter::ConnectedAdapter;
-use bluez::util::handle_error;
-use bluez::constants::*;
-use ::Error;
-use bluez::protocol::hci;
-use api::AddressType;
-use std::sync::mpsc;
-use std::sync::mpsc::Sender;
-use std::sync::mpsc::Receiver;
-use std::sync::mpsc::channel;
-use std::time::Duration;
 use bytes::{BytesMut, BufMut};
-use bluez::protocol::att;
-use std::fmt::Debug;
-use std::fmt::Formatter;
-use std::fmt;
-use std::sync::RwLock;
-use std::collections::VecDeque;
-use bluez::protocol::hci::ACLData;
-use std::sync::Condvar;
-use api::RequestCallback;
-use api::CommandCallback;
-use api::UUID;
-use api::UUID::B16;
-use api::NotificationHandler;
-use std::fmt::Display;
 
 #[derive(Copy, Debug)]
 #[repr(C)]
@@ -128,7 +123,7 @@ impl Peripheral {
         match message {
             &hci::Message::LEAdvertisingReport(ref info) => {
                 assert_eq!(self.address, info.bdaddr, "received message for wrong device");
-                use bluez::protocol::hci::LEAdvertisingData::*;
+                use crate::bluez::protocol::hci::LEAdvertisingData::*;
 
                 let mut properties = self.properties.lock().unwrap();
 

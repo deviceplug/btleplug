@@ -11,20 +11,25 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use std::slice::Iter;
-use std::iter::Take;
-use std::sync::Mutex;
+use std::{
+    slice::Iter,
+    iter::Take,
+    sync::Mutex,
+    mem,
+};
 
-use libc;
-use libc::{SOCK_RAW, AF_BLUETOOTH};
+use libc::{self, SOCK_RAW, AF_BLUETOOTH};
 use nix::sys::ioctl::ioctl_param_type;
-use std::mem;
 
-use bluez::util::handle_error;
-use bluez::adapter::{Adapter, ConnectedAdapter};
-use bluez::constants::*;
-use bluez::ioctl;
-use ::Result;
+use crate::{
+    bluez::{
+        util::handle_error,
+        adapter::{Adapter, ConnectedAdapter},
+        constants::*,
+        ioctl
+    },
+    Result
+};
 
 #[derive(Debug, Copy)]
 #[repr(C)]

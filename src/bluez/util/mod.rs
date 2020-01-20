@@ -14,8 +14,7 @@
 use nix;
 use nix::errno::Errno;
 
-use ::Result;
-use Error;
+use crate::{Result, Error};
 
 fn errno_to_error(errno: Errno) -> Error {
     match errno {

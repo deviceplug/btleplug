@@ -1,11 +1,11 @@
-extern crate rumble;
+extern crate btleplug;
 extern crate rand;
 
 use std::thread;
 use std::time::Duration;
 use rand::{Rng, thread_rng};
-use rumble::bluez::manager::Manager;
-use rumble::api::{UUID, Central, Peripheral};
+use btleplug::bluez::manager::Manager;
+use btleplug::api::{UUID, Central, Peripheral};
 
 pub fn main() {
     let manager = Manager::new().unwrap();

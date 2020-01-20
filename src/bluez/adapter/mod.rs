@@ -15,25 +15,28 @@ mod acl_stream;
 mod peripheral;
 
 use libc;
-use std;
-use std::ffi::CStr;
 use nom;
 use bytes::{BytesMut, BufMut};
 
-use std::collections::{HashSet, HashMap};
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
+use std::{
+    self,
+    ffi::CStr,
+    collections::{HashSet, HashMap},
+    sync::{Arc, Mutex},
+    sync::atomic::{AtomicBool, Ordering},
+    thread,
+};
 
-use ::Result;
-use api::{CentralEvent, BDAddr, Central};
+use crate::Result;
+use crate::api::{CentralEvent, BDAddr, Central, EventHandler};
 
-use bluez::util::handle_error;
-use bluez::protocol::hci;
-use bluez::adapter::peripheral::Peripheral;
-use bluez::constants::*;
-use bluez::ioctl;
-use api::EventHandler;
+use crate::bluez::{
+    util::handle_error,
+    protocol::hci,
+    adapter::peripheral::Peripheral,
+    constants::*,
+    ioctl,
+};
 
 
 #[derive(Copy, Debug)]

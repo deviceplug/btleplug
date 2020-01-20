@@ -31,11 +31,8 @@ bitflags = "1.0.1"
 failure = "0.1.1"
 failure_derive = "0.1.1"
 backtrace = "0.3.5"
-cocoa = "0.20.0"
-objc = "0.2"
 async-std = { version = "1.4.0", features = ["unstable"] }
 uuid = "0.8.1"
-crossbeam = "0.7.3"
 
 [dependencies.nom]
 version = "^4.0"

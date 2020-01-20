@@ -48,6 +48,8 @@ enum StreamMessage  {
     Data(Vec<u8>),
 }
 
+use StreamMessage::*;
+
 impl Debug for StreamMessage {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
@@ -67,10 +69,14 @@ pub struct ACLStream {
     should_stop: Arc<AtomicBool>,
     sender: Arc<Mutex<Sender<StreamMessage>>>,
     notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
+    // In order to get the UUID of our handle on notifications, we need to share
+    // the characteristics vector with a peripheral owner. There may be a nicer
+    // way to do this but I really don't care at the moment.
+    characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
 }
 
 impl ACLStream {
-    pub fn new(adapter: Adapter, address: BDAddr, handle: u16, fd: i32) -> ACLStream {
+    pub fn new(adapter: Adapter, address: BDAddr, characteristics: Arc<Mutex<BTreeSet<Characteristic>>>, handle: u16, fd: i32) -> ACLStream {
         info!("Creating new ACLStream for {}, {}, {}", address, handle, fd);
         let (tx, rx) = channel();
         let acl_stream = ACLStream {
@@ -78,6 +84,7 @@ impl ACLStream {
             address,
             handle,
             fd,
+            characteristics,
             should_stop: Arc::new(AtomicBool::new(false)),
             sender: Arc::new(Mutex::new(tx)),
             notification_handlers: Arc::new(Mutex::new(vec![])),
@@ -211,8 +218,21 @@ impl ACLStream {
                         debug!("value notification: {:?}", value);
                         match att::value_notification(&value) {
                             Ok(notification) => {
+                                let mut n = notification.1.clone();
+                                if let Some(h) = n.handle {
+                                    for c in self.characteristics.lock().unwrap().iter() {
+                                        info!("{} == {}", c.value_handle, h);
+                                        if c.value_handle == h {
+                                            n.uuid = c.uuid;
+                                            break;
+                                        }
+                                    }
+                                } else {
+                                    panic!("How did we get here without a handle?");
+                                }
+
                                 let handlers = self.notification_handlers.lock().unwrap();
-                                handlers.iter().for_each(|h| h(notification.1.clone()));
+                                handlers.iter().for_each(|h| h(n.clone()));
                             }
                             Err(err) => {
                                 error!("failed to parse notification: {:?}", err);

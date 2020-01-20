@@ -402,7 +402,7 @@ impl ApiPeripheral for Peripheral {
             Ok(handle) => {
                 // create the acl stream that will communicate with the device
                 let s = ACLStream::new(self.c_adapter.adapter.clone(),
-                                       self.address, handle, fd);
+                                       self.address, self.characteristics.clone(), handle, fd);
 
                 // replay missed messages
                 let mut queue = self.message_queue.lock().unwrap();

@@ -154,11 +154,11 @@ impl CharPropFlags {
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
 pub struct Characteristic {
     /// The start of the handle range that contains this characteristic.
-    pub start_handle: Option<u16>,
+    pub start_handle: u16,
     /// The end of the handle range that contains this characteristic.
-    pub end_handle: Option<u16>,
+    pub end_handle: u16,
     /// The value handle of the characteristic.
-    pub value_handle: Option<u16>,
+    pub value_handle: u16,
     /// The UUID for this characteristic. This uniquely identifies its behavior.
     pub uuid: UUID,
     /// The set of properties for this characteristic, which indicate what functionality it

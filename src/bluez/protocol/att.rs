@@ -60,7 +60,8 @@ mod tests {
         assert_eq!(value_notification(&buf), Ok((
             &[][..],
             ValueNotification {
-                handle: 46,
+                uuid: UUID::B16(0),
+                handle: Some(46),
                 value: vec![165, 17, 5, 0, 0, 130, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             })
         ));
@@ -141,7 +142,12 @@ named!(pub value_notification<&[u8], ValueNotification>,
         handle: le_u16 >>
         value: many1!(complete!(le_u8)) >>
         (
-           ValueNotification { handle, value }
+            ValueNotification {
+                // This will need to be set elsewhere.
+                uuid: UUID::B16(0),
+                handle: Some(handle),
+                value
+            }
         )
 ));
 

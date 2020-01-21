@@ -150,9 +150,10 @@ impl CBPeripheral {
                 let mut id = *uuid.as_bytes();
                 id.reverse();
                 let char = Characteristic {
-                    start_handle: None,
-                    end_handle: None,
-                    value_handle: None,
+                    // We can't get handles on macOS, just set them to 0.
+                    start_handle: 0,
+                    end_handle: 0,
+                    value_handle: 0,
                     uuid: UUID::B128(id),
                     properties: c.properties,
                 };

@@ -42,11 +42,11 @@ features = ["verbose-errors"]
 version = "0.6.0"
 features = ["windows-devices", "windows-storage"]
 
-[target.'cfg(macos)'.dependencies]
+[target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
 cocoa = "0.20.0"
 
-[target.'cfg(ios)'.dependencies]
+[target.'cfg(target_os = "ios")'.dependencies]
 objc = "0.2"
 cocoa = "0.20.0"
 

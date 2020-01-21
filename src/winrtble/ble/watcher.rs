@@ -18,7 +18,7 @@ use winrt::{
 };
 use crate::Result;
 
-pub type AdvertismentEventHandler = Box<Fn(&BluetoothLEAdvertisementReceivedEventArgs) + Send>;
+pub type AdvertismentEventHandler = Box<dyn Fn(&BluetoothLEAdvertisementReceivedEventArgs) + Send>;
 
 pub struct BLEWatcher {
     watcher: ComPtr<BluetoothLEAdvertisementWatcher>,

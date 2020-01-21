@@ -15,7 +15,7 @@ use winrt::{
     RtAsyncOperation,
     windows::devices::radios::{Radio, RadioKind},
 };
-use super::adapter::Adapter,
+use super::adapter::Adapter;
 use crate::{Result, Error};
 
 pub struct Manager {

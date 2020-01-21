@@ -24,7 +24,7 @@ use std::{
     fmt::{Debug, Display, Formatter, self},
     collections::{BTreeSet, HashMap},
     sync::{Arc, Mutex},
-    sync::atomic::{AtomicBool, Ordering};
+    sync::atomic::{AtomicBool, Ordering},
 };
 use winrt::windows::{
     devices::bluetooth::advertisement::*,
@@ -254,8 +254,9 @@ impl ApiPeripheral for Peripheral {
         let mut ble_characteristics = self.ble_characteristics.lock().unwrap();
         if let Some(ble_characteristic) = ble_characteristics.get_mut(&characteristic.uuid) {
             let notification_handlers = self.notification_handlers.clone();
+            let uuid = characteristic.uuid;
             ble_characteristic.subscribe(Box::new(move |value| {
-                let notification = ValueNotification{ handle: 0, value };
+                let notification = ValueNotification{ uuid: uuid, handle: None, value };
                 let handlers = notification_handlers.lock().unwrap();
                 handlers.iter().for_each(|h| h(notification.clone()));
             }))

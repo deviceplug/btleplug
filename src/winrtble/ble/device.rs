@@ -14,16 +14,17 @@
 use winrt::{
     ComPtr, RtAsyncOperation, IInspectable,
     windows::devices::bluetooth::{BluetoothLEDevice, IBluetoothLEDevice3, BluetoothConnectionStatus},
-    windows::devices::bluetooth::genericattributeprofile::{GattCommunicationStatus, GattDeviceServicesResult, GattDeviceService, IGattDeviceService3, GattCharacteristic},
+    windows::devices::bluetooth::genericattributeprofile::{GattCommunicationStatus, GattDeviceServicesResult,
+                                                           GattDeviceService, IGattDeviceService3, GattCharacteristic},
     windows::foundation::{TypedEventHandler, EventRegistrationToken},
-}
+};
 use crate::{
-    api::{BDAddr, CentralEvent},
+    api::BDAddr,
     Result, Error,
     winrtble::utils,
 };
 
-pub type ConnectedEventHandler = Box<Fn(bool) + Send>;
+pub type ConnectedEventHandler = Box<dyn Fn(bool) + Send>;
 
 pub struct BLEDevice {
     device: ComPtr<BluetoothLEDevice>,

@@ -27,7 +27,7 @@
 //! use std::thread;
 //! use std::time::Duration;
 //! use rand::{Rng, thread_rng};
-//! #[cfg(feature = "linux")]
+//! #[cfg(target_os = "linux")]
 //! use btleplug::bluez::{adapter::ConnectedAdapter, manager::Manager};
 //! #[cfg(target_os = "win")]
 //! use btleplug::winrtble::{adapter::Adapter, manager::Manager};
@@ -43,7 +43,7 @@
 //!     manager.adapters().unwrap()
 //! }
 //!
-//! #[cfg(feature = "linux")]
+//! #[cfg(target_os = "linux")]
 //! fn get_central(manager: &Manager) -> ConnectedAdapter {
 //!     let adapters = manager.adapters().unwrap();
 //!     let adapter = adapters.into_iter().nth(0).unwrap();

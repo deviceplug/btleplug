@@ -29,7 +29,7 @@
 //! use rand::{Rng, thread_rng};
 //! #[cfg(target_os = "linux")]
 //! use btleplug::bluez::{adapter::ConnectedAdapter, manager::Manager};
-//! #[cfg(target_os = "win")]
+//! #[cfg(target_os = "windows")]
 //! use btleplug::winrtble::{adapter::Adapter, manager::Manager};
 //! #[cfg(target_os = "macos")]
 //! use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
@@ -38,7 +38,7 @@
 //! // adapter retreival works differently depending on your platform right now.
 //! // API needs to be aligned.
 //!
-//! #[cfg(any(target_os = "win", target_os = "macos"))]
+//! #[cfg(any(target_os = "windows", target_os = "macos"))]
 //! fn get_central(manager: &Manager) -> Adapter {
 //!     manager.adapters().unwrap()
 //! }

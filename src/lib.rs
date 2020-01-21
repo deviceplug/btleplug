@@ -12,16 +12,9 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 
-//! Rumble is a Bluetooth Low Energy (BLE) central module library for Rust.
-//! Currently only Linux (with the BlueZ bluetooth library) is supported, although
-//! other operating systems may be supported in the future. Rumble interfaces with
-//! BlueZ using its socket interface rather than DBus. This offers much more control
-//! and reliability over the DBus interface, and does not require running BlueZ in
-//! experimental mode for BLE.
-//!
-//! As of version 0.2, the API is becoming more stable and the library itself more
-//! useful. You should still expect to encounter bugs, limitations, and odd behaviors.
-//! Pull requests (and wireshark traces) welcome!
+//! BtlePlug is a Bluetooth Low Energy (BLE) central module library for Rust. It
+//! currently supports Windows 10, macOS (and possibly iOS), Linux (using
+//! sockets instead of Bluez). Android support is coming in a future update.
 //!
 //! ## Usage
 //!
@@ -154,5 +147,5 @@ pub enum Error {
     Other(String),
 }
 
-// Rumble Result type
+// BtlePlug Result type
 pub type Result<T> = result::Result<T, Error>;

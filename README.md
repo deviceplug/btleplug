@@ -6,12 +6,14 @@
 
 [![Github donate button](https://img.shields.io/badge/github-donate-ff69b4.svg)](https://www.github.com/sponsors/qdot)
 
-btleplug is a fork of the seemingly-abandoned
-[rumble](https://github.com/mwylde/rumble) Rust BLE library. Our goal
-is the bring in some of the outstanding PRs from that project, expand
-the platform support to MacOS (Partial WinRT/UWP support is already in
-thanks to PRs in rumble), and possibly make the API surface more
-ergonomic for being a truly cross-platform library.
+btleplug is a Rust BLE library, support Windows 10, macOS, Linux, and
+possibly iOS. It is currently made up of parts of other abandoned
+projects with a goal of building a fully cross platform proof of
+concept. 
+
+Our goal is the bring in some of the outstanding PRs from other
+projects, expand the platform support, and possibly make the API
+surface more ergonomic for being a truly cross-platform library.
 
 Oh and async might happen to because why not.
 

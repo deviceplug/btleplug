@@ -11,32 +11,31 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use api::{AddressType, CentralEvent};
-use api::BDAddr;
-use std::fmt::Debug;
-use std::fmt::Display;
-use std::fmt::Formatter;
-use std::fmt;
-use api::PeripheralProperties;
-use api::CommandCallback;
-use api::NotificationHandler;
-use api::RequestCallback;
-use api::UUID;
-use std::collections::BTreeSet;
-use std::collections::HashMap;
-use ::Result;
-use api::{Peripheral as ApiPeripheral};
-use std::sync::{Arc, Mutex};
-use winrt::windows::devices::bluetooth::advertisement::*;
-use winrt::windows::storage::streams::DataReader;
-use winrtble::utils;
-use std::sync::atomic::{AtomicBool, Ordering};
-use ::Error;
-use api::Characteristic;
-use api::ValueNotification;
-use winrtble::ble::device::BLEDevice;
-use winrtble::ble::characteristic::BLECharacteristic;
-use winrtble::adapter::Adapter;
+use crate::{
+    api::{
+        AddressType, CentralEvent, BDAddr, PeripheralProperties, CommandCallback,
+        NotificationHandler, RequestCallback, UUID, Characteristic, ValueNotification,
+        Peripheral as ApiPeripheral
+    },
+    Result,
+    Error
+};
+use std::{
+    fmt::{Debug, Display, Formatter, self},
+    collections::{BTreeSet, HashMap},
+    sync::{Arc, Mutex},
+    sync::atomic::{AtomicBool, Ordering};
+};
+use winrt::windows::{
+    devices::bluetooth::advertisement::*,
+    storage::streams::DataReader,
+};
+use super::{
+    utils,
+    ble::device::BLEDevice,
+    ble::characteristic::BLECharacteristic,
+    adapter::Adapter,
+};
 
 #[derive(Clone)]
 pub struct Peripheral {

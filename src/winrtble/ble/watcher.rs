@@ -11,11 +11,12 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use winrt::ComPtr;
-use winrt::windows::devices::bluetooth::advertisement::*;
-use winrt::windows::foundation::{TypedEventHandler};
-use winrt::RtDefaultConstructible;
-use ::Result;
+use winrt::{
+    ComPtr, RtDefaultConstructible,
+    windows::devices::bluetooth::advertisement::*,
+    windows::foundation::{TypedEventHandler},
+};
+use crate::Result;
 
 pub type AdvertismentEventHandler = Box<Fn(&BluetoothLEAdvertisementReceivedEventArgs) + Send>;
 

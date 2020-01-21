@@ -11,13 +11,13 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use api::BDAddr;
-use api::UUID;
+use crate::{
+    api::{BDAddr, UUID, CharPropFlags},
+    Error,
+    Result
+};
 use winrt::Guid;
-use api::CharPropFlags;
 use winrt::windows::devices::bluetooth::genericattributeprofile::{GattCharacteristicProperties, GattCommunicationStatus};
-use ::Error;
-use ::Result;
 
 pub fn to_error(status: GattCommunicationStatus) -> Result<()> {
     match status {

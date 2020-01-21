@@ -11,16 +11,17 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use winrt::ComPtr;
-use winrt::RtAsyncOperation;
-use winrt::IInspectable;
-use winrt::windows::devices::bluetooth::{BluetoothLEDevice, IBluetoothLEDevice3, BluetoothConnectionStatus};
-use winrt::windows::devices::bluetooth::genericattributeprofile::{GattCommunicationStatus, GattDeviceServicesResult, GattDeviceService, IGattDeviceService3, GattCharacteristic};
-use winrt::windows::foundation::{TypedEventHandler, EventRegistrationToken};
-use ::Result;
-use ::Error;
-use api::{BDAddr, CentralEvent};
-use winrtble::utils;
+use winrt::{
+    ComPtr, RtAsyncOperation, IInspectable,
+    windows::devices::bluetooth::{BluetoothLEDevice, IBluetoothLEDevice3, BluetoothConnectionStatus},
+    windows::devices::bluetooth::genericattributeprofile::{GattCommunicationStatus, GattDeviceServicesResult, GattDeviceService, IGattDeviceService3, GattCharacteristic},
+    windows::foundation::{TypedEventHandler, EventRegistrationToken},
+}
+use crate::{
+    api::{BDAddr, CentralEvent},
+    Result, Error,
+    winrtble::utils,
+};
 
 pub type ConnectedEventHandler = Box<Fn(bool) + Send>;
 

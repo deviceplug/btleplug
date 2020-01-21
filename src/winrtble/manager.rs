@@ -11,11 +11,12 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use winrt::RtAsyncOperation;
-use winrt::windows::devices::radios::{Radio, RadioKind};
-use winrtble::adapter::Adapter;
-use ::Result;
-use ::Error;
+use winrt::{
+    RtAsyncOperation,
+    windows::devices::radios::{Radio, RadioKind},
+};
+use super::adapter::Adapter,
+use crate::{Result, Error};
 
 pub struct Manager {
 }

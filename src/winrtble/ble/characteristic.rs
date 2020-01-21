@@ -11,13 +11,15 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use ::Result;
-use ::Error;
-use winrt::{ComPtr, RtDefaultConstructible};
-use winrt::windows::devices::bluetooth::genericattributeprofile::{GattCommunicationStatus, GattCharacteristic, GattValueChangedEventArgs, GattClientCharacteristicConfigurationDescriptorValue};
-use winrt::windows::storage::streams::{DataReader, DataWriter};
-use winrt::RtAsyncOperation;
-use winrt::windows::foundation::{ TypedEventHandler, EventRegistrationToken };
+use crate::{Result, Error};
+use winrt::{
+    ComPtr,
+    RtDefaultConstructible,
+    windows::devices::bluetooth::genericattributeprofile::{GattCommunicationStatus, GattCharacteristic, GattValueChangedEventArgs, GattClientCharacteristicConfigurationDescriptorValue},
+    windows::storage::streams::{DataReader, DataWriter},
+    RtAsyncOperation,
+    windows::foundation::{ TypedEventHandler, EventRegistrationToken },
+};
 
 pub type NotifiyEventHandler = Box<dyn Fn(Vec<u8>) + Send>;
 

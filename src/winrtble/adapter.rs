@@ -11,15 +11,21 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use api::{Central, CentralEvent};
-use winrtble::peripheral::Peripheral;
-use api::EventHandler;
-use api::BDAddr;
-use ::Result;
-use winrtble::ble::watcher::BLEWatcher;
-use winrtble::utils;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use crate::{
+    api::{
+        Central, CentralEvent, EventHandler, BDAddr
+    },
+    Result
+};
+use super::{
+    peripheral::Peripheral,
+    ble::watcher::BLEWatcher,
+    utils,
+};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 #[derive(Clone)]
 pub struct Adapter {

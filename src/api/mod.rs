@@ -71,8 +71,10 @@ impl Debug for BDAddr {
 /// A notification sent from a peripheral due to a change in a value.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ValueNotification {
+    /// UUID of the characteristic that fired the notification.
     pub uuid: UUID,
-    /// The handle that has changed.
+    /// The handle that has changed. Only valid on Linux, will be None on all
+    /// other platforms.
     pub handle: Option<u16>,
     /// The new value of the handle.
     pub value: Vec<u8>,
@@ -153,11 +155,14 @@ impl CharPropFlags {
 /// able to write to it, read from it, set its notify or indicate status, or send a command to it.
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
 pub struct Characteristic {
-    /// The start of the handle range that contains this characteristic.
+    /// The start of the handle range that contains this characteristic. Only
+    /// valid on Linux, will be 0 on all other platforms.
     pub start_handle: u16,
-    /// The end of the handle range that contains this characteristic.
+    /// The end of the handle range that contains this characteristic. Only
+    /// valid on Linux, will be 0 on all other platforms.
     pub end_handle: u16,
-    /// The value handle of the characteristic.
+    /// The value handle of the characteristic. Only
+    /// valid on Linux, will be 0 on all other platforms.
     pub value_handle: u16,
     /// The UUID for this characteristic. This uniquely identifies its behavior.
     pub uuid: UUID,

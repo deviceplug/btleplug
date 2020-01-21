@@ -22,8 +22,8 @@ pub struct Manager {
 }
 
 impl Manager {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new() -> Result<Self> {
+        Ok(Self {})
     }
 
     pub fn adapters(&self) -> Result<Adapter> {

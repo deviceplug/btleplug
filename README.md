@@ -101,11 +101,15 @@ Beyond that, some of our other goals are:
     implemented. Usable but definitely missing functionality. 
   - Please file bugs and missing features if you find them.
 - **MacOS**
-  - Got a blurmac example up and running, now need to integrate it
-    into the library. 
-  - Tracking issue [here](https://github.com/deviceplug/btleplug/issues/2)
-  - Please hold off on filing more issues until base implementation is
-    landed.
+  - Device enumeration and characteristic/services implemented, works
+    ok enough. 
+  - Please file bugs and missing features if you find them.
+- **iOS**
+  - Trying to figure out if the macOS implementation will translate,
+    minus things having to do with background processing. Might just
+    work already?
+  - [Tracking issue here](https://github.com/deviceplug/btleplug/issues/12)
+  - Please file bugs and missing features if you find them.
 - **Android**
   - A rust android library exists (the aforementioned
     [blurdroid](https://github.com/servo/devices)), but getting a PoC
@@ -113,11 +117,6 @@ Beyond that, some of our other goals are:
     for help**. 
   - Tracking issue
     [here](https://github.com/deviceplug/btleplug/issues/8). 
-  - Please hold off on filing more issues until base implementation is
-    landed.
-- **iOS**
-  - Trying to figure out if the macOS implementation will translate. 
-  - [Tracking issue here](https://github.com/deviceplug/btleplug/issues/12)
   - Please hold off on filing more issues until base implementation is
     landed.
 - **WASM/WebBluetooth**
@@ -139,27 +138,29 @@ Beyond that, some of our other goals are:
 
 | Feature | Windows | MacOS | Linux |
 |---------|---------|-------|-------|
-| Bring Up Adapter |X||X|
+| Bring Up Adapter |X|X|X|
 | Handle Multiple Adapters |||X|
-| Discover Devices |X||X|
+| Discover Devices |X|X|X|
 | └ Discover Services ||| [O](https://github.com/deviceplug/btleplug/issues/11) |
-| └ Discover Name |X||X|
+| └ Discover Name |X|X|X|
 | └ Discover Manufacturer Data |X||X|
-| GATT Server Connect |X||X|
-| GATT Server Connect Event |X||X|
-| GATT Server Disconnect |X||X|
-| GATT Server Disconnect Event |X||X|
-| Write to Characteristic (Sync) |X||X|
-| Read from Characteristic (Async) |||X|
-| Write to Characteristic (Sync) |X||X|
+| GATT Server Connect |X|X|X|
+| GATT Server Connect Event |X|X|X|
+| GATT Server Disconnect |X|X|X|
+| GATT Server Disconnect Event |X|X|X|
+| Write to Characteristic (Sync) |X|X|X|
+| Write to Characteristic (Async) |||X|
+| Read from Characteristic (Sync) |X||X|
 | Read from Characteristic (Async) |X|||
-| Subscribe to Characteristic (Sync) |X||X|
+| Subscribe to Characteristic (Sync) |X|X|X|
 | Subscribe to Characteristic (Async) ||||
-| Unsubscribe from Characteristic (Sync) ||||
+| Unsubscribe from Characteristic (Sync) |X|X||
 | Unsubscribe from Characteristic (Async) ||||
-| Get Characteristic Notification Event |X||X|
-| Read Descriptor ||||
-| Write Descriptor ||||
+| Get Characteristic Notification Event |X|X|X|
+| Read Descriptor (Sync) ||||
+| Read Descriptor (Async) ||||
+| Write Descriptor (Sync) ||||
+| Write Descriptor (Async) ||||
 
 ## Old rumble README Content
 

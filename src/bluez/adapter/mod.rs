@@ -315,6 +315,12 @@ impl ConnectedAdapter {
                 let mut new = false;
                 let address = info.bdaddr.clone();
 
+                if new {
+                    self.emit(CentralEvent::DeviceDiscovered(address.clone(), info.data.as_slice()))
+                } else {
+                    self.emit(CentralEvent::DeviceUpdated(address.clone(), info.data.as_slice()))
+                }
+
                 {
                     let mut peripherals = self.peripherals.lock().unwrap();
                     let peripheral = peripherals.entry(info.bdaddr)
@@ -325,12 +331,6 @@ impl ConnectedAdapter {
 
 
                     peripheral.handle_device_message(&hci::Message::LEAdvertisingReport(info));
-                }
-
-                if new {
-                    self.emit(CentralEvent::DeviceDiscovered(address.clone()))
-                } else {
-                    self.emit(CentralEvent::DeviceUpdated(address.clone()))
                 }
             }
             hci::Message::LEConnComplete(info) => {

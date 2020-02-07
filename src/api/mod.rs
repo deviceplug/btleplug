@@ -21,6 +21,7 @@ use crate::{
     Result,
     api::UUID::{B16, B128}
 };
+use crate::bluez::protocol::hci::LEAdvertisingData;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum AddressType {
@@ -348,10 +349,10 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub enum CentralEvent {
-    DeviceDiscovered(BDAddr),
+pub enum CentralEvent<'a> {
+    DeviceDiscovered(BDAddr, &'a [LEAdvertisingData]),
     DeviceLost(BDAddr),
-    DeviceUpdated(BDAddr),
+    DeviceUpdated(BDAddr, &'a [LEAdvertisingData]),
     DeviceConnected(BDAddr),
     DeviceDisconnected(BDAddr),
 }

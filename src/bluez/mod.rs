@@ -13,7 +13,7 @@
 
 pub mod manager;
 pub mod adapter;
-mod protocol;
+pub mod protocol;
 mod util;
 mod constants;
 

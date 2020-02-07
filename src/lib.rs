@@ -140,6 +140,7 @@ pub mod winrtble;
 pub mod corebluetooth;
 pub mod api;
 
+
 #[derive(Debug, Fail, Clone)]
 pub enum Error {
     #[fail(display = "Permission denied")]

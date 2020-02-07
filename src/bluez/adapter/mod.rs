@@ -476,7 +476,7 @@ impl Adapter {
         info!("DevInfo: {:?}", di);
         Adapter {
             name: String::from(unsafe { CStr::from_ptr(di.name.as_ptr()).to_str().unwrap() }),
-            dev_id: 0,
+            dev_id: di.dev_id,
             addr: di.bdaddr,
             typ: AdapterType::parse((di.type_ & 0x30) >> 4),
             states: AdapterState::parse(di.flags),

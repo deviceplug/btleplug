@@ -50,6 +50,8 @@ fn main() {
                                     println!("{:?}", char_item);
                                 }
                             }
+                            println!("disconnecting from peripheral : {:?}...", peripheral.properties().local_name);
+                            peripheral.disconnect().expect("Error on disconnecting from BLE peripheral ");
                         }
                     } else {
                         //sometimes peripheral is not discovered completely

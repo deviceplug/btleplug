@@ -119,7 +119,7 @@ pub type Callback<T> = Box<dyn Fn(Result<T>) + Send>;
 pub type CommandCallback = Callback<()>;
 pub type RequestCallback = Callback<Vec<u8>>;
 
-pub type NotificationHandler = Box<dyn Fn(ValueNotification) + Send>;
+pub type NotificationHandler = Box<dyn FnMut(ValueNotification) + Send>;
 
 /// A Bluetooth UUID. These can either be 2 bytes or 16 bytes long. UUIDs uniquely identify various
 /// objects in the Bluetooth universe.

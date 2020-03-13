@@ -129,6 +129,7 @@ extern crate failure;
 #[macro_use]
 extern crate failure_derive;
 
+use serde::{Deserialize, Serialize};
 use std::result;
 use std::time::Duration;
 
@@ -140,7 +141,7 @@ pub mod winrtble;
 pub mod corebluetooth;
 pub mod api;
 
-#[derive(Debug, Fail, Clone)]
+#[derive(Debug, Fail, Clone, Serialize, Deserialize)]
 pub enum Error {
     #[fail(display = "Permission denied")]
     PermissionDenied,

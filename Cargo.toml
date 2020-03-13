@@ -33,6 +33,7 @@ failure_derive = "0.1.7"
 backtrace = "0.3.45"
 async-std = { version = "1.5.0", features = ["unstable"] }
 uuid = "0.8.1"
+serde = { version = "1.0", features = ["derive"] }
 
 [dependencies.nom]
 version = "^4.0"

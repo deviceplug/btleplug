@@ -17,6 +17,7 @@ use crate::{
         NotificationHandler, RequestCallback, UUID, Characteristic, ValueNotification,
         Peripheral as ApiPeripheral
     },
+    common::util,
     Result,
     Error
 };
@@ -257,8 +258,7 @@ impl ApiPeripheral for Peripheral {
             let uuid = characteristic.uuid;
             ble_characteristic.subscribe(Box::new(move |value| {
                 let notification = ValueNotification{ uuid: uuid, handle: None, value };
-                let handlers = notification_handlers.lock().unwrap();
-                handlers.iter().for_each(|h| h(notification.clone()));
+                util::invoke_handlers(&notification_handlers, &notification);
             }))
         } else {
             Err(Error::NotSupported("subscribe".into()))

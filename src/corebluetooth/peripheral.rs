@@ -11,6 +11,7 @@ use crate::{
         NotificationHandler, RequestCallback, UUID, Peripheral as ApiPeripheral,
         Characteristic, CentralEvent, EventHandler, ValueNotification
     },
+    common::util,
     Result, Error
 };
 use super::{
@@ -68,18 +69,12 @@ impl Peripheral {
         let mut er_clone = event_receiver.clone();
         let nh_clone = notification_handlers.clone();
         task::spawn(async move {
-            let emit = |event: ValueNotification| {
-                let vec = nh_clone.lock().unwrap();
-                for handler in (*vec).iter() {
-                    handler(event.clone());
-                }
-            };
             loop {
                 match er_clone.next().await.unwrap() {
                     CBPeripheralEvent::Notification(uuid, data) => {
                         let mut id = *uuid.as_bytes();
                         id.reverse();
-                        emit(ValueNotification {
+                        util::invoke_handlers(&nh_clone, &ValueNotification {
                             uuid: UUID::B128(id),
                             handle: None,
                             value: data,

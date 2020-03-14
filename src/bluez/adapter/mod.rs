@@ -215,7 +215,7 @@ impl ConnectedAdapter {
         let connected = ConnectedAdapter {
             adapter: adapter.clone(),
             adapter_fd,
-            active: Arc::new(AtomicBool::new(false)),
+            active: Arc::new(AtomicBool::new(true)),
             filter_duplicates: Arc::new(AtomicBool::new(false)),
             should_stop,
             scan_enabled: Arc::new(AtomicBool::new(false)),

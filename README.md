@@ -164,6 +164,17 @@ Beyond that, some of our other goals are:
 | Write Descriptor (Sync) ||||
 | Write Descriptor (Async) ||||
 
+## Library Features
+
+#### Serialization/Deserialization
+
+To enable implementation of serde's `Serialize` and `Deserialize` across some common types in the `api` module, use the `serde` feature.
+
+```toml
+[dependencies]
+btleplug = { version = "0.4", features = ["serde"] }
+```
+
 ## Old rumble README Content
 
 ### Rumble

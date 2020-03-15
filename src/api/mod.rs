@@ -13,6 +13,8 @@
 
 use std::{
     fmt::{self, Display, Formatter, Debug},
+    str::FromStr,
+    convert::TryFrom,
     collections::BTreeSet,
 };
 use crate::{
@@ -68,6 +70,35 @@ impl Debug for BDAddr {
     }
 }
 
+type ParseBDAddrResult<T> = std::result::Result<T, ParseBDAddrError>;
+
+#[derive(Debug, Fail, Clone, PartialEq)]
+pub enum ParseBDAddrError {
+    #[fail(display = "Bluetooth address has to be 6 bytes long")]
+    IncorrectByteCount,
+    #[fail(display = "Malformed integer in Bluetooth address")]
+    InvalidInt,
+}
+
+impl FromStr for BDAddr {
+    type Err = ParseBDAddrError;
+
+    fn from_str(s: &str) -> ParseBDAddrResult<Self> {
+        let bytes = s.split(':').map(|part: &str| {
+            u8::from_str_radix(part, 16).map_err(|_| ParseBDAddrError::InvalidInt)
+        }).collect::<ParseBDAddrResult<Vec<u8>>>()?;
+
+        if let Ok(mut address) = <[u8; 6]>::try_from(bytes.as_slice()) {
+            address.reverse();
+            Ok(BDAddr {
+                address
+            })
+        } else {
+            Err(ParseBDAddrError::IncorrectByteCount)
+        }
+    }
+}
+
 /// A notification sent from a peripheral due to a change in a value.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ValueNotification {
@@ -120,6 +151,35 @@ impl Display for UUID {
 impl Debug for UUID {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         (self as &dyn Display).fmt(f)
+    }
+}
+
+type ParseUUIDResult<T> = std::result::Result<T, ParseUUIDError>;
+
+#[derive(Debug, Fail, Clone, PartialEq)]
+pub enum ParseUUIDError {
+    #[fail(display = "UUID has to be either 2 or 16 bytes long")]
+    IncorrectByteCount,
+    #[fail(display = "Malformed integer in UUID")]
+    InvalidInt,
+}
+
+impl FromStr for UUID {
+    type Err = ParseUUIDError;
+
+    fn from_str(s: &str) -> ParseUUIDResult<Self> {
+        let bytes = s.split(':').map(|part: &str| {
+            u8::from_str_radix(part, 16).map_err(|_| ParseUUIDError::InvalidInt)
+        }).collect::<ParseUUIDResult<Vec<u8>>>()?;
+
+        if let Ok(bytes) = <[u8; 2]>::try_from(bytes.as_slice()) {
+            Ok(UUID::B16(u16::from_be_bytes(bytes)))
+        } else if let Ok(mut bytes) = <[u8; 16]>::try_from(bytes.as_slice()) {
+            bytes.reverse();
+            Ok(UUID::B128(bytes))
+        } else {
+            Err(ParseUUIDError::IncorrectByteCount)
+        }
     }
 }
 
@@ -330,4 +390,49 @@ pub trait Central<P : Peripheral>: Send + Sync + Clone {
     /// Returns a particular [`Peripheral`](trait.Peripheral.html) by its address if it has been
     /// discovered.
     fn peripheral(&self, address: BDAddr) -> Option<P>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_uud() {
+        let values = vec![
+            ("2A:00", Ok(UUID::B16(0x2A00))),
+            ("00:00:15:32:12:12:EF:DE:15:23:78:5F:EA:BC:D1:23", Ok(UUID::B128([
+                0x23, 0xD1, 0xBC, 0xEA, 0x5F, 0x78, 0x23, 0x15, 0xDE, 0xEF, 0x12, 0x12, 0x32, 0x15, 0x00, 0x00
+            ]))),
+            ("2A:00:00", Err(ParseUUIDError::IncorrectByteCount)),
+            ("2A:100", Err(ParseUUIDError::InvalidInt)),
+            ("ZZ:00", Err(ParseUUIDError::InvalidInt)),
+        ];
+
+        for (input, expected) in values {
+            let result: ParseUUIDResult<UUID> = input.parse();
+            assert_eq!(result, expected);
+
+            if let Ok(uuid) = result {
+                assert_eq!(input, uuid.to_string());
+            }
+        }
+    }
+
+    #[test]
+    fn parse_addr() {
+        let values = vec![
+            ("2A:00:AA:BB:CC:DD", Ok(BDAddr{address: [0xDD, 0xCC, 0xBB, 0xAA, 0x00, 0x2A]})),
+            ("2A:00:00", Err(ParseBDAddrError::IncorrectByteCount)),
+            ("2A:00:AA:BB:CC:ZZ", Err(ParseBDAddrError::InvalidInt)),
+        ];
+
+        for (input, expected) in values {
+            let result: ParseBDAddrResult<BDAddr> = input.parse();
+            assert_eq!(result, expected);
+
+            if let Ok(uuid) = result {
+                assert_eq!(input, uuid.to_string());
+            }
+        }
+    }
 }

@@ -170,7 +170,7 @@ impl AdapterState {
 
         let mut set = HashSet::new();
         for (i, f) in states.iter().enumerate() {
-            if flags & (1 << (i & 31)) != 0 {
+            if flags & (1 << (i & 31)) as u32 != 0 {
                 set.insert(f.clone());
             }
         }
@@ -233,15 +233,15 @@ impl ConnectedAdapter {
 
     fn set_socket_filter(&self) -> Result<()> {
         let mut filter = BytesMut::with_capacity(14);
-        let type_mask = (1 << HCI_COMMAND_PKT) | (1 << HCI_EVENT_PKT) | (1 << HCI_ACLDATA_PKT);
+        let type_mask = (1 << HCI_COMMAND_PKT) | (1 << HCI_EVENT_PKT) as u8 | (1 << HCI_ACLDATA_PKT) as u8;
         let event_mask1 = (1 << EVT_DISCONN_COMPLETE) | (1 << EVT_ENCRYPT_CHANGE) |
             (1 << EVT_CMD_COMPLETE) | (1 << EVT_CMD_STATUS);
         let event_mask2 = 1 << (EVT_LE_META_EVENT - 32);
         let opcode = 0;
 
-        filter.put_u32_le(type_mask);
-        filter.put_u32_le(event_mask1);
-        filter.put_u32_le(event_mask2);
+        filter.put_u32_le(type_mask as u32);
+        filter.put_u32_le(event_mask1 as u32);
+        filter.put_u32_le(event_mask2 as u32);
         filter.put_u16_le(opcode);
 
         handle_error(unsafe {

@@ -76,7 +76,7 @@ pub struct ACLStream {
 }
 
 impl ACLStream {
-    pub fn new(adapter: Adapter, address: BDAddr, characteristics: Arc<Mutex<BTreeSet<Characteristic>>>, handle: u16, fd: i32) -> ACLStream {
+    pub fn new(adapter: Adapter, address: BDAddr, characteristics: Arc<Mutex<BTreeSet<Characteristic>>>, handle: u16, fd: i32, notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>) -> ACLStream {
         info!("Creating new ACLStream for {}, {}, {}", address, handle, fd);
         let (tx, rx) = channel();
         let acl_stream = ACLStream {
@@ -87,7 +87,7 @@ impl ACLStream {
             characteristics,
             should_stop: Arc::new(AtomicBool::new(false)),
             sender: Arc::new(Mutex::new(tx)),
-            notification_handlers: Arc::new(Mutex::new(vec![])),
+            notification_handlers,
         };
 
         {
@@ -183,11 +183,6 @@ impl ACLStream {
 
     pub fn write_cmd(&self, data: &mut [u8], on_done: Option<CommandCallback>) {
         self.send(Command(data.to_owned(), on_done));
-    }
-
-    pub fn on_notification(&self, handler: NotificationHandler) {
-        let mut list = self.notification_handlers.lock().unwrap();
-        list.push(handler);
     }
 
     pub fn receive(&self, message: &ACLData) {

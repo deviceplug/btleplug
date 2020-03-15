@@ -84,6 +84,7 @@ pub struct Peripheral {
     connection_tx: Arc<Mutex<Sender<u16>>>,
     connection_rx: Arc<Mutex<Receiver<u16>>>,
     message_queue: Arc<Mutex<VecDeque<ACLData>>>,
+    notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
 }
 
 impl Display for Peripheral {
@@ -116,6 +117,7 @@ impl Peripheral {
             connection_tx: Arc::new(Mutex::new(connection_tx)),
             connection_rx: Arc::new(Mutex::new(connection_rx)),
             message_queue: Arc::new(Mutex::new(VecDeque::new())),
+            notification_handlers: Arc::new(Mutex::new(vec!())),
         }
     }
 
@@ -402,7 +404,7 @@ impl ApiPeripheral for Peripheral {
             Ok(handle) => {
                 // create the acl stream that will communicate with the device
                 let s = ACLStream::new(self.c_adapter.adapter.clone(),
-                                       self.address, self.characteristics.clone(), handle, fd);
+                                       self.address, self.characteristics.clone(), handle, fd, self.notification_handlers.clone());
 
                 // replay missed messages
                 let mut queue = self.message_queue.lock().unwrap();
@@ -575,8 +577,9 @@ impl ApiPeripheral for Peripheral {
         // TODO handle the disconnected case better
         let l = self.stream.read().unwrap();
         match l.as_ref() {
-            Some(stream) => {
-                stream.on_notification(handler);
+            Some(_) => {
+                let mut list = self.notification_handlers.lock().unwrap();
+                list.push(handler);
             }
             None => {
                 error!("tried to subscribe to notifications, but not yet connected")

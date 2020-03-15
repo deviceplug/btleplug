@@ -301,10 +301,12 @@ impl ConnectedAdapter {
     fn emit(&self, event: CentralEvent) {
         debug!("emitted {:?}", event);
         let handlers = self.event_handlers.clone();
-        let vec = handlers.lock().unwrap();
-        for handler in (*vec).iter() {
-            handler(event.clone());
-        }
+        thread::spawn(move || {
+            let vec = handlers.lock().unwrap();
+            for handler in (*vec).iter() {
+                handler(event.clone());
+            }
+        });
     }
 
     fn handle(&self, message: hci::Message) {

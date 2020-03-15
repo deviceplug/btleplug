@@ -16,6 +16,7 @@ use winrt::{
     windows::devices::radios::{Radio, RadioKind},
 };
 use super::adapter::Adapter;
+#[allow(unused_imports)]
 use crate::{Result, Error};
 
 pub struct Manager {
@@ -26,18 +27,20 @@ impl Manager {
         Ok(Self {})
     }
 
-    pub fn adapters(&self) -> Result<Adapter> {
+    pub fn adapters(&self) -> Result<Vec<Adapter>> {
+        let mut result: Vec<Adapter> = vec![];
         let radios = Radio::get_radios_async().unwrap().blocking_get().unwrap().unwrap();
 
         for radio in &radios {
             if let Some(radio) = radio {
                 if let Ok(kind) = radio.get_kind() {
                     if kind == RadioKind::Bluetooth {
-                        return Ok(Adapter::new());
+                        // try create BLE adapter
+                        result.push(Adapter::new());
                     }
                 }
             }
         }
-        Err(Error::NotSupported("no bluetooth adapter found".into()))
+        return Ok(result); 
     }
 }

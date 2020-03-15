@@ -13,7 +13,7 @@ use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
 use btleplug::api::{UUID, Central, Peripheral};
 
 // adapter retreival works differently depending on your platform right now.
-// API needs to be aligned.v
+// API needs to be aligned.
 
 // #[cfg(any(target_os = "windows", target_os = "macos"))]
 #[cfg(target_os = "windows")]
@@ -50,7 +50,7 @@ pub fn main() {
             .any(|name| name.contains("LEDBlue"))).unwrap();
 
     // connect to the device
-    // light.connect().unwrap();
+    light.connect().unwrap();
 
     // discover characteristics
     light.discover_characteristics().unwrap();

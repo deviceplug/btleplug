@@ -56,7 +56,6 @@ fn main() {
             adapter.start_scan().expect("Can't scan BLE adapter for connected devices...");
             thread::sleep(Duration::from_secs(2));
             if adapter.peripherals().is_empty() {
-            // if connected_adapter.peripherals().is_empty() {
                 eprintln!("->>> BLE peripheral devices were not found, sorry. Exiting...");
             } else {
                  // all peripheral devices in range

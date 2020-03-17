@@ -21,17 +21,17 @@ path = "src/lib.rs"
 # crate-type = ["staticlib"]
 
 [dependencies]
-libc = "0.2.45"
-nix = "0.12.0"
-bytes = "0.4"
-num = "0.1.41"
-log = "0.3.8"
+libc = "0.2.67"
+nix = "0.17.0"
+bytes = "0.5.4"
+num = "0.2.1"
+log = "0.4.8"
 enum_primitive = "0.1.1"
-bitflags = "1.0.1"
-failure = "0.1.1"
-failure_derive = "0.1.1"
-backtrace = "0.3.5"
-async-std = { version = "1.4.0", features = ["unstable"] }
+bitflags = "1.2.1"
+failure = "0.1.7"
+failure_derive = "0.1.7"
+backtrace = "0.3.45"
+async-std = { version = "1.5.0", features = ["unstable"] }
 uuid = "0.8.1"
 
 [dependencies.nom]
@@ -43,12 +43,12 @@ version = "0.6.0"
 features = ["windows-devices", "windows-storage"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc = "0.2"
+objc = "0.2.7"
 cocoa = "0.20.0"
 
 [target.'cfg(target_os = "ios")'.dependencies]
-objc = "0.2"
+objc = "0.2.7"
 cocoa = "0.20.0"
 
 [dev-dependencies]
-rand = "0.4.2"
+rand = "0.7.3"

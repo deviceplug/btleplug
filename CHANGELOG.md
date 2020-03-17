@@ -1,3 +1,11 @@
+# 0.4.1 (2020-03-16)
+
+## Features
+
+* Get BDAddr and UUID from String
+* More examples
+* Update dependencies
+
 # 0.4.0 (2020-01-20)
 
 ## Features

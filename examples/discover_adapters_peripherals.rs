@@ -24,8 +24,8 @@ fn connect_to(adapter: &Adapter) -> ConnectedAdapter {
 }
 #[cfg(target_os = "linux")]
 fn print_adapter_info(adapter: &ConnectedAdapter) {
-    println!("connected adapter {:?} is UP: {:?}", adapter.name, adapter.is_up());
-    println!("adapter states : {:?}", adapter.states);
+    println!("connected adapter {:?} is UP: {:?}", adapter.adapter.name, adapter.adapter.is_up());
+    println!("adapter states : {:?}", adapter.adapter.states);
 }
 
 #[cfg(target_os = "windows")]
@@ -51,16 +51,22 @@ fn main() {
     } else {
         for adapter in adapter_list.iter() {
             println!("connecting to BLE adapter: ...");
-            let connected_adapter = connect_to(&adapter);
+
+            let connected_adapter = if cfg!(windows) {
+                connect_to(&adapter)
+            } else {
+                connect_to(&adapter)
+            };
+            // let connected_adapter = connect_to(&adapter);
             print_adapter_info(&connected_adapter);
-            adapter.start_scan().expect("Can't scan BLE adapter for connected devices...");
+            connected_adapter.start_scan().expect("Can't scan BLE adapter for connected devices...");
             thread::sleep(Duration::from_secs(2));
-            if adapter.peripherals().is_empty() {
+            if connected_adapter.peripherals().is_empty() {
                 eprintln!("->>> BLE peripheral devices were not found, sorry. Exiting...");
             } else {
                  // all peripheral devices in range
                 // for peripheral in connected_adapter.peripherals().iter() {
-                for peripheral in adapter.peripherals().iter() {
+                for peripheral in connected_adapter.peripherals().iter() {
                     println!("peripheral : {:?} is connected: {:?}", peripheral.properties().local_name, peripheral.is_connected());
                     if peripheral.properties().local_name.is_some() && !peripheral.is_connected() {
                         println!("start connect to peripheral : {:?}...", peripheral.properties().local_name);

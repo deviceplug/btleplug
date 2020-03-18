@@ -65,7 +65,6 @@ fn main() {
                 eprintln!("->>> BLE peripheral devices were not found, sorry. Exiting...");
             } else {
                  // all peripheral devices in range
-                // for peripheral in connected_adapter.peripherals().iter() {
                 for peripheral in connected_adapter.peripherals().iter() {
                     println!("peripheral : {:?} is connected: {:?}", peripheral.properties().local_name, peripheral.is_connected());
                     if peripheral.properties().local_name.is_some() && !peripheral.is_connected() {

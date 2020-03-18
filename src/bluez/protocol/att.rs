@@ -138,7 +138,7 @@ named!(pub error_response<&[u8], ErrorResponse>,
 
 named!(pub value_notification<&[u8], ValueNotification>,
     do_parse!(
-        _op: tag!(&[ATT_OP_VALUE_NOTIFICATION]) >>
+        _op: alt!(tag!(&[ATT_OP_VALUE_NOTIFICATION]) | tag!(&[ATT_OP_VALUE_INDICATION])) >>
         handle: le_u16 >>
         value: many1!(complete!(le_u8)) >>
         (

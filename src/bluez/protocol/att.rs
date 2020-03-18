@@ -151,6 +151,21 @@ named!(pub value_notification<&[u8], ValueNotification>,
         )
 ));
 
+named!(pub value_indication<&[u8], ValueNotification>,
+    do_parse!(
+        _op: tag!(&[ATT_OP_VALUE_INDICATION]) >>
+        handle: le_u16 >>
+        value: many1!(complete!(le_u8)) >>
+        (
+            ValueNotification {
+                // This will need to be set elsewhere.
+                uuid: UUID::B16(0),
+                handle: Some(handle),
+                value
+            }
+        )
+));
+
 fn characteristic(i: &[u8], b16_uuid: bool) -> IResult<&[u8], Characteristic> {
     let (i, start_handle) = try_parse!(i, le_u16);
     let (i, properties) = try_parse!(i, le_u8);

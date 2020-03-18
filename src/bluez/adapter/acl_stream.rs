@@ -46,6 +46,8 @@ use bytes::{BytesMut, BufMut};
 enum StreamMessage  {
     Command(Vec<u8>, Option<CommandCallback>),
     Request(Vec<u8>, Option<RequestCallback>),
+    // TODO: Should the callback be done here?  Handed off from Request?
+    ConfirmIndication,
     Data(Vec<u8>),
 }
 
@@ -56,6 +58,7 @@ impl Debug for StreamMessage {
         match self {
             &Command(ref data, ref _cb) => write!(f, "Command({:?})", data),
             &Request(ref data, ref cb) => write!(f, "Request({:?}, cb: {})", data, cb.is_some()),
+            &ConfirmIndication => write!(f, "ConfirmIndication"),
             &Data(ref data) => write!(f, "Data({:?})", data),
         }
     }
@@ -164,6 +167,12 @@ impl ACLStream {
                     f(result);
                 }
             },
+            ConfirmIndication => {
+                let mut value = [0x1e];
+                debug!("sending request {:?} to {}", value, self.fd);
+
+                let _ = self.write_socket(&mut value, true, receiver);
+            },
             Data(ref value) => {
                 debug!("Received data {:?}", value);
             }
@@ -218,6 +227,30 @@ impl ACLStream {
                                 if let Some(h) = n.handle {
                                     for c in self.characteristics.lock().unwrap().iter() {
                                         info!("{} == {}", c.value_handle, h);
+                                        if c.value_handle == h {
+                                            n.uuid = c.uuid;
+                                            break;
+                                        }
+                                    }
+                                } else {
+                                    panic!("How did we get here without a handle?");
+                                }
+
+                                util::invoke_handlers(&self.notification_handlers, &n);
+                            }
+                            Err(err) => {
+                                error!("failed to parse notification: {:?}", err);
+                            }
+                        }
+                    }
+                    ATT_OP_VALUE_INDICATION => {
+                        debug!("value indication: {:?}", value);
+                        match att::value_indication(&value) {
+                            Ok(notification) => {
+                                self.send(ConfirmIndication);
+                                let mut n = notification.1.clone();
+                                if let Some(h) = n.handle {
+                                    for c in self.characteristics.lock().unwrap().iter() {
                                         if c.value_handle == h {
                                             n.uuid = c.uuid;
                                             break;

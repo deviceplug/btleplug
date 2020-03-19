@@ -49,6 +49,7 @@ pub const ATT_OP_WRITE_REQ: u8 = 0x12;
 pub const ATT_OP_WRITE_RESP: u8 = 0x13;
 pub const ATT_OP_VALUE_NOTIFICATION: u8 = 0x1b;
 pub const ATT_OP_VALUE_INDICATION: u8 = 0x1d;
+pub const ATT_OP_CONFIRM_INDICATION: u8 = 0x1e;
 pub const ATT_OP_WRITE_CMD: u8 = 0x52;
 
 pub const GATT_CHARAC_UUID: u16 = 0x2803;

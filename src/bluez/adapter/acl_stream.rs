@@ -168,10 +168,9 @@ impl ACLStream {
                 }
             },
             ConfirmIndication => {
-                let mut value = [0x1e];
-                debug!("sending request {:?} to {}", value, self.fd);
+                debug!("confirming indication to {}", self.fd);
 
-                let _ = self.write_socket(&mut value, true, receiver);
+                self.write_socket(&mut [ATT_OP_CONFIRM_INDICATION], true, receiver);
             },
             Data(ref value) => {
                 debug!("Received data {:?}", value);

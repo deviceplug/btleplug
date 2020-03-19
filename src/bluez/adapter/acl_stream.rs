@@ -25,7 +25,7 @@ use crate::{
     common::util,
     Error,
     Result,
-    api::{CommandCallback, RequestCallback, BDAddr, NotificationHandler, Characteristic},
+    api::{UUID, CommandCallback, RequestCallback, BDAddr, NotificationHandler, Characteristic},
 };
 
 use std::{
@@ -220,51 +220,13 @@ impl ACLStream {
                     }
                     ATT_OP_VALUE_NOTIFICATION => {
                         debug!("value notification: {:?}", value);
-                        match att::value_notification(&value) {
-                            Ok(notification) => {
-                                let mut n = notification.1.clone();
-                                if let Some(h) = n.handle {
-                                    for c in self.characteristics.lock().unwrap().iter() {
-                                        info!("{} == {}", c.value_handle, h);
-                                        if c.value_handle == h {
-                                            n.uuid = c.uuid;
-                                            break;
-                                        }
-                                    }
-                                } else {
-                                    panic!("How did we get here without a handle?");
-                                }
-
-                                util::invoke_handlers(&self.notification_handlers, &n);
-                            }
-                            Err(err) => {
-                                error!("failed to parse notification: {:?}", err);
-                            }
-                        }
+                        self.receive_notification(&value);
                     }
                     ATT_OP_VALUE_INDICATION => {
+                        // Indications must be manually ack'd for bluez HCI interface
+                        self.send(ConfirmIndication);
                         debug!("value indication: {:?}", value);
-                        match att::value_indication(&value) {
-                            Ok(notification) => {
-                                self.send(ConfirmIndication);
-                                let mut n = notification.1.clone();
-                                if let Some(h) = n.handle {
-                                    for c in self.characteristics.lock().unwrap().iter() {
-                                        if c.value_handle == h {
-                                            n.uuid = c.uuid;
-                                            break;
-                                        }
-                                    }
-                                } else {
-                                    panic!("How did we get here without a handle?");
-                                }
-
-                                util::invoke_handlers(&self.notification_handlers, &n);
-                            }
-                            Err(err) => {
-                                error!("failed to parse notification: {:?}", err);
-                            }
-                        }
+                        self.receive_notification(&value);
                     }
                     _ => {
                         self.send(Data(value));
@@ -272,6 +234,31 @@ impl ACLStream {
                 }
             }
         }
+    }
+
+    fn receive_notification(&self, value: &[u8]) -> () {
+        match att::value_notification(&value) {
+            Ok(notification) => {
+                let mut n = notification.1.clone();
+                n.uuid = n.handle
+                    .and_then(|h| self.get_uuid_by_handle(h))
+                    .expect("How did we get here without a handle?");
+
+                util::invoke_handlers(&self.notification_handlers, &n);
+            }
+            Err(err) => {
+                error!("failed to parse notification: {:?}", err);
+            }
+        }
+    }
+
+    fn get_uuid_by_handle(&self, handle: u16) -> Option<UUID> {
+        for c in self.characteristics.lock().unwrap().iter() {
+            if c.value_handle == handle {
+                return Some(c.uuid)
+            }
+        }
+        None
     }
 }
 

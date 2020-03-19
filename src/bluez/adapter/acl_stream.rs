@@ -46,7 +46,6 @@ use bytes::{BytesMut, BufMut};
 enum StreamMessage  {
     Command(Vec<u8>, Option<CommandCallback>),
     Request(Vec<u8>, Option<RequestCallback>),
-    // TODO: Should the callback be done here?  Handed off from Request?
     ConfirmIndication,
     Data(Vec<u8>),
 }

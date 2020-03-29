@@ -13,8 +13,8 @@
 
 
 //! BtlePlug is a Bluetooth Low Energy (BLE) central module library for Rust. It
-//! currently supports Windows 10, macOS (and possibly iOS), Linux (using
-//! sockets instead of Bluez). Android support is coming in a future update.
+//! currently supports Windows 10, macOS (and possibly iOS), Linux (using BlueZ
+//! sockets instead of D-Bus). Android support is coming in a future update.
 //!
 //! ## Usage
 //!

@@ -28,13 +28,13 @@ fn print_adapter_info(adapter: &ConnectedAdapter) {
     println!("adapter states : {:?}", adapter.adapter.states);
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 fn connect_to(adapter: &Adapter) -> &Adapter {
     adapter //windows 10
 }
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 fn print_adapter_info(_adapter: &Adapter) {
-    println!("adapter info can't be printed on Windows 10");
+    println!("adapter info can't be printed on Windows 10 or mac");
 }
 
 /**

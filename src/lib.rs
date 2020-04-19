@@ -40,7 +40,8 @@
 //!
 //! #[cfg(any(target_os = "windows", target_os = "macos"))]
 //! fn get_central(manager: &Manager) -> Adapter {
-//!     manager.adapters().unwrap()
+//!     let adapters = manager.adapters().unwrap();
+//!     adapters.into_iter().nth(0).unwrap()
 //! }
 //!
 //! #[cfg(target_os = "linux")]

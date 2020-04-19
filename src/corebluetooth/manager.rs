@@ -16,9 +16,9 @@ impl Manager {
         Ok(Self {})
     }
 
-    pub fn adapters(&self) -> Result<Adapter> {
+    pub fn adapters(&self) -> Result<Vec<Adapter>> {
 
-        Ok(Adapter::new())
+        Ok(vec!(Adapter::new()))
         // TODO What do we do if there is no bluetooth adapter, like on an older
         // macbook pro? Will BluetoothAdapter::init() fail?
     }

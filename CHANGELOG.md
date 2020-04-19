@@ -1,7 +1,16 @@
 # 0.4.2 (2020-04-18)
 
+## Features
+
+* Some types now capable of serde de/serialization, using "serde" feature
+* Added new examples
+
 ## Bugfixes
 
+* Adapters functions now return vectors of some kind of adapter on all
+  platforms.
+* Bluez notification handlers now live with the peripheral.
+* Bluez defaults to active scan.
 * Remove all println statements in library (mostly in the windows library),
   replace with log macros.
 

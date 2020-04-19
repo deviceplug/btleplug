@@ -15,12 +15,10 @@ use btleplug::api::{UUID, Central, Peripheral};
 // adapter retreival works differently depending on your platform right now.
 // API needs to be aligned.
 
-// #[cfg(any(target_os = "windows", target_os = "macos"))]
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 fn get_central(manager: &Manager) -> Adapter {
     let adapters = manager.adapters().unwrap();
-    let adapter = adapters.into_iter().nth(0).unwrap();
-    adapter
+    adapters.into_iter().nth(0).unwrap()
 }
 
 #[cfg(target_os = "linux")]

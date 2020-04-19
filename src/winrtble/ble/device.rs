@@ -42,7 +42,7 @@ impl BLEDevice {
             let sender = unsafe { (&*sender) };
             let is_connected = sender.get_connection_status().ok().map_or(false, |v| v == BluetoothConnectionStatus::Connected);
             connection_status_changed(is_connected);
-            println!("state {:?}", sender.get_connection_status());
+            info!("state {:?}", sender.get_connection_status());
             Ok(())
         });
         let connection_token = device.add_connection_status_changed(&connection_status_handler).map_err(|_| Error::Other("Could not add connection status handler".into()))?;
@@ -75,33 +75,33 @@ impl BLEDevice {
                         Ok(GattCommunicationStatus::Success) => {
                             match async_result.get_characteristics() {
                                 Ok(Some(results)) => {
-                                    println!("characteristics {:?}", results.get_size());
+                                    info!("characteristics {:?}", results.get_size());
                                     for characteristic in &results {
                                         if let Some(characteristic) = characteristic {
                                             characteristics.push(characteristic);
                                         } else {
-                                            println!("null pointer for characteristic");
+                                            info!("null pointer for characteristic");
                                         }
                                     }
                                 }
                                 Ok(None) => {
-                                    println!("null pointer from get_characteristics");
+                                    info!("null pointer from get_characteristics");
                                 },
                                 Err(error) => {
-                                    println!("get_characteristics {:?}", error);
+                                    info!("get_characteristics {:?}", error);
                                 }
                             }
                         }
                         rest => {
-                            println!("get_status {:?}", rest);
+                            info!("get_status {:?}", rest);
                         }
                     }
                 },
                 Ok(None) => {
-                    println!("null pointer from get_characteristics");
+                    info!("null pointer from get_characteristics");
                 },
                 Err(error) => {
-                    println!("get_characteristics_async {:?}", error);
+                    info!("get_characteristics_async {:?}", error);
                 }
             }
         }
@@ -115,16 +115,16 @@ impl BLEDevice {
         if status == GattCommunicationStatus::Success {
             let mut characteristics = Vec::new();
             if let Some(services) = service_result.get_services().map_err(winrt_error)? {
-                println!("services {:?}", services.get_size());
+                info!("services {:?}", services.get_size());
                 for service in &services {
                     if let Some(service) = service {
                        characteristics.append(&mut self.get_characteristics(&service));
                     } else {
-                        println!("null pointer for service");
+                        info!("null pointer for service");
                     }
                 }
             } else {
-                println!("null pointer from get_services()");
+                info!("null pointer from get_services()");
             }
             return Ok(characteristics);
         }
@@ -136,7 +136,7 @@ impl Drop for BLEDevice {
     fn drop(&mut self) {
         let result = self.device.remove_connection_status_changed(self.connection_token);
         if let Err(err) = result {
-            println!("Drop:remove_connection_status_changed {:?}", err);
+            info!("Drop:remove_connection_status_changed {:?}", err);
         }
     }
 }

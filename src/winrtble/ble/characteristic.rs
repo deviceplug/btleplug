@@ -70,7 +70,7 @@ impl BLECharacteristic {
             let len = reader.get_unconsumed_buffer_length().unwrap() as usize;
             let mut input = vec![0u8; len];
             reader.read_bytes(&mut input[0..len]).unwrap();
-            println!("changed {:?}", input);
+            info!("changed {:?}", input);
             on_value_changed(input);
             Ok(())
         });
@@ -78,7 +78,7 @@ impl BLECharacteristic {
         self.notify_token = Some(token);
         let config = GattClientCharacteristicConfigurationDescriptorValue::Notify;
         let status = self.characteristic.write_client_characteristic_configuration_descriptor_async(config).unwrap().blocking_get().unwrap();
-        println!("subscribe {:?}", status);
+        info!("subscribe {:?}", status);
         Ok(())
     }
 
@@ -89,7 +89,7 @@ impl BLECharacteristic {
         self.notify_token = None;
         let config = GattClientCharacteristicConfigurationDescriptorValue::None;
         let status = self.characteristic.write_client_characteristic_configuration_descriptor_async(config).unwrap().blocking_get().unwrap();
-        println!("unsubscribe {:?}", status);
+        info!("unsubscribe {:?}", status);
         Ok(())
     }
 }
@@ -99,7 +99,7 @@ impl Drop for BLECharacteristic {
         if let Some(token) = self.notify_token {
             let result = self.characteristic.remove_value_changed(token);
             if let Err(err) = result {
-                println!("Drop:remove_connection_status_changed {:?}", err);
+                info!("Drop:remove_connection_status_changed {:?}", err);
             }
         }
     }

@@ -1,3 +1,10 @@
+# 0.4.2 (2020-04-18)
+
+## Bugfixes
+
+* Remove all println statements in library (mostly in the windows library),
+  replace with log macros.
+
 # 0.4.1 (2020-03-16)
 
 ## Features

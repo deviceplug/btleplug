@@ -7,9 +7,6 @@ trigger:
 jobs:
  - template: default.yml@templates
    parameters:
-     # Turn off feature checking since this is a workspace
-     check_all_features: false
-     check_no_features: false
      cross: true
      minrust: false
 

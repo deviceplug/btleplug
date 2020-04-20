@@ -66,6 +66,12 @@ impl Adapter {
                             p.insert(id, Peripheral::new(uuid, name, handler_clone.clone(), event_receiver, adapter_sender_clone.clone()));
                             emit(CentralEvent::DeviceDiscovered(id));
                         },
+                        CoreBluetoothEvent::DeviceUpdated(uuid, name) => {
+                            let id = uuid_to_bdaddr(&uuid.to_string());
+                            let mut p = peripherals_clone.lock().unwrap();
+                            p.get_mut(&id).unwrap().properties.local_name = Some(name);
+                            emit(CentralEvent::DeviceUpdated(id));
+                        },
                         _ => {}
                     }
                 }

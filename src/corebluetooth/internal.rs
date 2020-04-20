@@ -214,6 +214,7 @@ pub enum CoreBluetoothEvent {
     AdapterError,
     // name, identifier, event receiver, message sender
     DeviceDiscovered(Uuid, String, async_std::sync::Receiver<CBPeripheralEvent>),
+    DeviceUpdated(Uuid, String),
     // identifier
     DeviceLost(Uuid),
 }
@@ -254,7 +255,11 @@ impl CoreBluetoothInternal {
         let uuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(*peripheral));
         let uuid = Uuid::from_str(&NSStringUtils::string_to_string(uuid_nsstring)).unwrap();
         let name = NSStringUtils::string_to_string(cb::peripheral_name(*peripheral));
-        if !self.peripherals.contains_key(&uuid) {
+        if self.peripherals.contains_key(&uuid) {
+            if name != String::from("nil") {
+                self.dispatch_event(CoreBluetoothEvent::DeviceUpdated(uuid, name));
+            }
+        } else {
             // if name.contains("LVS") {
             //     self.connect_peripheral(*peripheral);
             // }

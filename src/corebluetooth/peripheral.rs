@@ -41,7 +41,7 @@ pub struct Peripheral {
     adapter_handlers: Arc<Mutex<Vec<EventHandler>>>,
     uuid: Uuid,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
-    properties: PeripheralProperties,
+    pub(crate) properties: PeripheralProperties,
     event_receiver: Receiver<CBPeripheralEvent>,
     message_sender: Sender<CoreBluetoothMessage>,
     // We're not actually holding a peripheral object here, that's held out in

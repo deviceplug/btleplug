@@ -9,7 +9,7 @@
 btleplug is a Rust BLE library, support Windows 10, macOS, Linux, and
 possibly iOS. It is currently made up of parts of other abandoned
 projects with a goal of building a fully cross platform proof of
-concept. 
+concept.
 
 Our goal is the bring in some of the outstanding PRs from other
 projects, expand the platform support, and possibly make the API
@@ -96,15 +96,15 @@ Beyond that, some of our other goals are:
 
 - **Linux**
   - Device enumeration and characteristic/services implemented, works
-    ok enough. 
+    ok enough.
   - Please file bugs and missing features if you find them.
 - **Windows**
   - Device enumeration and some characteristic/service functions
-    implemented. Usable but definitely missing functionality. 
+    implemented. Usable but definitely missing functionality.
   - Please file bugs and missing features if you find them.
 - **MacOS**
   - Device enumeration and characteristic/services implemented, works
-    ok enough. 
+    ok enough.
   - Please file bugs and missing features if you find them.
 - **iOS**
   - Trying to figure out if the macOS implementation will translate,
@@ -116,9 +116,9 @@ Beyond that, some of our other goals are:
   - A rust android library exists (the aforementioned
     [blurdroid](https://github.com/servo/devices)), but getting a PoC
     up and tested is going to require some work. **Definitely looking
-    for help**. 
+    for help**.
   - Tracking issue
-    [here](https://github.com/deviceplug/btleplug/issues/8). 
+    [here](https://github.com/deviceplug/btleplug/issues/8).
   - Please hold off on filing more issues until base implementation is
     landed.
 - **WASM/WebBluetooth**
@@ -179,11 +179,11 @@ btleplug = { version = "0.4", features = ["serde"] }
 
 ### Rumble
 
-Rumble is a Bluetooth Low Energy (BLE) central module library for Rust. 
-Currently only Linux (with the BlueZ bluetooth library) is supported, although 
-other operating systems may be supported in the future. Rumble interfaces with 
-BlueZ using its socket interface rather than DBus. This offers much more control 
-and reliability over the DBus interface, and does not require running BlueZ in 
+Rumble is a Bluetooth Low Energy (BLE) central module library for Rust.
+Currently only Linux (with the BlueZ bluetooth library) is supported, although
+other operating systems may be supported in the future. Rumble interfaces with
+BlueZ using its socket interface rather than DBus. This offers much more control
+and reliability over the DBus interface, and does not require running BlueZ in
 experimental mode for BLE.
 
 As of version 0.2, the API is becoming more stable and the library itself more
@@ -247,6 +247,47 @@ pub fn main() {
         thread::sleep(Duration::from_millis(200));
     }
 }
+```
+
+Above code use is just waits for 2 seconds to see whatever device it can discover. This code example shows how to use event-driven discovery:
+
+```rust
+let (event_sender, event_receiver) = channel(256);
+// Add ourselves to the central event handler output now, so we don't
+// have to carry around the Central object. We'll be using this in
+// connect anyways.
+let on_event = move |event: CentralEvent| match event {
+    CentralEvent::DeviceDiscovered(bd_addr) => {
+        println!("DeviceDiscovered: {:?}", bd_addr);
+        let s = event_sender.clone();
+        let e = event.clone();
+        task::spawn(async move {
+            s.send(e).await;
+        });
+    }
+    CentralEvent::DeviceConnected(bd_addr) => {
+        println!("DeviceConnected: {:?}", bd_addr);
+        let s = event_sender.clone();
+        let e = event.clone();
+        task::spawn(async move {
+            s.send(e).await;
+        });
+    }
+    CentralEvent::DeviceDisconnected(bd_addr) => {
+        println!("DeviceDisconnected: {:?}", bd_addr);
+        let s = event_sender.clone();
+        let e = event.clone();
+        task::spawn(async move {
+            s.send(e).await;
+        });
+    }
+    _ => {}
+};
+
+central.on_event(Box::new(on_event));
+
+// Infinite loop otherwise the application will quit
+loop {};
 ```
 
 ## License

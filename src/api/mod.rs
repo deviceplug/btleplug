@@ -403,7 +403,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_uud() {
+    fn parse_uuid() {
         let values = vec![
             ("2A:00", Ok(UUID::B16(0x2A00))),
             ("00:00:15:32:12:12:EF:DE:15:23:78:5F:EA:BC:D1:23", Ok(UUID::B128([

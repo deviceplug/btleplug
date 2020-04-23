@@ -249,7 +249,7 @@ pub fn main() {
 }
 ```
 
-Above use is just waits for 2 seconds to see whatever device it can discover. This code example shows how to use event-driven discovery:
+Above code use is just waits for 2 seconds to see whatever device it can discover. This code example shows how to use event-driven discovery:
 
 ```rust
 let (event_sender, event_receiver) = channel(256);

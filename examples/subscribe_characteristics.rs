@@ -1,0 +1,109 @@
+use std::thread;
+use std::time::Duration;
+#[allow(unused_imports)]
+use rand::{Rng, thread_rng};
+
+#[allow(unused_imports)]
+#[cfg(target_os = "linux")]
+use btleplug::bluez::{adapter::Adapter, adapter::ConnectedAdapter, manager::Manager};
+#[allow(unused_imports)]
+#[cfg(target_os = "windows")]
+use btleplug::winrtble::{adapter::Adapter, manager::Manager};
+#[allow(unused_imports)]
+#[cfg(target_os = "macos")]
+use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
+#[allow(unused_imports)]
+use btleplug::api::{UUID, Central, Peripheral, Characteristic};
+
+const PERIPHERAL_NAME_MATCH_FILTER:&'static str = "Neuro"; // string to match with BLE name
+const SUBSCRIBE_TO_CHARACTERISTIC: UUID = UUID::B128(
+        [0x1B, 0xC5, 0xD5, 0xA5, 0x02, 0x00, 0xCF, 0x88, 0xE4, 0x11, 0xB9, 0xD6, 0x03, 0x00, 0x2F, 0x3D]);
+        //3D:2F:00:03:D6:B9:11:E4:88:CF:00:02:A5:D5:C5:1B
+
+#[cfg(target_os = "linux")]
+fn connect_to(adapter: &Adapter) -> ConnectedAdapter {
+        adapter.connect().expect("Error connecting to BLE Adapter....") //linux
+}
+#[cfg(target_os = "linux")]
+fn print_adapter_info(adapter: &ConnectedAdapter) {
+    println!("connected adapter {:?} is UP: {:?}", adapter.adapter.name, adapter.adapter.is_up());
+    println!("adapter states : {:?}", adapter.adapter.states);
+}
+
+#[cfg(target_os = "windows")]
+fn connect_to(adapter: &Adapter) -> &Adapter {
+    adapter //windows 10
+}
+#[cfg(target_os = "windows")]
+fn print_adapter_info(_adapter: &Adapter) {
+    println!("adapter info can't be printed on Windows 10");
+}
+
+/**
+If you are getting run time error like that :
+ thread 'main' panicked at 'Can't scan BLE adapter for connected devices...: PermissionDenied', src/libcore/result.rs:1188:5
+ you can try to run app with > sudo ./discover_adapters_peripherals
+ on linux
+**/
+fn main() {
+    let manager = Manager::new().unwrap();
+    let adapter_list = manager.adapters().unwrap();
+    if adapter_list.len() <= 0 {
+        eprint!("Bluetooth adapter(s) were NOT found, sorry...\n");
+    } else {
+        for adapter in adapter_list.iter() {
+            println!("connecting to BLE adapter: ...");
+
+            let connected_adapter = if cfg!(windows) {
+                connect_to(&adapter)
+            } else {
+                connect_to(&adapter)
+            };
+            // let connected_adapter = connect_to(&adapter);
+            print_adapter_info(&connected_adapter);
+            connected_adapter.start_scan().expect("Can't scan BLE adapter for connected devices...");
+            thread::sleep(Duration::from_secs(2));
+            if connected_adapter.peripherals().is_empty() {
+                eprintln!("->>> BLE peripheral devices were not found, sorry. Exiting...");
+            } else {
+                 // all peripheral devices in range
+                for peripheral in connected_adapter.peripherals().iter() {
+                    println!("peripheral : {:?} is connected: {:?}", peripheral.properties().local_name, peripheral.is_connected());
+                    // filter needed peripheral
+                    if peripheral.properties().local_name.is_some() 
+                        && !peripheral.is_connected() 
+                        && peripheral.properties().local_name.unwrap().contains(PERIPHERAL_NAME_MATCH_FILTER) {
+                        println!("start connect to peripheral : {:?}...", peripheral.properties().local_name);
+                        peripheral.connect().expect("Can't connect to peripheral...");
+                        println!("now connected (\'{:?}\') to peripheral : {:?}...", peripheral.is_connected(), peripheral.properties().local_name);
+                        let chars = peripheral.discover_characteristics();
+                        if peripheral.is_connected() {
+                            println!("Discover peripheral : \'{:?}\' characteristics...", peripheral.properties().local_name);
+                            for chars_vector in chars.into_iter() {
+                                for char_item in chars_vector.iter() {
+                                    println!("Checking CHARACTERISTIC...: {:?} result = {:?}", char_item.uuid,
+                                             char_item.uuid == SUBSCRIBE_TO_CHARACTERISTIC);
+                                    // subscribe on selected chars
+                                    if char_item.uuid == SUBSCRIBE_TO_CHARACTERISTIC {
+                                        println!("Try sub CHARACTERISTIC...: {:?} result = {:?}", char_item.uuid,
+                                                 char_item.uuid == SUBSCRIBE_TO_CHARACTERISTIC);
+                                        // do subscribe
+                                        let subscribe_result = peripheral.subscribe(&char_item);
+                                        println!("is subscribed? = {}", subscribe_result.is_ok());
+                                    } else {
+                                        eprintln!("NOT EQUAL char...")
+                                    }
+                                }
+                            }
+                            println!("disconnecting from peripheral : {:?}...", peripheral.properties().local_name);
+                            peripheral.disconnect().expect("Error on disconnecting from BLE peripheral ");
+                        }
+                    } else {
+                        //sometimes peripheral is not discovered completely
+                        eprintln!("SKIP connect to UNKNOWN peripheral : {:?}", peripheral);
+                    }
+                }
+            }
+        }
+    }
+}

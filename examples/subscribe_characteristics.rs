@@ -1,7 +1,10 @@
 use std::thread;
 use std::time::Duration;
-#[allow(unused_imports)]
-use rand::{Rng, thread_rng};
+use async_std::{
+    prelude::{FutureExt, StreamExt},
+    sync::{channel, Receiver},
+    task,
+};
 
 #[allow(unused_imports)]
 #[cfg(target_os = "linux")]
@@ -13,7 +16,7 @@ use btleplug::winrtble::{adapter::Adapter, manager::Manager};
 #[cfg(target_os = "macos")]
 use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
 #[allow(unused_imports)]
-use btleplug::api::{UUID, Central, Peripheral, Characteristic};
+use btleplug::api::{UUID, Central, CentralEvent, Peripheral, Characteristic};
 
 const PERIPHERAL_NAME_MATCH_FILTER:&'static str = "Neuro"; // string to match with BLE name
 const SUBSCRIBE_TO_CHARACTERISTIC: UUID = UUID::B128(
@@ -66,12 +69,12 @@ fn main() {
             if connected_adapter.peripherals().is_empty() {
                 eprintln!("->>> BLE peripheral devices were not found, sorry. Exiting...");
             } else {
-                 // all peripheral devices in range
+                // all peripheral devices in range
                 for peripheral in connected_adapter.peripherals().iter() {
                     println!("peripheral : {:?} is connected: {:?}", peripheral.properties().local_name, peripheral.is_connected());
                     // filter needed peripheral
-                    if peripheral.properties().local_name.is_some() 
-                        && !peripheral.is_connected() 
+                    if peripheral.properties().local_name.is_some()
+                        && !peripheral.is_connected()
                         && peripheral.properties().local_name.unwrap().contains(PERIPHERAL_NAME_MATCH_FILTER) {
                         println!("start connect to peripheral : {:?}...", peripheral.properties().local_name);
                         peripheral.connect().expect("Can't connect to peripheral...");
@@ -90,13 +93,47 @@ fn main() {
                                         // do subscribe
                                         let subscribe_result = peripheral.subscribe(&char_item);
                                         println!("is subscribed? = {}", subscribe_result.is_ok());
-                                    } else {
+                                    }/* else {
                                         eprintln!("NOT EQUAL char...")
-                                    }
+                                    }*/
                                 }
                             }
+
+                            /*
+                            let (event_sender, event_receiver) = channel(256);
+
+                            let on_event = move |event: CentralEvent| match event {
+                                CentralEvent::DeviceDiscovered(bd_addr) => {
+                                    println!("DeviceDiscovered: {:?}", bd_addr);
+                                    let s = event_sender.clone();
+                                    let e = event.clone();
+                                    task::spawn(async move {
+                                        s.send(e).await;
+                                    });
+                                }
+                                CentralEvent::DeviceConnected(bd_addr) => {
+                                    println!("DeviceConnected: {:?}", bd_addr);
+                                    let s = event_sender.clone();
+                                    let e = event.clone();
+                                    task::spawn(async move {
+                                        s.send(e).await;
+                                    });
+                                }
+                                CentralEvent::DeviceDisconnected(bd_addr) => {
+                                    println!("DeviceDisconnected: {:?}", bd_addr);
+                                    let s = event_sender.clone();
+                                    let e = event.clone();
+                                    task::spawn(async move {
+                                        s.send(e).await;
+                                    });
+                                }
+                                _ => {}
+                            };
+                            connected_adapter.on_event(Box::new(on_event));
+                            */
+
                             println!("disconnecting from peripheral : {:?}...", peripheral.properties().local_name);
-                            peripheral.disconnect().expect("Error on disconnecting from BLE peripheral ");
+                            peripheral.disconnect().expect("Error on disconnecting from BLE peripheral");
                         }
                     } else {
                         //sometimes peripheral is not discovered completely

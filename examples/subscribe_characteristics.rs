@@ -16,10 +16,10 @@ use btleplug::winrtble::{adapter::Adapter, manager::Manager};
 #[cfg(target_os = "macos")]
 use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
 #[allow(unused_imports)]
-use btleplug::api::{UUID, Central, CentralEvent, Peripheral, Characteristic};
+use btleplug::api::{UUID, ValueNotification, Central, CentralEvent, Peripheral, Characteristic, CharPropFlags};
 
 const PERIPHERAL_NAME_MATCH_FILTER:&'static str = "Neuro"; // string to match with BLE name
-const SUBSCRIBE_TO_CHARACTERISTIC: UUID = UUID::B128(
+const SUBSCRIBE_TO_CHARACTERISTIC: UUID = UUID::B128( // only NOTIFY type should be specified   s
         [0x1B, 0xC5, 0xD5, 0xA5, 0x02, 0x00, 0xCF, 0x88, 0xE4, 0x11, 0xB9, 0xD6, 0x03, 0x00, 0x2F, 0x3D]);
         //3D:2F:00:03:D6:B9:11:E4:88:CF:00:02:A5:D5:C5:1B
 
@@ -40,6 +40,10 @@ fn connect_to(adapter: &Adapter) -> &Adapter {
 #[cfg(target_os = "windows")]
 fn print_adapter_info(_adapter: &Adapter) {
     println!("adapter info can't be printed on Windows 10");
+}
+
+fn my_on_notification_handler(data: ValueNotification) {
+    println!("Received data from [{:?}] = {:?}", data.uuid, data.value.get(0));
 }
 
 /**
@@ -66,6 +70,8 @@ fn main() {
             print_adapter_info(&connected_adapter);
             connected_adapter.start_scan().expect("Can't scan BLE adapter for connected devices...");
             thread::sleep(Duration::from_secs(2));
+            // let mut handle;
+
             if connected_adapter.peripherals().is_empty() {
                 eprintln!("->>> BLE peripheral devices were not found, sorry. Exiting...");
             } else {
@@ -84,23 +90,30 @@ fn main() {
                             println!("Discover peripheral : \'{:?}\' characteristics...", peripheral.properties().local_name);
                             for chars_vector in chars.into_iter() {
                                 for char_item in chars_vector.iter() {
-                                    println!("Checking CHARACTERISTIC...: {:?} result = {:?}", char_item.uuid,
-                                             char_item.uuid == SUBSCRIBE_TO_CHARACTERISTIC);
+                                    // println!("Checking CHARACTERISTIC...: {:?} result = {:?}", char_item.uuid,
+                                    //          char_item.uuid == SUBSCRIBE_TO_CHARACTERISTIC);
                                     // subscribe on selected chars
-                                    if char_item.uuid == SUBSCRIBE_TO_CHARACTERISTIC {
-                                        println!("Try sub CHARACTERISTIC...: {:?} result = {:?}", char_item.uuid,
-                                                 char_item.uuid == SUBSCRIBE_TO_CHARACTERISTIC);
+                                    if char_item.uuid == SUBSCRIBE_TO_CHARACTERISTIC
+                                        && char_item.properties == CharPropFlags::NOTIFY {
+                                        println!("Lets try subscribe to desired CHARACTERISTIC...: {:?}", char_item.uuid);
                                         // do subscribe
-                                        let subscribe_result = peripheral.subscribe(&char_item);
-                                        println!("is subscribed? = {}", subscribe_result.is_ok());
+                                        // handle = thread::spawn(move || {
+                                            peripheral.on_notification(Box::new(my_on_notification_handler));
+                                            let subscribe_result = peripheral.subscribe(&char_item);
+                                            let is_subscribed = subscribe_result.is_ok();
+                                            println!("Is subscribed? = {}", is_subscribed);
+                                            while is_subscribed {
+                                                println!("Receiving...");
+                                            }
+                                        // });
+
                                     }/* else {
                                         eprintln!("NOT EQUAL char...")
                                     }*/
                                 }
                             }
 
-                            /*
-                            let (event_sender, event_receiver) = channel(256);
+/*                            let (event_sender, event_receiver) = channel(256);
 
                             let on_event = move |event: CentralEvent| match event {
                                 CentralEvent::DeviceDiscovered(bd_addr) => {
@@ -129,8 +142,7 @@ fn main() {
                                 }
                                 _ => {}
                             };
-                            connected_adapter.on_event(Box::new(on_event));
-                            */
+                            connected_adapter.on_event(Box::new(on_event));*/
 
                             println!("disconnecting from peripheral : {:?}...", peripheral.properties().local_name);
                             peripheral.disconnect().expect("Error on disconnecting from BLE peripheral");

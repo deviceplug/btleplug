@@ -22,6 +22,8 @@ const PERIPHERAL_NAME_MATCH_FILTER:&'static str = "Neuro"; // string to match wi
 const SUBSCRIBE_TO_CHARACTERISTIC: UUID = UUID::B128( // only NOTIFY type should be specified   s
         [0x1B, 0xC5, 0xD5, 0xA5, 0x02, 0x00, 0xCF, 0x88, 0xE4, 0x11, 0xB9, 0xD6, 0x03, 0x00, 0x2F, 0x3D]);
         //3D:2F:00:03:D6:B9:11:E4:88:CF:00:02:A5:D5:C5:1B
+// const DEVICE_COMMAND: UUID = UUID::B16(0x4600);
+// const DEVICE_COMMAND: Vec<u8> = vec![0x46];
 
 #[cfg(target_os = "linux")]
 fn connect_to(adapter: &Adapter) -> ConnectedAdapter {
@@ -97,21 +99,44 @@ fn main() {
                                         && char_item.properties == CharPropFlags::NOTIFY {
                                         println!("Lets try subscribe to desired CHARACTERISTIC...: {:?}", char_item.uuid);
                                         // do subscribe
-                                        // handle = thread::spawn(move || {
-                                            peripheral.on_notification(Box::new(my_on_notification_handler));
+                                        //     peripheral.on_notification(Box::new(my_on_notification_handler));
+                                            peripheral.on_notification(
+                                                Box::new(|data: ValueNotification| {
+                                                    let handle = thread::spawn( move|| {
+                                                        println!("Received data from [{:?}] = {:?}", data.uuid, data.value.get(0));
+                                                    });
+                                                })
+                                            );
                                             let subscribe_result = peripheral.subscribe(&char_item);
                                             let is_subscribed = subscribe_result.is_ok();
                                             println!("Is subscribed? = {}", is_subscribed);
-                                            while is_subscribed {
-                                                println!("Receiving...");
+                                        if is_subscribed {
+                                            // send command to device
+                                            let DEVICE_COMMAND = vec![0x46];
+                                            let connect_result = peripheral.command(&char_item, &DEVICE_COMMAND);
+                                            println!("Sent command OK? = {:?}", connect_result.is_ok());
+                                            while connect_result.is_ok() {
+                                                print!(".");
+                                                thread::sleep(Duration::from_millis(10));
                                             }
-                                        // });
+                                        }
 
-                                    }/* else {
-                                        eprintln!("NOT EQUAL char...")
-                                    }*/
+                                    }
                                 }
                             }
+
+                            println!("disconnecting from peripheral : {:?}...", peripheral.properties().local_name);
+                            peripheral.disconnect().expect("Error on disconnecting from BLE peripheral");
+                        }
+                    } else {
+                        //sometimes peripheral is not discovered completely
+                        eprintln!("SKIP connect to UNKNOWN peripheral : {:?}", peripheral);
+                    }
+                }
+            }
+        }
+    }
+}
 
 /*                            let (event_sender, event_receiver) = channel(256);
 
@@ -143,16 +168,3 @@ fn main() {
                                 _ => {}
                             };
                             connected_adapter.on_event(Box::new(on_event));*/
-
-                            println!("disconnecting from peripheral : {:?}...", peripheral.properties().local_name);
-                            peripheral.disconnect().expect("Error on disconnecting from BLE peripheral");
-                        }
-                    } else {
-                        //sometimes peripheral is not discovered completely
-                        eprintln!("SKIP connect to UNKNOWN peripheral : {:?}", peripheral);
-                    }
-                }
-            }
-        }
-    }
-}

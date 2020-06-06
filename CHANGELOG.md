@@ -1,3 +1,15 @@
+# 0.4.3 (2020-06-05)
+
+## Features
+
+* Allow notification handlers to be FnMut
+* Added new examples
+* Update dependencies
+
+## Bugfixes
+
+* Fix local_name on macOS 10.15
+
 # 0.4.2 (2020-04-18)
 
 ## Features

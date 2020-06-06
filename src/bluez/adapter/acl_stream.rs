@@ -22,6 +22,7 @@ use crate::{
         protocol::att,
         adapter::Adapter,
     },
+    common::util,
     Error,
     Result,
     api::{CommandCallback, RequestCallback, BDAddr, NotificationHandler, Characteristic},
@@ -226,8 +227,7 @@ impl ACLStream {
                                     panic!("How did we get here without a handle?");
                                 }
 
-                                let handlers = self.notification_handlers.lock().unwrap();
-                                handlers.iter().for_each(|h| h(n.clone()));
+                                util::invoke_handlers(&self.notification_handlers, &n);
                             }
                             Err(err) => {
                                 error!("failed to parse notification: {:?}", err);

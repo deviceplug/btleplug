@@ -140,6 +140,7 @@ pub mod winrtble;
 #[cfg(any(target_os = "macos", target_os="ios"))]
 pub mod corebluetooth;
 pub mod api;
+mod common;
 
 #[derive(Debug, Fail, Clone)]
 pub enum Error {

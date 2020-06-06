@@ -119,7 +119,7 @@ pub type Callback<T> = Box<dyn Fn(Result<T>) + Send>;
 pub type CommandCallback = Callback<()>;
 pub type RequestCallback = Callback<Vec<u8>>;
 
-pub type NotificationHandler = Box<dyn Fn(ValueNotification) + Send>;
+pub type NotificationHandler = Box<dyn FnMut(ValueNotification) + Send>;
 
 /// A Bluetooth UUID. These can either be 2 bytes or 16 bytes long. UUIDs uniquely identify various
 /// objects in the Bluetooth universe.
@@ -422,7 +422,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_uud() {
+    fn parse_uuid() {
         let values = vec![
             ("2A:00", Ok(UUID::B16(0x2A00))),
             ("00:00:15:32:12:12:EF:DE:15:23:78:5F:EA:BC:D1:23", Ok(UUID::B128([

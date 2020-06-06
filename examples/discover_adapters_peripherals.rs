@@ -66,21 +66,32 @@ fn main() {
             } else {
                  // all peripheral devices in range
                 for peripheral in connected_adapter.peripherals().iter() {
-                    println!("peripheral : {:?} is connected: {:?}", peripheral.properties().local_name, peripheral.is_connected());
+                    println!("Found BLE peripheral : \'{:?}\' : address = {:?} is connected: {:?}", peripheral.properties().local_name,
+                             peripheral.address().address, peripheral.is_connected());
                     if peripheral.properties().local_name.is_some() && !peripheral.is_connected() {
-                        println!("start connect to peripheral : {:?}...", peripheral.properties().local_name);
-                        peripheral.connect().expect("Can't connect to peripheral...");
-                        println!("now connected (\'{:?}\') to peripheral : {:?}...", peripheral.is_connected(), peripheral.properties().local_name);
-                        let chars = peripheral.discover_characteristics();
-                        if peripheral.is_connected() {
-                            println!("Discover peripheral : \'{:?}\' characteristics...", peripheral.properties().local_name);
-                            for chars_vector in chars.into_iter() {
-                                for char_item in chars_vector.iter() {
-                                    println!("{:?}", char_item);
+                        println!("start connect to peripheral : {:?} = {:?}...",
+                                 peripheral.properties().local_name, peripheral.address().address);
+                        let connect_result = peripheral.connect();
+                        match connect_result {
+                            Ok(_result) => {
+                                println!("now connected (\'{:?}\') to peripheral : {:?}...",
+                                         peripheral.is_connected(), peripheral.properties().local_name);
+                                let chars = peripheral.discover_characteristics();
+                                if peripheral.is_connected() {
+                                    println!("Discover peripheral : \'{:?}\' characteristics...", peripheral.properties().local_name);
+                                    for chars_vector in chars.into_iter() {
+                                        for char_item in chars_vector.iter() {
+                                            println!("{:?}", char_item);
+                                        }
+                                    }
+                                    println!("disconnecting from peripheral : {:?}...", peripheral.properties().local_name);
+                                    peripheral.disconnect().expect("Error on disconnecting from BLE peripheral ");
                                 }
                             }
-                            println!("disconnecting from peripheral : {:?}...", peripheral.properties().local_name);
-                            peripheral.disconnect().expect("Error on disconnecting from BLE peripheral ");
+                            Err(internal_error) => {
+                                eprintln!("ERROR! Can't connect to peripheral 'name' = {:?} : address = {:?} due to : {:?}",
+                                          peripheral.properties().local_name, peripheral.address().address, internal_error);
+                            }
                         }
                     } else {
                         //sometimes peripheral is not discovered completely

@@ -383,11 +383,11 @@ impl ConnectedAdapter {
         }
     }
 
-    fn write(&self, message: &mut [u8]) -> Result<()> {
+    fn write(&self, message: & [u8]) -> Result<()> {
         debug!("writing({}) {:?}", self.adapter_fd, message);
-        let ptr = message.as_mut_ptr();
+        let ptr = message.as_ptr();
         handle_error(unsafe {
-            libc::write(self.adapter_fd, ptr as *mut _ as *mut libc::c_void, message.len()) as i32
+            libc::write(self.adapter_fd, ptr as *const libc::c_void, message.len()) as i32
         })?;
         Ok(())
     }

@@ -258,8 +258,8 @@ pub mod CentralDelegate {
                 cb::peripheral_discoverincludedservicesforservice(peripheral, s);
 
                 // Create the map entry we'll need to export.
-                let uuid = cb::uuid_uuidstring(cb::attribute_uuid(s));
-                let uuid_str = Uuid::from_str(&NSStringUtils::string_to_string(uuid)).unwrap();
+                let uuid = CoreBluetoothUtils::uuid_to_canonical_uuid_string(cb::attribute_uuid(s));
+                let uuid_str = Uuid::from_str(&uuid).unwrap();
                 let held_service;
                 unsafe {
                     held_service = StrongPtr::retain(s);
@@ -293,8 +293,8 @@ pub mod CentralDelegate {
                 // TODO Actually implement characteristic descriptor enumeration
                 // cb::peripheral_discoverdescriptorsforcharacteristic(peripheral, c);
                 // Create the map entry we'll need to export.
-                let uuid = cb::uuid_uuidstring(cb::attribute_uuid(c));
-                let uuid = Uuid::from_str(&NSStringUtils::string_to_string(uuid)).unwrap();
+                let uuid = CoreBluetoothUtils::uuid_to_canonical_uuid_string(cb::attribute_uuid(c));
+                let uuid = Uuid::from_str(&uuid).unwrap();
                 let held_char;
                 unsafe {
                     held_char = StrongPtr::retain(c);

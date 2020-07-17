@@ -11,7 +11,7 @@
 use crate::api::{Characteristic, CharPropFlags, UUID};
 use super::{
     central_delegate::{CentralDelegate, CentralDelegateEvent},
-    utils::NSStringUtils,
+    utils::{CoreBluetoothUtils, NSStringUtils},
     future::{BtlePlugFutureState, BtlePlugFutureStateShared, BtlePlugFuture},
     framework::{cb, ns}
 };
@@ -45,8 +45,8 @@ struct CBCharacteristic {
 impl CBCharacteristic {
     pub fn new(characteristic: StrongPtr) -> Self {
         let properties = CBCharacteristic::form_flags(*characteristic);
-        let uuid_nsstring = ns::uuid_uuidstring(cb::attribute_uuid(*characteristic));
-        let uuid = Uuid::from_str(&NSStringUtils::string_to_string(uuid_nsstring)).unwrap();
+        let uuid = CoreBluetoothUtils::uuid_to_canonical_uuid_string(cb::attribute_uuid(*characteristic));
+        let uuid = Uuid::from_str(&uuid).unwrap();
         Self {
             characteristic,
             uuid,

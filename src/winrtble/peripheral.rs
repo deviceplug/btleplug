@@ -149,8 +149,13 @@ impl ApiPeripheral for Peripheral {
     /// a time. Operations that attempt to communicate with a device will fail until it is connected.
     fn connect(&self) -> Result<()> {
         let connected = self.connected.clone();
+        let adapter_clone = self.adapter.clone();
+        let address_clone = self.address.clone();
         let device = BLEDevice::new(self.address, Box::new(move |is_connected| {
             connected.store(is_connected, Ordering::Relaxed);
+            if !is_connected {
+                adapter_clone.emit(CentralEvent::DeviceDisconnected(address_clone));
+            }
         }))?;
 
         device.connect()?;

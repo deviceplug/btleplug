@@ -1,6 +1,6 @@
 [package]
 name = "btleplug"
-version = "0.4.3"
+version = "0.4.4"
 authors = ["Nonpolynomial <kyle@nonpolynomial.com>"]
 license = "MIT/Apache-2.0/BSD-3-Clause"
 repository = "https://github.com/deviceplug/btleplug"
@@ -21,35 +21,35 @@ path = "src/lib.rs"
 # crate-type = ["staticlib"]
 
 [dependencies]
-libc = "0.2.71"
+libc = "0.2.73"
 nix = "0.17.0"
-bytes = "0.5.4"
-num = "0.2.1"
-log = "0.4.8"
+bytes = "0.5.6"
+num = "0.3.0"
+log = "0.4.11"
 enum_primitive = "0.1.1"
 bitflags = "1.2.1"
 failure = "0.1.8"
 failure_derive = "0.1.8"
-backtrace = "0.3.48"
-async-std = { version = "1.6.0", features = ["unstable"] }
+backtrace = "0.3.50"
+async-std = { version = "1.6.2", features = ["unstable"] }
 uuid = "0.8.1"
-serde = { version = "1.0.111", features = ["derive"], default-features = false, optional = true }
+serde = { version = "1.0.114", features = ["derive"], default-features = false, optional = true }
 
 [dependencies.nom]
 version = "^4"
 features = ["verbose-errors"]
 
 [dependencies.winrt]
-version = "0.6.0"
+version = "^0.6"
 features = ["windows-devices", "windows-storage"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2.7"
-cocoa = "0.20.1"
+cocoa = "0.23.0"
 
 [target.'cfg(target_os = "ios")'.dependencies]
 objc = "0.2.7"
-cocoa = "0.20.1"
+cocoa = "0.23.0"
 
 [dev-dependencies]
 rand = "0.7.3"

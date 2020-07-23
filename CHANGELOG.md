@@ -1,3 +1,10 @@
+# 0.4.4 (2020-07-22)
+
+## Bugfixes
+
+* Fix peripheral connect panic caused by uuid length on macOS (#43)
+* Windows/macOS devices now emit events on device disconnect (#54)
+
 # 0.4.3 (2020-06-05)
 
 ## Features

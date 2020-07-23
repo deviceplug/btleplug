@@ -72,6 +72,10 @@ impl Adapter {
                             p.get_mut(&id).unwrap().properties.local_name = Some(name);
                             emit(CentralEvent::DeviceUpdated(id));
                         },
+                        CoreBluetoothEvent::DeviceLost(uuid) => {
+                            let id = uuid_to_bdaddr(&uuid.to_string());
+                            emit(CentralEvent::DeviceDisconnected(id));
+                        }
                         _ => {}
                     }
                 }

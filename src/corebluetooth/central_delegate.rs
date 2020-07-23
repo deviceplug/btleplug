@@ -219,7 +219,9 @@ pub mod CentralDelegate {
 
     extern fn delegate_centralmanager_diddisconnectperipheral_error(delegate: &mut Object, _cmd: Sel, _central: *mut Object, peripheral: *mut Object, _error: *mut Object) {
         trace!("delegate_centralmanager_diddisconnectperipheral_error {}", CoreBluetoothUtils::peripheral_debug(peripheral));
-        // ns::mutabledictionary_removeobjectforkey(delegate_peripherals(delegate), ns::uuid_uuidstring(cb::peer_identifier(peripheral)));
+        let uuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
+        let uuid = Uuid::from_str(&NSStringUtils::string_to_string(uuid_nsstring)).unwrap();
+        send_delegate_event(delegate, CentralDelegateEvent::DisconnectedDevice(uuid));
     }
 
     // extern fn delegate_centralmanager_didfailtoconnectperipheral_error(_delegate: &mut Object, _cmd: Sel, _central: *mut Object, _peripheral: *mut Object, _error: *mut Object) {
@@ -258,8 +260,8 @@ pub mod CentralDelegate {
                 cb::peripheral_discoverincludedservicesforservice(peripheral, s);
 
                 // Create the map entry we'll need to export.
-                let uuid = cb::uuid_uuidstring(cb::attribute_uuid(s));
-                let uuid_str = Uuid::from_str(&NSStringUtils::string_to_string(uuid)).unwrap();
+                let uuid = CoreBluetoothUtils::uuid_to_canonical_uuid_string(cb::attribute_uuid(s));
+                let uuid_str = Uuid::from_str(&uuid).unwrap();
                 let held_service;
                 unsafe {
                     held_service = StrongPtr::retain(s);
@@ -293,8 +295,8 @@ pub mod CentralDelegate {
                 // TODO Actually implement characteristic descriptor enumeration
                 // cb::peripheral_discoverdescriptorsforcharacteristic(peripheral, c);
                 // Create the map entry we'll need to export.
-                let uuid = cb::uuid_uuidstring(cb::attribute_uuid(c));
-                let uuid = Uuid::from_str(&NSStringUtils::string_to_string(uuid)).unwrap();
+                let uuid = CoreBluetoothUtils::uuid_to_canonical_uuid_string(cb::attribute_uuid(c));
+                let uuid = Uuid::from_str(&uuid).unwrap();
                 let held_char;
                 unsafe {
                     held_char = StrongPtr::retain(c);

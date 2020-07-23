@@ -1,6 +1,6 @@
 // btleplug Source Code File
 //
-// Copyright 2020 Nathan Fairhurst. All rights reserved.
+// Copyright 2020 Nonpolynomial. All rights reserved.
 //
 // Licensed under the BSD 3-Clause license. See LICENSE file in the project root
 // for full license information.

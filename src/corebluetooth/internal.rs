@@ -11,7 +11,7 @@
 use crate::api::{Characteristic, CharPropFlags, UUID};
 use super::{
     central_delegate::{CentralDelegate, CentralDelegateEvent},
-    utils::NSStringUtils,
+    utils::{CoreBluetoothUtils, NSStringUtils},
     future::{BtlePlugFutureState, BtlePlugFutureStateShared, BtlePlugFuture},
     framework::{cb, ns}
 };
@@ -45,8 +45,8 @@ struct CBCharacteristic {
 impl CBCharacteristic {
     pub fn new(characteristic: StrongPtr) -> Self {
         let properties = CBCharacteristic::form_flags(*characteristic);
-        let uuid_nsstring = ns::uuid_uuidstring(cb::attribute_uuid(*characteristic));
-        let uuid = Uuid::from_str(&NSStringUtils::string_to_string(uuid_nsstring)).unwrap();
+        let uuid = CoreBluetoothUtils::uuid_to_canonical_uuid_string(cb::attribute_uuid(*characteristic));
+        let uuid = Uuid::from_str(&uuid).unwrap();
         Self {
             characteristic,
             uuid,
@@ -180,9 +180,7 @@ impl CBPeripheral {
 // ass mut *Object values, keep them in a single struct, in a single thread, and
 // call it good. Right?
 struct CoreBluetoothInternal {
-    // TODO Should this be a StrongPtr?
     manager: StrongPtr,
-    // TODO Should this be a StrongPtr?
     delegate: StrongPtr,
     // Map of identifiers to object pointers
     peripherals: HashMap<Uuid, CBPeripheral>,
@@ -296,6 +294,10 @@ impl CoreBluetoothInternal {
         // itself when it receives all of its service/characteristic info.
     }
 
+    fn on_peripheral_disconnect(&mut self, peripheral_uuid: Uuid) {
+        self.dispatch_event(CoreBluetoothEvent::DeviceLost(peripheral_uuid));
+    }
+
     fn on_characteristic_subscribed(&mut self, peripheral_uuid: Uuid, characteristic_uuid: Uuid) {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
@@ -405,6 +407,8 @@ impl CoreBluetoothInternal {
                         self.on_discovered_characteristics(peripheral_id, char_map),
                     CentralDelegateEvent::ConnectedDevice(peripheral_id) =>
                         self.on_peripheral_connect(peripheral_id),
+                    CentralDelegateEvent::DisconnectedDevice(peripheral_id) =>
+                        self.on_peripheral_disconnect(peripheral_id),
                     CentralDelegateEvent::CharacteristicSubscribed(peripheral_id, characteristic_id) =>
                         self.on_characteristic_subscribed(peripheral_id, characteristic_id),
                     CentralDelegateEvent::CharacteristicUnsubscribed(peripheral_id, characteristic_id) =>

@@ -219,7 +219,9 @@ pub mod CentralDelegate {
 
     extern fn delegate_centralmanager_diddisconnectperipheral_error(delegate: &mut Object, _cmd: Sel, _central: *mut Object, peripheral: *mut Object, _error: *mut Object) {
         trace!("delegate_centralmanager_diddisconnectperipheral_error {}", CoreBluetoothUtils::peripheral_debug(peripheral));
-        // ns::mutabledictionary_removeobjectforkey(delegate_peripherals(delegate), ns::uuid_uuidstring(cb::peer_identifier(peripheral)));
+        let uuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
+        let uuid = Uuid::from_str(&NSStringUtils::string_to_string(uuid_nsstring)).unwrap();
+        send_delegate_event(delegate, CentralDelegateEvent::DisconnectedDevice(uuid));
     }
 
     // extern fn delegate_centralmanager_didfailtoconnectperipheral_error(_delegate: &mut Object, _cmd: Sel, _central: *mut Object, _peripheral: *mut Object, _error: *mut Object) {

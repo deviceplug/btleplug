@@ -47,7 +47,7 @@ pub enum CentralDelegateEvent {
     DiscoveredPeripheral(StrongPtr),
     // Peripheral UUID, HashMap Service Uuid to StrongPtr
     DiscoveredServices(Uuid, HashMap<Uuid, StrongPtr>),
-    DiscoveredIncludedServices(Uuid, HashMap<Uuid, StrongPtr>),
+    // DiscoveredIncludedServices(Uuid, HashMap<Uuid, StrongPtr>),
     // Peripheral UUID, HashMap Characteristic Uuid to StrongPtr
     DiscoveredCharacteristics(Uuid, HashMap<Uuid, StrongPtr>),
     ConnectedDevice(Uuid),
@@ -228,11 +228,9 @@ pub mod CentralDelegate {
     //     trace!("delegate_centralmanager_didfailtoconnectperipheral_error");
     // }
 
-    extern fn delegate_centralmanager_diddiscoverperipheral_advertisementdata_rssi(delegate: &mut Object, _cmd: Sel, _central: *mut Object, peripheral: *mut Object, adv_data: *mut Object, rssi: *mut Object) {
+    extern fn delegate_centralmanager_diddiscoverperipheral_advertisementdata_rssi(delegate: &mut Object, _cmd: Sel, _central: *mut Object, peripheral: *mut Object, _adv_data: *mut Object, _rssi: *mut Object) {
         trace!("delegate_centralmanager_diddiscoverperipheral_advertisementdata_rssi {}", CoreBluetoothUtils::peripheral_debug(peripheral));
-        let uuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-        let uuid_str = NSStringUtils::string_to_string(uuid_nsstring);
-        let name = NSStringUtils::string_to_string(cb::peripheral_name(peripheral));
+
         let held_peripheral;
         unsafe {
             held_peripheral = StrongPtr::retain(peripheral);
@@ -274,7 +272,7 @@ pub mod CentralDelegate {
         }
     }
 
-    extern fn delegate_peripheral_diddiscoverincludedservicesforservice_error(delegate: &mut Object, _cmd: Sel, peripheral: *mut Object, service: *mut Object, error: *mut Object) {
+    extern fn delegate_peripheral_diddiscoverincludedservicesforservice_error(_delegate: &mut Object, _cmd: Sel, peripheral: *mut Object, service: *mut Object, error: *mut Object) {
         trace!("delegate_peripheral_diddiscoverincludedservicesforservice_error {} {} {}", CoreBluetoothUtils::peripheral_debug(peripheral), CoreBluetoothUtils::service_debug(service), if error != nil {"error"} else {""});
         if error == nil {
             let includes = cb::service_includedservices(service);
@@ -322,13 +320,13 @@ pub mod CentralDelegate {
         }
     }
 
-    extern fn delegate_peripheral_didwritevalueforcharacteristic_error(delegate: &mut Object, _cmd: Sel, peripheral: *mut Object, characteristic: *mut Object, error: *mut Object) {
+    extern fn delegate_peripheral_didwritevalueforcharacteristic_error(_delegate: &mut Object, _cmd: Sel, peripheral: *mut Object, characteristic: *mut Object, error: *mut Object) {
         trace!("delegate_peripheral_didwritevalueforcharacteristic_error {} {} {}", CoreBluetoothUtils::peripheral_debug(peripheral), CoreBluetoothUtils::characteristic_debug(characteristic), if error != nil {"error"} else {""});
         if error == nil {
         }
     }
 
-    extern fn delegate_peripheral_didupdatenotificationstateforcharacteristic_error(delegate: &mut Object, _cmd: Sel, peripheral: *mut Object, characteristic: *mut Object, error: *mut Object) {
+    extern fn delegate_peripheral_didupdatenotificationstateforcharacteristic_error(delegate: &mut Object, _cmd: Sel, peripheral: *mut Object, characteristic: *mut Object, _error: *mut Object) {
         trace!("delegate_peripheral_didupdatenotificationstateforcharacteristic_error");
         // TODO check for error here
         let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
@@ -354,7 +352,7 @@ pub mod CentralDelegate {
     //     trace!("delegate_peripheral_didwritevaluefordescriptor_error");
     // }
 
-    extern fn delegate_peripheral_didreadrssi_error(delegate: &mut Object, _cmd: Sel, peripheral: *mut Object, rssi: *mut Object, error: *mut Object) {
+    extern fn delegate_peripheral_didreadrssi_error(_delegate: &mut Object, _cmd: Sel, peripheral: *mut Object, _rssi: *mut Object, error: *mut Object) {
         trace!("delegate_peripheral_didreadrssi_error {}", CoreBluetoothUtils::peripheral_debug(peripheral));
         if error == nil {
         }

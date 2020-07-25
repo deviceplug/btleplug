@@ -22,13 +22,12 @@ use std::{
     self,
     ffi::CStr,
     collections::{HashSet, HashMap},
-    sync::{Arc, Mutex},
-    sync::atomic::{AtomicBool, Ordering},
+    sync::{Arc, Mutex, mpsc::Receiver, atomic::{AtomicBool, Ordering}},
     thread,
 };
 
 use crate::Result;
-use crate::api::{CentralEvent, BDAddr, Central, EventHandler};
+use crate::api::{CentralEvent, BDAddr, Central, AdapterManager};
 
 use crate::bluez::{
     util::handle_error,
@@ -188,9 +187,8 @@ pub struct ConnectedAdapter {
     pub scan_enabled: Arc<AtomicBool>,
     pub active: Arc<AtomicBool>,
     pub filter_duplicates: Arc<AtomicBool>,
-    peripherals: Arc<Mutex<HashMap<BDAddr, Peripheral>>>,
     handle_map: Arc<Mutex<HashMap<u16, BDAddr>>>,
-    event_handlers: Arc<Mutex<Vec<EventHandler>>>,
+    manager: AdapterManager<Peripheral>
 }
 
 impl ConnectedAdapter {
@@ -219,9 +217,8 @@ impl ConnectedAdapter {
             filter_duplicates: Arc::new(AtomicBool::new(false)),
             should_stop,
             scan_enabled: Arc::new(AtomicBool::new(false)),
-            event_handlers: Arc::new(Mutex::new(vec![])),
-            peripherals: Arc::new(Mutex::new(HashMap::new())),
             handle_map: Arc::new(Mutex::new(HashMap::new())),
+            manager: AdapterManager::new(),
         };
 
         connected.add_raw_socket_reader(adapter_fd);
@@ -300,11 +297,7 @@ impl ConnectedAdapter {
 
     fn emit(&self, event: CentralEvent) {
         debug!("emitted {:?}", event);
-        let handlers = self.event_handlers.clone();
-        let vec = handlers.lock().unwrap();
-        for handler in (*vec).iter() {
-            handler(event.clone());
-        }
+        self.manager.emit(event);
     }
 
     fn handle(&self, message: hci::Message) {
@@ -316,15 +309,9 @@ impl ConnectedAdapter {
                 let address = info.bdaddr.clone();
 
                 {
-                    let mut peripherals = self.peripherals.lock().unwrap();
-                    let peripheral = peripherals.entry(info.bdaddr)
-                        .or_insert_with(|| {
-                            new = true;
-                            Peripheral::new(self.clone(), info.bdaddr)
-                        });
-
-
+                    let peripheral = Peripheral::new(self.clone(), info.bdaddr);
                     peripheral.handle_device_message(&hci::Message::LEAdvertisingReport(info));
+                    self.manager.add_peripheral(address, peripheral);                    
                 }
 
                 if new {
@@ -355,9 +342,9 @@ impl ConnectedAdapter {
 
                 // TODO this is a bit risky from a deadlock perspective (note mutexes are not
                 // reentrant in rust!)
-                let peripherals = self.peripherals.lock().unwrap();
+                let peripherals = self.manager.peripherals();
 
-                for peripheral in peripherals.values() {
+                for peripheral in peripherals {
                     // we don't know the handler => device mapping, so send to all and let them filter
                     peripheral.handle_device_message(&message);
                 }
@@ -415,9 +402,8 @@ impl ConnectedAdapter {
 }
 
 impl Central<Peripheral> for ConnectedAdapter {
-    fn on_event(&self, handler: EventHandler) {
-        let list = self.event_handlers.clone();
-        list.lock().unwrap().push(handler);
+    fn event_receiver(&self) -> Option<Receiver<CentralEvent>> {
+        self.manager.event_receiver()
     }
 
     fn active(&self, enabled: bool) {
@@ -438,13 +424,11 @@ impl Central<Peripheral> for ConnectedAdapter {
     }
 
     fn peripherals(&self) -> Vec<Peripheral> {
-        let l = self.peripherals.lock().unwrap();
-        l.values().map(|p| p.clone()).collect()
+        self.manager.peripherals()
     }
 
     fn peripheral(&self, address: BDAddr) -> Option<Peripheral> {
-        let l = self.peripherals.lock().unwrap();
-        l.get(&address).map(|p| p.clone())
+        self.manager.peripheral(address)
     }
 }
 

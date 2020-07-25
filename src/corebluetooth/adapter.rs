@@ -1,7 +1,6 @@
-use crate::api::{Central, CentralEvent, EventHandler, BDAddr};
+use crate::api::{Central, CentralEvent, BDAddr, AdapterManager};
 use crate::Result;
-use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
+use std::sync::mpsc::Receiver;
 use std::convert::TryInto;
 use super::peripheral::Peripheral;
 use super::internal::{run_corebluetooth_thread, CoreBluetoothMessage, CoreBluetoothEvent};
@@ -13,8 +12,7 @@ use async_std::{
 
 #[derive(Clone)]
 pub struct Adapter {
-    event_handlers: Arc<Mutex<Vec<EventHandler>>>,
-    peripherals: Arc<Mutex<HashMap<BDAddr, Peripheral>>>,
+    manager: AdapterManager<Peripheral>,
     sender: Sender<CoreBluetoothMessage>,
 }
 
@@ -36,73 +34,49 @@ impl Adapter {
             receiver.recv().await.unwrap()
         });
         info!("Waiting on adapter connected");
-        let event_handlers = Arc::new(Mutex::new(Vec::<EventHandler>::new()));
-        let peripherals = Arc::new(Mutex::new(HashMap::new()));
-        let handler_clone = event_handlers.clone();
-        let peripherals_clone = peripherals.clone();
         let adapter_sender_clone = adapter_sender.clone();
-        task::spawn(async move{
-            let emit = |event: CentralEvent| {
-                let vec = handler_clone.lock().unwrap();
-                for handler in (*vec).iter() {
-                    handler(event.clone());
-                }
-            };
+        let manager = AdapterManager::new();
 
-            loop {
-                // TODO We should probably have the sender throw out None on
-                // Drop to clean this up?
-                let msg = receiver.next().await;
-                if msg.is_none() {
-                    info!("Stopping CoreBluetooth Adapter event loop.");
-                    break;
-                } else {
-                    match msg.unwrap() {
+        let manager_clone = manager.clone();
+        task::spawn(async move{
+            while let Some(msg) = receiver.next().await {
+                    match msg {
                         CoreBluetoothEvent::DeviceDiscovered(uuid, name, event_receiver) => {
                             // TODO Gotta change uuid into a BDAddr for now. Expand
                             // library identifier type. :(
                             let id = uuid_to_bdaddr(&uuid.to_string());
-                            let mut p = peripherals_clone.lock().unwrap();
-                            p.insert(id, Peripheral::new(uuid, name, handler_clone.clone(), event_receiver, adapter_sender_clone.clone()));
-                            emit(CentralEvent::DeviceDiscovered(id));
+                            manager_clone.add_peripheral(id, Peripheral::new(uuid, name, manager_clone.clone(), event_receiver, adapter_sender_clone.clone()));
+                            manager_clone.emit(CentralEvent::DeviceDiscovered(id));
                         },
+                        /*
                         CoreBluetoothEvent::DeviceUpdated(uuid, name) => {
                             let id = uuid_to_bdaddr(&uuid.to_string());
-                            let mut p = peripherals_clone.lock().unwrap();
-                            p.get_mut(&id).unwrap().properties.local_name = Some(name);
                             emit(CentralEvent::DeviceUpdated(id));
                         },
+                        */
                         CoreBluetoothEvent::DeviceLost(uuid) => {
                             let id = uuid_to_bdaddr(&uuid.to_string());
-                            emit(CentralEvent::DeviceDisconnected(id));
+                            manager_clone.emit(CentralEvent::DeviceDisconnected(id));
                         }
                         _ => {}
-                    }
                 }
             }
         });
 
         Adapter {
-            event_handlers,
-            peripherals,
+            manager,
             sender: adapter_sender
         }
     }
 
     pub fn emit(&self, event: CentralEvent) {
-        debug!("emitted {:?}", event);
-        let handlers = self.event_handlers.clone();
-        let vec = handlers.lock().unwrap();
-        for handler in (*vec).iter() {
-            handler(event.clone());
-        }
+        self.manager.emit(event)
     }
 }
 
 impl Central<Peripheral> for Adapter {
-    fn on_event(&self, handler: EventHandler) {
-        let list = self.event_handlers.clone();
-        list.lock().unwrap().push(handler);
+    fn event_receiver(&self) -> Option<Receiver<CentralEvent>> {
+        self.manager.event_receiver()
     }
 
     fn start_scan(&self) -> Result<()> {
@@ -122,18 +96,16 @@ impl Central<Peripheral> for Adapter {
     }
 
     fn peripherals(&self) -> Vec<Peripheral> {
-        let l = self.peripherals.lock().unwrap();
-        l.values().cloned().collect()
+        self.manager.peripherals()
     }
 
     fn peripheral(&self, address: BDAddr) -> Option<Peripheral> {
-        let l = self.peripherals.lock().unwrap();
-        l.get(&address).cloned()
+        self.manager.peripheral(address)
     }
 
-    fn active(&self, enabled: bool) {
+    fn active(&self, _enabled: bool) {
     }
 
-    fn filter_duplicates(&self, enabled: bool) {
+    fn filter_duplicates(&self, _enabled: bool) {
     }
 }

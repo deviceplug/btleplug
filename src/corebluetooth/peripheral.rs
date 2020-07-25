@@ -9,7 +9,7 @@ use crate::{
     api::{
         AddressType, BDAddr, PeripheralProperties, CommandCallback,
         NotificationHandler, RequestCallback, UUID, Peripheral as ApiPeripheral,
-        Characteristic, CentralEvent, EventHandler, ValueNotification
+        Characteristic, CentralEvent, ValueNotification, AdapterManager
     },
     common::util,
     Result, Error
@@ -39,7 +39,7 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct Peripheral {
     notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
-    adapter_handlers: Arc<Mutex<Vec<EventHandler>>>,
+    manager: AdapterManager<Self>,
     uuid: Uuid,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
     pub(crate) properties: PeripheralProperties,
@@ -51,7 +51,7 @@ pub struct Peripheral {
 }
 
 impl Peripheral {
-    pub fn new(uuid: Uuid, local_name: String, adapter_handlers: Arc<Mutex<Vec<EventHandler>>>, event_receiver: Receiver<CBPeripheralEvent>, message_sender: Sender<CoreBluetoothMessage>) -> Self {
+    pub fn new(uuid: Uuid, local_name: String, manager: AdapterManager<Self>, event_receiver: Receiver<CBPeripheralEvent>, message_sender: Sender<CoreBluetoothMessage>) -> Self {
         // Since we're building the object, we have an active advertisement.
         // Build properties now.
         let properties = PeripheralProperties {
@@ -86,7 +86,8 @@ impl Peripheral {
         });
         Self {
             properties,
-            adapter_handlers,
+
+            manager,
             characteristics: Arc::new(Mutex::new(BTreeSet::new())),
             notification_handlers,
             uuid,
@@ -97,11 +98,7 @@ impl Peripheral {
 
     fn emit(&self, event: CentralEvent) {
         debug!("emitted {:?}", event);
-        let handlers = self.adapter_handlers.clone();
-        let vec = handlers.lock().unwrap();
-        for handler in (*vec).iter() {
-            handler(event.clone());
-        }
+        self.manager.emit(event)
     }
 }
 
@@ -245,7 +242,7 @@ impl ApiPeripheral for Peripheral {
     /// characteristic and for the specified declaration UUID. See
     /// [here](https://www.bluetooth.com/specifications/gatt/declarations) for valid UUIDs.
     /// Synchronously returns either an error or the device response.
-    fn read_by_type(&self, characteristic: &Characteristic,
+    fn read_by_type(&self, _characteristic: &Characteristic,
                     _uuid: UUID) -> Result<Vec<u8>> {
         Err(Error::NotSupported("read_by_type".into()))
     }
@@ -288,10 +285,10 @@ impl ApiPeripheral for Peripheral {
         list.push(handler);
     }
 
-    fn read_async(&self, characteristic: &Characteristic, handler: Option<RequestCallback>) {
+    fn read_async(&self, _characteristic: &Characteristic, _handler: Option<RequestCallback>) {
     }
 
-    fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
+    fn read(&self, _characteristic: &Characteristic) -> Result<Vec<u8>> {
         Ok(vec!())
     }
 }

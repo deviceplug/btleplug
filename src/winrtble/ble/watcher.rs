@@ -37,7 +37,7 @@ impl BLEWatcher {
     pub fn start(&self, on_received: AdvertismentEventHandler) -> Result<()> {
         self.watcher.set_scanning_mode(BluetoothLEScanningMode::Active).unwrap();
         let handler = TypedEventHandler::new(move |_sender, args: *mut BluetoothLEAdvertisementReceivedEventArgs| {
-            let args = unsafe { (&*args) }; 
+            let args = unsafe { &*args };
             on_received(args);
             Ok(())
         });

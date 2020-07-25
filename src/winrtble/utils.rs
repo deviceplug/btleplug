@@ -94,17 +94,10 @@ pub fn to_guid(uuid: &UUID) -> Guid {
             }
             Guid{ Data1: data1, Data2: data2, Data3: data3, Data4: data4 }
         },
-        UUID::B16(b) => {
+        UUID::B16(_) => {
             Guid{ Data1: 0, Data2: 0, Data3: 0, Data4: [0; 8] }
         }
     }
-}
-
-fn guid_to_string(guid: &Guid) -> String {
-    format!("{:08X}:{:04X}:{:04X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-	        guid.Data1, guid.Data2, guid.Data3,
-	        guid.Data4[0], guid.Data4[1], guid.Data4[2], guid.Data4[3],
-            guid.Data4[4], guid.Data4[5], guid.Data4[6], guid.Data4[7])
 }
 
 pub fn to_char_props(properties: &GattCharacteristicProperties) -> CharPropFlags {

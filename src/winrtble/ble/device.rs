@@ -39,7 +39,7 @@ impl BLEDevice {
         let async_op = BluetoothLEDevice::from_bluetooth_address_async(utils::to_address(address)).map_err(|_| Error::DeviceNotFound)?;
         let device = async_op.blocking_get().map_err(|_| Error::DeviceNotFound)?.ok_or(Error::DeviceNotFound)?;
         let connection_status_handler = TypedEventHandler::new(move |sender: *mut BluetoothLEDevice, _: *mut IInspectable| {
-            let sender = unsafe { (&*sender) };
+            let sender = unsafe { &*sender };
             let is_connected = sender.get_connection_status().ok().map_or(false, |v| v == BluetoothConnectionStatus::Connected);
             connection_status_changed(is_connected);
             info!("state {:?}", sender.get_connection_status());

@@ -15,7 +15,7 @@ use crate::{
     api::{
         AddressType, CentralEvent, BDAddr, PeripheralProperties, CommandCallback,
         NotificationHandler, RequestCallback, UUID, Characteristic, ValueNotification,
-        Peripheral as ApiPeripheral
+        Peripheral as ApiPeripheral, AdapterManager
     },
     common::util,
     Result,
@@ -35,13 +35,12 @@ use super::{
     utils,
     ble::device::BLEDevice,
     ble::characteristic::BLECharacteristic,
-    adapter::Adapter,
 };
 
 #[derive(Clone)]
 pub struct Peripheral {
     device: Arc<Mutex<Option<BLEDevice>>>,
-    adapter: Adapter,
+    adapter: AdapterManager<Self>,
     address: BDAddr,
     properties: Arc<Mutex<PeripheralProperties>>,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
@@ -51,7 +50,7 @@ pub struct Peripheral {
 }
 
 impl Peripheral {
-    pub fn new(adapter: Adapter, address: BDAddr) -> Self {
+    pub fn new(adapter: AdapterManager<Self>, address: BDAddr) -> Self {
         let device = Arc::new(Mutex::new(None));
         let mut properties = PeripheralProperties::default();
         properties.address = address;
@@ -289,10 +288,10 @@ impl ApiPeripheral for Peripheral {
         list.push(handler);
     }
 
-    fn read_async(&self, characteristic: &Characteristic, handler: Option<RequestCallback>) {
+    fn read_async(&self, _characteristic: &Characteristic, _handler: Option<RequestCallback>) {
     }
 
-    fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
+    fn read(&self, _characteristic: &Characteristic) -> Result<Vec<u8>> {
         Ok(vec!())
     }
 }

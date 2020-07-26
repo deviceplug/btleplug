@@ -305,18 +305,14 @@ impl ConnectedAdapter {
 
         match message {
             hci::Message::LEAdvertisingReport(info) => {
-                let mut new = false;
                 let address = info.bdaddr.clone();
-
-                {
-                    let peripheral = Peripheral::new(self.clone(), info.bdaddr);
-                    peripheral.handle_device_message(&hci::Message::LEAdvertisingReport(info));
+                let peripheral = Peripheral::new(self.clone(), info.bdaddr);
+                peripheral.handle_device_message(&hci::Message::LEAdvertisingReport(info));
+                if !self.manager.has_peripheral(&address) {
                     self.manager.add_peripheral(address, peripheral);                    
-                }
-
-                if new {
                     self.emit(CentralEvent::DeviceDiscovered(address.clone()))
                 } else {
+                    self.manager.update_peripheral(address, peripheral);
                     self.emit(CentralEvent::DeviceUpdated(address.clone()))
                 }
             }

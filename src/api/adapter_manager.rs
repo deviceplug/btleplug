@@ -70,8 +70,19 @@ impl<PeripheralType> AdapterManager<PeripheralType> where PeripheralType: Periph
       self.event_receiver.lock().unwrap().take()
   }
 
+  pub fn has_peripheral(&self, addr: &BDAddr) -> bool {
+      self.peripherals.contains_key(addr)
+  }
+
   pub fn add_peripheral(&self, addr: BDAddr, peripheral: PeripheralType) {
+      if self.peripherals.contains_key(&addr) {
+          panic!("Adding a peripheral that's already in the map.");
+      }
       self.peripherals.insert(addr, peripheral);
+  }
+
+  pub fn update_peripheral(&self, addr: BDAddr, peripheral: PeripheralType) {
+
   }
 
   pub fn peripherals(&self) -> Vec<PeripheralType> {

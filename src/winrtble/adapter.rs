@@ -51,8 +51,13 @@ impl Central<Peripheral> for Adapter {
             let address = utils::to_addr(bluetooth_address);
             let peripheral = Peripheral::new(manager.clone(), address);
             peripheral.update_properties(&args);
-            manager.add_peripheral(address, peripheral);
-            manager.emit(CentralEvent::DeviceDiscovered(address));
+            if !manager.has_peripheral(&address) {
+                manager.add_peripheral(address, peripheral);
+                manager.emit(CentralEvent::DeviceDiscovered(address));
+            } else {
+                manager.update_peripheral(address, peripheral);
+                manager.emit(CentralEvent::DeviceUpdated(address));
+            }
         }))
     }
 

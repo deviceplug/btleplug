@@ -17,11 +17,12 @@ mod peripheral;
 use libc;
 use nom;
 use bytes::{BytesMut, BufMut};
+use dashmap::DashMap;
 
 use std::{
     self,
     ffi::CStr,
-    collections::{HashSet, HashMap},
+    collections::HashSet,
     sync::{Arc, Mutex, mpsc::Receiver, atomic::{AtomicBool, Ordering}},
     thread,
 };
@@ -187,7 +188,7 @@ pub struct ConnectedAdapter {
     pub scan_enabled: Arc<AtomicBool>,
     pub active: Arc<AtomicBool>,
     pub filter_duplicates: Arc<AtomicBool>,
-    handle_map: Arc<Mutex<HashMap<u16, BDAddr>>>,
+    handle_map: Arc<DashMap<u16, BDAddr>>,
     manager: AdapterManager<Peripheral>
 }
 
@@ -217,7 +218,7 @@ impl ConnectedAdapter {
             filter_duplicates: Arc::new(AtomicBool::new(false)),
             should_stop,
             scan_enabled: Arc::new(AtomicBool::new(false)),
-            handle_map: Arc::new(Mutex::new(HashMap::new())),
+            handle_map: Arc::new(DashMap::new()),
             manager: AdapterManager::new(),
         };
 
@@ -328,8 +329,7 @@ impl ConnectedAdapter {
                     None => warn!("Got connection for unknown device {}", info.bdaddr)
                 }
 
-                let mut handles = self.handle_map.lock().unwrap();
-                handles.insert(handle, address);
+                self.handle_map.insert(handle, address);
 
                 self.emit(CentralEvent::DeviceConnected(address));
             }
@@ -346,8 +346,7 @@ impl ConnectedAdapter {
                 }
             },
             hci::Message::DisconnectComplete { handle, .. } => {
-                let mut handles = self.handle_map.lock().unwrap();
-                match handles.remove(&handle) {
+                match self.handle_map.remove(&handle) {
                     Some(addr) => {
                         match self.peripheral(addr) {
                             Some(peripheral) => peripheral.handle_device_message(&message),

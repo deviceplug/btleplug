@@ -70,17 +70,21 @@ impl Peripheral {
         let nh_clone = notification_handlers.clone();
         task::spawn(async move {
             loop {
-                match er_clone.next().await.unwrap() {
-                    CBPeripheralEvent::Notification(uuid, data) => {
-                        let mut id = *uuid.as_bytes();
-                        id.reverse();
-                        util::invoke_handlers(&nh_clone, &ValueNotification {
-                            uuid: UUID::B128(id),
-                            handle: None,
-                            value: data,
-                        });
-                    },
-                    _ => error!("Unhandled CBPeripheralEvent"),
+                let event = er_clone.next().await;
+                if event.is_none() {
+                    error!("Event receiver died, breaking out of corebluetooth device loop.");
+                    break;
+                }
+                if let Some(CBPeripheralEvent::Notification(uuid, data)) = event {
+                    let mut id = *uuid.as_bytes();
+                    id.reverse();
+                    util::invoke_handlers(&nh_clone, &ValueNotification {
+                        uuid: UUID::B128(id),
+                        handle: None,
+                        value: data,
+                    });
+                } else {
+                    error!("Unhandled CBPeripheralEvent");
                 }
             }
         });

@@ -38,8 +38,8 @@ pub fn main() {
 
     // start scanning for devices
     central.start_scan().unwrap();
-    // instead of waiting, you can use central.on_event to be notified of
-    // new devices
+    // instead of waiting, you can use central.event_receiver() to get a channel
+    // to listen for notifications on.
     thread::sleep(Duration::from_secs(2));
 
     // find the device we're interested in

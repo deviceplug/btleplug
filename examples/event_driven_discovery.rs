@@ -1,20 +1,13 @@
 extern crate btleplug;
 extern crate rand;
 
-use async_std::{
-    prelude::{FutureExt, StreamExt},
-    sync::{channel, Receiver},
-    task,
-};
-use btleplug::api::{Central, CentralEvent, Peripheral};
+use btleplug::api::{Central, CentralEvent};
 #[cfg(target_os = "linux")]
 use btleplug::bluez::{adapter::ConnectedAdapter, manager::Manager};
 #[cfg(target_os = "macos")]
 use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
 #[cfg(target_os = "windows")]
 use btleplug::winrtble::{adapter::Adapter, manager::Manager};
-use std::thread;
-use std::time::Duration;
 
 // adapter retrieval works differently depending on your platform right now.
 // API needs to be aligned.
@@ -39,49 +32,35 @@ pub fn main() {
     // connect to the adapter
     let central = get_central(&manager);
 
+    // Each adapter can only have one event receiver. We fetch it via
+    // event_receiver(), which will return an option. The first time the getter
+    // is called, it will return Some(Receiver<CentralEvent>). After that, it
+    // will only return None.
+    //
+    // While this API is awkward, is is done as not to disrupt the adapter
+    // retrieval system in btleplug v0.x while still allowing us to use event
+    // streams/channels instead of callbacks. In btleplug v1.x, we'll retrieve
+    // channels as part of adapter construction.
+    let event_receiver = central.event_receiver().unwrap();
+
     // start scanning for devices
     central.start_scan().unwrap();
-    // instead of waiting, you can use central.on_event to be notified of
-    // new devices
 
-    let (event_sender, event_receiver) = channel(256);
-    // Add ourselves to the central event handler output now, so we don't
-    // have to carry around the Central object. We'll be using this in
-    // connect anyways.
-    let on_event = move |event: CentralEvent| match event {
-        CentralEvent::DeviceDiscovered(bd_addr) => {
-            println!("DeviceDiscovered: {:?}", bd_addr);
-            let s = event_sender.clone();
-            let e = event.clone();
-            task::spawn(async move {
-                s.send(e).await;
-            });
+    // Print based on whatever the event receiver outputs. Note that the event
+    // receiver blocks, so in a real program, this should be run in its own
+    // thread (not task, as this library does not yet use async channels).
+    while let Ok(event) = event_receiver.recv() {
+        match event {
+            CentralEvent::DeviceDiscovered(bd_addr) => {
+                println!("DeviceDiscovered: {:?}", bd_addr);
+            }
+            CentralEvent::DeviceConnected(bd_addr) => {
+                println!("DeviceConnected: {:?}", bd_addr);
+            }
+            CentralEvent::DeviceDisconnected(bd_addr) => {
+                println!("DeviceDisconnected: {:?}", bd_addr);
+            }
+            _ => {}
         }
-        CentralEvent::DeviceConnected(bd_addr) => {
-            println!("DeviceConnected: {:?}", bd_addr);
-            let s = event_sender.clone();
-            let e = event.clone();
-            task::spawn(async move {
-                s.send(e).await;
-            });
-        }
-        CentralEvent::DeviceDisconnected(bd_addr) => {
-            println!("DeviceDisconnected: {:?}", bd_addr);
-            let s = event_sender.clone();
-            let e = event.clone();
-            task::spawn(async move {
-                s.send(e).await;
-            });
-        }
-        _ => {}
-    };
-
-    central.on_event(Box::new(on_event));
-
-    let mut count = 0;
-    loop {
-        count += 1;
-        println!("Count = {}", count);
-        thread::sleep(Duration::from_secs(1));
     }
 }

@@ -295,6 +295,7 @@ impl CoreBluetoothInternal {
     }
 
     fn on_peripheral_disconnect(&mut self, peripheral_uuid: Uuid) {
+        self.peripherals.remove(&peripheral_uuid);
         self.dispatch_event(CoreBluetoothEvent::DeviceLost(peripheral_uuid));
     }
 

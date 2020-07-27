@@ -15,7 +15,7 @@ use crate::{
     api::{
         AddressType, CentralEvent, BDAddr, PeripheralProperties, CommandCallback,
         NotificationHandler, RequestCallback, UUID, Characteristic, ValueNotification,
-        Peripheral as ApiPeripheral
+        Peripheral as ApiPeripheral, AdapterManager
     },
     common::util,
     Result,
@@ -23,7 +23,7 @@ use crate::{
 };
 use std::{
     fmt::{Debug, Display, Formatter, self},
-    collections::{BTreeSet, HashMap},
+    collections::BTreeSet,
     sync::{Arc, Mutex},
     sync::atomic::{AtomicBool, Ordering},
 };
@@ -31,34 +31,34 @@ use winrt::windows::{
     devices::bluetooth::advertisement::*,
     storage::streams::DataReader,
 };
+use dashmap::DashMap;
 use super::{
     utils,
     ble::device::BLEDevice,
     ble::characteristic::BLECharacteristic,
-    adapter::Adapter,
 };
 
 #[derive(Clone)]
 pub struct Peripheral {
     device: Arc<Mutex<Option<BLEDevice>>>,
-    adapter: Adapter,
+    adapter: AdapterManager<Self>,
     address: BDAddr,
     properties: Arc<Mutex<PeripheralProperties>>,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
     connected: Arc<AtomicBool>,
-    ble_characteristics: Arc<Mutex<HashMap<UUID, BLECharacteristic>>>,
+    ble_characteristics: Arc<DashMap<UUID, BLECharacteristic>>,
     notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
 }
 
 impl Peripheral {
-    pub fn new(adapter: Adapter, address: BDAddr) -> Self {
+    pub fn new(adapter: AdapterManager<Self>, address: BDAddr) -> Self {
         let device = Arc::new(Mutex::new(None));
         let mut properties = PeripheralProperties::default();
         properties.address = address;
         let properties = Arc::new(Mutex::new(properties));
         let characteristics = Arc::new(Mutex::new(BTreeSet::new()));
         let connected = Arc::new(AtomicBool::new(false));
-        let ble_characteristics = Arc::new(Mutex::new(HashMap::new()));
+        let ble_characteristics = Arc::new(DashMap::new());
         let notification_handlers = Arc::new(Mutex::new(Vec::new()));
         Peripheral{ device, adapter, address, properties, characteristics, connected, ble_characteristics, notification_handlers }
     }
@@ -179,14 +179,13 @@ impl ApiPeripheral for Peripheral {
         let device = self.device.lock().unwrap();
         if let Some(ref device) = *device {
             let mut characteristics_result = vec![];
-            let mut ble_characteristics = self.ble_characteristics.lock().unwrap();
             let characteristics = device.discover_characteristics()?;
             for characteristic in characteristics {
                 let uuid = utils::to_uuid(&characteristic.get_uuid().unwrap());
                 let properties = utils::to_char_props(&characteristic.get_characteristic_properties().unwrap());
                 let chara = Characteristic { uuid, start_handle: 0, end_handle: 0, value_handle: 0, properties };
                 characteristics_result.push(chara);
-                ble_characteristics.entry(uuid).or_insert_with(|| {
+                self.ble_characteristics.entry(uuid).or_insert_with(|| {
                     BLECharacteristic::new(characteristic)
                 });
             }
@@ -211,9 +210,8 @@ impl ApiPeripheral for Peripheral {
     /// Sends a command (write without response) to the characteristic. Synchronously returns a
     /// `Result` with an error set if the command was not accepted by the device.
     fn command(&self, _characteristic: &Characteristic, _data: &[u8]) -> Result<()> {
-        let ble_characteristics = self.ble_characteristics.lock().unwrap();
-        if let Some(ble_characteristic) = ble_characteristics.get(&_characteristic.uuid) {
-            return ble_characteristic.write_value(_data);
+        if let Some(ble_characteristic) = self.ble_characteristics.get(&_characteristic.uuid) {
+            ble_characteristic.write_value(_data)
         } else {
             Err(Error::NotSupported("read_by_type".into()))
         }
@@ -246,8 +244,7 @@ impl ApiPeripheral for Peripheral {
     /// Synchronously returns either an error or the device response.
     fn read_by_type(&self, characteristic: &Characteristic,
                     _uuid: UUID) -> Result<Vec<u8>> {
-        let ble_characteristics = self.ble_characteristics.lock().unwrap();
-        if let Some(ble_characteristic) = ble_characteristics.get(&characteristic.uuid) {
+        if let Some(ble_characteristic) = self.ble_characteristics.get(&characteristic.uuid) {
             return ble_characteristic.read_value();
         } else {
             Err(Error::NotSupported("read_by_type".into()))
@@ -257,8 +254,7 @@ impl ApiPeripheral for Peripheral {
     /// Enables either notify or indicate (depending on support) for the specified characteristic.
     /// This is a synchronous call.
     fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
-        let mut ble_characteristics = self.ble_characteristics.lock().unwrap();
-        if let Some(ble_characteristic) = ble_characteristics.get_mut(&characteristic.uuid) {
+        if let Some(mut ble_characteristic) = self.ble_characteristics.get_mut(&characteristic.uuid) {
             let notification_handlers = self.notification_handlers.clone();
             let uuid = characteristic.uuid;
             ble_characteristic.subscribe(Box::new(move |value| {
@@ -273,8 +269,7 @@ impl ApiPeripheral for Peripheral {
     /// Disables either notify or indicate (depending on support) for the specified characteristic.
     /// This is a synchronous call.
     fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
-        let mut ble_characteristics = self.ble_characteristics.lock().unwrap();
-        if let Some(ble_characteristic) = ble_characteristics.get_mut(&characteristic.uuid) {
+        if let Some(mut ble_characteristic) = self.ble_characteristics.get_mut(&characteristic.uuid) {
             ble_characteristic.unsubscribe()
         } else {
             Err(Error::NotSupported("unsubscribe".into()))
@@ -289,10 +284,10 @@ impl ApiPeripheral for Peripheral {
         list.push(handler);
     }
 
-    fn read_async(&self, characteristic: &Characteristic, handler: Option<RequestCallback>) {
+    fn read_async(&self, _characteristic: &Characteristic, _handler: Option<RequestCallback>) {
     }
 
-    fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
+    fn read(&self, _characteristic: &Characteristic) -> Result<Vec<u8>> {
         Ok(vec!())
     }
 }

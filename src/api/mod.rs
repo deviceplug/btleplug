@@ -11,6 +11,10 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
+mod adapter_manager;
+
+pub use adapter_manager::AdapterManager;
+
 use std::{
     fmt::{self, Display, Formatter, Debug},
     str::FromStr,
@@ -23,6 +27,7 @@ use crate::{
     Result,
     api::UUID::{B16, B128}
 };
+use std::sync::mpsc::Receiver;
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -362,14 +367,15 @@ pub enum CentralEvent {
     DeviceDisconnected(BDAddr),
 }
 
-pub type EventHandler = Box<dyn Fn(CentralEvent) + Send>;
-
 /// Central is the "client" of BLE. It's able to scan for and establish connections to peripherals.
 pub trait Central<P : Peripheral>: Send + Sync + Clone {
-    /// Registers a function that will receive notifications when events occur for this Central
-    /// module. See [`Event`](enum.CentralEvent.html) for the full set of events. Note that the
-    /// handler will be called in a common thread, so it should not block.
-    fn on_event(&self, handler: EventHandler);
+    /// Retreive the Event [Receiver] for the event channel. This channel
+    /// receiver will receive notifications when events occur for this Central
+    /// module. As this uses an std::channel which cannot be cloned, after the
+    /// first call (which will contain Some<Receiver<CentralEvent>>), all
+    /// subsequent calls will return None. See [`Event`](enum.CentralEvent.html)
+    /// for the full set of events returned.
+    fn event_receiver(&self) -> Option<Receiver<CentralEvent>>;
 
     /// Starts a scan for BLE devices. This scan will generally continue until explicitly stopped,
     /// although this may depend on your bluetooth adapter. Discovered devices will be announced
@@ -382,7 +388,7 @@ pub trait Central<P : Peripheral>: Send + Sync + Clone {
     fn active(&self, enabled: bool);
 
     /// Control whether to filter multiple advertisements by the same peer device. Receving
-    // can be useful for some applications. E.g. when using scan to collect information from
+    /// can be useful for some applications. E.g. when using scan to collect information from
     /// beacons that update data frequently. Defaults to filter duplicate advertisements.
     fn filter_duplicates(&self, enabled: bool);
 

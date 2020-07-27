@@ -13,7 +13,7 @@
 
 use crate::{
     api::{
-        Central, CentralEvent, EventHandler, BDAddr
+        Central, CentralEvent, BDAddr, AdapterManager
     },
     Result
 };
@@ -22,55 +22,42 @@ use super::{
     ble::watcher::BLEWatcher,
     utils,
 };
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::sync::{mpsc::Receiver, Arc, Mutex};
 
 #[derive(Clone)]
 pub struct Adapter {
     watcher: Arc<Mutex<BLEWatcher>>,
-    peripherals: Arc<Mutex<HashMap<BDAddr, Peripheral>>>,
-    event_handlers: Arc<Mutex<Vec<EventHandler>>>,
+    manager: AdapterManager<Peripheral>
 }
 
 impl Adapter {
     pub fn new() -> Self {
         let watcher = Arc::new(Mutex::new(BLEWatcher::new()));
-        let peripherals = Arc::new(Mutex::new(HashMap::new()));
-        let event_handlers = Arc::new(Mutex::new(Vec::new()));
-        Adapter { watcher, peripherals, event_handlers }
-    }
-
-    pub fn emit(&self, event: CentralEvent) {
-        debug!("emitted {:?}", event);
-        let handlers = self.event_handlers.clone();
-        let vec = handlers.lock().unwrap();
-        for handler in (*vec).iter() {
-            handler(event.clone());
-        }
+        let manager = AdapterManager::<Peripheral>::new();
+        Adapter { watcher, manager }
     }
 }
 
 impl Central<Peripheral> for Adapter {
-    fn on_event(&self, handler: EventHandler) {
-        let list = self.event_handlers.clone();
-        list.lock().unwrap().push(handler);
+    fn event_receiver(&self) -> Option<Receiver<CentralEvent>> {
+        self.manager.event_receiver()
     }
 
     fn start_scan(&self) -> Result<()> {
-        let peripherals = self.peripherals.clone();
         let watcher = self.watcher.lock().unwrap();
-        let adapter = self.clone();
+        let manager = self.manager.clone();
         watcher.start(Box::new(move |args| {
             let bluetooth_address = args.get_bluetooth_address().unwrap();
             let address = utils::to_addr(bluetooth_address);
-            let mut peripherals = peripherals.lock().unwrap();
-            let peripheral = peripherals.entry(address).or_insert_with(|| {
-                Peripheral::new(adapter.clone(), address)
-            });
+            let peripheral = Peripheral::new(manager.clone(), address);
             peripheral.update_properties(&args);
-            adapter.emit(CentralEvent::DeviceDiscovered(address));
+            if !manager.has_peripheral(&address) {
+                manager.add_peripheral(address, peripheral);
+                manager.emit(CentralEvent::DeviceDiscovered(address));
+            } else {
+                manager.update_peripheral(address, peripheral);
+                manager.emit(CentralEvent::DeviceUpdated(address));
+            }
         }))
     }
 
@@ -81,18 +68,16 @@ impl Central<Peripheral> for Adapter {
     }
 
     fn peripherals(&self) -> Vec<Peripheral> {
-        let l = self.peripherals.lock().unwrap();
-        l.values().cloned().collect()
+        self.manager.peripherals()
     }
 
     fn peripheral(&self, address: BDAddr) -> Option<Peripheral> {
-        let l = self.peripherals.lock().unwrap();
-        l.get(&address).cloned()
+        self.manager.peripheral(address)
     }
 
-    fn active(&self, enabled: bool) {
+    fn active(&self, _enabled: bool) {
     }
 
-    fn filter_duplicates(&self, enabled: bool) {
+    fn filter_duplicates(&self, _enabled: bool) {
     }
 }

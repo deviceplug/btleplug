@@ -38,7 +38,7 @@ impl BLECharacteristic {
 
     pub fn write_value(&self, data: &[u8]) -> Result<()> {
         let writer = DataWriter::new();
-        writer.write_bytes(data);
+        writer.write_bytes(data).unwrap();
         let buffer = writer.detach_buffer().unwrap().unwrap();
         let result = self.characteristic.write_value_async(&buffer).unwrap().blocking_get().unwrap();
         if result == GattCommunicationStatus::Success {
@@ -64,7 +64,7 @@ impl BLECharacteristic {
 
     pub fn subscribe(&mut self, on_value_changed: NotifiyEventHandler) -> Result<()> {
         let value_handler = TypedEventHandler::new(move |_: *mut GattCharacteristic, args: *mut GattValueChangedEventArgs| {
-            let args = unsafe { (&*args) };
+            let args = unsafe { &*args };
             let value = args.get_characteristic_value().unwrap().unwrap();
             let reader = DataReader::from_buffer(&value).unwrap().unwrap();
             let len = reader.get_unconsumed_buffer_length().unwrap() as usize;

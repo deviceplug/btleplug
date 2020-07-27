@@ -1,3 +1,17 @@
+# 0.5.0 (2020-07-26)
+
+## Features
+
+* Moved events from callbacks to channels (currently using std::channel, will
+  change to future::Stream once we go async).
+* Moved from using Arc<Mutex<HashMap<K,V>>> to Arc<DashMap<K,V>>. Slightly
+  cleaner, less locking boilerplate.
+
+## Bugfixes
+
+* Centralized peripheral management into the AdapterManager class, which should
+  clean up a bunch of bugs both filed and not.
+
 # 0.4.4 (2020-07-22)
 
 ## Bugfixes

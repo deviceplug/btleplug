@@ -1,6 +1,6 @@
 [package]
 name = "btleplug"
-version = "0.4.4"
+version = "0.5.0"
 authors = ["Nonpolynomial <kyle@nonpolynomial.com>"]
 license = "MIT/Apache-2.0/BSD-3-Clause"
 repository = "https://github.com/deviceplug/btleplug"
@@ -34,6 +34,7 @@ backtrace = "0.3.50"
 async-std = { version = "1.6.2", features = ["unstable"] }
 uuid = "0.8.1"
 serde = { version = "1.0.114", features = ["derive"], default-features = false, optional = true }
+dashmap = "3.11.7"
 
 [dependencies.nom]
 version = "^4"

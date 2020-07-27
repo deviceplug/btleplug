@@ -19,6 +19,8 @@ use super::adapter::Adapter;
 #[allow(unused_imports)]
 use crate::{Result, Error};
 
+
+#[derive(Debug)]
 pub struct Manager {
 }
 

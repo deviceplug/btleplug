@@ -94,17 +94,9 @@ Beyond that, some of our other goals are:
 
 ## Platform Status
 
-- **Linux**
+- **Linux / Windows / macOS**
   - Device enumeration and characteristic/services implemented, works
-    ok enough.
-  - Please file bugs and missing features if you find them.
-- **Windows**
-  - Device enumeration and some characteristic/service functions
-    implemented. Usable but definitely missing functionality.
-  - Please file bugs and missing features if you find them.
-- **MacOS**
-  - Device enumeration and characteristic/services implemented, works
-    ok enough.
+    ok.
   - Please file bugs and missing features if you find them.
 - **iOS**
   - Trying to figure out if the macOS implementation will translate,

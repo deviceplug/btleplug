@@ -369,10 +369,12 @@ pub enum CentralEvent {
 
 /// Central is the "client" of BLE. It's able to scan for and establish connections to peripherals.
 pub trait Central<P : Peripheral>: Send + Sync + Clone {
-    /// Retreive a Clone of the Event [Receiver] for the event channel. This
-    /// channel receiver will receive notifications when events occur for this
-    /// Central module. See [`Event`](enum.CentralEvent.html) for the full set
-    /// of events.
+    /// Retreive the Event [Receiver] for the event channel. This channel
+    /// receiver will receive notifications when events occur for this Central
+    /// module. As this uses an std::channel which cannot be cloned, after the
+    /// first call (which will contain Some<Receiver<CentralEvent>>), all
+    /// subsequent calls will return None. See [`Event`](enum.CentralEvent.html)
+    /// for the full set of events returned.
     fn event_receiver(&self) -> Option<Receiver<CentralEvent>>;
 
     /// Starts a scan for BLE devices. This scan will generally continue until explicitly stopped,

@@ -257,7 +257,7 @@ bitflags! {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum LEAdvertisingData {
     Flags(AdvertisingFlags),
     ServiceClassUUID16(u16),
@@ -274,7 +274,7 @@ pub enum LEAdvertisingData {
     ManufacturerSpecific(Vec<u8>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct LEAdvertisingInfo {
     pub evt_type: u8,
     pub bdaddr_type: u8,

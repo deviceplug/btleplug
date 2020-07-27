@@ -180,7 +180,7 @@ impl AdapterState {
 }
 
 /// The [`Central`](../../api/trait.Central.html) implementation for BlueZ.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ConnectedAdapter {
     pub adapter: Adapter,
     adapter_fd: i32,
@@ -307,9 +307,11 @@ impl ConnectedAdapter {
         match message {
             hci::Message::LEAdvertisingReport(info) => {
                 let address = info.bdaddr.clone();
+                let info_clone = info.clone();
                 let peripheral = Peripheral::new(self.clone(), info.bdaddr);
                 peripheral.handle_device_message(&hci::Message::LEAdvertisingReport(info));
                 if !self.manager.has_peripheral(&address) {
+                    warn!("{:?}", info_clone);
                     self.manager.add_peripheral(address, peripheral);                    
                     self.emit(CentralEvent::DeviceDiscovered(address.clone()))
                 } else {

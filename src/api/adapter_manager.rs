@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex};
 use dashmap::DashMap;
 use std::sync::mpsc::{channel, Sender, Receiver};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct AdapterManager<PeripheralType> where PeripheralType: Peripheral {
   peripherals: Arc<DashMap<BDAddr, PeripheralType>>,
 
@@ -43,7 +43,7 @@ pub struct AdapterManager<PeripheralType> where PeripheralType: Peripheral {
   event_receiver: Arc<Mutex<Option<Receiver<CentralEvent>>>>
 }
 
-impl<PeripheralType> AdapterManager<PeripheralType> where PeripheralType: Peripheral {
+impl<PeripheralType> AdapterManager<PeripheralType> where PeripheralType: Peripheral + 'static {
   pub fn new() -> Self {
       let peripherals = Arc::new(DashMap::new());
       let (event_sender, event_receiver) = channel();

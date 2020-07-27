@@ -23,7 +23,7 @@ use std::{
     self,
     ffi::CStr,
     collections::HashSet,
-    sync::{Arc, Mutex, mpsc::Receiver, atomic::{AtomicBool, Ordering}},
+    sync::{Arc, mpsc::Receiver, atomic::{AtomicBool, Ordering}},
     thread,
 };
 
@@ -350,11 +350,11 @@ impl ConnectedAdapter {
             hci::Message::DisconnectComplete { handle, .. } => {
                 match self.handle_map.remove(&handle) {
                     Some(addr) => {
-                        match self.peripheral(addr) {
+                        match self.peripheral(addr.1) {
                             Some(peripheral) => peripheral.handle_device_message(&message),
-                            None => warn!("got disconnect for unknown device {}", addr),
+                            None => warn!("got disconnect for unknown device {}", addr.1),
                         };
-                        self.emit(CentralEvent::DeviceDisconnected(addr));
+                        self.emit(CentralEvent::DeviceDisconnected(addr.1));
                     }
                     None => {
                         warn!("got disconnect for unknown handle {}", handle);

@@ -81,7 +81,7 @@ impl<PeripheralType> AdapterManager<PeripheralType> where PeripheralType: Periph
       self.peripherals.insert(addr, peripheral);
   }
 
-  pub fn update_peripheral(&self, addr: BDAddr, peripheral: PeripheralType) {
+  pub fn update_peripheral(&self, _addr: BDAddr, _peripheral: PeripheralType) {
 
   }
 

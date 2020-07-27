@@ -169,7 +169,7 @@ impl ACLStream {
             ConfirmIndication => {
                 debug!("confirming indication to {}", self.fd);
 
-                self.write_socket(&mut [ATT_OP_CONFIRM_INDICATION], true, receiver);
+                self.write_socket(&mut [ATT_OP_CONFIRM_INDICATION], true, receiver)?;
             },
             Data(ref value) => {
                 debug!("Received data {:?}", value);

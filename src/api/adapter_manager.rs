@@ -75,14 +75,21 @@ impl<PeripheralType> AdapterManager<PeripheralType> where PeripheralType: Periph
   }
 
   pub fn add_peripheral(&self, addr: BDAddr, peripheral: PeripheralType) {
-      if self.peripherals.contains_key(&addr) {
-          panic!("Adding a peripheral that's already in the map.");
-      }
+      assert!(!self.peripherals.contains_key(&addr), "Adding a peripheral that's already in the map.");
+      assert_eq!(peripheral.address(), addr, "Device has unexpected address."); // TODO remove addr argument
       self.peripherals.insert(addr, peripheral);
   }
 
-  pub fn update_peripheral(&self, _addr: BDAddr, _peripheral: PeripheralType) {
-
+  pub fn update_peripheral(&self, addr: BDAddr, peripheral: PeripheralType) {
+      // FIXME: this function is too easy to use incorrectly.
+      // when you get a peripheral from self.peripheral() you can forget to call update_peripheral easily.
+      // and when you do, there is no guarantee that it hasn't been updated by someone else, causing changes
+      // to be lost.
+      // one way to fix it is to make this function work more similarly to (and/or use) DashMap::alter.
+      // also, firing of events (self.emit) should probably be done here, instead of in peripheral impls.
+      assert!(self.peripherals.contains_key(&addr), "Updating a peripheral that's not in the map.");
+      assert_eq!(peripheral.address(), addr, "Device has unexpected address."); // TODO remove addr argument
+      self.peripherals.insert(addr, peripheral);
   }
 
   pub fn peripherals(&self) -> Vec<PeripheralType> {

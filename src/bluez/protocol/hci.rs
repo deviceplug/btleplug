@@ -563,7 +563,11 @@ fn le_advertising_data(i: &[u8]) -> IResult<&[u8], Vec<LEAdvertisingData>> {
 named!(le_advertising_info<&[u8], LEAdvertisingInfo>,
     do_parse!(
        // TODO: support counts other than 1
-       _count: le_u8 >>
+       // note that if count > 1, *every individual field* is an array of that many items.
+       // we'd then have to piece that back together into separate events.
+       // but, hopefully this less-than-reasonable layout guarantees that no hardware actually uses count > 1.
+       // see https://stackoverflow.com/questions/26275679/ble-hci-le-advertising-report-event-data-format
+       _count: verify!(le_u8, |c| c == 1) >>
        evt_type: le_u8 >>
        bdaddr_type: le_u8 >>
        bdaddr: bd_addr >>

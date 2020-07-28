@@ -308,11 +308,15 @@ impl ConnectedAdapter {
             hci::Message::LEAdvertisingReport(info) => {
                 let address = info.bdaddr.clone();
                 let info_clone = info.clone();
-                let peripheral = Peripheral::new(self.clone(), info.bdaddr);
+                // FIXME this is confusing, it appears we are getting an *owned* Peripheral here
+                // but in fact because most of its members are wrapped in an Arc it ends up
+                // actually sharing most of its state with the original object...
+                let peripheral = self.manager.peripheral(info.bdaddr)
+                    .unwrap_or_else(|| Peripheral::new(self.clone(), info.bdaddr));
                 peripheral.handle_device_message(&hci::Message::LEAdvertisingReport(info));
                 if !self.manager.has_peripheral(&address) {
                     warn!("{:?}", info_clone);
-                    self.manager.add_peripheral(address, peripheral);                    
+                    self.manager.add_peripheral(address, peripheral);
                     self.emit(CentralEvent::DeviceDiscovered(address.clone()))
                 } else {
                     self.manager.update_peripheral(address, peripheral);

@@ -4,7 +4,10 @@
 [![Crates.io Downloads](https://img.shields.io/crates/d/btleplug)](https://crates.io/crates/btleplug)
 [![Crates.io License](https://img.shields.io/crates/l/btleplug)](https://crates.io/crates/btleplug)
 
+[![Discord](https://img.shields.io/discord/353303527587708932.svg?logo=discord)](https://discord.gg/QGhMFzR)
+
 [![Github donate button](https://img.shields.io/badge/github-donate-ff69b4.svg)](https://www.github.com/sponsors/qdot)
+
 
 btleplug is a Rust BLE library, support Windows 10, macOS, Linux, and
 possibly iOS. It is currently made up of parts of other abandoned

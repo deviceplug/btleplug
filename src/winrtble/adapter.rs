@@ -49,7 +49,7 @@ impl Central<Peripheral> for Adapter {
         watcher.start(Box::new(move |args| {
             let bluetooth_address = args.get_bluetooth_address().unwrap();
             let address = utils::to_addr(bluetooth_address);
-            let peripheral = self.manager.peripheral(address)
+            let peripheral = manager.peripheral(address)
                 .unwrap_or_else(|| Peripheral::new(manager.clone(), address));
             peripheral.update_properties(&args);
             if !manager.has_peripheral(&address) {

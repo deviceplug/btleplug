@@ -89,7 +89,17 @@ impl<PeripheralType> AdapterManager<PeripheralType> where PeripheralType: Periph
       // also, firing of events (self.emit) should probably be done here, instead of in peripheral impls.
       assert!(self.peripherals.contains_key(&addr), "Updating a peripheral that's not in the map.");
       assert_eq!(peripheral.address(), addr, "Device has unexpected address."); // TODO remove addr argument
-      self.peripherals.insert(addr, peripheral);
+      // We already have this peripheral in the map, so there's no need to readd it.
+      let current_peripheral = self.peripherals.get_mut(&addr).unwrap();
+      // Update name if it's none.
+      if peripheral.properties().local_name.is_some() && current_peripheral.properties().local_name.is_none() {
+        current_peripheral.properties().local_name = peripheral.properties().local_name;
+      }
+      if peripheral.properties().manufacturer_data.is_some() && current_peripheral.properties().manufacturer_data.is_none() {
+        current_peripheral.properties().manufacturer_data = peripheral.properties().manufacturer_data;
+      }
+      // Update RSSI
+      current_peripheral.properties().tx_power_level = peripheral.properties().tx_power_level;
   }
 
   pub fn peripherals(&self) -> Vec<PeripheralType> {

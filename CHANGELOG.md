@@ -1,3 +1,11 @@
+# 0.5.1 (2020-08-03)
+
+## Bugfixes
+
+* Fixed issue with peripheral updates in adapter manager wiping out peripherals
+  completely (#64)
+* Ran rustfmt (misformatted code is a bug ok?)
+
 # 0.5.0 (2020-07-26)
 
 ## Features

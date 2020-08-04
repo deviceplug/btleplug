@@ -11,6 +11,6 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-pub mod watcher;
-pub mod device;
 pub mod characteristic;
+pub mod device;
+pub mod watcher;

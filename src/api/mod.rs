@@ -15,19 +15,19 @@ mod adapter_manager;
 
 pub use adapter_manager::AdapterManager;
 
-use std::{
-    fmt::{self, Display, Formatter, Debug},
-    str::FromStr,
-    convert::TryFrom,
-    collections::BTreeSet,
+use crate::{
+    api::UUID::{B128, B16},
+    Result,
 };
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use crate::{
-    Result,
-    api::UUID::{B16, B128}
-};
 use std::sync::mpsc::Receiver;
+use std::{
+    collections::BTreeSet,
+    convert::TryFrom,
+    fmt::{self, Debug, Display, Formatter},
+    str::FromStr,
+};
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -37,7 +37,9 @@ pub enum AddressType {
 }
 
 impl Default for AddressType {
-    fn default() -> Self { AddressType::Public }
+    fn default() -> Self {
+        AddressType::Public
+    }
 }
 
 impl AddressType {
@@ -52,7 +54,7 @@ impl AddressType {
     pub fn num(&self) -> u8 {
         match *self {
             AddressType::Public => 1,
-            AddressType::Random => 2
+            AddressType::Random => 2,
         }
     }
 }
@@ -62,14 +64,17 @@ impl AddressType {
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Default)]
 #[repr(C)]
 pub struct BDAddr {
-    pub address: [ u8 ; 6usize ]
+    pub address: [u8; 6usize],
 }
 
 impl Display for BDAddr {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let a = self.address;
-        write!(f, "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-               a[5], a[4], a[3], a[2], a[1], a[0])
+        write!(
+            f,
+            "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+            a[5], a[4], a[3], a[2], a[1], a[0]
+        )
     }
 }
 
@@ -93,15 +98,16 @@ impl FromStr for BDAddr {
     type Err = ParseBDAddrError;
 
     fn from_str(s: &str) -> ParseBDAddrResult<Self> {
-        let bytes = s.split(':').map(|part: &str| {
-            u8::from_str_radix(part, 16).map_err(|_| ParseBDAddrError::InvalidInt)
-        }).collect::<ParseBDAddrResult<Vec<u8>>>()?;
+        let bytes = s
+            .split(':')
+            .map(|part: &str| {
+                u8::from_str_radix(part, 16).map_err(|_| ParseBDAddrError::InvalidInt)
+            })
+            .collect::<ParseBDAddrResult<Vec<u8>>>()?;
 
         if let Ok(mut address) = <[u8; 6]>::try_from(bytes.as_slice()) {
             address.reverse();
-            Ok(BDAddr {
-                address
-            })
+            Ok(BDAddr { address })
         } else {
             Err(ParseBDAddrError::IncorrectByteCount)
         }
@@ -178,9 +184,10 @@ impl FromStr for UUID {
     type Err = ParseUUIDError;
 
     fn from_str(s: &str) -> ParseUUIDResult<Self> {
-        let bytes = s.split(':').map(|part: &str| {
-            u8::from_str_radix(part, 16).map_err(|_| ParseUUIDError::InvalidInt)
-        }).collect::<ParseUUIDResult<Vec<u8>>>()?;
+        let bytes = s
+            .split(':')
+            .map(|part: &str| u8::from_str_radix(part, 16).map_err(|_| ParseUUIDError::InvalidInt))
+            .collect::<ParseUUIDResult<Vec<u8>>>()?;
 
         if let Ok(bytes) = <[u8; 2]>::try_from(bytes.as_slice()) {
             Ok(UUID::B16(u16::from_be_bytes(bytes)))
@@ -209,9 +216,7 @@ bitflags! {
 
 impl CharPropFlags {
     pub fn new() -> Self {
-        Self {
-            bits: 0
-        }
+        Self { bits: 0 }
     }
 }
 
@@ -244,8 +249,11 @@ pub struct Characteristic {
 
 impl Display for Characteristic {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "uuid: {:?}, char properties: {:?}",
-               self.properties, self.uuid)
+        write!(
+            f,
+            "uuid: {:?}, char properties: {:?}",
+            self.properties, self.uuid
+        )
     }
 }
 
@@ -300,12 +308,21 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
 
     /// Discovers characteristics within the specified range of handles. This is a synchronous
     /// operation.
-    fn discover_characteristics_in_range(&self, start: u16, end: u16) -> Result<Vec<Characteristic>>;
+    fn discover_characteristics_in_range(
+        &self,
+        start: u16,
+        end: u16,
+    ) -> Result<Vec<Characteristic>>;
 
     /// Sends a command (`write-without-response`) to the characteristic. Takes an optional callback
     /// that will be notified in case of error or when the command has been successfully acked by the
     /// device.
-    fn command_async(&self, characteristic: &Characteristic, data: &[u8], handler: Option<CommandCallback>);
+    fn command_async(
+        &self,
+        characteristic: &Characteristic,
+        data: &[u8],
+        handler: Option<CommandCallback>,
+    );
 
     /// Sends a command (write without response) to the characteristic. Synchronously returns a
     /// `Result` with an error set if the command was not accepted by the device.
@@ -313,13 +330,16 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
 
     /// Sends a request (write) to the device. Takes an optional callback with either an error if
     /// the request was not accepted or the response from the device.
-    fn request_async(&self, characteristic: &Characteristic,
-                     data: &[u8], handler: Option<RequestCallback>);
+    fn request_async(
+        &self,
+        characteristic: &Characteristic,
+        data: &[u8],
+        handler: Option<RequestCallback>,
+    );
 
     /// Sends a request (write) to the device. Synchronously returns either an error if the request
     /// was not accepted or the response from the device.
-    fn request(&self, characteristic: &Characteristic,
-               data: &[u8]) -> Result<Vec<u8>>;
+    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<Vec<u8>>;
 
     /// Sends a request (read) to the device. Takes an optional callback with either an error if
     /// the request was not accepted or the response from the device.
@@ -333,15 +353,18 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     /// characteristic and for the specified declaration UUID. See
     /// [here](https://www.bluetooth.com/specifications/gatt/declarations) for valid UUIDs.
     /// Takes an optional callback that will be called with an error or the device response.
-    fn read_by_type_async(&self, characteristic: &Characteristic,
-                          uuid: UUID, handler: Option<RequestCallback>);
+    fn read_by_type_async(
+        &self,
+        characteristic: &Characteristic,
+        uuid: UUID,
+        handler: Option<RequestCallback>,
+    );
 
     /// Sends a read-by-type request to device for the range of handles covered by the
     /// characteristic and for the specified declaration UUID. See
     /// [here](https://www.bluetooth.com/specifications/gatt/declarations) for valid UUIDs.
     /// Synchronously returns either an error or the device response.
-    fn read_by_type(&self, characteristic: &Characteristic,
-                    uuid: UUID) -> Result<Vec<u8>>;
+    fn read_by_type(&self, characteristic: &Characteristic, uuid: UUID) -> Result<Vec<u8>>;
 
     /// Enables either notify or indicate (depending on support) for the specified characteristic.
     /// This is a synchronous call.
@@ -368,7 +391,7 @@ pub enum CentralEvent {
 }
 
 /// Central is the "client" of BLE. It's able to scan for and establish connections to peripherals.
-pub trait Central<P : Peripheral>: Send + Sync + Clone {
+pub trait Central<P: Peripheral>: Send + Sync + Clone {
     /// Retreive the Event [Receiver] for the event channel. This channel
     /// receiver will receive notifications when events occur for this Central
     /// module. As this uses an std::channel which cannot be cloned, after the
@@ -412,9 +435,13 @@ mod tests {
     fn parse_uuid() {
         let values = vec![
             ("2A:00", Ok(UUID::B16(0x2A00))),
-            ("00:00:15:32:12:12:EF:DE:15:23:78:5F:EA:BC:D1:23", Ok(UUID::B128([
-                0x23, 0xD1, 0xBC, 0xEA, 0x5F, 0x78, 0x23, 0x15, 0xDE, 0xEF, 0x12, 0x12, 0x32, 0x15, 0x00, 0x00
-            ]))),
+            (
+                "00:00:15:32:12:12:EF:DE:15:23:78:5F:EA:BC:D1:23",
+                Ok(UUID::B128([
+                    0x23, 0xD1, 0xBC, 0xEA, 0x5F, 0x78, 0x23, 0x15, 0xDE, 0xEF, 0x12, 0x12, 0x32,
+                    0x15, 0x00, 0x00,
+                ])),
+            ),
             ("2A:00:00", Err(ParseUUIDError::IncorrectByteCount)),
             ("2A:100", Err(ParseUUIDError::InvalidInt)),
             ("ZZ:00", Err(ParseUUIDError::InvalidInt)),
@@ -433,7 +460,12 @@ mod tests {
     #[test]
     fn parse_addr() {
         let values = vec![
-            ("2A:00:AA:BB:CC:DD", Ok(BDAddr{address: [0xDD, 0xCC, 0xBB, 0xAA, 0x00, 0x2A]})),
+            (
+                "2A:00:AA:BB:CC:DD",
+                Ok(BDAddr {
+                    address: [0xDD, 0xCC, 0xBB, 0xAA, 0x00, 0x2A],
+                }),
+            ),
             ("2A:00:00", Err(ParseBDAddrError::IncorrectByteCount)),
             ("2A:00:AA:BB:CC:ZZ", Err(ParseBDAddrError::InvalidInt)),
         ];

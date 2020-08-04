@@ -11,18 +11,16 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use winrt::{
-    RtAsyncOperation,
-    windows::devices::radios::{Radio, RadioKind},
-};
 use super::adapter::Adapter;
 #[allow(unused_imports)]
-use crate::{Result, Error};
-
+use crate::{Error, Result};
+use winrt::{
+    windows::devices::radios::{Radio, RadioKind},
+    RtAsyncOperation,
+};
 
 #[derive(Debug)]
-pub struct Manager {
-}
+pub struct Manager {}
 
 impl Manager {
     pub fn new() -> Result<Self> {
@@ -31,7 +29,11 @@ impl Manager {
 
     pub fn adapters(&self) -> Result<Vec<Adapter>> {
         let mut result: Vec<Adapter> = vec![];
-        let radios = Radio::get_radios_async().unwrap().blocking_get().unwrap().unwrap();
+        let radios = Radio::get_radios_async()
+            .unwrap()
+            .blocking_get()
+            .unwrap()
+            .unwrap();
 
         for radio in &radios {
             if let Some(radio) = radio {
@@ -43,6 +45,6 @@ impl Manager {
                 }
             }
         }
-        return Ok(result); 
+        return Ok(result);
     }
 }

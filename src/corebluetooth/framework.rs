@@ -18,12 +18,10 @@
 
 use std::os::raw::{c_char, c_int, c_uint};
 
-use objc::runtime::{BOOL, Class, Object};
-
+use objc::runtime::{Class, Object, BOOL};
 
 #[allow(non_upper_case_globals)]
 pub const nil: *mut Object = 0 as *mut Object;
-
 
 pub mod ns {
     use super::*;
@@ -41,14 +39,18 @@ pub mod ns {
 
     pub fn number_withbool(value: BOOL) -> *mut Object {
         unsafe {
-            let nsnumber: *mut Object = msg_send![Class::get("NSNumber").unwrap(), numberWithBool:value];
+            let nsnumber: *mut Object =
+                msg_send![Class::get("NSNumber").unwrap(), numberWithBool: value];
             nsnumber
         }
     }
 
     pub fn number_withunsignedlonglong(value: u64) -> *mut Object {
         unsafe {
-            let nsnumber: *mut Object = msg_send![Class::get("NSNumber").unwrap(), numberWithUnsignedLongLong:value];
+            let nsnumber: *mut Object = msg_send![
+                Class::get("NSNumber").unwrap(),
+                numberWithUnsignedLongLong: value
+            ];
             nsnumber
         }
     }
@@ -64,7 +66,10 @@ pub mod ns {
 
     pub fn string(cstring: *const c_char) -> *mut Object /* NSString* */ {
         unsafe {
-            let nsstring: *mut Object = msg_send![Class::get("NSString").unwrap(), stringWithUTF8String:cstring];
+            let nsstring: *mut Object = msg_send![
+                Class::get("NSString").unwrap(),
+                stringWithUTF8String: cstring
+            ];
             nsstring
         }
     }
@@ -87,7 +92,7 @@ pub mod ns {
 
     pub fn array_objectatindex(nsarray: *mut Object, index: c_uint) -> *mut Object {
         unsafe {
-            let object: *mut Object = msg_send![nsarray, objectAtIndex:index];
+            let object: *mut Object = msg_send![nsarray, objectAtIndex: index];
             object
         }
     }
@@ -103,7 +108,7 @@ pub mod ns {
 
     pub fn dictionary_objectforkey(nsdict: *mut Object, key: *mut Object) -> *mut Object {
         unsafe {
-            let object: *mut Object = msg_send![nsdict, objectForKey:key];
+            let object: *mut Object = msg_send![nsdict, objectForKey: key];
             object
         }
     }
@@ -112,18 +117,23 @@ pub mod ns {
 
     pub fn mutabledictionary() -> *mut Object {
         unsafe {
-            let nsmutdict: *mut Object = msg_send![Class::get("NSMutableDictionary").unwrap(), dictionaryWithCapacity:0];
+            let nsmutdict: *mut Object =
+                msg_send![Class::get("NSMutableDictionary").unwrap(), dictionaryWithCapacity:0];
             nsmutdict
         }
     }
 
     pub fn mutabledictionary_removeobjectforkey(nsmutdict: *mut Object, key: *mut Object) {
         unsafe {
-            let _: () = msg_send![nsmutdict, removeObjectForKey:key];
+            let _: () = msg_send![nsmutdict, removeObjectForKey: key];
         }
     }
 
-    pub fn mutabledictionary_setobject_forkey(nsmutdict: *mut Object, object: *mut Object, key: *mut Object) {
+    pub fn mutabledictionary_setobject_forkey(
+        nsmutdict: *mut Object,
+        object: *mut Object,
+        key: *mut Object,
+    ) {
         unsafe {
             let _: () = msg_send![nsmutdict, setObject:object forKey:key];
         }
@@ -133,7 +143,8 @@ pub mod ns {
 
     pub fn data(bytes: *const u8, length: c_uint) -> *mut Object /* NSData* */ {
         unsafe {
-            let data: *mut Object = msg_send![Class::get("NSData").unwrap(), dataWithBytes:bytes length:length];
+            let data: *mut Object =
+                msg_send![Class::get("NSData").unwrap(), dataWithBytes:bytes length:length];
             data
         }
     }
@@ -162,12 +173,11 @@ pub mod ns {
     }
 }
 
-
 pub mod io {
     use super::*;
 
     #[link(name = "IOBluetooth", kind = "framework")]
-    extern {
+    extern "C" {
         pub fn IOBluetoothPreferenceGetControllerPowerState() -> c_int;
         pub fn IOBluetoothPreferenceSetControllerPowerState(state: c_int);
 
@@ -177,21 +187,27 @@ pub mod io {
 
     // IOBluetoothHostController
 
-    pub fn bluetoothhostcontroller_defaultcontroller() -> *mut Object /* IOBluetoothHostController* */ {
+    pub fn bluetoothhostcontroller_defaultcontroller() -> *mut Object /* IOBluetoothHostController* */
+    {
         unsafe {
-            let defaultcontroller: *mut Object = msg_send![Class::get("IOBluetoothHostController").unwrap(), defaultController];
+            let defaultcontroller: *mut Object = msg_send![
+                Class::get("IOBluetoothHostController").unwrap(),
+                defaultController
+            ];
             defaultcontroller
         }
     }
 
-    pub fn bluetoothhostcontroller_nameasstring(iobthc: *mut Object) -> *mut Object /* NSString* */ {
+    pub fn bluetoothhostcontroller_nameasstring(iobthc: *mut Object) -> *mut Object /* NSString* */
+    {
         unsafe {
             let name: *mut Object = msg_send![iobthc, nameAsString];
             name
         }
     }
 
-    pub fn bluetoothhostcontroller_addressasstring(iobthc: *mut Object) -> *mut Object /* NSString* */ {
+    pub fn bluetoothhostcontroller_addressasstring(iobthc: *mut Object) -> *mut Object /* NSString* */
+    {
         unsafe {
             let address: *mut Object = msg_send![iobthc, addressAsString];
             address
@@ -208,9 +224,7 @@ pub mod io {
     // IOBluetoothPreference...
 
     pub fn bluetoothpreferencegetcontrollerpowerstate() -> c_int {
-        unsafe {
-             IOBluetoothPreferenceGetControllerPowerState()
-        }
+        unsafe { IOBluetoothPreferenceGetControllerPowerState() }
     }
 
     pub fn bluetoothpreferencesetcontrollerpowerstate(state: c_int) {
@@ -220,9 +234,7 @@ pub mod io {
     }
 
     pub fn bluetoothpreferencegetdiscoverablestate() -> c_int {
-        unsafe {
-            IOBluetoothPreferenceGetDiscoverableState()
-        }
+        unsafe { IOBluetoothPreferenceGetDiscoverableState() }
     }
 
     pub fn bluetoothpreferencesetdiscoverablestate(state: c_int) {
@@ -231,7 +243,6 @@ pub mod io {
         }
     }
 }
-
 
 pub mod cb {
     use super::*;
@@ -259,7 +270,7 @@ pub mod cb {
         use super::*;
 
         #[link(name = "CoreBluetooth", kind = "framework")]
-        extern {
+        extern "C" {
             pub static CBAdvertisementDataServiceUUIDsKey: *mut Object;
 
             pub static CBCentralManagerScanOptionAllowDuplicatesKey: *mut Object;
@@ -268,10 +279,12 @@ pub mod cb {
 
     // CBCentralManager
 
-    pub fn centralmanager(delegate: *mut Object /*CBCentralManagerDelegate* */) -> *mut Object /*CBCentralManager* */ {
+    pub fn centralmanager(delegate: *mut Object, /*CBCentralManagerDelegate* */) -> *mut Object /*CBCentralManager* */
+    {
         let label = CString::new("CBqueue").unwrap();
         unsafe {
-            let mut cbcentralmanager: *mut Object = msg_send![Class::get("CBCentralManager").unwrap(), alloc];
+            let mut cbcentralmanager: *mut Object =
+                msg_send![Class::get("CBCentralManager").unwrap(), alloc];
             let queue = dispatch_queue_create(label.as_ptr(), DISPATCH_QUEUE_SERIAL);
 
             cbcentralmanager = msg_send![cbcentralmanager, initWithDelegate:delegate queue:queue];
@@ -279,9 +292,13 @@ pub mod cb {
         }
     }
 
-    pub fn centralmanager_scanforperipherals_options(cbcentralmanager: *mut Object, options: *mut Object /* NSDictionary<NSString*,id> */) {
+    pub fn centralmanager_scanforperipherals_options(
+        cbcentralmanager: *mut Object,
+        options: *mut Object, /* NSDictionary<NSString*,id> */
+    ) {
         unsafe {
-            let _: () = msg_send![cbcentralmanager, scanForPeripheralsWithServices:nil options:options];
+            let _: () =
+                msg_send![cbcentralmanager, scanForPeripheralsWithServices:nil options:options];
         }
     }
 
@@ -291,15 +308,21 @@ pub mod cb {
         }
     }
 
-    pub fn centralmanager_connectperipheral(cbcentralmanager: *mut Object, peripheral: *mut Object /* CBPeripheral* */) {
+    pub fn centralmanager_connectperipheral(
+        cbcentralmanager: *mut Object,
+        peripheral: *mut Object, /* CBPeripheral* */
+    ) {
         unsafe {
             let _: () = msg_send![cbcentralmanager, connectPeripheral:peripheral options:nil];
         }
     }
 
-    pub fn centralmanager_cancelperipheralconnection(cbcentralmanager: *mut Object, peripheral: *mut Object /* CBPeripheral* */) {
+    pub fn centralmanager_cancelperipheralconnection(
+        cbcentralmanager: *mut Object,
+        peripheral: *mut Object, /* CBPeripheral* */
+    ) {
         unsafe {
-            let _: () = msg_send![cbcentralmanager, cancelPeripheralConnection:peripheral];
+            let _: () = msg_send![cbcentralmanager, cancelPeripheralConnection: peripheral];
         }
     }
 
@@ -328,58 +351,88 @@ pub mod cb {
         }
     }
 
-    pub fn peripheral_setdelegate(cbperipheral: *mut Object, delegate: *mut Object /* CBPeripheralDelegate* */) {
+    pub fn peripheral_setdelegate(
+        cbperipheral: *mut Object,
+        delegate: *mut Object, /* CBPeripheralDelegate* */
+    ) {
         unsafe {
-            let _: () = msg_send![cbperipheral, setDelegate:delegate];
+            let _: () = msg_send![cbperipheral, setDelegate: delegate];
         }
     }
 
     pub fn peripheral_discoverservices(cbperipheral: *mut Object) {
         unsafe {
-            let _: () = msg_send![cbperipheral, discoverServices:nil];
+            let _: () = msg_send![cbperipheral, discoverServices: nil];
         }
     }
 
-    pub fn peripheral_discoverincludedservicesforservice(cbperipheral: *mut Object, service: *mut Object /* CBService* */) {
+    pub fn peripheral_discoverincludedservicesforservice(
+        cbperipheral: *mut Object,
+        service: *mut Object, /* CBService* */
+    ) {
         unsafe {
             let _: () = msg_send![cbperipheral, discoverIncludedServices:nil forService:service];
         }
     }
 
-    pub fn peripheral_services(cbperipheral: *mut Object) -> *mut Object /* NSArray<CBService*>* */ {
+    pub fn peripheral_services(cbperipheral: *mut Object) -> *mut Object /* NSArray<CBService*>* */
+    {
         unsafe {
             let services: *mut Object = msg_send![cbperipheral, services];
             services
         }
     }
 
-    pub fn peripheral_discovercharacteristicsforservice(cbperipheral: *mut Object, service: *mut Object /* CBService* */) {
+    pub fn peripheral_discovercharacteristicsforservice(
+        cbperipheral: *mut Object,
+        service: *mut Object, /* CBService* */
+    ) {
         unsafe {
             let _: () = msg_send![cbperipheral, discoverCharacteristics:nil forService:service];
         }
     }
 
-    pub fn peripheral_readvalueforcharacteristic(cbperipheral: *mut Object, characteristic: *mut Object /* CBCharacteristic* */) {
+    pub fn peripheral_readvalueforcharacteristic(
+        cbperipheral: *mut Object,
+        characteristic: *mut Object, /* CBCharacteristic* */
+    ) {
         unsafe {
-            let _: () = msg_send![cbperipheral, readValueForCharacteristic:characteristic];
+            let _: () = msg_send![cbperipheral, readValueForCharacteristic: characteristic];
         }
     }
 
-    pub fn peripheral_writevalue_forcharacteristic(cbperipheral: *mut Object, value: *mut Object /* NSData* */, characteristic: *mut Object /* CBCharacteristic* */) {
+    pub fn peripheral_writevalue_forcharacteristic(
+        cbperipheral: *mut Object,
+        value: *mut Object,          /* NSData* */
+        characteristic: *mut Object, /* CBCharacteristic* */
+    ) {
         unsafe {
-            let _: () = msg_send![cbperipheral, writeValue:value forCharacteristic:characteristic type:0]; // CBCharacteristicWriteWithResponse from CBPeripheral.h
+            let _: () =
+                msg_send![cbperipheral, writeValue:value forCharacteristic:characteristic type:0];
+            // CBCharacteristicWriteWithResponse from CBPeripheral.h
         }
     }
 
-    pub fn peripheral_setnotifyvalue_forcharacteristic(cbperipheral: *mut Object, value: BOOL, characteristic: *mut Object /* CBCharacteristic* */) {
+    pub fn peripheral_setnotifyvalue_forcharacteristic(
+        cbperipheral: *mut Object,
+        value: BOOL,
+        characteristic: *mut Object, /* CBCharacteristic* */
+    ) {
         unsafe {
-            let _: () = msg_send![cbperipheral, setNotifyValue:value forCharacteristic:characteristic];
+            let _: () =
+                msg_send![cbperipheral, setNotifyValue:value forCharacteristic:characteristic];
         }
     }
 
-    pub fn peripheral_discoverdescriptorsforcharacteristic(cbperipheral: *mut Object, characteristic: *mut Object /* CBCharacteristic* */) {
+    pub fn peripheral_discoverdescriptorsforcharacteristic(
+        cbperipheral: *mut Object,
+        characteristic: *mut Object, /* CBCharacteristic* */
+    ) {
         unsafe {
-            let _: () = msg_send![cbperipheral, discoverDescriptorsForCharacteristic:characteristic];
+            let _: () = msg_send![
+                cbperipheral,
+                discoverDescriptorsForCharacteristic: characteristic
+            ];
         }
     }
 
@@ -405,14 +458,16 @@ pub mod cb {
     //     }
     // }
 
-    pub fn service_includedservices(cbservice: *mut Object) -> *mut Object /* NSArray<CBService*>* */ {
+    pub fn service_includedservices(cbservice: *mut Object) -> *mut Object /* NSArray<CBService*>* */
+    {
         unsafe {
             let includedservices: *mut Object = msg_send![cbservice, includedServices];
             includedservices
         }
     }
 
-    pub fn service_characteristics(cbservice: *mut Object) -> *mut Object /* NSArray<CBCharacteristic*>* */ {
+    pub fn service_characteristics(cbservice: *mut Object) -> *mut Object /* NSArray<CBCharacteristic*>* */
+    {
         unsafe {
             let characteristics: *mut Object = msg_send![cbservice, characteristics];
             characteristics
@@ -444,13 +499,13 @@ pub mod cb {
 
     // CBCharacteristicProperties = NSUInteger from CBCharacteristic.h
 
-    pub const CHARACTERISTICPROPERTY_BROADCAST : c_uint                 = 0x01; // CBCharacteristicPropertyBroadcast
-    pub const CHARACTERISTICPROPERTY_READ : c_uint                      = 0x02; // CBCharacteristicPropertyRead
-    pub const CHARACTERISTICPROPERTY_WRITEWITHOUTRESPONSE : c_uint      = 0x04; // CBCharacteristicPropertyWriteWithoutResponse
-    pub const CHARACTERISTICPROPERTY_WRITE : c_uint                     = 0x08; // CBCharacteristicPropertyWrite
-    pub const CHARACTERISTICPROPERTY_NOTIFY : c_uint                    = 0x10; // CBCharacteristicPropertyNotify
-    pub const CHARACTERISTICPROPERTY_INDICATE : c_uint                  = 0x20; // CBCharacteristicPropertyIndicate
-    pub const CHARACTERISTICPROPERTY_AUTHENTICATEDSIGNEDWRITES : c_uint = 0x40; // CBCharacteristicPropertyAuthenticatedSignedWrites
+    pub const CHARACTERISTICPROPERTY_BROADCAST: c_uint = 0x01; // CBCharacteristicPropertyBroadcast
+    pub const CHARACTERISTICPROPERTY_READ: c_uint = 0x02; // CBCharacteristicPropertyRead
+    pub const CHARACTERISTICPROPERTY_WRITEWITHOUTRESPONSE: c_uint = 0x04; // CBCharacteristicPropertyWriteWithoutResponse
+    pub const CHARACTERISTICPROPERTY_WRITE: c_uint = 0x08; // CBCharacteristicPropertyWrite
+    pub const CHARACTERISTICPROPERTY_NOTIFY: c_uint = 0x10; // CBCharacteristicPropertyNotify
+    pub const CHARACTERISTICPROPERTY_INDICATE: c_uint = 0x20; // CBCharacteristicPropertyIndicate
+    pub const CHARACTERISTICPROPERTY_AUTHENTICATEDSIGNEDWRITES: c_uint = 0x40; // CBCharacteristicPropertyAuthenticatedSignedWrites
 
     // CBUUID
 

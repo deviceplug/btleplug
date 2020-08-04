@@ -1,14 +1,14 @@
-use crate::api::{Central, CentralEvent, BDAddr, AdapterManager};
-use crate::Result;
-use std::sync::mpsc::Receiver;
-use std::convert::TryInto;
+use super::internal::{run_corebluetooth_thread, CoreBluetoothEvent, CoreBluetoothMessage};
 use super::peripheral::Peripheral;
-use super::internal::{run_corebluetooth_thread, CoreBluetoothMessage, CoreBluetoothEvent};
+use crate::api::{AdapterManager, BDAddr, Central, CentralEvent};
+use crate::Result;
 use async_std::{
-    task,
     prelude::StreamExt,
     sync::{channel, Sender},
+    task,
 };
+use std::convert::TryInto;
+use std::sync::mpsc::Receiver;
 
 #[derive(Clone)]
 pub struct Adapter {
@@ -18,7 +18,7 @@ pub struct Adapter {
 
 pub fn uuid_to_bdaddr(uuid: &String) -> BDAddr {
     BDAddr {
-        address: uuid.as_bytes()[0..6].try_into().unwrap()
+        address: uuid.as_bytes()[0..6].try_into().unwrap(),
     }
 }
 
@@ -30,42 +30,49 @@ impl Adapter {
         // receiver is dropped after that. We can pick it up here and make it
         // part of our event loop to update our peripherals.
         info!("Waiting on adapter connect");
-        task::block_on(async {
-            receiver.recv().await.unwrap()
-        });
+        task::block_on(async { receiver.recv().await.unwrap() });
         info!("Waiting on adapter connected");
         let adapter_sender_clone = adapter_sender.clone();
         let manager = AdapterManager::new();
 
         let manager_clone = manager.clone();
-        task::spawn(async move{
+        task::spawn(async move {
             while let Some(msg) = receiver.next().await {
-                    match msg {
-                        CoreBluetoothEvent::DeviceDiscovered(uuid, name, event_receiver) => {
-                            // TODO Gotta change uuid into a BDAddr for now. Expand
-                            // library identifier type. :(
-                            let id = uuid_to_bdaddr(&uuid.to_string());
-                            manager_clone.add_peripheral(id, Peripheral::new(uuid, name, manager_clone.clone(), event_receiver, adapter_sender_clone.clone()));
-                            manager_clone.emit(CentralEvent::DeviceDiscovered(id));
-                        },
-                        /*
-                        CoreBluetoothEvent::DeviceUpdated(uuid, name) => {
-                            let id = uuid_to_bdaddr(&uuid.to_string());
-                            emit(CentralEvent::DeviceUpdated(id));
-                        },
-                        */
-                        CoreBluetoothEvent::DeviceLost(uuid) => {
-                            let id = uuid_to_bdaddr(&uuid.to_string());
-                            manager_clone.emit(CentralEvent::DeviceDisconnected(id));
-                        }
-                        _ => {}
+                match msg {
+                    CoreBluetoothEvent::DeviceDiscovered(uuid, name, event_receiver) => {
+                        // TODO Gotta change uuid into a BDAddr for now. Expand
+                        // library identifier type. :(
+                        let id = uuid_to_bdaddr(&uuid.to_string());
+                        manager_clone.add_peripheral(
+                            id,
+                            Peripheral::new(
+                                uuid,
+                                name,
+                                manager_clone.clone(),
+                                event_receiver,
+                                adapter_sender_clone.clone(),
+                            ),
+                        );
+                        manager_clone.emit(CentralEvent::DeviceDiscovered(id));
+                    }
+                    /*
+                    CoreBluetoothEvent::DeviceUpdated(uuid, name) => {
+                        let id = uuid_to_bdaddr(&uuid.to_string());
+                        emit(CentralEvent::DeviceUpdated(id));
+                    },
+                    */
+                    CoreBluetoothEvent::DeviceLost(uuid) => {
+                        let id = uuid_to_bdaddr(&uuid.to_string());
+                        manager_clone.emit(CentralEvent::DeviceDisconnected(id));
+                    }
+                    _ => {}
                 }
             }
         });
 
         Adapter {
             manager,
-            sender: adapter_sender
+            sender: adapter_sender,
         }
     }
 
@@ -103,9 +110,7 @@ impl Central<Peripheral> for Adapter {
         self.manager.peripheral(address)
     }
 
-    fn active(&self, _enabled: bool) {
-    }
+    fn active(&self, _enabled: bool) {}
 
-    fn filter_duplicates(&self, _enabled: bool) {
-    }
+    fn filter_duplicates(&self, _enabled: bool) {}
 }

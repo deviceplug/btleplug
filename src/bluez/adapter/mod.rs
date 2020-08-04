@@ -14,48 +14,49 @@
 mod acl_stream;
 mod peripheral;
 
+use bytes::{BufMut, BytesMut};
+use dashmap::DashMap;
 use libc;
 use nom;
-use bytes::{BytesMut, BufMut};
-use dashmap::DashMap;
 
 use std::{
     self,
-    ffi::CStr,
     collections::HashSet,
-    sync::{Arc, mpsc::Receiver, atomic::{AtomicBool, Ordering}},
+    ffi::CStr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::Receiver,
+        Arc,
+    },
     thread,
 };
 
+use crate::api::{AdapterManager, BDAddr, Central, CentralEvent};
 use crate::Result;
-use crate::api::{CentralEvent, BDAddr, Central, AdapterManager};
 
 use crate::bluez::{
-    util::handle_error,
-    protocol::hci,
-    adapter::peripheral::Peripheral,
-    constants::*,
-    ioctl,
+    adapter::peripheral::Peripheral, constants::*, ioctl, protocol::hci, util::handle_error,
 };
-
 
 #[derive(Copy, Debug)]
 #[repr(C)]
 pub struct HCIDevStats {
-    pub err_rx : u32,
-    pub err_tx : u32,
-    pub cmd_tx : u32,
-    pub evt_rx : u32,
-    pub acl_tx : u32,
-    pub acl_rx : u32,
-    pub sco_tx : u32,
-    pub sco_rx : u32,
-    pub byte_rx : u32,
-    pub byte_tx : u32,
+    pub err_rx: u32,
+    pub err_tx: u32,
+    pub cmd_tx: u32,
+    pub evt_rx: u32,
+    pub acl_tx: u32,
+    pub acl_rx: u32,
+    pub sco_tx: u32,
+    pub sco_rx: u32,
+    pub byte_rx: u32,
+    pub byte_tx: u32,
 }
 
-impl Clone for HCIDevStats{
-    fn clone(&self) -> Self { *self }
+impl Clone for HCIDevStats {
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 
 impl HCIDevStats {
@@ -70,7 +71,7 @@ impl HCIDevStats {
             sco_tx: 0u32,
             sco_rx: 0u32,
             byte_rx: 0u32,
-            byte_tx: 0u32
+            byte_tx: 0u32,
         }
     }
 }
@@ -78,24 +79,26 @@ impl HCIDevStats {
 #[derive(Copy, Debug)]
 #[repr(C)]
 pub struct HCIDevInfo {
-    pub dev_id : u16,
-    pub name : [libc::c_char; 8],
-    pub bdaddr : BDAddr,
-    pub flags : u32,
-    pub type_ : u8,
-    pub features : [u8; 8],
-    pub pkt_type : u32,
-    pub link_policy : u32,
-    pub link_mode : u32,
-    pub acl_mtu : u16,
-    pub acl_pkts : u16,
-    pub sco_mtu : u16,
-    pub sco_pkts : u16,
-    pub stat : HCIDevStats,
+    pub dev_id: u16,
+    pub name: [libc::c_char; 8],
+    pub bdaddr: BDAddr,
+    pub flags: u32,
+    pub type_: u8,
+    pub features: [u8; 8],
+    pub pkt_type: u32,
+    pub link_policy: u32,
+    pub link_mode: u32,
+    pub acl_mtu: u16,
+    pub acl_pkts: u16,
+    pub sco_mtu: u16,
+    pub sco_pkts: u16,
+    pub stat: HCIDevStats,
 }
 
 impl Clone for HCIDevInfo {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 
 impl HCIDevInfo {
@@ -114,7 +117,7 @@ impl HCIDevInfo {
             acl_pkts: 0u16,
             sco_mtu: 0u16,
             sco_pkts: 0u16,
-            stat: HCIDevStats::default()
+            stat: HCIDevStats::default(),
         }
     }
 }
@@ -128,15 +131,16 @@ struct SockaddrHCI {
 }
 
 impl Clone for SockaddrHCI {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
-
 
 #[derive(Debug, Copy, Clone)]
 pub enum AdapterType {
     BrEdr,
     Amp,
-    Unknown(u8)
+    Unknown(u8),
 }
 
 impl AdapterType {
@@ -159,7 +163,15 @@ impl AdapterType {
 
 #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone)]
 pub enum AdapterState {
-    Up, Init, Running, Raw, PScan, IScan, Inquiry, Auth, Encrypt
+    Up,
+    Init,
+    Running,
+    Raw,
+    PScan,
+    IScan,
+    Inquiry,
+    Auth,
+    Encrypt,
 }
 
 impl AdapterState {
@@ -189,7 +201,7 @@ pub struct ConnectedAdapter {
     pub active: Arc<AtomicBool>,
     pub filter_duplicates: Arc<AtomicBool>,
     handle_map: Arc<DashMap<u16, BDAddr>>,
-    manager: AdapterManager<Peripheral>
+    manager: AdapterManager<Peripheral>,
 }
 
 impl ConnectedAdapter {
@@ -205,8 +217,11 @@ impl ConnectedAdapter {
         };
 
         handle_error(unsafe {
-            libc::bind(adapter_fd, &addr as *const SockaddrHCI as *const libc::sockaddr,
-                       std::mem::size_of::<SockaddrHCI>() as u32)
+            libc::bind(
+                adapter_fd,
+                &addr as *const SockaddrHCI as *const libc::sockaddr,
+                std::mem::size_of::<SockaddrHCI>() as u32,
+            )
         })?;
 
         let should_stop = Arc::new(AtomicBool::new(false));
@@ -231,9 +246,12 @@ impl ConnectedAdapter {
 
     fn set_socket_filter(&self) -> Result<()> {
         let mut filter = BytesMut::with_capacity(14);
-        let type_mask = (1 << HCI_COMMAND_PKT) | (1 << HCI_EVENT_PKT) as u8 | (1 << HCI_ACLDATA_PKT) as u8;
-        let event_mask1 = (1 << EVT_DISCONN_COMPLETE) | (1 << EVT_ENCRYPT_CHANGE) |
-            (1 << EVT_CMD_COMPLETE) | (1 << EVT_CMD_STATUS);
+        let type_mask =
+            (1 << HCI_COMMAND_PKT) | (1 << HCI_EVENT_PKT) as u8 | (1 << HCI_ACLDATA_PKT) as u8;
+        let event_mask1 = (1 << EVT_DISCONN_COMPLETE)
+            | (1 << EVT_ENCRYPT_CHANGE)
+            | (1 << EVT_CMD_COMPLETE)
+            | (1 << EVT_CMD_STATUS);
         let event_mask2 = 1 << (EVT_LE_META_EVENT - 32);
         let opcode = 0;
 
@@ -243,9 +261,13 @@ impl ConnectedAdapter {
         filter.put_u16_le(opcode);
 
         handle_error(unsafe {
-            libc::setsockopt(self.adapter_fd, SOL_HCI, HCI_FILTER,
-                             filter.as_mut_ptr() as *mut _ as *mut libc::c_void,
-                             filter.len() as u32)
+            libc::setsockopt(
+                self.adapter_fd,
+                SOL_HCI,
+                HCI_FILTER,
+                filter.as_mut_ptr() as *mut _ as *mut libc::c_void,
+                filter.len() as u32,
+            )
         })?;
         Ok(())
     }
@@ -261,8 +283,13 @@ impl ConnectedAdapter {
             while !should_stop.load(Ordering::Relaxed) {
                 // debug!("reading");
                 let len = handle_error(unsafe {
-                    libc::read(fd, buf.as_mut_ptr() as *mut _ as *mut libc::c_void, buf.len()) as i32
-                }).unwrap_or(0) as usize;
+                    libc::read(
+                        fd,
+                        buf.as_mut_ptr() as *mut _ as *mut libc::c_void,
+                        buf.len(),
+                    ) as i32
+                })
+                .unwrap_or(0) as usize;
                 if len == 0 {
                     continue;
                 }
@@ -271,9 +298,7 @@ impl ConnectedAdapter {
 
                 let mut new_cur: Option<Vec<u8>> = Some(vec![]);
                 {
-                    let result = {
-                        hci::message(&cur)
-                    };
+                    let result = { hci::message(&cur) };
 
                     match result {
                         Ok((left, result)) => {
@@ -284,7 +309,7 @@ impl ConnectedAdapter {
                         }
                         Err(nom::Err::Incomplete(_)) => {
                             new_cur = None;
-                        },
+                        }
                         Err(nom::Err::Error(err)) | Err(nom::Err::Failure(err)) => {
                             error!("parse error {:?}\nfrom: {:?}", err, cur);
                         }
@@ -311,7 +336,9 @@ impl ConnectedAdapter {
                 // FIXME this is confusing, it appears we are getting an *owned* Peripheral here
                 // but in fact because most of its members are wrapped in an Arc it ends up
                 // actually sharing most of its state with the original object...
-                let peripheral = self.manager.peripheral(info.bdaddr)
+                let peripheral = self
+                    .manager
+                    .peripheral(info.bdaddr)
                     .unwrap_or_else(|| Peripheral::new(self.clone(), info.bdaddr));
                 peripheral.handle_device_message(&hci::Message::LEAdvertisingReport(info));
                 if !self.manager.has_peripheral(&address) {
@@ -332,7 +359,7 @@ impl ConnectedAdapter {
                         peripheral.handle_device_message(&hci::Message::LEConnComplete(info))
                     }
                     // todo: there's probably a better way to handle this case
-                    None => warn!("Got connection for unknown device {}", info.bdaddr)
+                    None => warn!("Got connection for unknown device {}", info.bdaddr),
                 }
 
                 self.handle_map.insert(handle, address);
@@ -350,7 +377,7 @@ impl ConnectedAdapter {
                     // we don't know the handler => device mapping, so send to all and let them filter
                     peripheral.handle_device_message(&message);
                 }
-            },
+            }
             hci::Message::DisconnectComplete { handle, .. } => {
                 match self.handle_map.remove(&handle) {
                     Some(addr) => {
@@ -371,7 +398,7 @@ impl ConnectedAdapter {
         }
     }
 
-    fn write(&self, message: & [u8]) -> Result<()> {
+    fn write(&self, message: &[u8]) -> Result<()> {
         debug!("writing({}) {:?}", self.adapter_fd, message);
         let ptr = message.as_ptr();
         handle_error(unsafe {
@@ -382,7 +409,11 @@ impl ConnectedAdapter {
 
     fn set_scan_params(&self) -> Result<()> {
         let mut data = BytesMut::with_capacity(7);
-        data.put_u8(if self.active.load(Ordering::Relaxed) { 1 } else { 0 }); // scan_type = active or passive
+        data.put_u8(if self.active.load(Ordering::Relaxed) {
+            1
+        } else {
+            0
+        }); // scan_type = active or passive
         data.put_u16_le(0x0010); // interval ms
         data.put_u16_le(0x0010); // window ms
         data.put_u8(0); // own_type = public
@@ -394,7 +425,11 @@ impl ConnectedAdapter {
     fn set_scan_enabled(&self, enabled: bool) -> Result<()> {
         let mut data = BytesMut::with_capacity(2);
         data.put_u8(if enabled { 1 } else { 0 }); // enabled
-        data.put_u8(if self.filter_duplicates.load(Ordering::Relaxed) { 1 } else { 0 }); // filter duplicates
+        data.put_u8(if self.filter_duplicates.load(Ordering::Relaxed) {
+            1
+        } else {
+            0
+        }); // filter duplicates
 
         self.scan_enabled.clone().store(enabled, Ordering::Relaxed);
         let mut buf = hci::hci_command(LE_SET_SCAN_ENABLE_CMD, &*data);
@@ -412,7 +447,9 @@ impl Central<Peripheral> for ConnectedAdapter {
     }
 
     fn filter_duplicates(&self, enabled: bool) {
-        self.filter_duplicates.clone().store(enabled, Ordering::Relaxed);
+        self.filter_duplicates
+            .clone()
+            .store(enabled, Ordering::Relaxed);
     }
 
     fn start_scan(&self) -> Result<()> {

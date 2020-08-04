@@ -1,16 +1,16 @@
 extern crate btleplug;
 extern crate rand;
 
-use std::thread;
-use std::time::Duration;
-use rand::{Rng, thread_rng};
+use btleplug::api::{Central, Peripheral, UUID};
 #[cfg(target_os = "linux")]
 use btleplug::bluez::{adapter::ConnectedAdapter, manager::Manager};
-#[cfg(target_os = "windows")]
-use btleplug::winrtble::{adapter::Adapter, manager::Manager};
 #[cfg(target_os = "macos")]
 use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
-use btleplug::api::{UUID, Central, Peripheral};
+#[cfg(target_os = "windows")]
+use btleplug::winrtble::{adapter::Adapter, manager::Manager};
+use rand::{thread_rng, Rng};
+use std::thread;
+use std::time::Duration;
 
 // adapter retreival works differently depending on your platform right now.
 // API needs to be aligned.
@@ -43,9 +43,16 @@ pub fn main() {
     thread::sleep(Duration::from_secs(2));
 
     // find the device we're interested in
-    let light = central.peripherals().into_iter()
-        .find(|p| p.properties().local_name.iter()
-            .any(|name| name.contains("LEDBlue"))).unwrap();
+    let light = central
+        .peripherals()
+        .into_iter()
+        .find(|p| {
+            p.properties()
+                .local_name
+                .iter()
+                .any(|name| name.contains("LEDBlue"))
+        })
+        .unwrap();
 
     // connect to the device
     light.connect().unwrap();

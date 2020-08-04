@@ -28,7 +28,7 @@ pub const HCI_CHANNEL_CONTROL: u16 = 3;
 pub const HCI_CHANNEL_LOGGING: u16 = 4;
 
 pub const ACL_START_NO_FLUSH: u16 = 0x00;
-pub const ACL_CONT: u16  = 0x01;
+pub const ACL_CONT: u16 = 0x01;
 pub const ACL_START: u16 = 0x02;
 pub const HCI_OE_USER_ENDED_CONNECTION: u8 = 0x13;
 
@@ -91,12 +91,9 @@ pub const OCF_LE_CREATE_CONN: u16 = 0x000d;
 pub const OCF_LE_CONN_UPDATE: u16 = 0x0013;
 pub const OCF_LE_START_ENCRYPTION: u16 = 0x0019;
 
-pub const LE_SET_SCAN_PARAMETERS_CMD: u16 =
-    OCF_LE_SET_SCAN_PARAMETERS | (OGF_LE_CTL as u16) << 10;
-pub const LE_SET_SCAN_ENABLE_CMD: u16 = OCF_LE_SET_SCAN_ENABLE |
-    (OGF_LE_CTL as u16) << 10;
+pub const LE_SET_SCAN_PARAMETERS_CMD: u16 = OCF_LE_SET_SCAN_PARAMETERS | (OGF_LE_CTL as u16) << 10;
+pub const LE_SET_SCAN_ENABLE_CMD: u16 = OCF_LE_SET_SCAN_ENABLE | (OGF_LE_CTL as u16) << 10;
 pub const LE_CREATE_CONN_CMD: u16 = OCF_LE_CREATE_CONN | ((OGF_LE_CTL as u16) << 10);
 pub const DISCONNECT_CMD: u16 = OCF_DISCONNECT | (OGF_LINK_CTL as u16) << 10;
 
 pub const BTPROTO_HCI: i32 = 1;
-

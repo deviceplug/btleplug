@@ -11,7 +11,6 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-
 //! BtlePlug is a Bluetooth Low Energy (BLE) central module library for Rust. It
 //! currently supports Windows 10, macOS (and possibly iOS), Linux (using BlueZ
 //! sockets instead of D-Bus). Android support is coming in a future update.
@@ -102,14 +101,14 @@ extern crate nix;
 #[cfg(target_os = "windows")]
 extern crate winrt;
 
-#[cfg(any(target_os = "macos", target_os="ios"))]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 #[macro_use]
 extern crate objc;
 
 // We won't actually use anything specifically out of this crate. However, if we
 // want the CoreBluetooth code to compile, we need the objc protocols
 // (specifically, the core bluetooth protocols) exposed by it.
-#[cfg(any(target_os = "macos", target_os="ios"))]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 extern crate cocoa;
 
 extern crate bytes;
@@ -133,14 +132,14 @@ extern crate failure_derive;
 use std::result;
 use std::time::Duration;
 
+pub mod api;
 #[cfg(target_os = "linux")]
 pub mod bluez;
+mod common;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+pub mod corebluetooth;
 #[cfg(target_os = "windows")]
 pub mod winrtble;
-#[cfg(any(target_os = "macos", target_os="ios"))]
-pub mod corebluetooth;
-pub mod api;
-mod common;
 
 #[derive(Debug, Fail, Clone)]
 pub enum Error {

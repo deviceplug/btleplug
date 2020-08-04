@@ -11,39 +11,32 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-
 use libc;
 
 use crate::{
+    api::{BDAddr, Characteristic, CommandCallback, NotificationHandler, RequestCallback, UUID},
     bluez::{
-        constants::*,
-        util::handle_error,
-        protocol::hci::ACLData,
-        protocol::att,
-        adapter::Adapter,
+        adapter::Adapter, constants::*, protocol::att, protocol::hci::ACLData, util::handle_error,
     },
     common::util,
-    Error,
-    Result,
-    api::{UUID, CommandCallback, RequestCallback, BDAddr, NotificationHandler, Characteristic},
+    Error, Result,
 };
 
 use std::{
+    collections::BTreeSet,
     fmt::{self, Debug, Formatter},
     sync::{
-        mpsc::{channel, Sender, Receiver},
         atomic::{AtomicBool, Ordering},
-        Mutex,
-        Arc,
+        mpsc::{channel, Receiver, Sender},
+        Arc, Mutex,
     },
-    collections::BTreeSet,
     thread,
     time::Duration,
 };
 
-use bytes::{BytesMut, BufMut};
+use bytes::{BufMut, BytesMut};
 
-enum StreamMessage  {
+enum StreamMessage {
     Command(Vec<u8>, Option<CommandCallback>),
     Request(Vec<u8>, Option<RequestCallback>),
     ConfirmIndication,
@@ -79,7 +72,14 @@ pub struct ACLStream {
 }
 
 impl ACLStream {
-    pub fn new(adapter: Adapter, address: BDAddr, characteristics: Arc<Mutex<BTreeSet<Characteristic>>>, handle: u16, fd: i32, notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>) -> ACLStream {
+    pub fn new(
+        adapter: Adapter,
+        address: BDAddr,
+        characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
+        handle: u16,
+        fd: i32,
+        notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
+    ) -> ACLStream {
         info!("Creating new ACLStream for {}, {}, {}", address, handle, fd);
         let (tx, rx) = channel();
         let acl_stream = ACLStream {
@@ -121,11 +121,19 @@ impl ACLStream {
         acl_stream
     }
 
-    fn write_socket(&self, value: &mut [u8], command: bool,
-                    receiver: &Receiver<StreamMessage>) -> Result<Vec<u8>> {
+    fn write_socket(
+        &self,
+        value: &mut [u8],
+        command: bool,
+        receiver: &Receiver<StreamMessage>,
+    ) -> Result<Vec<u8>> {
         debug!("writing {:?}", value);
         handle_error(unsafe {
-            libc::write(self.fd, value.as_mut_ptr() as *mut libc::c_void, value.len()) as i32
+            libc::write(
+                self.fd,
+                value.as_mut_ptr() as *mut libc::c_void,
+                value.len(),
+            ) as i32
         })?;
 
         let mut skipped = vec![];
@@ -134,8 +142,7 @@ impl ACLStream {
             debug!("waiting for confirmation... {:?}", message);
             if let Data(rec) = message {
                 if rec != value {
-                    skipped.into_iter().for_each(|m|
-                        self.send(m));
+                    skipped.into_iter().for_each(|m| self.send(m));
                     return Ok(rec);
                 } else if command {
                     return Ok(vec![]);
@@ -146,18 +153,20 @@ impl ACLStream {
         }
     }
 
-    fn handle_iteration(&self, msg: &mut StreamMessage,
-                        receiver: &Receiver<StreamMessage>) -> Result<()> {
+    fn handle_iteration(
+        &self,
+        msg: &mut StreamMessage,
+        receiver: &Receiver<StreamMessage>,
+    ) -> Result<()> {
         match *msg {
             Command(ref mut value, ref handler) => {
                 debug!("sending command {:?} to {}", value, self.fd);
 
-                let result = self.write_socket(value, true, receiver)
-                    .map(|_v| ());
+                let result = self.write_socket(value, true, receiver).map(|_v| ());
                 if let &Some(ref f) = handler {
                     f(result);
                 }
-            },
+            }
             Request(ref mut value, ref handler) => {
                 debug!("sending request {:?} to {}", value, self.fd);
 
@@ -165,12 +174,12 @@ impl ACLStream {
                 if let &Some(ref f) = handler {
                     f(result);
                 }
-            },
+            }
             ConfirmIndication => {
                 debug!("confirming indication to {}", self.fd);
 
                 self.write_socket(&mut [ATT_OP_CONFIRM_INDICATION], true, receiver)?;
-            },
+            }
             Data(ref value) => {
                 debug!("Received data {:?}", value);
             }
@@ -239,7 +248,8 @@ impl ACLStream {
         match att::value_notification(&value) {
             Ok(notification) => {
                 let mut n = notification.1.clone();
-                n.uuid = n.handle
+                n.uuid = n
+                    .handle
                     .and_then(|h| self.get_uuid_by_handle(h))
                     .expect("How did we get here without a handle?");
 
@@ -254,7 +264,7 @@ impl ACLStream {
     fn get_uuid_by_handle(&self, handle: u16) -> Option<UUID> {
         for c in self.characteristics.lock().unwrap().iter() {
             if c.value_handle == handle {
-                return Some(c.uuid)
+                return Some(c.uuid);
             }
         }
         None

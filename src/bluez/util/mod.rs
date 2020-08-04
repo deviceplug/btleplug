@@ -14,26 +14,22 @@
 use nix;
 use nix::errno::Errno;
 
-use crate::{Result, Error};
+use crate::{Error, Result};
 
 fn errno_to_error(errno: Errno) -> Error {
     match errno {
         Errno::EPERM => Error::PermissionDenied,
         Errno::ENODEV => Error::DeviceNotFound,
         Errno::ENOTCONN => Error::NotConnected,
-        _ => Error::Other(errno.to_string())
+        _ => Error::Other(errno.to_string()),
     }
 }
 
 impl From<nix::Error> for Error {
     fn from(e: nix::Error) -> Self {
         match e {
-            nix::Error::Sys(errno) => {
-                errno_to_error(errno)
-            },
-            _ => {
-                Error::Other(e.to_string())
-            }
+            nix::Error::Sys(errno) => errno_to_error(errno),
+            _ => Error::Other(e.to_string()),
         }
     }
 }

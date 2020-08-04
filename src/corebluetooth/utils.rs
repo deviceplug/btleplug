@@ -20,8 +20,7 @@ use std::ffi::{CStr, CString};
 
 use objc::runtime::Object;
 
-use super::framework::{nil, cb, ns};
-
+use super::framework::{cb, nil, ns};
 
 pub const NOT_SUPPORTED_ERROR: &'static str = "Error! Not supported by blurmac!";
 pub const NO_PERIPHERAL_FOUND: &'static str = "Error! No peripheral found!";
@@ -32,9 +31,15 @@ pub mod NSStringUtils {
     use super::*;
 
     pub fn string_to_string(nsstring: *mut Object) -> String {
-        if nsstring == nil { return String::from("nil"); }
+        if nsstring == nil {
+            return String::from("nil");
+        }
         unsafe {
-            String::from(CStr::from_ptr(ns::string_utf8string(nsstring)).to_str().unwrap())
+            String::from(
+                CStr::from_ptr(ns::string_utf8string(nsstring))
+                    .to_str()
+                    .unwrap(),
+            )
         }
     }
 
@@ -42,7 +47,6 @@ pub mod NSStringUtils {
         ns::string(CString::new(string).unwrap().as_ptr())
     }
 }
-
 
 pub mod CoreBluetoothUtils {
     use super::*;
@@ -52,30 +56,47 @@ pub mod CoreBluetoothUtils {
         // UUID is short (16 bits). However, WebBluetooth mandates lowercase UUID strings. And Servo
         // seems to compare strings, not the binary representation.
         let uuid = NSStringUtils::string_to_string(cb::uuid_uuidstring(cbuuid));
-        let long = if uuid.len() == 4 { format!("0000{}-0000-1000-8000-00805f9b34fb", uuid) } else { uuid };
+        let long = if uuid.len() == 4 {
+            format!("0000{}-0000-1000-8000-00805f9b34fb", uuid)
+        } else {
+            uuid
+        };
         long.to_lowercase()
     }
 
     pub fn peripheral_debug(peripheral: *mut Object) -> String {
-        if peripheral == nil { return String::from("nil"); }
+        if peripheral == nil {
+            return String::from("nil");
+        }
         let name = cb::peripheral_name(peripheral);
         let uuid = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
         if name != nil {
-            format!("CBPeripheral({}, {})", NSStringUtils::string_to_string(name), NSStringUtils::string_to_string(uuid))
+            format!(
+                "CBPeripheral({}, {})",
+                NSStringUtils::string_to_string(name),
+                NSStringUtils::string_to_string(uuid)
+            )
         } else {
             format!("CBPeripheral({})", NSStringUtils::string_to_string(uuid))
         }
     }
 
     pub fn service_debug(service: *mut Object) -> String {
-        if service == nil { return String::from("nil"); }
+        if service == nil {
+            return String::from("nil");
+        }
         let uuid = cb::uuid_uuidstring(cb::attribute_uuid(service));
         format!("CBService({})", NSStringUtils::string_to_string(uuid))
     }
 
     pub fn characteristic_debug(characteristic: *mut Object) -> String {
-        if characteristic == nil { return String::from("nil"); }
+        if characteristic == nil {
+            return String::from("nil");
+        }
         let uuid = cb::uuid_uuidstring(cb::attribute_uuid(characteristic));
-        format!("CBCharacteristic({})", NSStringUtils::string_to_string(uuid))
+        format!(
+            "CBCharacteristic({})",
+            NSStringUtils::string_to_string(uuid)
+        )
     }
 }

@@ -11,23 +11,17 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
+use super::{ble::watcher::BLEWatcher, peripheral::Peripheral, utils};
 use crate::{
-    api::{
-        Central, CentralEvent, BDAddr, AdapterManager
-    },
-    Result
-};
-use super::{
-    peripheral::Peripheral,
-    ble::watcher::BLEWatcher,
-    utils,
+    api::{AdapterManager, BDAddr, Central, CentralEvent},
+    Result,
 };
 use std::sync::{mpsc::Receiver, Arc, Mutex};
 
 #[derive(Clone)]
 pub struct Adapter {
     watcher: Arc<Mutex<BLEWatcher>>,
-    manager: AdapterManager<Peripheral>
+    manager: AdapterManager<Peripheral>,
 }
 
 impl Adapter {
@@ -49,7 +43,8 @@ impl Central<Peripheral> for Adapter {
         watcher.start(Box::new(move |args| {
             let bluetooth_address = args.get_bluetooth_address().unwrap();
             let address = utils::to_addr(bluetooth_address);
-            let peripheral = manager.peripheral(address)
+            let peripheral = manager
+                .peripheral(address)
                 .unwrap_or_else(|| Peripheral::new(manager.clone(), address));
             peripheral.update_properties(&args);
             if !manager.has_peripheral(&address) {
@@ -76,9 +71,7 @@ impl Central<Peripheral> for Adapter {
         self.manager.peripheral(address)
     }
 
-    fn active(&self, _enabled: bool) {
-    }
+    fn active(&self, _enabled: bool) {}
 
-    fn filter_duplicates(&self, _enabled: bool) {
-    }
+    fn filter_duplicates(&self, _enabled: bool) {}
 }

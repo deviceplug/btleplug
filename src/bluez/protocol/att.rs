@@ -11,13 +11,13 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use nom::{le_u8, le_u16, IResult};
+use nom::{le_u16, le_u8, IResult};
 
-use crate::api::{Characteristic, UUID, CharPropFlags, ValueNotification};
+use crate::api::{CharPropFlags, Characteristic, ValueNotification, UUID};
 
 use crate::bluez::constants::*;
 use crate::bluez::protocol::*;
-use bytes::{BytesMut, BufMut};
+use bytes::{BufMut, BytesMut};
 
 #[cfg(test)]
 mod tests {
@@ -25,59 +25,72 @@ mod tests {
 
     #[test]
     fn test_characteristics() {
-        let buf = [9, 7, 2, 0, 2, 3, 0, 0, 42, 4, 0, 2, 5, 0, 1, 42, 6, 0, 10, 7, 0, 2, 42];
-        assert_eq!(characteristics(&buf), Ok((
-            &[][..],
-            Ok(vec![
-                Characteristic {
-                    start_handle: 2,
-                    value_handle: 3,
-                    end_handle: 0xFFFF,
-                    uuid: UUID::B16(0x2A00),
-                    properties: CharPropFlags::READ
-                },
-                Characteristic {
-                    start_handle: 4,
-                    value_handle: 5,
-                    end_handle: 0xFFFF,
-                    uuid: UUID::B16(0x2A01),
-                    properties: CharPropFlags::READ
-                },
-                Characteristic {
-                    start_handle: 6,
-                    value_handle: 7,
-                    end_handle: 0xFFFF,
-                    uuid: UUID::B16(0x2A02),
-                    properties: CharPropFlags::READ | CharPropFlags::WRITE
-                },
-            ]
-        ))))
+        let buf = [
+            9, 7, 2, 0, 2, 3, 0, 0, 42, 4, 0, 2, 5, 0, 1, 42, 6, 0, 10, 7, 0, 2, 42,
+        ];
+        assert_eq!(
+            characteristics(&buf),
+            Ok((
+                &[][..],
+                Ok(vec![
+                    Characteristic {
+                        start_handle: 2,
+                        value_handle: 3,
+                        end_handle: 0xFFFF,
+                        uuid: UUID::B16(0x2A00),
+                        properties: CharPropFlags::READ
+                    },
+                    Characteristic {
+                        start_handle: 4,
+                        value_handle: 5,
+                        end_handle: 0xFFFF,
+                        uuid: UUID::B16(0x2A01),
+                        properties: CharPropFlags::READ
+                    },
+                    Characteristic {
+                        start_handle: 6,
+                        value_handle: 7,
+                        end_handle: 0xFFFF,
+                        uuid: UUID::B16(0x2A02),
+                        properties: CharPropFlags::READ | CharPropFlags::WRITE
+                    },
+                ])
+            ))
+        )
     }
 
     #[test]
     fn test_value_notification() {
-        let buf = [27, 46, 0, 165, 17, 5, 0, 0, 130, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-        assert_eq!(value_notification(&buf), Ok((
-            &[][..],
-            ValueNotification {
-                uuid: UUID::B16(0),
-                handle: Some(46),
-                value: vec![165, 17, 5, 0, 0, 130, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            })
-        ));
+        let buf = [
+            27, 46, 0, 165, 17, 5, 0, 0, 130, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+        assert_eq!(
+            value_notification(&buf),
+            Ok((
+                &[][..],
+                ValueNotification {
+                    uuid: UUID::B16(0),
+                    handle: Some(46),
+                    value: vec![165, 17, 5, 0, 0, 130, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                }
+            ))
+        );
     }
 
     #[test]
     fn test_error() {
         let buf = [1, 8, 32, 0, 10];
-        assert_eq!(characteristics(&buf), Ok((
-            &[][..],
-            Err(ErrorResponse {
-                request_opcode: 0x08,
-                handle: 0x20,
-                error_code: 0x0a,
-            })
-        )))
+        assert_eq!(
+            characteristics(&buf),
+            Ok((
+                &[][..],
+                Err(ErrorResponse {
+                    request_opcode: 0x08,
+                    handle: 0x20,
+                    error_code: 0x0a,
+                })
+            ))
+        )
     }
 
     #[test]
@@ -95,15 +108,15 @@ pub struct NotifyResponse {
 }
 
 named!(pub notify_response<&[u8], NotifyResponse>,
-   do_parse!(
-      _op: tag!(&[ATT_OP_READ_BY_TYPE_RESP]) >>
-      typ: le_u8 >>
-      handle: le_u16 >>
-      value: le_u16 >>
-      (
-        NotifyResponse { typ, handle, value }
-      )
-   ));
+do_parse!(
+   _op: tag!(&[ATT_OP_READ_BY_TYPE_RESP]) >>
+   typ: le_u8 >>
+   handle: le_u16 >>
+   value: le_u16 >>
+   (
+     NotifyResponse { typ, handle, value }
+   )
+));
 
 #[derive(Debug, PartialEq)]
 pub struct ExchangeMTURequest {
@@ -111,13 +124,13 @@ pub struct ExchangeMTURequest {
 }
 
 named!(pub mtu_request<&[u8], ExchangeMTURequest>,
-    do_parse!(
-      _op: tag!(&[ATT_OP_EXCHANGE_MTU_REQ]) >>
-      client_rx_mtu: le_u16 >>
-      (
-        ExchangeMTURequest { client_rx_mtu }
-      )
-    ));
+do_parse!(
+  _op: tag!(&[ATT_OP_EXCHANGE_MTU_REQ]) >>
+  client_rx_mtu: le_u16 >>
+  (
+    ExchangeMTURequest { client_rx_mtu }
+  )
+));
 
 #[derive(Debug, PartialEq)]
 pub struct ErrorResponse {
@@ -161,27 +174,31 @@ fn characteristic(i: &[u8], b16_uuid: bool) -> IResult<&[u8], Characteristic> {
         try_parse!(i, map!(parse_uuid_128, |b| UUID::B128(b)))
     };
 
-    Ok((i, Characteristic {
-        start_handle,
-        value_handle,
-        end_handle: 0xFFFF,
-        uuid,
-        properties: CharPropFlags::from_bits_truncate(properties),
-    }))
+    Ok((
+        i,
+        Characteristic {
+            start_handle,
+            value_handle,
+            end_handle: 0xFFFF,
+            uuid,
+            properties: CharPropFlags::from_bits_truncate(properties),
+        },
+    ))
 }
 
 pub fn characteristics(i: &[u8]) -> IResult<&[u8], Result<Vec<Characteristic>, ErrorResponse>> {
     let (i, opcode) = try_parse!(i, le_u8);
 
     let (i, result) = match opcode {
-        ATT_OP_ERROR_RESP => {
-            try_parse!(i, map!(error_response, |r| Err(r)))
-        }
+        ATT_OP_ERROR_RESP => try_parse!(i, map!(error_response, |r| Err(r))),
         ATT_OP_READ_BY_TYPE_RESP => {
             let (i, rec_len) = try_parse!(i, le_u8);
             let num = i.len() / rec_len as usize;
             let b16_uuid = rec_len == 7;
-            try_parse!(i, map!(count!(apply!(characteristic, b16_uuid), num), |r| Ok(r)))
+            try_parse!(
+                i,
+                map!(count!(apply!(characteristic, b16_uuid), num), |r| Ok(r))
+            )
         }
         x => {
             warn!("unhandled characteristics op type {} for {:?}", x, i);

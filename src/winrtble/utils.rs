@@ -12,39 +12,32 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use crate::{
-    api::{BDAddr, UUID, CharPropFlags},
-    Error,
-    Result
+    api::{BDAddr, CharPropFlags, UUID},
+    Error, Result,
+};
+use winrt::windows::devices::bluetooth::genericattributeprofile::{
+    GattCharacteristicProperties, GattCommunicationStatus,
 };
 use winrt::Guid;
-use winrt::windows::devices::bluetooth::genericattributeprofile::{GattCharacteristicProperties, GattCommunicationStatus};
 
 pub fn to_error(status: GattCommunicationStatus) -> Result<()> {
     match status {
-        GattCommunicationStatus::AccessDenied => {
-            Err(Error::PermissionDenied)
-        },
-        GattCommunicationStatus::Unreachable => {
-            Err(Error::NotConnected)
-        },
-        GattCommunicationStatus::Success => {
-            Ok(())
-        },
+        GattCommunicationStatus::AccessDenied => Err(Error::PermissionDenied),
+        GattCommunicationStatus::Unreachable => Err(Error::NotConnected),
+        GattCommunicationStatus::Success => Ok(()),
         GattCommunicationStatus::ProtocolError => {
             Err(Error::NotSupported("ProtocolError".to_string()))
-        },
-        GattCommunicationStatus(a) => {
-            Err(Error::Other(format!("Communication Error: {}", a)))
-        },
+        }
+        GattCommunicationStatus(a) => Err(Error::Other(format!("Communication Error: {}", a))),
     }
 }
 
 pub fn to_addr(addr: u64) -> BDAddr {
-    let mut address : [u8; 6usize] = [0, 0, 0, 0, 0, 0];
+    let mut address: [u8; 6usize] = [0, 0, 0, 0, 0, 0];
     for i in 0..6 {
         address[i] = (addr >> (8 * i)) as u8;
     }
-    BDAddr{ address }
+    BDAddr { address }
 }
 
 pub fn to_address(addr: BDAddr) -> u64 {
@@ -68,7 +61,7 @@ pub fn to_uuid(uuid: &Guid) -> UUID {
         array[i + 8] = (uuid.Data3 >> (8 * i)) as u8;
     }
     for i in 0..8 {
-        array[i] = uuid.Data4[7-i];
+        array[i] = uuid.Data4[7 - i];
     }
     UUID::B128(array)
 }
@@ -92,11 +85,19 @@ pub fn to_guid(uuid: &UUID) -> Guid {
             for i in 0..8 {
                 data4[i] = a[i + 8];
             }
-            Guid{ Data1: data1, Data2: data2, Data3: data3, Data4: data4 }
-        },
-        UUID::B16(_) => {
-            Guid{ Data1: 0, Data2: 0, Data3: 0, Data4: [0; 8] }
+            Guid {
+                Data1: data1,
+                Data2: data2,
+                Data3: data3,
+                Data4: data4,
+            }
         }
+        UUID::B16(_) => Guid {
+            Data1: 0,
+            Data2: 0,
+            Data3: 0,
+            Data4: [0; 8],
+        },
     }
 }
 

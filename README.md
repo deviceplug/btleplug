@@ -4,7 +4,7 @@
 [![Crates.io Downloads](https://img.shields.io/crates/d/btleplug)](https://crates.io/crates/btleplug)
 [![Crates.io License](https://img.shields.io/crates/l/btleplug)](https://crates.io/crates/btleplug)
 
-[![Discord](https://img.shields.io/discord/353303527587708932.svg?logo=discord)](https://discord.gg/QGhMFzR)
+[![Discord](https://img.shields.io/discord/738080600032018443.svg?logo=discord)](https://discord.gg/QGhMFzR)
 
 [![Github donate button](https://img.shields.io/badge/github-donate-ff69b4.svg)](https://www.github.com/sponsors/qdot)
 

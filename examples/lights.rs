@@ -52,7 +52,7 @@ pub fn main() {
                 .iter()
                 .any(|name| name.contains("LEDBlue"))
         })
-        .unwrap();
+        .expect("No lights found");
 
     // connect to the device
     light.connect().unwrap();

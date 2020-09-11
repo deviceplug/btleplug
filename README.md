@@ -147,7 +147,7 @@ Beyond that, some of our other goals are:
 | GATT Server Disconnect Event |X|X|X|
 | Write to Characteristic (Sync) |X|X|X|
 | Write to Characteristic (Async) |||X|
-| Read from Characteristic (Sync) |X||X|
+| Read from Characteristic (Sync) |X|X|X|
 | Read from Characteristic (Async) |X|||
 | Subscribe to Characteristic (Sync) |X|X|X|
 | Subscribe to Characteristic (Async) ||||

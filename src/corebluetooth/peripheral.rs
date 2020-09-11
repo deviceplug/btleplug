@@ -260,8 +260,33 @@ impl ApiPeripheral for Peripheral {
 
     /// Sends a request (write) to the device. Synchronously returns either an error if the request
     /// was not accepted or the response from the device.
-    fn request(&self, _characteristic: &Characteristic, _data: &[u8]) -> Result<Vec<u8>> {
-        Ok(Vec::new())
+    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<Vec<u8>> {
+        println!("Trying write!");
+        // Not sure what to return, since a write will not respond with the data. So, erm, let's
+        // just return what was passed in.
+        let mut result = Vec::<u8>::new();
+        for i in 0..data.len() {
+            result.push(data[i]);
+        }
+
+        task::block_on(async {
+            let fut = CoreBluetoothReplyFuture::default();
+            self.message_sender
+                .send(CoreBluetoothMessage::WriteValueWithResponse(
+                    self.uuid,
+                    get_apple_uuid(characteristic.uuid),
+                    Vec::from(data),
+                    fut.get_state_clone(),
+                ))
+                .await;
+            match fut.await {
+                CoreBluetoothReply::Ok => {},
+                _ => {
+                    panic!("Shouldn't get anything but read result!");
+                },
+            }
+        });
+        Ok(result)
     }
 
     /// Sends a read-by-type request to device for the range of handles covered by the
@@ -336,7 +361,27 @@ impl ApiPeripheral for Peripheral {
 
     fn read_async(&self, _characteristic: &Characteristic, _handler: Option<RequestCallback>) {}
 
-    fn read(&self, _characteristic: &Characteristic) -> Result<Vec<u8>> {
-        Ok(vec![])
+    fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
+        info!("Trying read!");
+        let mut result = Vec::<u8>::new();
+        task::block_on(async {
+            let fut = CoreBluetoothReplyFuture::default();
+            self.message_sender
+                .send(CoreBluetoothMessage::ReadValue(
+                    self.uuid,
+                    get_apple_uuid(characteristic.uuid),
+                    fut.get_state_clone(),
+                ))
+                .await;
+            match fut.await {
+                CoreBluetoothReply::ReadResult(chars) => {
+                    result = chars;
+                }
+                _ => {
+                    panic!("Shouldn't get anything but read result!");
+                },
+            }
+        });
+        Ok(result)
     }
 }

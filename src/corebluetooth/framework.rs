@@ -392,7 +392,7 @@ pub mod cb {
         }
     }
 
-    pub fn peripheral_readvalueforcharacteristic(
+    pub fn peripheral_readvalue_forcharacteristic(
         cbperipheral: *mut Object,
         characteristic: *mut Object, /* CBCharacteristic* */
     ) {
@@ -405,10 +405,11 @@ pub mod cb {
         cbperipheral: *mut Object,
         value: *mut Object,          /* NSData* */
         characteristic: *mut Object, /* CBCharacteristic* */
+        write_type: usize,
     ) {
         unsafe {
             let _: () =
-                msg_send![cbperipheral, writeValue:value forCharacteristic:characteristic type:0];
+                msg_send![cbperipheral, writeValue:value forCharacteristic:characteristic type:write_type];
             // CBCharacteristicWriteWithResponse from CBPeripheral.h
         }
     }

@@ -35,7 +35,8 @@ use super::{
 
 use uuid::Uuid;
 
-use libc::c_void;
+use libc::{c_void, c_char};
+use std::ffi::CStr;
 
 pub enum CentralDelegateEvent {
     DidUpdateState,
@@ -50,6 +51,7 @@ pub enum CentralDelegateEvent {
     CharacteristicSubscribed(Uuid, Uuid),
     CharacteristicUnsubscribed(Uuid, Uuid),
     CharacteristicNotified(Uuid, Uuid, Vec<u8>),
+    CharacteristicWritten(Uuid, Uuid),
     // TODO Deal with descriptors at some point, but not a huge worry at the moment.
     // DiscoveredDescriptors(String, )
 }
@@ -149,6 +151,20 @@ pub mod CentralDelegate {
         });
 
         Class::get("BtlePlugCentralManagerDelegate").unwrap()
+    }
+
+    fn localized_description(error: *mut Object) -> String {
+        if error == nil {
+            "".to_string()
+        } else {
+            unsafe {
+                let nsstring: *mut Object = msg_send![error, localizedDescription];
+                let c_string: *const c_char = msg_send![nsstring, UTF8String];
+                let c_str: &CStr = CStr::from_ptr(c_string);
+                let str_slice: &str = c_str.to_str().unwrap();
+                str_slice.to_owned()
+            }
+        }
     }
 
     ////////////////////////////////////////////////////////////////
@@ -302,7 +318,7 @@ pub mod CentralDelegate {
         trace!(
             "delegate_peripheral_diddiscoverservices {} {}",
             CoreBluetoothUtils::peripheral_debug(peripheral),
-            if error != nil { "error" } else { "" }
+            localized_description(error)
         );
         if error == nil {
             let services = cb::peripheral_services(peripheral);
@@ -347,7 +363,7 @@ pub mod CentralDelegate {
             "delegate_peripheral_diddiscoverincludedservicesforservice_error {} {} {}",
             CoreBluetoothUtils::peripheral_debug(peripheral),
             CoreBluetoothUtils::service_debug(service),
-            if error != nil { "error" } else { "" }
+            localized_description(error)
         );
         if error == nil {
             let includes = cb::service_includedservices(service);
@@ -369,7 +385,7 @@ pub mod CentralDelegate {
             "delegate_peripheral_diddiscovercharacteristicsforservice_error {} {} {}",
             CoreBluetoothUtils::peripheral_debug(peripheral),
             CoreBluetoothUtils::service_debug(service),
-            if error != nil { "error" } else { "" }
+            localized_description(error)
         );
         if error == nil {
             let mut char_map = HashMap::new();
@@ -407,7 +423,7 @@ pub mod CentralDelegate {
             "delegate_peripheral_didupdatevalueforcharacteristic_error {} {} {}",
             CoreBluetoothUtils::peripheral_debug(peripheral),
             CoreBluetoothUtils::characteristic_debug(characteristic),
-            if error != nil { "error" } else { "" }
+            localized_description(error)
         );
         if error == nil {
             let v = get_characteristic_value(characteristic);
@@ -424,7 +440,7 @@ pub mod CentralDelegate {
     }
 
     extern "C" fn delegate_peripheral_didwritevalueforcharacteristic_error(
-        _delegate: &mut Object,
+        delegate: &mut Object,
         _cmd: Sel,
         peripheral: *mut Object,
         characteristic: *mut Object,
@@ -434,9 +450,18 @@ pub mod CentralDelegate {
             "delegate_peripheral_didwritevalueforcharacteristic_error {} {} {}",
             CoreBluetoothUtils::peripheral_debug(peripheral),
             CoreBluetoothUtils::characteristic_debug(characteristic),
-            if error != nil { "error" } else { "" }
+            localized_description(error)
         );
-        if error == nil {}
+        if error == nil {
+            let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
+            let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
+            let cuuid_nsstring = cb::uuid_uuidstring(cb::attribute_uuid(characteristic));
+            let cuuid = Uuid::from_str(&NSStringUtils::string_to_string(cuuid_nsstring)).unwrap();
+            send_delegate_event(
+                delegate,
+                CentralDelegateEvent::CharacteristicWritten(puuid, cuuid),
+            );
+        }
     }
 
     extern "C" fn delegate_peripheral_didupdatenotificationstateforcharacteristic_error(

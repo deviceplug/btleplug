@@ -280,10 +280,10 @@ impl ApiPeripheral for Peripheral {
                 ))
                 .await;
             match fut.await {
-                CoreBluetoothReply::Ok => {},
+                CoreBluetoothReply::Ok => {}
                 _ => {
                     panic!("Shouldn't get anything but read result!");
-                },
+                }
             }
         });
         Ok(result)
@@ -379,7 +379,7 @@ impl ApiPeripheral for Peripheral {
                 }
                 _ => {
                     panic!("Shouldn't get anything but read result!");
-                },
+                }
             }
         });
         Ok(result)

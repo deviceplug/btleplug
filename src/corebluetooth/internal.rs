@@ -351,7 +351,10 @@ impl CoreBluetoothInternal {
                 for byte in data.iter() {
                     data_clone.push(*byte);
                 }
-                state.lock().unwrap().set_reply(CoreBluetoothReply::ReadResult(data_clone));
+                state
+                    .lock()
+                    .unwrap()
+                    .set_reply(CoreBluetoothReply::ReadResult(data_clone));
                 task::block_on(async {
                     p.event_sender
                         .send(CBPeripheralEvent::Notification(characteristic_uuid, data))
@@ -361,11 +364,7 @@ impl CoreBluetoothInternal {
         }
     }
 
-    fn on_characteristic_written(
-        &mut self,
-        peripheral_uuid: Uuid,
-        characteristic_uuid: Uuid,
-    ) {
+    fn on_characteristic_written(&mut self, peripheral_uuid: Uuid, characteristic_uuid: Uuid) {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
                 info!("Got written event!");
@@ -390,7 +389,7 @@ impl CoreBluetoothInternal {
         characteristic_uuid: Uuid,
         data: Vec<u8>,
         fut: CoreBluetoothReplyStateShared,
-        with_response: bool
+        with_response: bool,
     ) {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
@@ -419,10 +418,7 @@ impl CoreBluetoothInternal {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
                 info!("Reading value!");
-                cb::peripheral_readvalue_forcharacteristic(
-                    *p.peripheral,
-                    *c.characteristic,
-                );
+                cb::peripheral_readvalue_forcharacteristic(*p.peripheral, *c.characteristic);
                 c.read_future_state.push_front(fut);
             }
         }
@@ -523,7 +519,7 @@ impl CoreBluetoothInternal {
                     ) => self.on_characteristic_read(peripheral_id, characteristic_id, data),
                     CentralDelegateEvent::CharacteristicWritten(
                         peripheral_id,
-                        characteristic_id
+                        characteristic_id,
                     ) => self.on_characteristic_written(peripheral_id, characteristic_id),
                     _ => info!("Unknown type!"),
                 };
@@ -545,9 +541,12 @@ impl CoreBluetoothInternal {
                     CoreBluetoothMessage::WriteValue(peripheral_uuid, char_uuid, data, fut) => {
                         self.write_value(peripheral_uuid, char_uuid, data, fut, false)
                     }
-                    CoreBluetoothMessage::WriteValueWithResponse(peripheral_uuid, char_uuid, data, fut) => {
-                        self.write_value(peripheral_uuid, char_uuid, data, fut, true)
-                    }
+                    CoreBluetoothMessage::WriteValueWithResponse(
+                        peripheral_uuid,
+                        char_uuid,
+                        data,
+                        fut,
+                    ) => self.write_value(peripheral_uuid, char_uuid, data, fut, true),
                     CoreBluetoothMessage::Subscribe(peripheral_uuid, char_uuid, fut) => {
                         self.subscribe(peripheral_uuid, char_uuid, fut)
                     }

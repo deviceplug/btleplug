@@ -408,8 +408,7 @@ pub mod cb {
         write_type: usize,
     ) {
         unsafe {
-            let _: () =
-                msg_send![cbperipheral, writeValue:value forCharacteristic:characteristic type:write_type];
+            let _: () = msg_send![cbperipheral, writeValue:value forCharacteristic:characteristic type:write_type];
             // CBCharacteristicWriteWithResponse from CBPeripheral.h
         }
     }

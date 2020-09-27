@@ -185,8 +185,14 @@ impl FromStr for UUID {
 
     fn from_str(s: &str) -> ParseUUIDResult<Self> {
         let bytes = s
-            .split(':')
-            .map(|part: &str| u8::from_str_radix(part, 16).map_err(|_| ParseUUIDError::InvalidInt))
+            .chars()
+            .filter(|ch| ch.is_ascii_alphanumeric())
+            .collect::<Vec<char>>()
+            .chunks(2)
+            .map(|chunk| {
+                u8::from_str_radix(chunk.iter().collect::<String>().as_str(), 16)
+                    .map_err(|_| ParseUUIDError::InvalidInt)
+            })
             .collect::<ParseUUIDResult<Vec<u8>>>()?;
 
         if let Ok(bytes) = <[u8; 2]>::try_from(bytes.as_slice()) {
@@ -443,7 +449,7 @@ mod tests {
                 ])),
             ),
             ("2A:00:00", Err(ParseUUIDError::IncorrectByteCount)),
-            ("2A:100", Err(ParseUUIDError::InvalidInt)),
+            ("2A:100", Err(ParseUUIDError::IncorrectByteCount)),
             ("ZZ:00", Err(ParseUUIDError::InvalidInt)),
         ];
 
@@ -455,6 +461,20 @@ mod tests {
                 assert_eq!(input, uuid.to_string());
             }
         }
+
+        let expected_uuid = Ok(UUID::B128([
+            0x8a, 0xf7, 0x15, 0x02, 0x9c, 0x00, 0x49, 0x8a, 0x24, 0x10, 0x8a, 0x33, 0x02, 0x00,
+            0xfa, 0x99,
+        ]));
+        let result: ParseUUIDResult<UUID> =
+            "99:fa:00:02:33:8a:10:24:8a:49:00:9c:02:15:f7:8a".parse();
+        assert_eq!(result, expected_uuid);
+
+        let result: ParseUUIDResult<UUID> = "99fa0002-338a-1024-8a49-009c0215f78a".parse();
+        assert_eq!(result, expected_uuid);
+
+        let result: ParseUUIDResult<UUID> = "99fa0002338a10248a49009c0215f78a".parse();
+        assert_eq!(result, expected_uuid);
     }
 
     #[test]

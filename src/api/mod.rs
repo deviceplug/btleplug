@@ -81,7 +81,7 @@ impl AddressType {
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Default)]
 #[repr(C)]
 pub struct BDAddr {
-    pub address: [u8; 6usize],
+    address: [u8; 6usize],
 }
 
 impl fmt::Display for BDAddr {
@@ -124,6 +124,23 @@ impl AsRef<[u8]> for BDAddr {
     }
 }
 
+impl From<[u8; 6]> for BDAddr {
+    /// Build an address from an array.
+    ///
+    /// `address[0]` will be the MSB and `address[5]` the LSB.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use btleplug::api::BDAddr;
+    /// let addr: BDAddr = [0x2a, 0xCC, 0x00, 0x34, 0xfa, 0x00].into();
+    /// assert_eq!("2a:cc:00:34:fa:00", addr.to_string());
+    /// ```
+    fn from(address: [u8; 6]) -> Self {
+        Self { address }
+    }
+}
+
 #[derive(Debug, Error, Clone, PartialEq)]
 pub enum ParseBDAddrError {
     #[error("Bluetooth address has to be 6 bytes long")]
@@ -157,6 +174,13 @@ impl FromStr for BDAddr {
 impl BDAddr {
     pub fn into_inner(self) -> [u8; 6] {
         self.address
+    }
+    pub fn bytes(&self) -> &[u8; 6] {
+        &self.address
+    }
+    /// Check if this address is a randomly generated.
+    pub fn is_random_static(&self) -> bool {
+        self.address[5] & 0b11 == 0b11
     }
     /// Parses a Bluetooth address colons `:` as delimiters.
     ///

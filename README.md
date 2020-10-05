@@ -117,12 +117,10 @@ Beyond that, some of our other goals are:
   - Please hold off on filing more issues until base implementation is
     landed.
 - **WASM/WebBluetooth**
-  - This seems more useful for a stunt hack than anything, but I love
-    a good stunt hack.
-  - We'd probably want
-    [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen) to
-    support WebBluetooth via its API extensions, and just build a shim
-    on top of that?
+  - WebBluetooth has been added to wasm-bindgen's web-sys by @qdot, and a full
+    implementation has been done in other libraries that could easily be ported
+    here. This is now definitely in the works, once the new API surface is
+    solidified.
   - [Tracking issue here](https://github.com/deviceplug/btleplug/issues/13)
   - Please hold off on filing more issues until base implementation is
     landed.

@@ -1,3 +1,18 @@
+# 0.5.2 (2020-10-04)
+
+## Features
+
+- UUID now takes simplified inputs for from_str()
+- Read/Write added for CoreBluetooth
+- Example improvements
+
+## Bugfixes
+
+- Windows UWP characteristics now actually reads on read(), instead of just
+  returning []
+
+## Bugfixes
+
 # 0.5.1 (2020-08-03)
 
 ## Bugfixes

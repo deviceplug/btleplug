@@ -342,7 +342,11 @@ impl ApiPeripheral for Peripheral {
 
     fn read_async(&self, _characteristic: &Characteristic, _handler: Option<RequestCallback>) {}
 
-    fn read(&self, _characteristic: &Characteristic) -> Result<Vec<u8>> {
-        Ok(vec![])
+    fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
+        if let Some(ble_characteristic) = self.ble_characteristics.get(&characteristic.uuid) {
+            return ble_characteristic.read_value();
+        } else {
+            Err(Error::NotSupported("read".into()))
+        }
     }
 }

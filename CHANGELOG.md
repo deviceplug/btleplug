@@ -1,3 +1,10 @@
+# 0.5.3 (2020-10-05)
+
+## Bugfixes
+
+- Fix issue where library panics whenever a characteristic is written without
+  response on macOS.
+
 # 0.5.2 (2020-10-04)
 
 ## Features

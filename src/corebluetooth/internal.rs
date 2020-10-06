@@ -400,11 +400,7 @@ impl CoreBluetoothInternal {
                     *c.characteristic,
                     if with_response { 1 } else { 0 },
                 );
-                if with_response {
-                    c.write_future_state.push_front(fut);
-                } else {
-                    fut.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
-                }
+                c.write_future_state.push_front(fut);
             }
         }
     }

@@ -346,20 +346,28 @@ impl CoreBluetoothInternal {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
                 info!("Got read event!");
-                let state = c.read_future_state.pop_back().unwrap();
+
                 let mut data_clone = Vec::new();
                 for byte in data.iter() {
                     data_clone.push(*byte);
                 }
-                state
-                    .lock()
-                    .unwrap()
-                    .set_reply(CoreBluetoothReply::ReadResult(data_clone));
-                task::block_on(async {
-                    p.event_sender
-                        .send(CBPeripheralEvent::Notification(characteristic_uuid, data))
-                        .await;
-                });
+                // Reads and notifications both return the same callback. If
+                // we're trying to do a read, we'll have a future we can
+                // fulfill. Otherwise, just treat the returned value as a
+                // notification and use the event system.
+                if c.read_future_state.len() > 0 {
+                    let state = c.read_future_state.pop_back().unwrap();
+                    state
+                        .lock()
+                        .unwrap()
+                        .set_reply(CoreBluetoothReply::ReadResult(data_clone));
+                } else {
+                    task::block_on(async {
+                        p.event_sender
+                            .send(CBPeripheralEvent::Notification(characteristic_uuid, data))
+                            .await;
+                    });
+                }
             }
         }
     }

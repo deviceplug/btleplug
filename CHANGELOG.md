@@ -1,3 +1,10 @@
+# 0.5.4 (2020-10-06)
+
+## Bugfixes
+
+- Fix issue where library panics whenever a characteristic is read instead of
+  notified on macOS.
+
 # 0.5.3 (2020-10-05)
 
 ## Bugfixes

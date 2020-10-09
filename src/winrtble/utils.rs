@@ -67,14 +67,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn check_address() {
-        let bluetooth_address = 252566450624623;
-        let addr = bluetooth_address.into();
-        let result = addr.into();
-        assert_eq!(bluetooth_address, result);
-    }
-
-    #[test]
     fn check_uuid_to_guid_conversion() {
         let uuid_str = "10B201FF-5B3B-45A1-9508-CF3EFCD7BBAF";
         let uuid = Uuid::from_str(uuid_str).unwrap();

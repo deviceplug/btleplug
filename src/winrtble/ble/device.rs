@@ -32,7 +32,7 @@ unsafe impl Sync for BLEDevice {}
 
 impl BLEDevice {
     pub fn new(address: BDAddr, connection_status_changed: ConnectedEventHandler) -> Result<Self> {
-        let async_op = BluetoothLEDevice::from_bluetooth_address_async(utils::to_address(address))
+        let async_op = BluetoothLEDevice::from_bluetooth_address_async(address.into())
             .map_err(|_| Error::DeviceNotFound)?;
         let device = async_op.get().map_err(|_| Error::DeviceNotFound)?;
         let connection_status_handler = TypedEventHandler::new(

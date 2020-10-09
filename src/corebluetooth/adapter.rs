@@ -7,7 +7,7 @@ use futures::channel::mpsc::{self, Sender};
 use futures::sink::SinkExt;
 use futures::stream::StreamExt;
 use log::info;
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::sync::mpsc::Receiver;
 
 #[derive(Clone, Debug)]
@@ -17,9 +17,8 @@ pub struct Adapter {
 }
 
 pub(crate) fn uuid_to_bdaddr(uuid: &String) -> BDAddr {
-    BDAddr {
-        address: uuid.as_bytes()[0..6].try_into().unwrap(),
-    }
+    let b: [u8; 6] = uuid.as_bytes()[0..6].try_into().unwrap();
+    BDAddr::try_from(b).unwrap()
 }
 
 impl Adapter {

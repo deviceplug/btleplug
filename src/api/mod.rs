@@ -141,6 +141,37 @@ impl From<[u8; 6]> for BDAddr {
     }
 }
 
+impl<'a> std::convert::TryFrom<&'a [u8]> for BDAddr {
+    type Error = ParseBDAddrError;
+
+    fn try_from(slice: &'a [u8]) -> Result<Self, Self::Error> {
+        if slice.len() < 6 {
+            Err(ParseBDAddrError::IncorrectByteCount)
+        } else {
+            let mut cpy = [0; 6];
+            cpy.copy_from_slice(&slice[..6]);
+            Ok(cpy.into())
+        }
+    }
+}
+
+impl From<u64> for BDAddr {
+    fn from(int: u64) -> Self {
+        let mut cpy = [0; 6];
+        let slice = int.to_be_bytes(); // Reverse order to have MSB on index 0
+        cpy.copy_from_slice(&slice[2..]);
+        cpy.into()
+    }
+}
+
+impl From<BDAddr> for u64 {
+    fn from(addr: BDAddr) -> Self {
+        let mut slice = [0; 8];
+        (&mut slice[2..]).copy_from_slice(&addr.into_inner());
+        u64::from_be_bytes(slice)
+    }
+}
+
 #[derive(Debug, Error, Clone, PartialEq)]
 pub enum ParseBDAddrError {
     #[error("Bluetooth address has to be 6 bytes long")]
@@ -215,8 +246,7 @@ impl BDAddr {
         let mut address = [0; 6];
         for i in (0..12).step_by(2) {
             let part = &s[i..i + 2];
-            address[i / 2] =
-                u8::from_str_radix(part, 16).expect("Checked upfront");
+            address[i / 2] = u8::from_str_radix(part, 16).expect("Checked upfront");
         }
         Ok(Self { address })
     }
@@ -513,5 +543,34 @@ mod tests {
         assert_eq!(format!("{:x}", base), "1f:2a:00:cc:22:f1");
         assert_eq!(format!("{}", base.to_string_flat()), "1f2a00cc22f1");
         assert_eq!(format!("{:X}", base), "1F:2A:00:CC:22:F1");
+    }
+
+    /// A BDAddr with the same value as `hex()`.
+    const fn addr() -> BDAddr {
+        BDAddr {
+            address: [0x1f, 0x2a, 0x00, 0xcc, 0x22, 0xf1],
+        }
+    }
+    /// A u64 with the same value as `addr()`.
+    const fn hex() -> u64 {
+        0x00_00_1f_2a_00_cc_22_f1
+    }
+
+    #[test]
+    fn u64_to_addr() {
+        let hex_addr: BDAddr = hex().into();
+        assert_eq!(hex_addr, addr());
+
+        let hex_back: u64 = hex_addr.into();
+        assert_eq!(hex(), hex_back);
+    }
+
+    #[test]
+    fn addr_to_u64() {
+        let addr_as_hex: u64 = addr().into();
+        assert_eq!(hex(), addr_as_hex);
+
+        let addr_back: BDAddr = addr_as_hex.into();
+        assert_eq!(addr(), addr_back);
     }
 }

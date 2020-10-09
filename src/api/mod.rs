@@ -205,17 +205,18 @@ impl BDAddr {
     ///
     /// All hex-digits `[0-9a-fA-F]` are allowed.
     pub fn from_str_no_delim(s: &str) -> Result<Self, ParseBDAddrError> {
-        if !s.is_ascii() {
-            return Err(ParseBDAddrError::InvalidDigit);
-        }
-        if s.len() > 12 {
+        if s.len() != 12 {
             return Err(ParseBDAddrError::IncorrectByteCount);
         }
+        if s.bytes().find(|b| !b.is_ascii_hexdigit()).is_some() {
+            return Err(ParseBDAddrError::InvalidDigit);
+        }
+
         let mut address = [0; 6];
         for i in (0..12).step_by(2) {
             let part = &s[i..i + 2];
             address[i / 2] =
-                u8::from_str_radix(part, 16).map_err(|_| ParseBDAddrError::InvalidDigit)?;
+                u8::from_str_radix(part, 16).expect("Checked upfront");
         }
         Ok(Self { address })
     }

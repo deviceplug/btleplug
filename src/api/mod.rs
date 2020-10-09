@@ -84,6 +84,14 @@ pub struct BDAddr {
     address: [u8; 6usize],
 }
 
+#[derive(Debug, Error, Clone, PartialEq)]
+pub enum ParseBDAddrError {
+    #[error("Bluetooth address has to be 6 bytes long")]
+    IncorrectByteCount,
+    #[error("All digits in a Bluetooth address must be hex-digits [0-9a-fA-F]")]
+    InvalidDigit,
+}
+
 impl fmt::Display for BDAddr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         <Self as fmt::LowerHex>::fmt(self, f)
@@ -170,14 +178,6 @@ impl From<BDAddr> for u64 {
         (&mut slice[2..]).copy_from_slice(&addr.into_inner());
         u64::from_be_bytes(slice)
     }
-}
-
-#[derive(Debug, Error, Clone, PartialEq)]
-pub enum ParseBDAddrError {
-    #[error("Bluetooth address has to be 6 bytes long")]
-    IncorrectByteCount,
-    #[error("All digits in a Bluetooth address must be hex-digits [0-9a-fA-F]")]
-    InvalidDigit,
 }
 
 impl From<ParseBDAddrError> for Error {
@@ -512,6 +512,13 @@ pub trait Central: Send + Sync + Clone {
 mod tests {
     use super::*;
 
+    /// A BDAddr with the same value as `HEX`.
+    const ADDR: BDAddr = BDAddr {
+        address: [0x1f, 0x2a, 0x00, 0xcc, 0x22, 0xf1],
+    };
+    /// A u64 with the same value as `ADDR`.
+    const HEX: u64 = 0x00_00_1f_2a_00_cc_22_f1;
+
     #[test]
     fn parse_addr() {
         let bytes = [0x2a, 0x00, 0xaa, 0xbb, 0xcc, 0xdd];
@@ -536,41 +543,28 @@ mod tests {
 
     #[test]
     fn display_addr() {
-        let base = "1f:2A:00:cC:22:F1";
-        let base: BDAddr = base.parse().unwrap();
-        assert_eq!(format!("{}", base), "1f:2a:00:cc:22:f1");
-        assert_eq!(format!("{:?}", base), "1f:2a:00:cc:22:f1");
-        assert_eq!(format!("{:x}", base), "1f:2a:00:cc:22:f1");
-        assert_eq!(format!("{}", base.to_string_flat()), "1f2a00cc22f1");
-        assert_eq!(format!("{:X}", base), "1F:2A:00:CC:22:F1");
-    }
-
-    /// A BDAddr with the same value as `hex()`.
-    const fn addr() -> BDAddr {
-        BDAddr {
-            address: [0x1f, 0x2a, 0x00, 0xcc, 0x22, 0xf1],
-        }
-    }
-    /// A u64 with the same value as `addr()`.
-    const fn hex() -> u64 {
-        0x00_00_1f_2a_00_cc_22_f1
+        assert_eq!(format!("{}", ADDR), "1f:2a:00:cc:22:f1");
+        assert_eq!(format!("{:?}", ADDR), "1f:2a:00:cc:22:f1");
+        assert_eq!(format!("{:x}", ADDR), "1f:2a:00:cc:22:f1");
+        assert_eq!(format!("{:X}", ADDR), "1F:2A:00:CC:22:F1");
+        assert_eq!(format!("{}", ADDR.to_string_flat()), "1f2a00cc22f1");
     }
 
     #[test]
     fn u64_to_addr() {
-        let hex_addr: BDAddr = hex().into();
-        assert_eq!(hex_addr, addr());
+        let hex_addr: BDAddr = HEX.into();
+        assert_eq!(hex_addr, ADDR);
 
         let hex_back: u64 = hex_addr.into();
-        assert_eq!(hex(), hex_back);
+        assert_eq!(HEX, hex_back);
     }
 
     #[test]
     fn addr_to_u64() {
-        let addr_as_hex: u64 = addr().into();
-        assert_eq!(hex(), addr_as_hex);
+        let addr_as_hex: u64 = ADDR.into();
+        assert_eq!(HEX, addr_as_hex);
 
         let addr_back: BDAddr = addr_as_hex.into();
-        assert_eq!(addr(), addr_back);
+        assert_eq!(ADDR, addr_back);
     }
 }

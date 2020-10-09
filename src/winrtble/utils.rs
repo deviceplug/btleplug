@@ -40,22 +40,6 @@ pub fn to_error(status: GattCommunicationStatus) -> Result<()> {
     }
 }
 
-pub fn to_addr(addr: u64) -> BDAddr {
-    let mut address: [u8; 6usize] = [0, 0, 0, 0, 0, 0];
-    for i in 0..6 {
-        address[i] = (addr >> (8 * i)) as u8;
-    }
-    BDAddr { address }
-}
-
-pub fn to_address(addr: BDAddr) -> u64 {
-    let mut address = 0u64;
-    for i in (0..6).rev() {
-        address |= (u64::from(addr.address[i])) << (8 * i);
-    }
-    address
-}
-
 pub fn to_uuid(uuid: &Guid) -> Uuid {
     let guid_s = format!("{:?}", uuid);
     Uuid::from_str(&guid_s).unwrap()
@@ -85,8 +69,8 @@ mod tests {
     #[test]
     fn check_address() {
         let bluetooth_address = 252566450624623;
-        let addr = to_addr(bluetooth_address);
-        let result = to_address(addr);
+        let addr = bluetooth_address.into();
+        let result = addr.into();
         assert_eq!(bluetooth_address, result);
     }
 

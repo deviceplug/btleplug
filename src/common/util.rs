@@ -5,9 +5,9 @@
 // Licensed under the BSD 3-Clause license. See LICENSE file in the project root
 // for full license information.
 
-use crate::api::{UUID, ValueNotification, CharacteristicsDiscovery, Characteristic};
-use std::sync::{Arc, Mutex};
+use crate::api::{Characteristic, CharacteristicsDiscovery, ValueNotification, UUID};
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 pub fn invoke_notification_handlers<F: FnMut(ValueNotification) + ?Sized>(
     notification_handlers: &Arc<Mutex<Vec<Box<F>>>>,

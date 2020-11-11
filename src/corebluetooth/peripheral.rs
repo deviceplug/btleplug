@@ -13,9 +13,10 @@ use super::{
 };
 use crate::{
     api::{
-        AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, CommandCallback,
-        NotificationHandler, DiscoveryHandler, Peripheral as ApiPeripheral, PeripheralProperties, RequestCallback,
-        ValueNotification, CharacteristicsDiscovery, UUID,
+        AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic,
+        CharacteristicsDiscovery, CommandCallback, DiscoveryHandler, NotificationHandler,
+        Peripheral as ApiPeripheral, PeripheralProperties, RequestCallback, ValueNotification,
+        UUID,
     },
     common::util,
     Error, Result,
@@ -91,20 +92,20 @@ impl Peripheral {
                                 value: data,
                             },
                         );
-                    },
+                    }
                     Some(CBPeripheralEvent::DiscoveredCharacteristics(char_set)) => {
                         info!("Peripheral received discovery of characteristics event");
                         util::invoke_discovery_handlers(
                             &dh_clone,
                             &CharacteristicsDiscovery {
-                                characteristics_set: char_set
-                            }
+                                characteristics_set: char_set,
+                            },
                         );
-                    },
+                    }
                     None => {
                         error!("Event receiver died, breaking out of corebluetooth device loop.");
                         break;
-                    },
+                    }
                 }
             }
         });
@@ -220,7 +221,7 @@ impl ApiPeripheral for Peripheral {
                 CoreBluetoothReply::Ok => {
                     self.emit(CentralEvent::DeviceDisconnected(self.properties.address));
                 }
-                _ => info!("Disconnect shouldn't get anything but ok")
+                _ => info!("Disconnect shouldn't get anything but ok"),
             }
         });
         info!("Device disconnected!");
@@ -255,7 +256,7 @@ impl ApiPeripheral for Peripheral {
                 if !handlers.contains_key(&characteristic_uuid) {
                     handlers.insert(characteristic_uuid, handler);
                 }
-            },
+            }
             _ => {
                 info!("Discovery handlers lock is contended, skipping");
             }

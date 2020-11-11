@@ -153,7 +153,9 @@ impl CBPeripheral {
             char_set.insert(char);
         }
         task::block_on(async {
-            self.event_sender.send(CBPeripheralEvent::DiscoveredCharacteristics(char_set)).await;
+            self.event_sender
+                .send(CBPeripheralEvent::DiscoveredCharacteristics(char_set))
+                .await;
         });
     }
 
@@ -322,7 +324,7 @@ impl CoreBluetoothInternal {
                 .unwrap()
                 .set_reply(CoreBluetoothReply::Ok);
         }
-   }
+    }
 
     fn on_characteristic_subscribed(&mut self, peripheral_uuid: Uuid, characteristic_uuid: Uuid) {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
@@ -409,7 +411,11 @@ impl CoreBluetoothInternal {
         }
     }
 
-    fn discover_characteristics(&mut self, peripheral_uuid: Uuid, fut: CoreBluetoothReplyStateShared) {
+    fn discover_characteristics(
+        &mut self,
+        peripheral_uuid: Uuid,
+        fut: CoreBluetoothReplyStateShared,
+    ) {
         info!("Trying to discover characteristics!");
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             cb::peripheral_discoverservices(*p.peripheral);
@@ -417,9 +423,7 @@ impl CoreBluetoothInternal {
             // We may not know how many characteristics/services we will discover.
             // In succeeding this future, we are marking that we completed requesting discovery
             // and there may be existing characteristics/services already discovered.
-            fut.lock()
-                .unwrap()
-                .set_reply(CoreBluetoothReply::Ok);
+            fut.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
         }
     }
 
@@ -460,7 +464,7 @@ impl CoreBluetoothInternal {
                 error!("Unknown characteristic");
             }
         } else {
-                error!("Unknown peripheral");
+            error!("Unknown peripheral");
         }
     }
 

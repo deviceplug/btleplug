@@ -61,17 +61,24 @@ pub fn main() {
                 let characteristic_uuid: UUID = "00:00".parse().unwrap();
                 if let Some(peripheral) = central.peripheral(bd_addr) {
                     let peripheral_clone = peripheral.clone();
-                    peripheral.on_discovery(characteristic_uuid, Box::new(move |characteristic| {
-                        println!("I found the characteristic I was looking for: {:?}", characteristic);
-                        let another_clone = peripheral_clone.clone();
-                        task::spawn(async move {
-                            loop {
-                                let value: Result<Vec<u8>, _> = another_clone.read(&characteristic);
-                                println!("I read the value: {:?}", value);
-                                task::sleep(std::time::Duration::from_secs(1)).await;
-                            }
-                        });
-                    }));
+                    peripheral.on_discovery(
+                        characteristic_uuid,
+                        Box::new(move |characteristic| {
+                            println!(
+                                "I found the characteristic I was looking for: {:?}",
+                                characteristic
+                            );
+                            let another_clone = peripheral_clone.clone();
+                            task::spawn(async move {
+                                loop {
+                                    let value: Result<Vec<u8>, _> =
+                                        another_clone.read(&characteristic);
+                                    println!("I read the value: {:?}", value);
+                                    task::sleep(std::time::Duration::from_secs(1)).await;
+                                }
+                            });
+                        }),
+                    );
                 }
             }
             CentralEvent::DeviceDisconnected(bd_addr) => {

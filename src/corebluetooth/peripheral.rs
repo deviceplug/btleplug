@@ -14,8 +14,8 @@ use super::{
 use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, CommandCallback,
-        NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties, RequestCallback,
-        ValueNotification, UUID,
+        NotificationHandler, DiscoveryHandler, Peripheral as ApiPeripheral, PeripheralProperties, RequestCallback,
+        ValueNotification, CharacteristicsDiscovery, UUID,
     },
     common::util,
     Error, Result,
@@ -27,6 +27,7 @@ use async_std::{
 };
 use std::{
     collections::BTreeSet,
+    collections::HashMap,
     fmt::{self, Debug, Display, Formatter},
     iter::FromIterator,
     sync::{Arc, Mutex},
@@ -36,6 +37,7 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct Peripheral {
     notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
+    discovery_handlers: Arc<Mutex<HashMap<UUID, DiscoveryHandler>>>,
     manager: AdapterManager<Self>,
     uuid: Uuid,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
@@ -69,37 +71,55 @@ impl Peripheral {
             has_scan_response: true,
         };
         let notification_handlers = Arc::new(Mutex::new(Vec::<NotificationHandler>::new()));
+        let discovery_handlers = Arc::new(Mutex::new(HashMap::<UUID, DiscoveryHandler>::new()));
         let mut er_clone = event_receiver.clone();
         let nh_clone = notification_handlers.clone();
+        let dh_clone = discovery_handlers.clone();
         task::spawn(async move {
             loop {
                 let event = er_clone.next().await;
-                if event.is_none() {
-                    error!("Event receiver died, breaking out of corebluetooth device loop.");
-                    break;
-                }
-                if let Some(CBPeripheralEvent::Notification(uuid, data)) = event {
-                    let mut id = *uuid.as_bytes();
-                    id.reverse();
-                    util::invoke_handlers(
-                        &nh_clone,
-                        &ValueNotification {
-                            uuid: UUID::B128(id),
-                            handle: None,
-                            value: data,
-                        },
-                    );
-                } else {
-                    error!("Unhandled CBPeripheralEvent");
+                match event {
+                    Some(CBPeripheralEvent::Notification(uuid, data)) => {
+                        info!("Peripheral received notification of value event");
+                        let mut id = *uuid.as_bytes();
+                        id.reverse();
+                        util::invoke_notification_handlers(
+                            &nh_clone,
+                            &ValueNotification {
+                                uuid: UUID::B128(id),
+                                handle: None,
+                                value: data,
+                            },
+                        );
+                    },
+                    Some(CBPeripheralEvent::DiscoveredCharacteristics(char_set)) => {
+                        info!("Peripheral received discovery of characteristics event");
+                        util::invoke_discovery_handlers(
+                            &dh_clone,
+                            &CharacteristicsDiscovery {
+                                characteristics_set: char_set
+                            }
+                        );
+                    }
+                    Some(CBPeripheralEvent::Disconnecting) => {
+                        info!("Received CBPeripheral Disconnecting event, but don't know what to do with it");
+                    },
+                    None => {
+                        error!("Event receiver died, breaking out of corebluetooth device loop.");
+                        break;
+                    },
+                    _ => {
+                        error!("Unhandled CBPeripheralEvent");
+                    }
                 }
             }
         });
         Self {
             properties,
-
             manager,
             characteristics: Arc::new(Mutex::new(BTreeSet::new())),
             notification_handlers,
+            discovery_handlers,
             uuid,
             event_receiver,
             message_sender,
@@ -181,11 +201,10 @@ impl ApiPeripheral for Peripheral {
                 ))
                 .await;
             match fut.await {
-                CoreBluetoothReply::Connected(chars) => {
-                    *(self.characteristics.lock().unwrap()) = chars;
+                CoreBluetoothReply::Ok => {
                     self.emit(CentralEvent::DeviceConnected(self.properties.address));
                 }
-                _ => panic!("Shouldn't get anything but connected!"),
+                _ => panic!("Connect shouldn't get anything but connected!"),
             }
         });
         info!("Device connected!");
@@ -194,14 +213,57 @@ impl ApiPeripheral for Peripheral {
 
     /// Terminates a connection to the device. This is a synchronous operation.
     fn disconnect(&self) -> Result<()> {
+        info!("Initiating disconnect by canceling connect!");
+        task::block_on(async {
+            let fut = CoreBluetoothReplyFuture::default();
+            self.message_sender
+                .send(CoreBluetoothMessage::DisconnectDevice(
+                    self.uuid,
+                    fut.get_state_clone(),
+                ))
+                .await;
+            match fut.await {
+                CoreBluetoothReply::Ok => {
+                    self.emit(CentralEvent::DeviceDisconnected(self.properties.address));
+                }
+                _ => info!("Disconnect shouldn't get anything but ok")
+            }
+        });
+        info!("Device disconnected!");
         Ok(())
     }
 
-    /// Discovers all characteristics for the device. This is a synchronous operation.
+    /// Discovers all characteristics for the device. This is an asynchronous operation.
     fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
+        info!("Initiating discovery of services and characteristics");
+        task::block_on(async {
+            let fut = CoreBluetoothReplyFuture::default();
+            self.message_sender
+                .send(CoreBluetoothMessage::DiscoverCharacteristics(
+                    self.uuid,
+                    fut.get_state_clone(),
+                ))
+                .await;
+        });
         let chrs = self.characteristics.lock().unwrap().clone();
         let v = Vec::from_iter(chrs.into_iter());
         Ok(v)
+    }
+
+    /// Registers a handler that will be called when characteristic discovery messages are received from
+    /// the device. This method should only be used after a connection has been established. Note
+    /// that the handler will be called in a common thread, so it should not block.
+    fn on_discovery(&self, characteristic_uuid: UUID, handler: DiscoveryHandler) {
+        match self.discovery_handlers.try_lock() {
+            Ok(mut handlers) => {
+                if !handlers.contains_key(&characteristic_uuid) {
+                    handlers.insert(characteristic_uuid, handler);
+                }
+            },
+            _ => {
+                info!("Discovery handlers lock is contended, skipping");
+            }
+        }
     }
 
     /// Discovers characteristics within the specified range of handles. This is a synchronous
@@ -354,8 +416,15 @@ impl ApiPeripheral for Peripheral {
     /// the device. This method should only be used after a connection has been established. Note
     /// that the handler will be called in a common thread, so it should not block.
     fn on_notification(&self, handler: NotificationHandler) {
-        let mut list = self.notification_handlers.lock().unwrap();
-        list.push(handler);
+        match self.notification_handlers.try_lock() {
+            Ok(mut list) => {
+                list.push(handler);
+
+            },
+            _ => {
+                warn!("Notification handlers lock is contended, skipping");
+            }
+        }
     }
 
     fn read_async(&self, _characteristic: &Characteristic, _handler: Option<RequestCallback>) {}

@@ -60,11 +60,19 @@ impl Adapter {
                         let id = uuid_to_bdaddr(&uuid.to_string());
                         emit(CentralEvent::DeviceUpdated(id));
                     },
-                    */
-                    CoreBluetoothEvent::DeviceLost(uuid) => {
+                    CoreBluetoothEvent::DeviceConnected(uuid) => {
+                        let id = uuid_to_bdaddr(&uuid.to_string());
+                        manager_clone.emit(CentralEvent::DeviceConnected(id));
+                    }
+                    CoreBluetoothEvent::DeviceDisconnected(uuid) => {
                         let id = uuid_to_bdaddr(&uuid.to_string());
                         manager_clone.emit(CentralEvent::DeviceDisconnected(id));
                     }
+                    CoreBluetoothEvent::DeviceLost(uuid) => {
+                        let id = uuid_to_bdaddr(&uuid.to_string());
+                        manager_clone.emit(CentralEvent::DeviceLost(id));
+                    }
+                    */
                     _ => {}
                 }
             }

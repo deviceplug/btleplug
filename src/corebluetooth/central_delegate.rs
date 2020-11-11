@@ -254,7 +254,6 @@ pub mod CentralDelegate {
             CoreBluetoothUtils::peripheral_debug(peripheral)
         );
         cb::peripheral_setdelegate(peripheral, delegate);
-        cb::peripheral_discoverservices(peripheral);
         let uuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
         let uuid = Uuid::from_str(&NSStringUtils::string_to_string(uuid_nsstring)).unwrap();
         send_delegate_event(delegate, CentralDelegateEvent::ConnectedDevice(uuid));

@@ -100,17 +100,11 @@ impl Peripheral {
                                 characteristics_set: char_set
                             }
                         );
-                    }
-                    Some(CBPeripheralEvent::Disconnecting) => {
-                        info!("Received CBPeripheral Disconnecting event, but don't know what to do with it");
                     },
                     None => {
                         error!("Event receiver died, breaking out of corebluetooth device loop.");
                         break;
                     },
-                    _ => {
-                        error!("Unhandled CBPeripheralEvent");
-                    }
                 }
             }
         });
@@ -245,6 +239,8 @@ impl ApiPeripheral for Peripheral {
                 ))
                 .await;
         });
+
+        // Return whatever characteristics we already have cached
         let chrs = self.characteristics.lock().unwrap().clone();
         let v = Vec::from_iter(chrs.into_iter());
         Ok(v)
@@ -416,15 +412,8 @@ impl ApiPeripheral for Peripheral {
     /// the device. This method should only be used after a connection has been established. Note
     /// that the handler will be called in a common thread, so it should not block.
     fn on_notification(&self, handler: NotificationHandler) {
-        match self.notification_handlers.try_lock() {
-            Ok(mut list) => {
-                list.push(handler);
-
-            },
-            _ => {
-                warn!("Notification handlers lock is contended, skipping");
-            }
-        }
+        let mut list = self.notification_handlers.lock().unwrap();
+        list.push(handler);
     }
 
     fn read_async(&self, _characteristic: &Characteristic, _handler: Option<RequestCallback>) {}

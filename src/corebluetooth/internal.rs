@@ -88,16 +88,14 @@ impl CBCharacteristic {
     }
 }
 
-#[derive(Clone)]
 pub enum CoreBluetoothReply {
+    DiscoveredCharacteristics(BTreeSet<Characteristic>),
     ReadResult(Vec<u8>),
     Ok,
-    DiscoveredCharacteristics(BTreeSet<Characteristic>),
     Err(String),
 }
 
 pub enum CBPeripheralEvent {
-    Disconnecting,
     Notification(Uuid, Vec<u8>),
     DiscoveredCharacteristics(BTreeSet<Characteristic>),
 }
@@ -299,8 +297,6 @@ impl CoreBluetoothInternal {
     }
 
     fn on_peripheral_connect(&mut self, peripheral_uuid: Uuid) {
-        // Don't actually do anything here. The peripheral will fire the future
-        // itself when it receives all of its service/characteristic info.
         info!("on_peripheral_connect: {}", peripheral_uuid);
 
         // Succeed the future that peripheral may use for synchronous connect
@@ -315,9 +311,6 @@ impl CoreBluetoothInternal {
     }
 
     fn on_peripheral_disconnect(&mut self, peripheral_uuid: Uuid) {
-        // Don't actually do anything here.
-        // Disconnect is initiated by cancelPeripheralConnection
-        // Disconnect is finalized by didDisconnectPeripheral
         info!("on_peripheral_disconnect: {}", peripheral_uuid);
 
         // Succeed the future that peripheral may use for synchronous disconnect
@@ -412,11 +405,6 @@ impl CoreBluetoothInternal {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             info!("Disconnecting peripheral!");
             p.disconnected_future_state = Some(fut);
-            // task::block_on(async {
-            //     p.event_sender
-            //         .send(CBPeripheralEvent::Disconnecting)
-            //         .await;
-            // });
             cb::centralmanager_cancelperipheralconnection(*self.manager, *p.peripheral);
         }
     }
@@ -425,8 +413,11 @@ impl CoreBluetoothInternal {
         info!("Trying to discover characteristics!");
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             cb::peripheral_discoverservices(*p.peripheral);
-            fut
-                .lock()
+            // We requested service discovery, which will request characteristic discovery.
+            // We may not know how many characteristics/services we will discover.
+            // In succeeding this future, we are marking that we completed requesting discovery
+            // and there may be existing characteristics/services already discovered.
+            fut.lock()
                 .unwrap()
                 .set_reply(CoreBluetoothReply::Ok);
         }

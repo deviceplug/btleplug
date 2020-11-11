@@ -27,6 +27,48 @@ fn get_central(manager: &Manager) -> ConnectedAdapter {
     adapter.connect().unwrap()
 }
 
+#[cfg(target_os = "macos")]
+fn discover_and_read_characteristic<P: 'static + Peripheral>(peripheral: P) {
+    let characteristic_uuid: UUID = "00:00".parse().unwrap();
+    let peripheral_clone = peripheral.clone();
+    peripheral.on_discovery(
+        characteristic_uuid,
+        Box::new(move |characteristic| {
+            println!(
+                "I found the characteristic I was looking for: {:?}",
+                characteristic
+            );
+            let another_clone = peripheral_clone.clone();
+            task::spawn(async move {
+                loop {
+                    let value: Result<Vec<u8>, _> = another_clone.read(&characteristic);
+                    println!("I read the value: {:?}", value);
+                    task::sleep(std::time::Duration::from_secs(1)).await;
+                }
+            });
+        }),
+    );
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+fn discover_and_read_characteristic<P: 'static + Peripheral>(peripheral: P) {
+    let characteristic_uuid: UUID = "00:00".parse().unwrap();
+    let characteristics = peripheral.discover_characteristics().unwrap();
+    for c in characteristics {
+        if c.uuid == characteristic_uuid {
+            let peripheral_clone = peripheral.clone();
+            task::spawn(async move {
+                loop {
+                    let value: Result<Vec<u8>, _> = peripheral_clone.read(&c);
+                    println!("I read the value: {:?}", value);
+                    task::sleep(std::time::Duration::from_secs(1)).await;
+                }
+            });
+            break;
+        }
+    }
+}
+
 pub fn main() {
     let manager = Manager::new().unwrap();
 
@@ -58,27 +100,8 @@ pub fn main() {
             }
             CentralEvent::DeviceConnected(bd_addr) => {
                 println!("DeviceConnected: {:?}", bd_addr);
-                let characteristic_uuid: UUID = "00:00".parse().unwrap();
                 if let Some(peripheral) = central.peripheral(bd_addr) {
-                    let peripheral_clone = peripheral.clone();
-                    peripheral.on_discovery(
-                        characteristic_uuid,
-                        Box::new(move |characteristic| {
-                            println!(
-                                "I found the characteristic I was looking for: {:?}",
-                                characteristic
-                            );
-                            let another_clone = peripheral_clone.clone();
-                            task::spawn(async move {
-                                loop {
-                                    let value: Result<Vec<u8>, _> =
-                                        another_clone.read(&characteristic);
-                                    println!("I read the value: {:?}", value);
-                                    task::sleep(std::time::Duration::from_secs(1)).await;
-                                }
-                            });
-                        }),
-                    );
+                    discover_and_read_characteristic(peripheral);
                 }
             }
             CentralEvent::DeviceDisconnected(bd_addr) => {

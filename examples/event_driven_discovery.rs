@@ -1,7 +1,9 @@
 extern crate btleplug;
 extern crate rand;
 
-use btleplug::api::{Central, CentralEvent};
+use async_std::task;
+
+use btleplug::api::{Central, CentralEvent, Peripheral, UUID};
 #[cfg(target_os = "linux")]
 use btleplug::bluez::{adapter::ConnectedAdapter, manager::Manager};
 #[cfg(target_os = "macos")]
@@ -56,6 +58,21 @@ pub fn main() {
             }
             CentralEvent::DeviceConnected(bd_addr) => {
                 println!("DeviceConnected: {:?}", bd_addr);
+                let characteristic_uuid: UUID = "00:00".parse().unwrap();
+                if let Some(peripheral) = central.peripheral(bd_addr) {
+                    let peripheral_clone = peripheral.clone();
+                    peripheral.on_discovery(characteristic_uuid, Box::new(move |characteristic| {
+                        println!("I found the characteristic I was looking for: {:?}", characteristic);
+                        let another_clone = peripheral_clone.clone();
+                        task::spawn(async move {
+                            loop {
+                                let value: Result<Vec<u8>, _> = another_clone.read(&characteristic);
+                                println!("I read the value: {:?}", value);
+                                task::sleep(std::time::Duration::from_secs(1)).await;
+                            }
+                        });
+                    }));
+                }
             }
             CentralEvent::DeviceDisconnected(bd_addr) => {
                 println!("DeviceDisconnected: {:?}", bd_addr);

@@ -230,6 +230,11 @@ impl ApiPeripheral for Peripheral {
         Err(Error::NotConnected)
     }
 
+    fn on_discovery(&self, characteristic_uuid: UUID, handler: DiscoveryHandler) {
+        // Characteristic discovery is synchronous for the winrtble implementation
+        unimplemented!();
+    }
+
     /// Discovers characteristics within the specified range of handles. This is a synchronous
     /// operation.
     fn discover_characteristics_in_range(

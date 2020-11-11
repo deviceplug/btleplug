@@ -5,10 +5,11 @@
 // Licensed under the BSD 3-Clause license. See LICENSE file in the project root
 // for full license information.
 
-use crate::api::ValueNotification;
+use crate::api::{UUID, ValueNotification, CharacteristicsDiscovery, Characteristic};
 use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
 
-pub fn invoke_handlers<F: FnMut(ValueNotification) + ?Sized>(
+pub fn invoke_notification_handlers<F: FnMut(ValueNotification) + ?Sized>(
     notification_handlers: &Arc<Mutex<Vec<Box<F>>>>,
     n: &ValueNotification,
 ) -> () {
@@ -34,5 +35,25 @@ pub fn invoke_handlers<F: FnMut(ValueNotification) + ?Sized>(
     handlers.into_iter().for_each(|mut h| {
         h(n.clone());
         (*handlers_guard).push(h)
+    });
+}
+
+pub fn invoke_discovery_handlers<F: FnMut(Characteristic) + ?Sized>(
+    discovery_handlers: &Arc<Mutex<HashMap<UUID, Box<F>>>>,
+    d: &CharacteristicsDiscovery,
+) -> () {
+    // Yes, this makes a copy of the hash map in order to call each mutable handler
+    let mut handlers_guard = discovery_handlers.lock().unwrap();
+    let handler_count = handlers_guard.len();
+    let handlers = std::mem::replace(&mut *handlers_guard, HashMap::with_capacity(handler_count));
+    handlers.into_iter().for_each(|(id, mut h)| {
+        // linear search and invoke handler if characteristic uuid matches
+        for c in &d.characteristics_set {
+            if c.uuid == id {
+                h(c.clone());
+                break;
+            }
+        }
+        (*handlers_guard).insert(id, h);
     });
 }

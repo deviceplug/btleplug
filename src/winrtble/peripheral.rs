@@ -15,7 +15,7 @@ use super::{ble::characteristic::BLECharacteristic, ble::device::BLEDevice, util
 use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, CommandCallback,
-        NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties, RequestCallback,
+        NotificationHandler, DiscoveryHandler, Peripheral as ApiPeripheral, PeripheralProperties, RequestCallback,
         ValueNotification, UUID,
     },
     common::util,
@@ -319,7 +319,7 @@ impl ApiPeripheral for Peripheral {
                     handle: None,
                     value,
                 };
-                util::invoke_handlers(&notification_handlers, &notification);
+                util::invoke_notification_handlers(&notification_handlers, &notification);
             }))
         } else {
             Err(Error::NotSupported("subscribe".into()))

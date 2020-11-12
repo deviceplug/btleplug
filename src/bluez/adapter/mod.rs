@@ -12,7 +12,7 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 mod acl_stream;
-mod peripheral;
+pub mod peripheral;
 
 use bytes::{BufMut, BytesMut};
 use dashmap::DashMap;

@@ -12,7 +12,7 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use super::super::bindings;
-use crate::Result;
+use crate::{Error, Result};
 use bindings::windows::devices::bluetooth::advertisement::*;
 use bindings::windows::foundation::TypedEventHandler;
 
@@ -24,6 +24,12 @@ pub struct BLEWatcher {
 
 unsafe impl Send for BLEWatcher {}
 unsafe impl Sync for BLEWatcher {}
+
+impl From<winrt::Error> for Error {
+    fn from(err: winrt::Error) -> Error {
+        Error::Other(format!("{:?}", err))
+    }
+}
 
 impl BLEWatcher {
     pub fn new() -> Self {
@@ -43,13 +49,14 @@ impl BLEWatcher {
                 Ok(())
             },
         );
-        self.watcher.received(&handler).unwrap();
-        self.watcher.start().unwrap();
+
+        self.watcher.received(&handler)?;
+        self.watcher.start()?;
         Ok(())
     }
 
     pub fn stop(&self) -> Result<()> {
-        self.watcher.stop().unwrap();
+        self.watcher.stop()?;
         Ok(())
     }
 }

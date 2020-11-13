@@ -11,7 +11,7 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use crate::Result;
+use crate::{Error, Result};
 use winrt::{
     windows::devices::bluetooth::advertisement::*, windows::foundation::TypedEventHandler, ComPtr,
     RtDefaultConstructible,
@@ -25,6 +25,12 @@ pub struct BLEWatcher {
 
 unsafe impl Send for BLEWatcher {}
 unsafe impl Sync for BLEWatcher {}
+
+impl From<winrt::Error> for Error {
+    fn from(err: winrt::Error) -> Error {
+        Error::Other(format!("{:?}", err))
+    }
+}
 
 impl BLEWatcher {
     pub fn new() -> Self {
@@ -45,12 +51,12 @@ impl BLEWatcher {
             },
         );
         self.watcher.add_received(&handler).unwrap();
-        self.watcher.start().unwrap();
+        self.watcher.start()?;
         Ok(())
     }
 
     pub fn stop(&self) -> Result<()> {
-        self.watcher.stop().unwrap();
+        self.watcher.stop()?;
         Ok(())
     }
 }

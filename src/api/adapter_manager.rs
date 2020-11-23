@@ -17,11 +17,8 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Debug)]
-pub struct AdapterManager<PeripheralType>
-where
-    PeripheralType: Peripheral,
-{
-    peripherals: Arc<DashMap<BDAddr, PeripheralType>>,
+pub struct AdapterManager {
+    peripherals: Arc<DashMap<BDAddr, Peripheral>>,
 
     // Sender is never handled mutably, but mpsc's Sender is Send only, not Sync,
     // so we can't just wrap it in an Arc to pass it around as part of the adapter
@@ -41,10 +38,7 @@ where
     event_receiver: Arc<Mutex<Option<Receiver<CentralEvent>>>>,
 }
 
-impl<PeripheralType> AdapterManager<PeripheralType>
-where
-    PeripheralType: Peripheral + 'static,
-{
+impl AdapterManager {
     pub fn new() -> Self {
         let peripherals = Arc::new(DashMap::new());
         let (event_sender, event_receiver) = channel();
@@ -79,7 +73,7 @@ where
         self.peripherals.contains_key(addr)
     }
 
-    pub fn add_peripheral(&self, addr: BDAddr, peripheral: PeripheralType) {
+    pub fn add_peripheral(&self, addr: BDAddr, peripheral: Peripheral) {
         assert!(
             !self.peripherals.contains_key(&addr),
             "Adding a peripheral that's already in the map."
@@ -88,7 +82,7 @@ where
         self.peripherals.insert(addr, peripheral);
     }
 
-    pub fn update_peripheral(&self, addr: BDAddr, peripheral: PeripheralType) {
+    pub fn update_peripheral(&self, addr: BDAddr, peripheral: Peripheral) {
         // FIXME: this function is too easy to use incorrectly.
         // when you get a peripheral from self.peripheral() you can forget to call update_peripheral easily.
         // and when you do, there is no guarantee that it hasn't been updated by someone else, causing changes
@@ -118,14 +112,14 @@ where
         current_peripheral.properties().tx_power_level = peripheral.properties().tx_power_level;
     }
 
-    pub fn peripherals(&self) -> Vec<PeripheralType> {
+    pub fn peripherals(&self) -> Vec<Peripheral> {
         self.peripherals
             .iter()
             .map(|val| val.value().clone())
             .collect()
     }
 
-    pub fn peripheral(&self, address: BDAddr) -> Option<PeripheralType> {
+    pub fn peripheral(&self, address: BDAddr) -> Option<Peripheral> {
         self.peripherals
             .get(&address)
             .and_then(|val| Some(val.value().clone()))

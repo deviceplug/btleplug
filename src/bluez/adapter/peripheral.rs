@@ -14,8 +14,7 @@
 use crate::{
     api::{
         AddressType, BDAddr, Callback, Central, CharPropFlags, Characteristic, CommandCallback,
-        NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties, RequestCallback,
-        UUID, UUID::B16,
+        NotificationHandler, PeripheralProperties, RequestCallback, UUID, UUID::B16,
     },
     bluez::{
         adapter::acl_stream::ACLStream,
@@ -418,27 +417,28 @@ impl Peripheral {
     }
 }
 
-impl ApiPeripheral for Peripheral {
-    fn address(&self) -> BDAddr {
+// API implementations
+impl Peripheral {
+    pub fn address(&self) -> BDAddr {
         self.address.clone()
     }
 
-    fn properties(&self) -> PeripheralProperties {
+    pub fn properties(&self) -> PeripheralProperties {
         let l = self.properties.lock().unwrap();
         l.clone()
     }
 
-    fn characteristics(&self) -> BTreeSet<Characteristic> {
+    pub fn characteristics(&self) -> BTreeSet<Characteristic> {
         let l = self.characteristics.lock().unwrap();
         l.clone()
     }
 
-    fn is_connected(&self) -> bool {
+    pub fn is_connected(&self) -> bool {
         let l = self.stream.try_read();
         return l.is_ok() && l.unwrap().is_some();
     }
 
-    fn connect(&self) -> Result<()> {
+    pub fn connect(&self) -> Result<()> {
         // take lock on stream
         let mut stream = self.stream.write().unwrap();
 
@@ -486,7 +486,7 @@ impl ApiPeripheral for Peripheral {
         Ok(())
     }
 
-    fn disconnect(&self) -> Result<()> {
+    pub fn disconnect(&self) -> Result<()> {
         let mut l = self.stream.write().unwrap();
 
         if l.is_none() {
@@ -506,11 +506,11 @@ impl ApiPeripheral for Peripheral {
         Ok(())
     }
 
-    fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
+    pub fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
         self.discover_characteristics_in_range(0x0001, 0xFFFF)
     }
 
-    fn discover_characteristics_in_range(
+    pub fn discover_characteristics_in_range(
         &self,
         start: u16,
         end: u16,
@@ -572,7 +572,7 @@ impl ApiPeripheral for Peripheral {
         Ok(results)
     }
 
-    fn command_async(
+    pub fn command_async(
         &self,
         characteristic: &Characteristic,
         data: &[u8],
@@ -594,13 +594,13 @@ impl ApiPeripheral for Peripheral {
         }
     }
 
-    fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
+    pub fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
         Peripheral::wait_until_done(|done: CommandCallback| {
             self.command_async(characteristic, data, Some(done));
         })
     }
 
-    fn request_async(
+    pub fn request_async(
         &self,
         characteristic: &Characteristic,
         data: &[u8],
@@ -609,24 +609,24 @@ impl ApiPeripheral for Peripheral {
         self.request_by_handle(characteristic.value_handle, data, handler);
     }
 
-    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<Vec<u8>> {
+    pub fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<Vec<u8>> {
         Peripheral::wait_until_done(|done: RequestCallback| {
             self.request_async(characteristic, data, Some(done));
         })
     }
 
-    fn read_async(&self, characteristic: &Characteristic, handler: Option<RequestCallback>) {
+    pub fn read_async(&self, characteristic: &Characteristic, handler: Option<RequestCallback>) {
         let mut buf = att::read_req(characteristic.value_handle);
         self.request_raw_async(&mut buf, handler);
     }
 
-    fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
+    pub fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
         Peripheral::wait_until_done(|done: RequestCallback| {
             self.read_async(characteristic, Some(done));
         })
     }
 
-    fn read_by_type_async(
+    pub fn read_by_type_async(
         &self,
         characteristic: &Characteristic,
         uuid: UUID,
@@ -637,21 +637,21 @@ impl ApiPeripheral for Peripheral {
         self.request_raw_async(&mut buf, handler);
     }
 
-    fn read_by_type(&self, characteristic: &Characteristic, uuid: UUID) -> Result<Vec<u8>> {
+    pub fn read_by_type(&self, characteristic: &Characteristic, uuid: UUID) -> Result<Vec<u8>> {
         Peripheral::wait_until_done(|done: RequestCallback| {
             self.read_by_type_async(characteristic, uuid, Some(done));
         })
     }
 
-    fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
+    pub fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
         self.notify(characteristic, true)
     }
 
-    fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
+    pub fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
         self.notify(characteristic, false)
     }
 
-    fn on_notification(&self, handler: NotificationHandler) {
+    pub fn on_notification(&self, handler: NotificationHandler) {
         // TODO handle the disconnected case better
         let l = self.stream.read().unwrap();
         match l.as_ref() {

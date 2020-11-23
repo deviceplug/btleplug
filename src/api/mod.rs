@@ -29,6 +29,9 @@ use std::{
     str::FromStr,
 };
 
+#[cfg(target_os = "linux")]
+use crate::bluez::adapter::peripheral::Peripheral as PeripheralImpl;
+
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum AddressType {
@@ -286,104 +289,167 @@ pub struct PeripheralProperties {
 /// Peripheral is the device that you would like to communicate with (the "server" of BLE). This
 /// struct contains both the current state of the device (its properties, characteristics, etc.)
 /// as well as functions for communication.
-pub trait Peripheral: Send + Sync + Clone + Debug {
+#[derive(Clone)]
+pub struct Peripheral(PeripheralImpl);
+
+impl Display for Peripheral {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        Display::fmt(self.as_inner(), f)
+    }
+}
+
+impl Debug for Peripheral {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        Debug::fmt(self.as_inner(), f)
+    }
+}
+
+impl Peripheral {
+    pub(crate) fn new(inner: PeripheralImpl) -> Self {
+        Self(inner)
+    }
+
+    pub(crate) fn as_inner(&self) -> &PeripheralImpl {
+        &self.0
+    }
+
     /// Returns the address of the peripheral.
-    fn address(&self) -> BDAddr;
+    pub fn address(&self) -> BDAddr {
+        self.as_inner().address()
+    }
 
     /// Returns the set of properties associated with the peripheral. These may be updated over time
     /// as additional advertising reports are received.
-    fn properties(&self) -> PeripheralProperties;
+    pub fn properties(&self) -> PeripheralProperties {
+        self.as_inner().properties()
+    }
 
     /// The set of characteristics we've discovered for this device. This will be empty until
     /// `discover_characteristics` or `discover_characteristics_in_range` is called.
-    fn characteristics(&self) -> BTreeSet<Characteristic>;
+    pub fn characteristics(&self) -> BTreeSet<Characteristic> {
+        self.as_inner().characteristics()
+    }
 
     /// Returns true iff we are currently connected to the device.
-    fn is_connected(&self) -> bool;
+    pub fn is_connected(&self) -> bool {
+        self.as_inner().is_connected()
+    }
 
     /// Creates a connection to the device. This is a synchronous operation; if this method returns
     /// Ok there has been successful connection. Note that peripherals allow only one connection at
     /// a time. Operations that attempt to communicate with a device will fail until it is connected.
-    fn connect(&self) -> Result<()>;
+    pub fn connect(&self) -> Result<()> {
+        self.as_inner().connect()
+    }
 
     /// Terminates a connection to the device. This is a synchronous operation.
-    fn disconnect(&self) -> Result<()>;
+    pub fn disconnect(&self) -> Result<()> {
+        self.as_inner().disconnect()
+    }
 
     /// Discovers all characteristics for the device. This is a synchronous operation.
-    fn discover_characteristics(&self) -> Result<Vec<Characteristic>>;
+    pub fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
+        self.as_inner().discover_characteristics()
+    }
 
     /// Discovers characteristics within the specified range of handles. This is a synchronous
     /// operation.
-    fn discover_characteristics_in_range(
+    pub fn discover_characteristics_in_range(
         &self,
         start: u16,
         end: u16,
-    ) -> Result<Vec<Characteristic>>;
+    ) -> Result<Vec<Characteristic>> {
+        self.as_inner()
+            .discover_characteristics_in_range(start, end)
+    }
 
     /// Sends a command (`write-without-response`) to the characteristic. Takes an optional callback
     /// that will be notified in case of error or when the command has been successfully acked by the
     /// device.
-    fn command_async(
+    pub fn command_async(
         &self,
         characteristic: &Characteristic,
         data: &[u8],
         handler: Option<CommandCallback>,
-    );
+    ) {
+        self.as_inner().command_async(characteristic, data, handler)
+    }
 
     /// Sends a command (write without response) to the characteristic. Synchronously returns a
     /// `Result` with an error set if the command was not accepted by the device.
-    fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()>;
+    pub fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
+        self.as_inner().command(characteristic, data)
+    }
 
     /// Sends a request (write) to the device. Takes an optional callback with either an error if
     /// the request was not accepted or the response from the device.
-    fn request_async(
+    pub fn request_async(
         &self,
         characteristic: &Characteristic,
         data: &[u8],
         handler: Option<RequestCallback>,
-    );
+    ) {
+        self.as_inner().request_async(characteristic, data, handler)
+    }
 
     /// Sends a request (write) to the device. Synchronously returns either an error if the request
     /// was not accepted or the response from the device.
-    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<Vec<u8>>;
+    pub fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<Vec<u8>> {
+        self.as_inner().request(characteristic, data)
+    }
 
     /// Sends a request (read) to the device. Takes an optional callback with either an error if
     /// the request was not accepted or the response from the device.
-    fn read_async(&self, characteristic: &Characteristic, handler: Option<RequestCallback>);
+    pub fn read_async(&self, characteristic: &Characteristic, handler: Option<RequestCallback>) {
+        self.as_inner().read_async(characteristic, handler)
+    }
 
     /// Sends a request (read) to the device. Synchronously returns either an error if the request
     /// was not accepted or the response from the device.
-    fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>>;
+    pub fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
+        self.as_inner().read(characteristic)
+    }
 
     /// Sends a read-by-type request to device for the range of handles covered by the
     /// characteristic and for the specified declaration UUID. See
     /// [here](https://www.bluetooth.com/specifications/gatt/declarations) for valid UUIDs.
     /// Takes an optional callback that will be called with an error or the device response.
-    fn read_by_type_async(
+    pub fn read_by_type_async(
         &self,
         characteristic: &Characteristic,
         uuid: UUID,
         handler: Option<RequestCallback>,
-    );
+    ) {
+        self.as_inner()
+            .read_by_type_async(characteristic, uuid, handler)
+    }
 
     /// Sends a read-by-type request to device for the range of handles covered by the
     /// characteristic and for the specified declaration UUID. See
     /// [here](https://www.bluetooth.com/specifications/gatt/declarations) for valid UUIDs.
     /// Synchronously returns either an error or the device response.
-    fn read_by_type(&self, characteristic: &Characteristic, uuid: UUID) -> Result<Vec<u8>>;
+    pub fn read_by_type(&self, characteristic: &Characteristic, uuid: UUID) -> Result<Vec<u8>> {
+        self.as_inner().read_by_type(characteristic, uuid)
+    }
 
     /// Enables either notify or indicate (depending on support) for the specified characteristic.
     /// This is a synchronous call.
-    fn subscribe(&self, characteristic: &Characteristic) -> Result<()>;
+    pub fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
+        self.as_inner().subscribe(characteristic)
+    }
 
     /// Disables either notify or indicate (depending on support) for the specified characteristic.
     /// This is a synchronous call.
-    fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()>;
+    pub fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
+        self.as_inner().unsubscribe(characteristic)
+    }
 
     /// Registers a handler that will be called when value notification messages are received from
     /// the device. This method should only be used after a connection has been established. Note
     /// that the handler will be called in a common thread, so it should not block.
-    fn on_notification(&self, handler: NotificationHandler);
+    pub fn on_notification(&self, handler: NotificationHandler) {
+        self.as_inner().on_notification(handler)
+    }
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -397,7 +463,7 @@ pub enum CentralEvent {
 }
 
 /// Central is the "client" of BLE. It's able to scan for and establish connections to peripherals.
-pub trait Central<P: Peripheral>: Send + Sync + Clone {
+pub trait Central: Send + Sync + Clone {
     /// Retreive the Event [Receiver] for the event channel. This channel
     /// receiver will receive notifications when events occur for this Central
     /// module. As this uses an std::channel which cannot be cloned, after the
@@ -426,11 +492,11 @@ pub trait Central<P: Peripheral>: Send + Sync + Clone {
 
     /// Returns the list of [`Peripherals`](trait.Peripheral.html) that have been discovered so far.
     /// Note that this list may contain peripherals that are no longer available.
-    fn peripherals(&self) -> Vec<P>;
+    fn peripherals(&self) -> Vec<Peripheral>;
 
     /// Returns a particular [`Peripheral`](trait.Peripheral.html) by its address if it has been
     /// discovered.
-    fn peripheral(&self, address: BDAddr) -> Option<P>;
+    fn peripheral(&self, address: BDAddr) -> Option<Peripheral>;
 }
 
 #[cfg(test)]

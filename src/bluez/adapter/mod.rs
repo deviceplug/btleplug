@@ -12,7 +12,7 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 mod acl_stream;
-mod peripheral;
+pub(crate) mod peripheral;
 
 use bytes::{BufMut, BytesMut};
 use dashmap::DashMap;
@@ -31,11 +31,12 @@ use std::{
     thread,
 };
 
-use crate::api::{AdapterManager, BDAddr, Central, CentralEvent};
+use crate::api::{AdapterManager, BDAddr, Central, CentralEvent, Peripheral};
 use crate::Result;
 
 use crate::bluez::{
-    adapter::peripheral::Peripheral, constants::*, ioctl, protocol::hci, util::handle_error,
+    adapter::peripheral::Peripheral as PeripheralImpl, constants::*, ioctl, protocol::hci,
+    util::handle_error,
 };
 
 #[derive(Copy, Debug)]
@@ -201,7 +202,7 @@ pub struct ConnectedAdapter {
     pub active: Arc<AtomicBool>,
     pub filter_duplicates: Arc<AtomicBool>,
     handle_map: Arc<DashMap<u16, BDAddr>>,
-    manager: AdapterManager<Peripheral>,
+    manager: AdapterManager,
 }
 
 impl ConnectedAdapter {
@@ -336,11 +337,12 @@ impl ConnectedAdapter {
                 // FIXME this is confusing, it appears we are getting an *owned* Peripheral here
                 // but in fact because most of its members are wrapped in an Arc it ends up
                 // actually sharing most of its state with the original object...
-                let peripheral = self
-                    .manager
-                    .peripheral(info.bdaddr)
-                    .unwrap_or_else(|| Peripheral::new(self.clone(), info.bdaddr));
-                peripheral.handle_device_message(&hci::Message::LEAdvertisingReport(info));
+                let peripheral = self.manager.peripheral(info.bdaddr).unwrap_or_else(|| {
+                    Peripheral::new(PeripheralImpl::new(self.clone(), info.bdaddr))
+                });
+                peripheral
+                    .as_inner()
+                    .handle_device_message(&hci::Message::LEAdvertisingReport(info));
                 if !self.manager.has_peripheral(&address) {
                     warn!("{:?}", info_clone);
                     self.manager.add_peripheral(address, peripheral);
@@ -355,9 +357,9 @@ impl ConnectedAdapter {
                 let address = info.bdaddr.clone();
                 let handle = info.handle.clone();
                 match self.peripheral(address) {
-                    Some(peripheral) => {
-                        peripheral.handle_device_message(&hci::Message::LEConnComplete(info))
-                    }
+                    Some(peripheral) => peripheral
+                        .as_inner()
+                        .handle_device_message(&hci::Message::LEConnComplete(info)),
                     // todo: there's probably a better way to handle this case
                     None => warn!("Got connection for unknown device {}", info.bdaddr),
                 }
@@ -375,14 +377,16 @@ impl ConnectedAdapter {
 
                 for peripheral in peripherals {
                     // we don't know the handler => device mapping, so send to all and let them filter
-                    peripheral.handle_device_message(&message);
+                    peripheral.as_inner().handle_device_message(&message);
                 }
             }
             hci::Message::DisconnectComplete { handle, .. } => {
                 match self.handle_map.remove(&handle) {
                     Some(addr) => {
                         match self.peripheral(addr.1) {
-                            Some(peripheral) => peripheral.handle_device_message(&message),
+                            Some(peripheral) => {
+                                peripheral.as_inner().handle_device_message(&message)
+                            }
                             None => warn!("got disconnect for unknown device {}", addr.1),
                         };
                         self.emit(CentralEvent::DeviceDisconnected(addr.1));
@@ -437,7 +441,7 @@ impl ConnectedAdapter {
     }
 }
 
-impl Central<Peripheral> for ConnectedAdapter {
+impl Central for ConnectedAdapter {
     fn event_receiver(&self) -> Option<Receiver<CentralEvent>> {
         self.manager.event_receiver()
     }

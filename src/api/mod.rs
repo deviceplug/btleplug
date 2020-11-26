@@ -277,6 +277,8 @@ pub struct PeripheralProperties {
     pub tx_power_level: Option<i8>,
     /// Unstructured data set by the device manufacturer
     pub manufacturer_data: Option<Vec<u8>>,
+    /// Service Identifiers
+    pub services: BTreeSet<UUID>,
     /// Number of times we've seen advertising reports for this device
     pub discovery_count: u32,
     /// True if we've discovered the device before

@@ -52,7 +52,12 @@ pub fn main() {
     while let Ok(event) = event_receiver.recv() {
         match event {
             CentralEvent::DeviceDiscovered(bd_addr) => {
-                println!("DeviceDiscovered: {:?}", bd_addr);
+                println!(
+                    "DeviceDiscovered: {:?}",
+                    central
+                        .peripheral(bd_addr)
+                        .expect("Couldn't get discovered device from central")
+                );
             }
             CentralEvent::DeviceConnected(bd_addr) => {
                 println!("DeviceConnected: {:?}", bd_addr);

@@ -67,6 +67,7 @@ impl Peripheral {
             manufacturer_data: None,
             discovery_count: 1,
             has_scan_response: true,
+            services: BTreeSet::new(),
         };
         let notification_handlers = Arc::new(Mutex::new(Vec::<NotificationHandler>::new()));
         let mut er_clone = event_receiver.clone();

@@ -41,12 +41,12 @@ impl Central<Peripheral> for Adapter {
         let watcher = self.watcher.lock().unwrap();
         let manager = self.manager.clone();
         watcher.start(Box::new(move |args| {
-            let bluetooth_address = args.get_bluetooth_address().unwrap();
+            let bluetooth_address = args.bluetooth_address().unwrap();
             let address = utils::to_addr(bluetooth_address);
             let peripheral = manager
                 .peripheral(address)
                 .unwrap_or_else(|| Peripheral::new(manager.clone(), address));
-            peripheral.update_properties(&args);
+            peripheral.update_properties(args);
             if !manager.has_peripheral(&address) {
                 manager.add_peripheral(address, peripheral);
                 manager.emit(CentralEvent::DeviceDiscovered(address));

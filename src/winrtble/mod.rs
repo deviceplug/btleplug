@@ -16,3 +16,4 @@ mod ble;
 pub mod manager;
 pub mod peripheral;
 pub mod utils;
+pub mod bindings;

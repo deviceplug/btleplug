@@ -11,11 +11,13 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
+use std::str::FromStr;
 use crate::{
     api::{BDAddr, CharPropFlags, UUID},
     Error, Result,
 };
-use winrt::windows::devices::bluetooth::genericattributeprofile::{
+use super::bindings;
+use bindings::windows::devices::bluetooth::generic_attribute_profile::{
     GattCharacteristicProperties, GattCommunicationStatus,
 };
 use winrt::Guid;
@@ -28,7 +30,7 @@ pub fn to_error(status: GattCommunicationStatus) -> Result<()> {
         GattCommunicationStatus::ProtocolError => {
             Err(Error::NotSupported("ProtocolError".to_string()))
         }
-        GattCommunicationStatus(a) => Err(Error::Other(format!("Communication Error: {}", a))),
+        _ => Err(Error::Other(format!("Communication Error:")))
     }
 }
 
@@ -50,20 +52,8 @@ pub fn to_address(addr: BDAddr) -> u64 {
 
 // If we want to get this into Bluez format, we've got to flip everything into a U128.
 pub fn to_uuid(uuid: &Guid) -> UUID {
-    let mut array = [0u8; 16];
-    for i in 0..4 {
-        array[i + 12] = (uuid.Data1 >> (8 * i)) as u8;
-    }
-    for i in 0..2 {
-        array[i + 10] = (uuid.Data2 >> (8 * i)) as u8;
-    }
-    for i in 0..2 {
-        array[i + 8] = (uuid.Data3 >> (8 * i)) as u8;
-    }
-    for i in 0..8 {
-        array[i] = uuid.Data4[7 - i];
-    }
-    UUID::B128(array)
+    let guid_s = format!("{:?}", uuid);
+    UUID::from_str(&guid_s).unwrap()
 }
 
 pub fn to_guid(uuid: &UUID) -> Guid {
@@ -85,24 +75,19 @@ pub fn to_guid(uuid: &UUID) -> Guid {
             for i in 0..8 {
                 data4[i] = a[i + 8];
             }
-            Guid {
-                Data1: data1,
-                Data2: data2,
-                Data3: data3,
-                Data4: data4,
-            }
+            Guid::from_values(
+                    data1,
+                    data2,
+                    data3,
+                    data4,
+            )
         }
-        UUID::B16(_) => Guid {
-            Data1: 0,
-            Data2: 0,
-            Data3: 0,
-            Data4: [0; 8],
-        },
+        UUID::B16(_) => Guid::zeroed()
     }
 }
 
-pub fn to_char_props(properties: &GattCharacteristicProperties) -> CharPropFlags {
-    CharPropFlags::from_bits_truncate(properties.0 as u8)
+pub fn to_char_props(_: &GattCharacteristicProperties) -> CharPropFlags {
+    CharPropFlags::from_bits_truncate(0 as u8)
 }
 
 #[cfg(test)]

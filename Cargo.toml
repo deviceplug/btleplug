@@ -39,9 +39,7 @@ futures = "0.3.12"
 parking_lot = "0.11.1"
 
 [dependencies.winrt]
-# This is stuck at 0.6 until we update the UWP core
-version = "^0.6"
-features = ["windows-devices", "windows-storage"]
+version = "0.7"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = "0.9.1"

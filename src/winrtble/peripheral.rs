@@ -11,7 +11,7 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use super::{ble::characteristic::BLECharacteristic, ble::device::BLEDevice, utils, bindings};
+use super::{bindings, ble::characteristic::BLECharacteristic, ble::device::BLEDevice, utils};
 use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, CommandCallback,

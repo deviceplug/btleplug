@@ -27,21 +27,13 @@ impl Manager {
 
     pub fn adapters(&self) -> Result<Vec<Adapter>> {
         let mut result: Vec<Adapter> = vec![];
-        let radios = Radio::get_radios_async()
-            .unwrap()
-            .get()
-            .unwrap();
+        let radios = Radio::get_radios_async().unwrap().get().unwrap();
 
         for radio in &radios {
-            // if let radio = radio {
-                // if let kind = radio.kind().unwrap() {
-                let kind = radio.kind().unwrap();
-                    if kind == RadioKind::Bluetooth {
-                        // try create BLE adapter
-                        result.push(Adapter::new());
-                    }
-                // }
-            // }
+            let kind = radio.kind().unwrap();
+            if kind == RadioKind::Bluetooth {
+                result.push(Adapter::new());
+            }
         }
         return Ok(result);
     }

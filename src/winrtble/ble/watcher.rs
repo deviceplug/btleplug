@@ -11,8 +11,8 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use crate::Result;
 use super::super::bindings;
+use crate::Result;
 use bindings::windows::devices::bluetooth::advertisement::*;
 use bindings::windows::foundation::TypedEventHandler;
 
@@ -38,7 +38,6 @@ impl BLEWatcher {
             .unwrap();
         let handler = TypedEventHandler::new(
             move |_sender, args: &BluetoothLEAdvertisementReceivedEventArgs| {
-                // let args = unsafe { &args };
                 let args = &args;
                 on_received(args);
                 Ok(())

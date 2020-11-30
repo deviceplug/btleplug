@@ -11,12 +11,12 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use crate::{Error, Result};
 use super::super::bindings;
+use crate::{Error, Result};
 
 use bindings::windows::devices::bluetooth::generic_attribute_profile::{
-        GattCharacteristic, GattClientCharacteristicConfigurationDescriptorValue,
-        GattCommunicationStatus, GattValueChangedEventArgs,
+    GattCharacteristic, GattClientCharacteristicConfigurationDescriptorValue,
+    GattCommunicationStatus, GattValueChangedEventArgs,
 };
 use bindings::windows::foundation::{EventRegistrationToken, TypedEventHandler};
 use bindings::windows::storage::streams::{DataReader, DataWriter};
@@ -78,22 +78,18 @@ impl BLECharacteristic {
     pub fn subscribe(&mut self, on_value_changed: NotifiyEventHandler) -> Result<()> {
         let value_handler = TypedEventHandler::new(
             move |_: &GattCharacteristic, args: &GattValueChangedEventArgs| {
-                //let args = unsafe { &*args };
                 let args = &*args;
                 let value = args.characteristic_value().unwrap();
                 let reader = DataReader::from_buffer(&value).unwrap();
                 let len = reader.unconsumed_buffer_length().unwrap() as usize;
-                let mut input = vec![0u8; len];
+                let mut input: Vec<u8> = vec![0u8; len];
                 reader.read_bytes(&mut input[0..len]).unwrap();
                 info!("changed {:?}", input);
                 on_value_changed(input);
                 Ok(())
             },
         );
-        let token = self
-            .characteristic
-            .value_changed(&value_handler)
-            .unwrap();
+        let token = self.characteristic.value_changed(&value_handler).unwrap();
         self.notify_token = Some(token);
         let config = GattClientCharacteristicConfigurationDescriptorValue::Notify;
         let status = self

@@ -11,15 +11,15 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use std::str::FromStr;
+use super::bindings;
 use crate::{
     api::{BDAddr, CharPropFlags, UUID},
     Error, Result,
 };
-use super::bindings;
 use bindings::windows::devices::bluetooth::generic_attribute_profile::{
     GattCharacteristicProperties, GattCommunicationStatus,
 };
+use std::str::FromStr;
 use winrt::Guid;
 
 pub fn to_error(status: GattCommunicationStatus) -> Result<()> {
@@ -30,7 +30,7 @@ pub fn to_error(status: GattCommunicationStatus) -> Result<()> {
         GattCommunicationStatus::ProtocolError => {
             Err(Error::NotSupported("ProtocolError".to_string()))
         }
-        _ => Err(Error::Other(format!("Communication Error:")))
+        _ => Err(Error::Other(format!("Communication Error:"))),
     }
 }
 
@@ -75,14 +75,9 @@ pub fn to_guid(uuid: &UUID) -> Guid {
             for i in 0..8 {
                 data4[i] = a[i + 8];
             }
-            Guid::from_values(
-                    data1,
-                    data2,
-                    data3,
-                    data4,
-            )
+            Guid::from_values(data1, data2, data3, data4)
         }
-        UUID::B16(_) => Guid::zeroed()
+        UUID::B16(_) => Guid::zeroed(),
     }
 }
 

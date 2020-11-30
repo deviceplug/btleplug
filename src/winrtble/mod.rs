@@ -12,8 +12,8 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 pub mod adapter;
+pub mod bindings;
 mod ble;
 pub mod manager;
 pub mod peripheral;
 pub mod utils;
-pub mod bindings;

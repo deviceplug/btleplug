@@ -57,24 +57,25 @@ pub fn to_uuid(uuid: &Guid) -> UUID {
 }
 
 pub fn to_guid(uuid: &UUID) -> Guid {
+    let uuid_s = format!("{:?}", uuid);
+    println!("{}", uuid_s);
     match uuid {
         UUID::B128(a) => {
-            let mut data1 = 0;
-            for i in 0..4 {
-                data1 |= u32::from(a[i]) << (8 * i);
-            }
-            let mut data2 = 0;
-            for i in 0..2 {
-                data2 |= u16::from(a[i + 4]) << (8 * i);
-            }
-            let mut data3 = 0;
-            for i in 0..2 {
-                data3 |= u16::from(a[i + 6]) << (8 * i);
-            }
-            let mut data4 = [0; 8];
+            let mut data4:[u8; 8] = [0; 8];
             for i in 0..8 {
-                data4[i] = a[i + 8];
+                data4[7 - i] = a[i];
             }
+            let mut data3:u16 = u16::from(a[9]) << 8;
+            data3 |= u16::from(a[8]);
+
+            let mut data2:u16 = u16::from(a[11]) << 8;
+            data2 |= u16::from(a[10]);
+
+            let mut data1:u32 = u32::from(a[15]) << 24;
+            data1 |= u32::from(a[14]) << 16;
+            data1 |= u32::from(a[13]) << 8;
+            data1 |= u32::from(a[12]);
+
             Guid::from_values(data1, data2, data3, data4)
         }
         UUID::B16(_) => Guid::zeroed(),
@@ -95,5 +96,17 @@ mod tests {
         let addr = to_addr(bluetooth_address);
         let result = to_address(addr);
         assert_eq!(bluetooth_address, result);
+    }
+
+    #[test]
+    fn check_uuid_guid_conversion() {
+        let uuid_str = "10:B2:01:FF:5B:3B:45:A1:95:08:CF:3E:FC:D7:BB:AF";
+        let guid_str = "10B201FF-5B3B-45A1-9508-CF3EFCD7BBAF";
+        let uuid = UUID::from_str(uuid_str).unwrap();
+        let guid_converted = to_guid(&uuid);
+        let uuid_converted = to_uuid(&guid_converted);
+        assert_eq!(uuid, uuid_converted);
+        let guid_converted_str = format!("{:?}", guid_converted);
+        assert_eq!(guid_str, guid_converted_str);
     }
 }

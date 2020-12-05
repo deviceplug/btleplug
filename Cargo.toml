@@ -42,9 +42,7 @@ version = "^4"
 features = ["verbose-errors"]
 
 [dependencies.winrt]
-# This is stuck at 0.6 until we update the UWP core
-version = "^0.6"
-features = ["windows-devices", "windows-storage"]
+version = "0.7"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2.7"

@@ -11,7 +11,7 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use super::{ble::characteristic::BLECharacteristic, ble::device::BLEDevice, utils};
+use super::{bindings, ble::characteristic::BLECharacteristic, ble::device::BLEDevice, utils};
 use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, CommandCallback,
@@ -28,7 +28,8 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
     sync::{Arc, Mutex},
 };
-use winrt::windows::{devices::bluetooth::advertisement::*, storage::streams::DataReader};
+
+use bindings::windows::{devices::bluetooth::advertisement::*, storage::streams::DataReader};
 
 #[derive(Clone)]
 pub struct Peripheral {
@@ -66,24 +67,24 @@ impl Peripheral {
 
     pub fn update_properties(&self, args: &BluetoothLEAdvertisementReceivedEventArgs) {
         let mut properties = self.properties.lock().unwrap();
-        let advertisement = args.get_advertisement().unwrap().unwrap();
+        let advertisement = args.advertisement().unwrap();
 
         properties.discovery_count += 1;
 
         // Advertisements are cumulative: set/replace data only if it's set
-        if let Ok(name) = advertisement.get_local_name() {
+        if let Ok(name) = advertisement.local_name() {
             if !name.is_empty() {
                 properties.local_name = Some(name.to_string());
             }
         }
-        if let Ok(Some(manufacturer_data)) = advertisement.get_manufacturer_data() {
+        if let Ok(manufacturer_data) = advertisement.manufacturer_data() {
             let mut data = Vec::new();
             for i in &manufacturer_data {
-                let d = i.unwrap();
-                let company_id = d.get_company_id().unwrap();
-                let buffer = d.get_data().unwrap().unwrap();
-                let reader = DataReader::from_buffer(&buffer).unwrap().unwrap();
-                let len = reader.get_unconsumed_buffer_length().unwrap() as usize;
+                let d = i;
+                let company_id = d.company_id().unwrap();
+                let buffer = d.data().unwrap();
+                let reader = DataReader::from_buffer(&buffer).unwrap();
+                let len = reader.unconsumed_buffer_length().unwrap() as usize;
                 let mut input = vec![0u8; len + 2];
                 reader.read_bytes(&mut input[2..(len + 2)]).unwrap();
                 input[0] = company_id as u8;
@@ -97,9 +98,9 @@ impl Peripheral {
         // https://social.msdn.microsoft.com/Forums/en-US/c71d51a2-56a1-425a-9063-de44fda48766/bluetooth-address-public-or-random?forum=wdk
         properties.address_type = AddressType::default();
         properties.has_scan_response =
-            args.get_advertisement_type().unwrap() == BluetoothLEAdvertisementType::ScanResponse;
+            args.advertisement_type().unwrap() == BluetoothLEAdvertisementType::ScanResponse;
         properties.tx_power_level = args
-            .get_raw_signal_strength_in_dbm()
+            .raw_signal_strength_in_dbm()
             .ok()
             .map(|rssi| rssi as i8);
     }
@@ -210,9 +211,9 @@ impl ApiPeripheral for Peripheral {
             let mut characteristics_result = vec![];
             let characteristics = device.discover_characteristics()?;
             for characteristic in characteristics {
-                let uuid = utils::to_uuid(&characteristic.get_uuid().unwrap());
+                let uuid = utils::to_uuid(&characteristic.uuid().unwrap());
                 let properties =
-                    utils::to_char_props(&characteristic.get_characteristic_properties().unwrap());
+                    utils::to_char_props(&characteristic.characteristic_properties().unwrap());
                 let chara = Characteristic {
                     uuid,
                     start_handle: 0,

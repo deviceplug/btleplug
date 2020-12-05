@@ -11,13 +11,11 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use super::adapter::Adapter;
+use super::{adapter::Adapter, bindings};
 #[allow(unused_imports)]
 use crate::{Error, Result};
-use winrt::{
-    windows::devices::radios::{Radio, RadioKind},
-    RtAsyncOperation,
-};
+
+use bindings::windows::devices::radios::{Radio, RadioKind};
 
 #[derive(Debug)]
 pub struct Manager {}
@@ -29,20 +27,12 @@ impl Manager {
 
     pub fn adapters(&self) -> Result<Vec<Adapter>> {
         let mut result: Vec<Adapter> = vec![];
-        let radios = Radio::get_radios_async()
-            .unwrap()
-            .blocking_get()
-            .unwrap()
-            .unwrap();
+        let radios = Radio::get_radios_async().unwrap().get().unwrap();
 
         for radio in &radios {
-            if let Some(radio) = radio {
-                if let Ok(kind) = radio.get_kind() {
-                    if kind == RadioKind::Bluetooth {
-                        // try create BLE adapter
-                        result.push(Adapter::new());
-                    }
-                }
+            let kind = radio.kind().unwrap();
+            if kind == RadioKind::Bluetooth {
+                result.push(Adapter::new());
             }
         }
         return Ok(result);

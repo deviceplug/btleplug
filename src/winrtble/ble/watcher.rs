@@ -11,16 +11,15 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
+use super::super::bindings;
 use crate::Result;
-use winrt::{
-    windows::devices::bluetooth::advertisement::*, windows::foundation::TypedEventHandler, ComPtr,
-    RtDefaultConstructible,
-};
+use bindings::windows::devices::bluetooth::advertisement::*;
+use bindings::windows::foundation::TypedEventHandler;
 
 pub type AdvertismentEventHandler = Box<dyn Fn(&BluetoothLEAdvertisementReceivedEventArgs) + Send>;
 
 pub struct BLEWatcher {
-    watcher: ComPtr<BluetoothLEAdvertisementWatcher>,
+    watcher: BluetoothLEAdvertisementWatcher,
 }
 
 unsafe impl Send for BLEWatcher {}
@@ -28,7 +27,7 @@ unsafe impl Sync for BLEWatcher {}
 
 impl BLEWatcher {
     pub fn new() -> Self {
-        let ad = BluetoothLEAdvertisementFilter::new();
+        let ad = BluetoothLEAdvertisementFilter::new().unwrap();
         let watcher = BluetoothLEAdvertisementWatcher::create(&ad).unwrap();
         BLEWatcher { watcher }
     }
@@ -38,13 +37,13 @@ impl BLEWatcher {
             .set_scanning_mode(BluetoothLEScanningMode::Active)
             .unwrap();
         let handler = TypedEventHandler::new(
-            move |_sender, args: *mut BluetoothLEAdvertisementReceivedEventArgs| {
-                let args = unsafe { &*args };
+            move |_sender, args: &BluetoothLEAdvertisementReceivedEventArgs| {
+                let args = &args;
                 on_received(args);
                 Ok(())
             },
         );
-        self.watcher.add_received(&handler).unwrap();
+        self.watcher.received(&handler).unwrap();
         self.watcher.start().unwrap();
         Ok(())
     }

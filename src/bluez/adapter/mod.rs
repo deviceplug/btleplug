@@ -409,7 +409,9 @@ impl Drop for Adapter {
     }
 }
 
-impl Central<Peripheral> for Adapter {
+impl Central for Adapter {
+    type Peripheral = Peripheral;
+
     fn event_receiver(&self) -> Option<Receiver<CentralEvent>> {
         self.manager.event_receiver()
     }

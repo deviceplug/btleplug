@@ -347,7 +347,9 @@ pub enum CentralEvent {
 }
 
 /// Central is the "client" of BLE. It's able to scan for and establish connections to peripherals.
-pub trait Central<P: Peripheral>: Send + Sync + Clone {
+pub trait Central: Send + Sync + Clone {
+    type Peripheral: Peripheral;
+
     /// Retreive the Event [Receiver] for the event channel. This channel
     /// receiver will receive notifications when events occur for this Central
     /// module. As this uses an std::channel which cannot be cloned, after the
@@ -376,11 +378,11 @@ pub trait Central<P: Peripheral>: Send + Sync + Clone {
 
     /// Returns the list of [`Peripherals`](trait.Peripheral.html) that have been discovered so far.
     /// Note that this list may contain peripherals that are no longer available.
-    fn peripherals(&self) -> Vec<P>;
+    fn peripherals(&self) -> Vec<Self::Peripheral>;
 
     /// Returns a particular [`Peripheral`](trait.Peripheral.html) by its address if it has been
     /// discovered.
-    fn peripheral(&self, address: BDAddr) -> Option<P>;
+    fn peripheral(&self, address: BDAddr) -> Option<Self::Peripheral>;
 }
 
 #[cfg(test)]

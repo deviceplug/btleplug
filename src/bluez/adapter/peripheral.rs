@@ -179,6 +179,16 @@ impl Peripheral {
                         &ManufacturerSpecific(ref data) => {
                             properties.manufacturer_data = Some(data.clone());
                         }
+                        &ServiceData16(ref uuid, ref data) => {
+                            properties
+                                .service_data
+                                .insert(UUID::B16(*uuid), data.clone());
+                        }
+                        &ServiceData128(ref uuid, ref data) => {
+                            properties
+                                .service_data
+                                .insert(UUID::B128(*uuid), data.clone());
+                        }
                         _ => {
                             // skip for now
                         }

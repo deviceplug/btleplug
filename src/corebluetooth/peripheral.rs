@@ -26,7 +26,7 @@ use async_std::{
     task,
 };
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, BTreeMap},
     fmt::{self, Debug, Display, Formatter},
     iter::FromIterator,
     sync::{Arc, Mutex},
@@ -65,6 +65,7 @@ impl Peripheral {
             local_name: Some(local_name),
             tx_power_level: None,
             manufacturer_data: None,
+            service_data: BTreeMap::new(),
             discovery_count: 1,
             has_scan_response: true,
         };

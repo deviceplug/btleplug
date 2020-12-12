@@ -2,15 +2,7 @@ extern crate btleplug;
 extern crate rand;
 
 use btleplug::api::{bleuuid::BleUuid, Central, CentralEvent};
-#[cfg(target_os = "linux")]
-use btleplug::bluez::{adapter::Adapter, manager::Manager};
-#[cfg(target_os = "macos")]
-use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
-#[cfg(target_os = "windows")]
-use btleplug::winrtble::{adapter::Adapter, manager::Manager};
-
-// adapter retrieval works differently depending on your platform right now.
-// API needs to be aligned.
+use btleplug::{Adapter, Manager};
 
 fn get_central(manager: &Manager) -> Adapter {
     let adapters = manager.adapters().unwrap();

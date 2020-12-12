@@ -6,17 +6,10 @@ use simple_logger::SimpleLogger;
 use std::thread;
 use std::time::Duration;
 
-#[allow(unused_imports)]
-use btleplug::api::{Central, Characteristic, Peripheral};
-#[allow(unused_imports)]
-#[cfg(target_os = "linux")]
-use btleplug::bluez::{adapter::Adapter, manager::Manager};
-#[allow(unused_imports)]
-#[cfg(target_os = "macos")]
-use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
-#[allow(unused_imports)]
-#[cfg(target_os = "windows")]
-use btleplug::winrtble::{adapter::Adapter, manager::Manager};
+use btleplug::{
+    api::{Central, Peripheral},
+    Adapter, Manager,
+};
 
 #[cfg(target_os = "linux")]
 fn print_adapter_info(adapter: &Adapter) {

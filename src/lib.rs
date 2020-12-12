@@ -93,6 +93,16 @@ pub mod corebluetooth;
 #[cfg(target_os = "windows")]
 pub mod winrtble;
 
+#[allow(unused_imports)]
+#[cfg(target_os = "linux")]
+pub use crate::bluez::{adapter::Adapter, manager::Manager};
+#[allow(unused_imports)]
+#[cfg(target_os = "macos")]
+pub use crate::corebluetooth::{adapter::Adapter, manager::Manager};
+#[allow(unused_imports)]
+#[cfg(target_os = "windows")]
+pub use crate::winrtble::{adapter::Adapter, manager::Manager};
+
 #[derive(Debug, thiserror::Error, Clone)]
 pub enum Error {
     #[error("Permission denied")]

@@ -11,28 +11,7 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use nix;
-use nix::errno::Errno;
-
-use crate::{Error, Result};
-
-fn errno_to_error(errno: Errno) -> Error {
-    match errno {
-        Errno::EPERM => Error::PermissionDenied,
-        Errno::ENODEV => Error::DeviceNotFound,
-        Errno::ENOTCONN => Error::NotConnected,
-        _ => Error::Other(errno.to_string()),
-    }
-}
-
-impl From<nix::Error> for Error {
-    fn from(e: nix::Error) -> Self {
-        match e {
-            nix::Error::Sys(errno) => errno_to_error(errno),
-            _ => Error::Other(e.to_string()),
-        }
-    }
-}
+use crate::Error;
 
 impl From<dbus::Error> for Error {
     fn from(e: dbus::Error) -> Self {
@@ -44,14 +23,5 @@ impl From<dbus::Error> for Error {
                 e.message().unwrap_or("Unknown DBus error.")
             )),
         }
-    }
-}
-
-pub fn handle_error(v: i32) -> Result<i32> {
-    if v < 0 {
-        debug!("got error {}", Errno::last());
-        Err(errno_to_error(Errno::last()))
-    } else {
-        Ok(v)
     }
 }

@@ -17,7 +17,7 @@ pub use adapter_manager::AdapterManager;
 
 use crate::{
     api::UUID::{B128, B16},
-    Result,
+    Error, Result,
 };
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -100,6 +100,12 @@ pub enum ParseBDAddrError {
     IncorrectByteCount,
     #[fail(display = "Malformed integer in Bluetooth address")]
     InvalidInt,
+}
+
+impl From<ParseBDAddrError> for Error {
+    fn from(e: ParseBDAddrError) -> Self {
+        Error::Other(format!("ParseBDAddrError: {}", e))
+    }
 }
 
 impl FromStr for BDAddr {

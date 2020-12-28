@@ -15,10 +15,7 @@ use libc;
 
 use crate::{
     api::{BDAddr, Characteristic, CommandCallback, NotificationHandler, RequestCallback, UUID},
-    bluez::{
-        adapter::Adapter, constants::*, protocol::att, protocol::hci::ACLData, util::handle_error,
-    },
-    common::util,
+    bluez::util::handle_error,
     Error, Result,
 };
 
@@ -34,8 +31,6 @@ use std::{
     time::Duration,
 };
 
-use bytes::{BufMut, BytesMut};
-
 enum StreamMessage {
     Command(Vec<u8>, Option<CommandCallback>),
     Request(Vec<u8>, Option<RequestCallback>),
@@ -44,6 +39,8 @@ enum StreamMessage {
 }
 
 use StreamMessage::*;
+
+use super::Adapter;
 
 impl Debug for StreamMessage {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
@@ -178,7 +175,7 @@ impl ACLStream {
             ConfirmIndication => {
                 debug!("confirming indication to {}", self.fd);
 
-                self.write_socket(&mut [ATT_OP_CONFIRM_INDICATION], true, receiver)?;
+                unimplemented!()
             }
             Data(ref value) => {
                 debug!("Received data {:?}", value);
@@ -202,63 +199,8 @@ impl ACLStream {
         self.send(Command(data.to_owned(), on_done));
     }
 
-    pub fn receive(&self, message: &ACLData) {
-        debug!("receive message: {:?}", message);
-        // message.data
-        // TODO: handle partial packets
-        if message.cid == ATT_CID {
-            let value = message.data.to_vec();
-            if !value.is_empty() {
-                match value[0] {
-                    ATT_OP_EXCHANGE_MTU_REQ => {
-                        let request = att::mtu_request(&value).unwrap().1;
-                        // is the client MTU smaller than ours?
-                        if request.client_rx_mtu <= self.adapter.info.acl_mtu {
-                            debug!("sending MTU: {}", self.adapter.info.acl_mtu);
-                            // it is, send confirmation
-                            let mut buf = BytesMut::with_capacity(3);
-                            buf.put_u8(ATT_OP_EXCHANGE_MTU_RESP);
-                            buf.put_u16_le(self.adapter.info.acl_mtu);
-                            self.write_cmd(&mut buf, None);
-                        } else {
-                            // TODO: reduce our MTU to client's
-                            error!("client's MTU is larger than ours");
-                            self.write_cmd(&mut [0x01, 0x02, 0x00, 0x00, 0x06], None);
-                        }
-                    }
-                    ATT_OP_VALUE_NOTIFICATION => {
-                        debug!("value notification: {:?}", value);
-                        self.receive_notification(&value);
-                    }
-                    ATT_OP_VALUE_INDICATION => {
-                        // Indications must be manually ack'd for bluez HCI interface
-                        self.send(ConfirmIndication);
-                        debug!("value indication: {:?}", value);
-                        self.receive_notification(&value);
-                    }
-                    _ => {
-                        self.send(Data(value));
-                    }
-                }
-            }
-        }
-    }
-
-    fn receive_notification(&self, value: &[u8]) -> () {
-        match att::value_notification(&value) {
-            Ok(notification) => {
-                let mut n = notification.1.clone();
-                n.uuid = n
-                    .handle
-                    .and_then(|h| self.get_uuid_by_handle(h))
-                    .expect("How did we get here without a handle?");
-
-                util::invoke_handlers(&self.notification_handlers, &n);
-            }
-            Err(err) => {
-                error!("failed to parse notification: {:?}", err);
-            }
-        }
+    fn receive_notification(&self, _value: &[u8]) -> () {
+        unimplemented!()
     }
 
     fn get_uuid_by_handle(&self, handle: u16) -> Option<UUID> {

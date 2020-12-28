@@ -34,6 +34,19 @@ impl From<nix::Error> for Error {
     }
 }
 
+impl From<dbus::Error> for Error {
+    fn from(e: dbus::Error) -> Self {
+        match e.name() {
+            // TODO: translate other dbus errors into relevant btleplug::Error kind
+            _ => Error::Other(format!(
+                "{}: {}",
+                e.name().unwrap_or("Unknown DBus error"),
+                e.message().unwrap_or("Unknown DBus error.")
+            )),
+        }
+    }
+}
+
 pub fn handle_error(v: i32) -> Result<i32> {
     if v < 0 {
         debug!("got error {}", Errno::last());

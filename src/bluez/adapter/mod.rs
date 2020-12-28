@@ -13,25 +13,21 @@
 
 mod acl_stream;
 mod peripheral;
+mod dbus;
 
 use bytes::{BufMut, BytesMut};
 use dashmap::DashMap;
+use dbus::{OrgBluezAdapter1, Path, blocking::{Connection, Proxy}};
 use libc;
 use nom;
 
-use std::{
-    self,
-    collections::HashSet,
-    ffi::CStr,
-    sync::{
+use std::{self, collections::HashSet, ffi::CStr, str::FromStr, sync::{
         atomic::{AtomicBool, Ordering},
         mpsc::Receiver,
         Arc,
-    },
-    thread,
-};
+    }, thread, time::Duration};
 
-use crate::api::{AdapterManager, BDAddr, Central, CentralEvent};
+use crate::api::{self, AdapterManager, AddressType, BDAddr, Central, CentralEvent};
 use crate::Result;
 
 use crate::bluez::{
@@ -189,6 +185,19 @@ impl AdapterState {
 
         set
     }
+
+    // Is this really needed?
+    fn from_dbus(conn: &Proxy<'_, Connection>) -> HashSet<AdapterState> {
+        let mut set = HashSet::new();
+        if conn.discovering().unwrap() {
+            set.insert(AdapterState::IScan);
+        }
+        if conn.powered().unwrap() {
+            set.insert(AdapterState::Up);
+        }
+
+        set
+    }
 }
 
 /// The [`Central`](../../api/trait.Central.html) implementation for BlueZ.
@@ -207,13 +216,13 @@ pub struct ConnectedAdapter {
 impl ConnectedAdapter {
     pub fn new(adapter: &Adapter) -> Result<ConnectedAdapter> {
         let adapter_fd = handle_error(unsafe {
-            libc::socket(libc::AF_BLUETOOTH, libc::SOCK_RAW | libc::SOCK_CLOEXEC, 1)
+            libc::socket(libc::AF_BLUETOOTH, libc::SOCK_RAW | libc::SOCK_CLOEXEC, BTProto::HCI)
         })?;
 
         let addr = SockaddrHCI {
             hci_family: libc::AF_BLUETOOTH as u16,
             hci_dev: adapter.dev_id,
-            hci_channel: 0,
+            hci_channel: HCIChannel::User,
         };
 
         handle_error(unsafe {
@@ -437,7 +446,53 @@ impl ConnectedAdapter {
     }
 }
 
-impl Central<Peripheral> for ConnectedAdapter {
+/// Adapter represents a physical bluetooth interface in your system, for example a bluetooth
+/// dongle.
+#[derive(Debug, Clone)]
+pub struct Adapter {
+    connection:Arc<Connection>,
+    path: Path,
+    manager: AdapterManager<Peripheral>,
+}
+
+impl Adapter {
+    pub(crate) fn from_dbus(conn: Arc<Connection>, path: &Path) -> Result<Adapter> {
+        info!("DevInfo: {:?}", conn.address()?);
+        let proxy = conn.with_proxy("org.bluez", path, Duration::from_secs(5));
+        Ok(Adapter {
+            connection: conn,
+            path: path,
+            manager: AdapterManager::new(),
+        })
+    }
+
+    pub fn is_up(&self) -> Result<bool> {
+        let proxy = self.connection.with_proxy("org.bluez", self.path, Duration::from_secs(5));
+        Ok(proxy.powered()?)
+    }
+    
+    pub fn name(&self) -> Result<String>{
+        let proxy = self.connection.with_proxy("org.bluez", self.path, Duration::from_secs(5));
+        Ok(proxy.name()?)
+    }
+
+    pub fn address(&self) -> Result<BDAddr>{
+        let proxy = self.connection.with_proxy("org.bluez", self.path, Duration::from_secs(5));
+        Ok(proxy.address()?.parse())
+    }
+
+    pub fn discoverable(&self) -> Result<bool>{
+        let proxy = self.connection.with_proxy("org.bluez", self.path, Duration::from_secs(5));
+        Ok(proxy.discoverable()?)
+    }
+
+    pub fn set_discoverable(&self, enabled: bool) -> Result<()>{
+        let proxy = self.connection.with_proxy("org.bluez", self.path, Duration::from_secs(5));
+        Ok(proxy.set_discoverable(enabled)?)
+    }
+}
+
+impl Central<Peripheral> for Adapter {
     fn event_receiver(&self) -> Option<Receiver<CentralEvent>> {
         self.manager.event_receiver()
     }
@@ -467,61 +522,5 @@ impl Central<Peripheral> for ConnectedAdapter {
 
     fn peripheral(&self, address: BDAddr) -> Option<Peripheral> {
         self.manager.peripheral(address)
-    }
-}
-
-/// Adapter represents a physical bluetooth interface in your system, for example a bluetooth
-/// dongle.
-#[derive(Debug, Clone)]
-pub struct Adapter {
-    /// The name of the adapter.
-    pub name: String,
-
-    /// The device id of the adapter.
-    pub dev_id: u16,
-
-    /// The address of the adapter.
-    pub addr: BDAddr,
-
-    /// The type of the adapater.
-    pub typ: AdapterType,
-
-    /// The set of states that the adapater is in.
-    pub states: HashSet<AdapterState>,
-
-    /// Properties of the adapter.
-    pub info: HCIDevInfo,
-}
-
-impl Adapter {
-    pub fn from_device_info(di: &HCIDevInfo) -> Adapter {
-        info!("DevInfo: {:?}", di);
-        Adapter {
-            name: String::from(unsafe { CStr::from_ptr(di.name.as_ptr()).to_str().unwrap() }),
-            dev_id: di.dev_id,
-            addr: di.bdaddr,
-            typ: AdapterType::parse((di.type_ & 0x30) >> 4),
-            states: AdapterState::parse(di.flags),
-            info: di.clone(),
-        }
-    }
-
-    pub fn from_dev_id(ctl: i32, dev_id: u16) -> Result<Adapter> {
-        let mut di = HCIDevInfo::default();
-        di.dev_id = dev_id;
-
-        unsafe {
-            ioctl::hci_get_dev_info(ctl, &mut di)?;
-        }
-
-        Ok(Adapter::from_device_info(&di))
-    }
-
-    pub fn is_up(&self) -> bool {
-        self.states.contains(&AdapterState::Up)
-    }
-
-    pub fn connect(&self) -> Result<ConnectedAdapter> {
-        ConnectedAdapter::new(self)
     }
 }

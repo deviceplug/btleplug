@@ -43,6 +43,14 @@ impl Default for AddressType {
 }
 
 impl AddressType {
+    pub fn from_str(v: &str) -> Option<AddressType> {
+        match v {
+            "public" => Some(AddressType::Public),
+            "random" => Some(AddressType::Random),
+            _ => None,
+        }
+    }
+
     pub fn from_u8(v: u8) -> Option<AddressType> {
         match v {
             1 => Some(AddressType::Public),

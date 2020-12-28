@@ -11,19 +11,27 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use std::{iter::Take, mem, slice::Iter, sync::Mutex};
+use std::{
+    collections::HashMap,
+    iter::Take,
+    mem, result,
+    slice::Iter,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
-use libc::{self, AF_BLUETOOTH, SOCK_RAW};
+mod dbus;
+use self::dbus::OrgFreedesktopDBusObjectManager;
+use ::dbus::{blocking::Connection, Error as DBusError};
+
 use nix::sys::ioctl::ioctl_param_type;
 
 use crate::{
     bluez::{
         adapter::{Adapter, ConnectedAdapter},
-        constants::*,
         ioctl,
-        util::handle_error,
     },
-    Result,
+    Error, Result,
 };
 
 #[derive(Debug, Copy)]
@@ -79,43 +87,47 @@ impl Default for HCIDevListReq {
 /// This struct is the interface into BlueZ. It can be used to list, manage, and connect to bluetooth
 /// adapters.
 pub struct Manager {
-    ctl_fd: Mutex<i32>,
+    dbus_conn: Arc<Connection>,
 }
 
 impl Manager {
     /// Constructs a new manager to communicate with the BlueZ system. Only one Manager should be
     /// created by your application.
     pub fn new() -> Result<Manager> {
-        let fd = handle_error(unsafe { libc::socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI) })?;
+        let conn = Connection::new_system()?;
         Ok(Manager {
-            ctl_fd: Mutex::new(fd),
+            dbus_conn: Arc::new(conn),
         })
     }
 
     /// Returns the list of adapters available on the system.
     pub fn adapters(&self) -> Result<Vec<Adapter>> {
-        let mut result: Vec<Adapter> = vec![];
+        // Create a convenience proxy connection that's already namespaced to org.bluez
+        let bluez = self
+            .dbus_conn
+            .with_proxy("org.bluez", "/", Duration::from_secs(5));
 
-        let ctl = self.ctl_fd.lock().unwrap();
+        // First, use org.freedesktop.DBus.ObjectManager to query org.bluez
+        // for adapters
+        let adapters = bluez
+            .get_managed_objects()?
+            .into_iter()
+            .filter(|(_k, v)| v.keys().any(|i| i.starts_with("org.bluez.Adapter")))
+            .map(|(path, _v)| {
+                Adapter::from_dbus(self.dbus_conn.clone(), &path)
+            })
+            .collect::<Result<Vec<_>>>()?;
 
-        let mut dev_list = HCIDevListReq::default();
-
-        unsafe {
-            ioctl::hci_get_dev_list(*ctl, &mut dev_list)?;
-        }
-
-        for dev_req in dev_list.iter() {
-            let adapter = Adapter::from_dev_id(*ctl, dev_req.dev_id)?;
-            result.push(adapter);
-        }
-
-        Ok(result)
+        Ok(adapters)
     }
 
     /// Updates the state of an adapter.
     pub fn update(&self, adapter: &Adapter) -> Result<Adapter> {
-        let ctl = self.ctl_fd.lock().unwrap();
-        Adapter::from_dev_id(*ctl, adapter.dev_id)
+        Adapter::from_dbus(&self.dbus_conn.with_proxy(
+            "org.bluez",
+            adapter.path,
+            Duration::from_secs(5),
+        ))
     }
 
     /// Disables an adapter.

@@ -47,6 +47,9 @@ features = ["verbose-errors"]
 version = "^0.6"
 features = ["windows-devices", "windows-storage"]
 
+[target.'cfg(target_os = "linux")'.dependencies]
+dbus = "0.9"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2.7"
 cocoa = "0.24.0"

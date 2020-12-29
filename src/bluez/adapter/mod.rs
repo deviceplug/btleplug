@@ -12,13 +12,13 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 // mod acl_stream;
-mod dbus;
+// mod dbus;
 mod peripheral;
 
-use self::dbus::OrgBluezAdapter1;
-use ::dbus::blocking::Proxy;
-use ::dbus::blocking::SyncConnection;
-use ::dbus::Path;
+use super::bluez_dbus::adapter::OrgBluezAdapter1;
+use dbus::blocking::Proxy;
+use dbus::blocking::SyncConnection;
+use dbus::Path;
 
 use std::{
     self,

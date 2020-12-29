@@ -61,3 +61,7 @@ cocoa = "0.24.0"
 
 [dev-dependencies]
 rand = "0.8.2"
+
+[target.'cfg(target_os = "linux")'.build-dependencies.dbus-codegen]
+version = "0.9.0"
+default-features = false

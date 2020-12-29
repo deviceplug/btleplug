@@ -61,40 +61,59 @@ output_introspection() {
 cleanup() {
     if [[ -z "${DEBUG+x}" ]]; then
         # only remove when `DEBUG` is unset.
-        rm --force "${this_dir}/dbus-introspect-manager.xml.tmp"
-        rm --force "${this_dir}/dbus-introspect-adapter.xml.tmp"
-        rm --force "${this_dir}/dbus-introspect-device.xml.tmp"
+        rm --force "${this_dir}/bluez-dbus-introspect-manager.xml.tmp"
+        rm --force "${this_dir}/bluez-dbus-introspect-adapter.xml.tmp"
+        rm --force "${this_dir}/bluez-dbus-introspect-device.xml.tmp"
     fi
 }
 
 main () {
     trap cleanup EXIT
 
+    echo "> Checking required programs."
+
+    if hash dbus-send 2>/dev/null; then
+        echo "> Command 'dbus-send' is present."
+    else
+        echo "> Command 'dbus-send' is absent."
+        echo "> This command is usually found in the same package as DBus."
+        echo "> In Ubuntu, this is can be installed with 'sudo apt install dbus'"
+        exit 1
+    fi
+    if hash xmllint 2>/dev/null; then
+        echo "> Command 'xmllint' is present."
+    else
+        echo "> Command 'xmllint' is absent."
+        echo "> This command is usually found in the libxml2 utils package."
+        echo "> In Ubuntu, this is can be installed with 'sudo apt install libxml2-utils'"
+        exit 1
+    fi
+    echo "> All required programs are present."
 
     echo "> Starting introspection"
 
     echo -n "> Introspecting manager"
 
-    introspect "/org/bluez" "${this_dir}/dbus-introspect-manager.xml.tmp"
-    adapter_names="$(node_names "${this_dir}/dbus-introspect-manager.xml.tmp")"
-    output_introspection "${this_dir}/dbus-introspect-manager.xml.tmp" "${this_dir}/dbus-introspect-manager.xml" "false"
+    introspect "/org/bluez" "${this_dir}/bluez-dbus-introspect-manager.xml.tmp"
+    adapter_names="$(node_names "${this_dir}/bluez-dbus-introspect-manager.xml.tmp")"
+    output_introspection "${this_dir}/bluez-dbus-introspect-manager.xml.tmp" "${this_dir}/bluez-dbus-introspect-manager.xml" "false"
 
     echo "> Found BlueZ manager types. Now introspecting all $(lines "${adapter_names}") discovered adapter."
     local has_adapters=false has_devices=false
 
     for adapter_name in ${adapter_names}; do
         echo -n ">> Introspecting adapter ${adapter_name}."
-        introspect "/org/bluez/${adapter_name}" "${this_dir}/dbus-introspect-adapter.xml.tmp"
-        device_names="$(node_names "${this_dir}/dbus-introspect-adapter.xml.tmp")"
-        output_introspection "${this_dir}/dbus-introspect-adapter.xml.tmp" "${this_dir}/dbus-introspect-adapter.xml" "${has_adapters}"
+        introspect "/org/bluez/${adapter_name}" "${this_dir}/bluez-dbus-introspect-adapter.xml.tmp"
+        device_names="$(node_names "${this_dir}/bluez-dbus-introspect-adapter.xml.tmp")"
+        output_introspection "${this_dir}/bluez-dbus-introspect-adapter.xml.tmp" "${this_dir}/bluez-dbus-introspect-adapter.xml" "${has_adapters}"
         has_adapters=true
 
         echo ">> Found BlueZ adapter types. Now introspecting all $(lines "${device_names}") discovered devices."
 
         for device_name in ${device_names}; do
             echo -n ">>> Introspecting device ${adapter_name}/${device_name}."
-            introspect "/org/bluez/${adapter_name}/${device_name}" "${this_dir}/dbus-introspect-device.xml.tmp"
-            output_introspection "${this_dir}/dbus-introspect-device.xml.tmp" "${this_dir}/dbus-introspect-device.xml" "${has_devices}"
+            introspect "/org/bluez/${adapter_name}/${device_name}" "${this_dir}/bluez-dbus-introspect-device.xml.tmp"
+            output_introspection "${this_dir}/bluez-dbus-introspect-device.xml.tmp" "${this_dir}/bluez-dbus-introspect-device.xml" "${has_devices}"
             has_devices=true
         done
     done
@@ -105,14 +124,14 @@ main () {
     if [[ "${has_adapters}" = "false" ]]; then
         echo "Unable to find an adapter to export, leaving the adapter and device XML files alone."
         echo
-        echo "Updated 'dbus-introspect-manager.xml'"
+        echo "Updated 'bluez-dbus-introspect-manager.xml'"
     elif [[ "${has_devices}" = "false" ]]; then
         echo "Unable to find a device to export, leaving the device XML file alone"
         echo "To fix this you should start a scan before running this script."
         echo
-        echo "Updated 'dbus-introspect-manager.xml', 'dbus-introspect-adapter.xml'"
+        echo "Updated 'bluez-dbus-introspect-manager.xml', 'bluez-dbus-introspect-adapter.xml'"
     else
-        echo "Updated 'dbus-introspect-manager.xml', 'dbus-introspect-adapter.xml', 'dbus-introspect-device.xml'"
+        echo "Updated 'bluez-dbus-introspect-manager.xml', 'bluez-dbus-introspect-adapter.xml', 'bluez-dbus-introspect-device.xml'"
     fi
 }
 main "$@"

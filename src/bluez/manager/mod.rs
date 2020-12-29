@@ -13,9 +13,7 @@
 
 use std::{sync::Arc, time::Duration};
 
-mod dbus;
-use self::dbus::OrgFreedesktopDBusObjectManager;
-use ::dbus::blocking::SyncConnection;
+use dbus::blocking::{stdintf::org_freedesktop_dbus::ObjectManager, SyncConnection};
 
 use crate::{bluez::adapter::Adapter, Result};
 

@@ -12,5 +12,6 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 pub mod adapter;
+pub(crate) mod bluez_dbus;
 pub mod manager;
 mod util;

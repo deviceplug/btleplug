@@ -11,11 +11,14 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
+use std::time::Duration;
+
 use crate::Error;
 
 impl From<dbus::Error> for Error {
     fn from(e: dbus::Error) -> Self {
         match e.name() {
+            Some("org.freedesktop.DBus.Error.NoReply") => Error::TimedOut(Duration::new(0,0)), // How to express a TimedOut error without a duration?
             // TODO: translate other dbus errors into relevant btleplug::Error kind
             _ => Error::Other(format!(
                 "{}: {}",

@@ -11,34 +11,131 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
+mod dbus;
+use self::dbus::OrgBluezDevice1;
+
+use ::dbus::{
+    arg::{Array, RefArg, Variant},
+    blocking::{Proxy, SyncConnection},
+    Path,
+};
+use bytes::BufMut;
+
 use crate::{
     api::{
-        BDAddr, Characteristic, CommandCallback, NotificationHandler, Peripheral as ApiPeripheral,
-        PeripheralProperties, RequestCallback, UUID,
+        AdapterManager, AddressType, BDAddr, Characteristic, CommandCallback, NotificationHandler,
+        Peripheral as ApiPeripheral, PeripheralProperties, RequestCallback, UUID,
     },
     Result,
 };
 
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, HashMap},
     fmt::{self, Debug, Display, Formatter},
     sync::{
+        atomic::{AtomicBool, Ordering},
         mpsc::{Receiver, Sender},
         Arc, Mutex,
     },
+    time::Duration,
 };
-
-use super::Adapter;
 
 #[derive(Clone)]
 pub struct Peripheral {
-    adapter: Adapter,
+    adapter: AdapterManager<Self>,
+    connection: Arc<SyncConnection>,
+    path: String,
     address: BDAddr,
+    connected: Arc<AtomicBool>,
     properties: Arc<Mutex<PeripheralProperties>>,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
-    connection_tx: Arc<Mutex<Sender<u16>>>,
-    connection_rx: Arc<Mutex<Receiver<u16>>>,
     notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
+}
+
+impl Peripheral {
+    pub fn new(
+        adapter: AdapterManager<Self>,
+        connection: Arc<SyncConnection>,
+        path: &Path,
+        address: BDAddr,
+    ) -> Self {
+        let mut properties = PeripheralProperties::default();
+        properties.address = address;
+        let properties = Arc::new(Mutex::new(properties));
+        let characteristics = Arc::new(Mutex::new(BTreeSet::new()));
+        let connected = Arc::new(AtomicBool::new(false));
+        let notification_handlers = Arc::new(Mutex::new(Vec::new()));
+
+        Peripheral {
+            adapter: adapter,
+            connection: connection,
+            path: path.to_string(),
+            address: address,
+            connected: connected,
+            properties: properties,
+            characteristics: characteristics,
+            notification_handlers: notification_handlers,
+        }
+    }
+
+    pub fn update_properties(
+        &self,
+        args: &::std::collections::HashMap<String, Variant<Box<dyn RefArg + 'static>>>,
+    ) {
+        let mut properties = self.properties.lock().unwrap();
+
+        properties.discovery_count += 1;
+
+        if let Some(name) = args.get("Name") {
+            properties.local_name = name.as_str().map(|s| s.to_string());
+        }
+
+        // As of writing this: ManufacturerData returns a 'Variant({<manufacturer_id>: Variant([<manufacturer_data>])})'.
+        // This Variant wrapped dictionary and array is difficult to navigate. So uh.. trust me, this works on my machine™.
+        if let Some(manufacturer_data) = args.get("ManufacturerData") {
+            let mut result = Vec::<u8>::new();
+            // dbus-rs doesn't really have a dictionary API... so need to iterate two at a time and make a key-value pair.
+            if let Some(mut iter) = manufacturer_data.0.as_iter() {
+                loop {
+                    if let (Some(id), Some(data)) = (iter.next(), iter.next()) {
+                        // This API is terrible.. why can't I just get an array out, why is it all wrapped in a Variant?
+                        let data: Vec<u8> = data
+                            .as_iter()
+                            .unwrap()
+                            .next()
+                            .unwrap()
+                            .as_iter()
+                            .unwrap()
+                            .map(|b| b.as_u64().unwrap() as u8)
+                            .collect();
+
+                        result.put_u16_le(id.as_u64().map(|v| v as u16).unwrap());
+                        result.extend(data);
+                    } else {
+                        break;
+                    }
+                }
+            }
+            // 🎉
+            properties.manufacturer_data = Some(result);
+        }
+
+        if let Some(address_type) = args.get("AddressType") {
+            properties.address_type = address_type
+                .as_str()
+                .map(|address_type| AddressType::from_str(address_type).unwrap_or_default())
+                .unwrap_or_default();
+        }
+
+        if let Some(rssi) = args.get("RSSI") {
+            properties.tx_power_level = rssi.as_i64().map(|rssi| rssi as i8);
+        }
+    }
+
+    pub fn proxy(&self) -> Proxy<&SyncConnection> {
+        self.connection
+            .with_proxy("org.bluez", &self.path, Duration::from_secs(5))
+    }
 }
 
 assert_impl_all!(Peripheral: Sync, Send);
@@ -97,15 +194,15 @@ impl ApiPeripheral for Peripheral {
     }
 
     fn is_connected(&self) -> bool {
-        unimplemented!()
+        self.connected.load(Ordering::Relaxed)
     }
 
     fn connect(&self) -> Result<()> {
-        unimplemented!()
+        Ok(self.proxy().connect()?)
     }
 
     fn disconnect(&self) -> Result<()> {
-        unimplemented!()
+        Ok(self.proxy().disconnect()?)
     }
 
     fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {

@@ -16,49 +16,31 @@
 mod peripheral;
 
 use super::bluez_dbus::adapter::OrgBluezAdapter1;
-use dbus::blocking::Proxy;
-use dbus::blocking::SyncConnection;
-use dbus::Path;
+use dbus::{
+    arg::{RefArg, Variant},
+    channel::Token,
+    blocking::{Proxy, SyncConnection},
+    message::MatchRule,
+    Path,
+};
 
 use std::{
-    self,
-    collections::HashSet,
-    sync::{mpsc::Receiver, Arc},
+    self, 
+    collections::HashSet, 
+    sync::{
+        Arc, 
+        atomic::{AtomicBool, Ordering}, 
+        mpsc::Receiver}, 
+    thread, 
     time::Duration,
 };
+
 
 use crate::api::{AdapterManager, BDAddr, Central, CentralEvent};
 use crate::Result;
 
 use crate::bluez::adapter::peripheral::Peripheral;
 
-#[derive(Hash, Eq, PartialEq, Debug, Copy, Clone)]
-pub enum AdapterState {
-    Up,
-    Init,
-    Running,
-    Raw,
-    PScan,
-    IScan,
-    Inquiry,
-    Auth,
-    Encrypt,
-}
-
-impl AdapterState {
-    // Is this really needed?
-    fn from_dbus<A: OrgBluezAdapter1>(conn: &A) -> HashSet<AdapterState> {
-        let mut set = HashSet::new();
-        if conn.discovering().unwrap() {
-            set.insert(AdapterState::IScan);
-        }
-        if conn.powered().unwrap() {
-            set.insert(AdapterState::Up);
-        }
-
-        set
-    }
-}
 /// Adapter represents a physical bluetooth interface in your system, for example a bluetooth
 /// dongle.
 #[derive(Clone)]
@@ -66,6 +48,8 @@ pub struct Adapter {
     connection: Arc<SyncConnection>,
     path: String,
     manager: AdapterManager<Peripheral>,
+    match_tokens: Vec<Token>,
+    should_stop: Arc<AtomicBool>,
 }
 
 assert_impl_all!(SyncConnection: Sync, Send);
@@ -79,6 +63,8 @@ impl Adapter {
             connection: conn,
             path: path.to_string(),
             manager: AdapterManager::new(),
+            match_tokens: Vec::with_capacity(2),
+            should_stop: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -112,21 +98,68 @@ impl Central<Peripheral> for Adapter {
     fn event_receiver(&self) -> Option<Receiver<CentralEvent>> {
         self.manager.event_receiver()
     }
-
-    fn active(&self, _enabled: bool) {
-        unimplemented!()
+    
+    fn filter_duplicates(&self, enabled: bool) {
+        todo!()
+        // self.filter_duplicates
+        // .clone()
+        // .store(enabled, Ordering::Relaxed);
     }
-
-    fn filter_duplicates(&self, _enabled: bool) {
-        unimplemented!()
+    
+    fn start_scan<'a>(&'a self) -> Result<()> {
+        use ::dbus::blocking::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesAdded as IA;
+        let connection = self.connection.clone();
+        let manager = self.manager.clone();
+        let token = self.connection.add_match(MatchRule::new(),  move |args: IA, _c, _msg| {
+            let path = args.object;
+            if !path.starts_with("/org/bluez") {
+                return true
+            }
+            
+            if let Some(device) = args.interfaces.get("org.bluez.Device1") {    
+                if let Some(address) = device.get("Address") {
+                    if let Some(address) = address.as_str() {
+                        let address :BDAddr = address.parse().unwrap();
+                        let peripheral = manager
+                            .peripheral(address)
+                            .unwrap_or_else(|| Peripheral::new(manager.clone(), connection.clone(), &path, address));
+                        peripheral.update_properties(&device);
+                        if !manager.has_peripheral(&address) {
+                            manager.add_peripheral(address, peripheral);
+                            manager.emit(CentralEvent::DeviceDiscovered(address));
+                        } else {
+                            manager.update_peripheral(address, peripheral);
+                            manager.emit(CentralEvent::DeviceUpdated(address));
+                        }
+                    } else {
+                        error!("Could not parse Bluetooth address");
+                    }
+                } else {
+                    error!("Could not retrieve 'Address' from DBus 'InterfaceAdded' message with interface 'org.bluez.Device1'");
+                }
+            } else {
+                debug!("Interface added to /org/bluez was not a 'org.bluez.Device1'");
+            }
+            
+            return true;
+        })?;
+        
+        // Create a thread to process incoming DBus messages
+        let connection = self.connection.clone();
+        let should_stop = self.should_stop.clone();
+        thread::spawn(move ||{
+            while !should_stop.load(Ordering::Relaxed){
+                connection.process(Duration::from_secs(1)).unwrap();
+            }
+            connection.remove_match(token).unwrap();
+        });
+        
+        Ok(self.proxy().start_discovery()?)
     }
-
-    fn start_scan(&self) -> Result<()> {
-        unimplemented!()
-    }
-
+    
     fn stop_scan(&self) -> Result<()> {
-        unimplemented!()
+        self.should_stop.store(false, Ordering::Relaxed);
+        Ok(self.proxy().stop_discovery()?)
     }
 
     fn peripherals(&self) -> Vec<Peripheral> {
@@ -135,5 +168,9 @@ impl Central<Peripheral> for Adapter {
 
     fn peripheral(&self, address: BDAddr) -> Option<Peripheral> {
         self.manager.peripheral(address)
+    }
+
+    fn active(&self, enabled: bool) {
+        todo!()
     }
 }

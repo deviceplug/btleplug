@@ -11,7 +11,13 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 use dbus::blocking::{stdintf::org_freedesktop_dbus::ObjectManager, SyncConnection};
 
@@ -28,9 +34,8 @@ impl Manager {
     /// Constructs a new manager to communicate with the BlueZ system. Only one Manager should be
     /// created by your application.
     pub fn new() -> Result<Manager> {
-        let conn = SyncConnection::new_system()?;
         Ok(Manager {
-            dbus_conn: Arc::new(conn),
+            dbus_conn: Arc::new(SyncConnection::new_system()?),
         })
     }
 
@@ -47,7 +52,7 @@ impl Manager {
             .get_managed_objects()?
             .into_iter()
             .filter(|(_k, v)| v.keys().any(|i| i.starts_with("org.bluez.Adapter")))
-            .map(|(path, _v)| Adapter::from_dbus(self.dbus_conn.clone(), &path))
+            .map(|(path, _v)| Adapter::from_dbus_path(&path))
             .collect::<Result<Vec<_>>>()?;
 
         Ok(adapters)

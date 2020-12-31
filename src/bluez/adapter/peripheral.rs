@@ -11,14 +11,13 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-mod dbus;
-use self::dbus::OrgBluezDevice1;
-
-use ::dbus::{
+use crate::bluez::bluez_dbus::device::OrgBluezDevice1;
+use dbus::{
     arg::{Array, RefArg, Variant},
     blocking::{Proxy, SyncConnection},
     Path,
 };
+
 use bytes::BufMut;
 
 use crate::{
@@ -82,17 +81,20 @@ impl Peripheral {
         &self,
         args: &::std::collections::HashMap<String, Variant<Box<dyn RefArg + 'static>>>,
     ) {
+        debug!("Updating peripheral properties");
         let mut properties = self.properties.lock().unwrap();
-
+        
         properties.discovery_count += 1;
-
+        
         if let Some(name) = args.get("Name") {
+            debug!("Updating local name to \"{:?}\"", name);
             properties.local_name = name.as_str().map(|s| s.to_string());
         }
-
+        
         // As of writing this: ManufacturerData returns a 'Variant({<manufacturer_id>: Variant([<manufacturer_data>])})'.
         // This Variant wrapped dictionary and array is difficult to navigate. So uh.. trust me, this works on my machine™.
         if let Some(manufacturer_data) = args.get("ManufacturerData") {
+            debug!("Updating manufacturer data \"{:?}\"", manufacturer_data);
             let mut result = Vec::<u8>::new();
             // dbus-rs doesn't really have a dictionary API... so need to iterate two at a time and make a key-value pair.
             if let Some(mut iter) = manufacturer_data.0.as_iter() {
@@ -100,14 +102,14 @@ impl Peripheral {
                     if let (Some(id), Some(data)) = (iter.next(), iter.next()) {
                         // This API is terrible.. why can't I just get an array out, why is it all wrapped in a Variant?
                         let data: Vec<u8> = data
-                            .as_iter()
-                            .unwrap()
-                            .next()
-                            .unwrap()
-                            .as_iter()
-                            .unwrap()
-                            .map(|b| b.as_u64().unwrap() as u8)
-                            .collect();
+                            .as_iter() // 🎶 The Variant is connected to the
+                            .unwrap() // Array type!
+                            .next() // The Array type is connected to the
+                            .unwrap() // Array of integers!
+                            .as_iter() // Lets convert the 
+                            .unwrap() // integers to a 
+                            .map(|b| b.as_u64().unwrap() as u8) // array of bytes...
+                            .collect(); // I got too lazy to make it rhyme... 🎶
 
                         result.put_u16_le(id.as_u64().map(|v| v as u16).unwrap());
                         result.extend(data);
@@ -121,13 +123,15 @@ impl Peripheral {
         }
 
         if let Some(address_type) = args.get("AddressType") {
+            debug!("Updating address type \"{:?}\"", address_type);
             properties.address_type = address_type
-                .as_str()
-                .map(|address_type| AddressType::from_str(address_type).unwrap_or_default())
-                .unwrap_or_default();
+            .as_str()
+            .map(|address_type| AddressType::from_str(address_type).unwrap_or_default())
+            .unwrap_or_default();
         }
-
+        
         if let Some(rssi) = args.get("RSSI") {
+            debug!("Updating RSSI \"{:?}\"", rssi);
             properties.tx_power_level = rssi.as_i64().map(|rssi| rssi as i8);
         }
     }

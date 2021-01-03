@@ -267,6 +267,13 @@ impl Peripheral {
         self.connection
             .with_proxy(BLUEZ_DEST, &self.path, Duration::from_secs(30))
     }
+
+    pub fn proxy_for(&self, characteristic: &UUID) -> Option<Proxy<&SyncConnection>> {
+        self.characteristics_map
+            .lock().unwrap()
+            .get_by_right(characteristic)
+            .map(|path| self.connection.with_proxy(BLUEZ_DEST, path.clone(), Duration::from_secs(30)))
+    }
 }
 
 assert_impl_all!(Peripheral: Sync, Send);
@@ -363,8 +370,11 @@ impl ApiPeripheral for Peripheral {
         unimplemented!()
     }
 
-    fn command(&self, _characteristic: &Characteristic, _data: &[u8]) -> Result<()> {
-        unimplemented!()
+    fn command(&self, characteristic: &Characteristic, _data: &[u8]) -> Result<()> {
+        use crate::bluez::bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1;
+        Ok(self.proxy_for(&characteristic.uuid)
+            .map(|p| p.write_value(Vec::from(_data), HashMap::new()))
+            .ok_or(Error::DeviceNotFound)??)
     }
 
     fn request_async(
@@ -384,8 +394,11 @@ impl ApiPeripheral for Peripheral {
         unimplemented!()
     }
 
-    fn read(&self, _characteristic: &Characteristic) -> Result<Vec<u8>> {
-        unimplemented!()
+    fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
+        use crate::bluez::bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1;
+        Ok(self.proxy_for(&characteristic.uuid)
+            .map(|p| p.read_value(HashMap::new()))
+            .ok_or(Error::DeviceNotFound)??)
     }
 
     fn read_by_type_async(

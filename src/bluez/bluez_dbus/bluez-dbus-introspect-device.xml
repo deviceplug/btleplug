@@ -37,7 +37,6 @@
     <property name="ServiceData" type="a{sv}" access="read"/>
     <property name="TxPower" type="n" access="read"/>
     <property name="ServicesResolved" type="b" access="read"/>
-    <property name="WakeAllowed" type="b" access="readwrite"/>
   </interface>
   <interface name="org.freedesktop.DBus.Properties">
     <method name="Get">

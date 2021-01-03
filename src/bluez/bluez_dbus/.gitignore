@@ -1,2 +1,3 @@
+*.xml.tmp
 *.rs
 !mod.rs

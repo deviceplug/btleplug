@@ -31,7 +31,6 @@
     <property name="Discovering" type="b" access="read"/>
     <property name="UUIDs" type="as" access="read"/>
     <property name="Modalias" type="s" access="read"/>
-    <property name="Roles" type="as" access="read"/>
   </interface>
   <interface name="org.freedesktop.DBus.Properties">
     <method name="Get">

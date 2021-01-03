@@ -22,20 +22,38 @@ mod build {
         let base_path = Path::new("src/bluez/bluez_dbus/");
 
         generate_dbus_interfaces(
-            base_path.join("dbus-introspect-manager.xml"),
+            base_path.join("bluez-dbus-introspect-manager.xml"),
             base_path.join("manager.rs"),
             &options,
         )
         .unwrap();
         generate_dbus_interfaces(
-            base_path.join("dbus-introspect-adapter.xml"),
+            base_path.join("bluez-dbus-introspect-adapter.xml"),
             base_path.join("adapter.rs"),
             &options,
         )
         .unwrap();
         generate_dbus_interfaces(
-            base_path.join("dbus-introspect-device.xml"),
+            base_path.join("bluez-dbus-introspect-device.xml"),
             base_path.join("device.rs"),
+            &options,
+        )
+        .unwrap();
+        generate_dbus_interfaces(
+            base_path.join("bluez-dbus-introspect-gatt-service.xml"),
+            base_path.join("gatt_service.rs"),
+            &options,
+        )
+        .unwrap();
+        generate_dbus_interfaces(
+            base_path.join("bluez-dbus-introspect-gatt-characteristic.xml"),
+            base_path.join("gatt_characteristic.rs"),
+            &options,
+        )
+        .unwrap();
+        generate_dbus_interfaces(
+            base_path.join("bluez-dbus-introspect-gatt-descriptor.xml"),
+            base_path.join("gatt_descriptor.rs"),
             &options,
         )
         .unwrap();

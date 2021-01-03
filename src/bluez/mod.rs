@@ -15,3 +15,10 @@ pub mod adapter;
 pub(crate) mod bluez_dbus;
 pub mod manager;
 mod util;
+
+
+pub(crate) const BLUEZ_DEST: &str = "org.bluez";
+pub(crate) const BLUEZ_INTERFACE_ADAPTER :&str = "org.bluez.Adapter1";
+pub(crate) const BLUEZ_INTERFACE_DEVICE :&str = "org.bluez.Device1";
+pub(crate) const BLUEZ_INTERFACE_SERVICE :&str = "org.bluez.GattService1";
+pub(crate) const BLUEZ_INTERFACE_CHARACTERISTIC :&str = "org.bluez.GattCharacteristic1";

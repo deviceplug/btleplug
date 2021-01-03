@@ -186,6 +186,12 @@ impl Debug for UUID {
 
 type ParseUUIDResult<T> = std::result::Result<T, ParseUUIDError>;
 
+impl From<ParseUUIDError> for Error {
+    fn from(e: ParseUUIDError) -> Self {
+        Error::Other(format!("ParseUUIDError: {:?}", e))
+    }
+}
+
 #[derive(Debug, Fail, Clone, PartialEq)]
 pub enum ParseUUIDError {
     #[fail(display = "UUID has to be either 2 or 16 bytes long")]

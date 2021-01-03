@@ -11,10 +11,14 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use crate::bluez::bluez_dbus::device::OrgBluezDevice1;
+use crate::{Error, api::CharPropFlags, bluez::{BLUEZ_DEST, bluez_dbus::device::OrgBluezDevice1}};
+use bimap::{BiHashMap, Overwritten};
+use dashmap::DashMap;
 use dbus::{
     arg::{Array, RefArg, Variant},
-    blocking::{Proxy, SyncConnection},
+    blocking::{stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged, Proxy, SyncConnection},
+    channel::Token,
+    message::{MatchRule, Message, SignalArgs},
     Path,
 };
 
@@ -25,6 +29,7 @@ use crate::{
         AdapterManager, AddressType, BDAddr, Characteristic, CommandCallback, NotificationHandler,
         Peripheral as ApiPeripheral, PeripheralProperties, RequestCallback, UUID,
     },
+    bluez::util,
     Result,
 };
 
@@ -48,14 +53,16 @@ pub struct Peripheral {
     connected: Arc<AtomicBool>,
     properties: Arc<Mutex<PeripheralProperties>>,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
+    characteristics_map: Arc<Mutex<BiHashMap<String, UUID>>>,
     notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
+    listen_token: Arc<Mutex<Option<Token>>>,
 }
 
 impl Peripheral {
     pub fn new(
         adapter: AdapterManager<Self>,
         connection: Arc<SyncConnection>,
-        path: &Path,
+        path: &str,
         address: BDAddr,
     ) -> Self {
         let mut properties = PeripheralProperties::default();
@@ -72,25 +79,135 @@ impl Peripheral {
             address: address,
             connected: connected,
             properties: properties,
+            characteristics_map: Arc::new(Mutex::new(BiHashMap::new())),
             characteristics: characteristics,
             notification_handlers: notification_handlers,
+            listen_token: Arc::new(Mutex::new(None)),
         }
+    }
+
+    pub fn properties_changed(
+        &self,
+        args: PropertiesPropertiesChanged,
+        _connection: &SyncConnection,
+        message: &Message,
+    ) -> bool {
+        assert_eq!(
+            self.path,
+            message.path().unwrap().into_static().as_str().unwrap(),
+            "Message path did not match!"
+        );
+
+        self.update_properties(&args.changed_properties);
+        if !args.invalidated_properties.is_empty() {
+            warn!(
+                "TODO: Got some properties to invalidate!\n\t{:?}",
+                args.invalidated_properties
+            );
+        }
+
+        true
+    }
+
+    pub fn listen(&mut self, listener: &SyncConnection) -> Result<()> {
+        let peripheral = self.clone();
+        let mut rule = PropertiesPropertiesChanged::match_rule(None, None);
+        // Due to weird lifetime decisions, it was easier to set rule.path, than to pass it in as an argument...
+        rule.path = Some(Path::new(&self.path).unwrap());
+        let token =
+            listener.add_match(rule, move |a, s, m| peripheral.properties_changed(a, s, m))?;
+        *self.listen_token.lock().unwrap() = Some(token);
+
+        Ok(())
+    }
+
+    pub fn stop_listening(&mut self, listener: &SyncConnection) -> Result<()> {
+        let mut token = self.listen_token.lock().unwrap();
+        if token.is_some() {
+            listener.remove_match(token.unwrap())?;
+            *token = None;
+        }
+
+        Ok(())
+    }
+
+    pub fn add_characteristic(
+        &self,
+        path: &str,
+        characteristic: UUID,
+        properties: CharPropFlags,
+    ) -> Result<()> {
+        trace!(
+            "Adding characteristic {} ({:?}) under {}",
+            characteristic, properties, path
+        );
+        let mut path_uuid_map = self.characteristics_map.lock().unwrap();
+
+        // Insert the DBus-Path and UUID pair. neither values should already exist.
+        let result = path_uuid_map.insert(path.to_string(), characteristic);
+        match result {
+            Overwritten::Left(old_path, old_characteristic) => error!(
+                "Found (and replaced) existing DBus characteristic mapping!\n\tOld: {} -> {}\n\tNew: {} -> {}",
+                old_path, old_characteristic,
+                path, characteristic,
+            ),
+            Overwritten::Right(old_path, old_characteristic) => error!(
+                "Found (and replaced) existing DBus characteristic mapping!\n\tOld: {} -> {}\n\tNew: {} -> {}",
+                old_path, old_characteristic,
+                path, characteristic,
+            ),
+            Overwritten::Both((old_path, new_characteristic), (new_path, old_characteristic)) => error!(
+                "Found (and replaced) two existing DBus characteristic mapping!\n\t First: {} -> {}\n\tSecond: {} -> {}\n\t   New: {} -> {}",
+                old_path, new_characteristic,
+                new_path, old_characteristic,
+                path, characteristic,
+            ),
+            _ => {},
+        }
+
+        // DBus doesn't directly expose "handles" for devices, just a DBus path that indirectly contains them.
+        // It is not worth the effort to parse and figure out ranges...
+        self.characteristics.lock().unwrap().insert(Characteristic {
+            start_handle: 0,
+            end_handle: 0,
+            value_handle: 0,
+            uuid: characteristic,
+            properties: properties,
+        });
+
+        Ok(())
     }
 
     pub fn update_properties(
         &self,
         args: &::std::collections::HashMap<String, Variant<Box<dyn RefArg + 'static>>>,
     ) {
-        debug!("Updating peripheral properties");
+        trace!("Updating peripheral properties");
         let mut properties = self.properties.lock().unwrap();
-        
+
         properties.discovery_count += 1;
-        
+
+        if let Some(connected) = args.get("Connected") {
+            debug!("Updating connected to \"{:?}\"", connected.0);
+            self.connected
+                .store(connected.0.as_u64().unwrap() > 0, Ordering::Relaxed);
+        }
+
         if let Some(name) = args.get("Name") {
             debug!("Updating local name to \"{:?}\"", name);
             properties.local_name = name.as_str().map(|s| s.to_string());
         }
-        
+
+        // if let Some(services) = args.get("ServiceData") {
+        //     debug!("Updating services to \"{:?}\"", services);
+
+        //     if let Some(mut iter) = services.0.as_iter() {
+        //         loop {
+        //             if let (Some(uuid), ())
+        //         }
+        //     }
+        // }
+
         // As of writing this: ManufacturerData returns a 'Variant({<manufacturer_id>: Variant([<manufacturer_data>])})'.
         // This Variant wrapped dictionary and array is difficult to navigate. So uh.. trust me, this works on my machine™.
         if let Some(manufacturer_data) = args.get("ManufacturerData") {
@@ -106,8 +223,8 @@ impl Peripheral {
                             .unwrap() // Array type!
                             .next() // The Array type is connected to the
                             .unwrap() // Array of integers!
-                            .as_iter() // Lets convert the 
-                            .unwrap() // integers to a 
+                            .as_iter() // Lets convert the
+                            .unwrap() // integers to a
                             .map(|b| b.as_u64().unwrap() as u8) // array of bytes...
                             .collect(); // I got too lazy to make it rhyme... 🎶
 
@@ -125,11 +242,11 @@ impl Peripheral {
         if let Some(address_type) = args.get("AddressType") {
             debug!("Updating address type \"{:?}\"", address_type);
             properties.address_type = address_type
-            .as_str()
-            .map(|address_type| AddressType::from_str(address_type).unwrap_or_default())
-            .unwrap_or_default();
+                .as_str()
+                .map(|address_type| AddressType::from_str(address_type).unwrap_or_default())
+                .unwrap_or_default();
         }
-        
+
         if let Some(rssi) = args.get("RSSI") {
             debug!("Updating RSSI \"{:?}\"", rssi);
             properties.tx_power_level = rssi.as_i64().map(|rssi| rssi as i8);
@@ -138,7 +255,7 @@ impl Peripheral {
 
     pub fn proxy(&self) -> Proxy<&SyncConnection> {
         self.connection
-            .with_proxy("org.bluez", &self.path, Duration::from_secs(5))
+            .with_proxy(BLUEZ_DEST, &self.path, Duration::from_secs(30))
     }
 }
 

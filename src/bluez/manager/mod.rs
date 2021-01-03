@@ -23,6 +23,8 @@ use dbus::blocking::{stdintf::org_freedesktop_dbus::ObjectManager, SyncConnectio
 
 use crate::{bluez::adapter::Adapter, Result};
 
+use super::{BLUEZ_DEST, BLUEZ_INTERFACE_ADAPTER};
+
 /// This struct is the interface into BlueZ. It can be used to list, manage, and connect to bluetooth
 /// adapters.
 pub struct Manager {
@@ -44,14 +46,14 @@ impl Manager {
         // Create a convenience proxy connection that's already namespaced to org.bluez
         let bluez = self
             .dbus_conn
-            .with_proxy("org.bluez", "/", Duration::from_secs(5));
+            .with_proxy(BLUEZ_DEST, "/", Duration::from_secs(5));
 
         // First, use org.freedesktop.DBus.ObjectManager to query org.bluez
         // for adapters
         let adapters = bluez
             .get_managed_objects()?
             .into_iter()
-            .filter(|(_k, v)| v.keys().any(|i| i.starts_with("org.bluez.Adapter")))
+            .filter(|(_k, v)| v.keys().any(|i| i.starts_with(BLUEZ_INTERFACE_ADAPTER)))
             .map(|(path, _v)| Adapter::from_dbus_path(&path))
             .collect::<Result<Vec<_>>>()?;
 

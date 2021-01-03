@@ -38,6 +38,7 @@ use std::{
     fmt::{self, Debug, Display, Formatter},
     sync::{
         atomic::{AtomicBool, Ordering},
+        Condvar,
         mpsc::{Receiver, Sender},
         Arc, Mutex,
     },
@@ -54,6 +55,7 @@ pub struct Peripheral {
     properties: Arc<Mutex<PeripheralProperties>>,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
     characteristics_map: Arc<Mutex<BiHashMap<String, UUID>>>,
+    characteristics_discovered_wait: Arc<(Mutex<bool>, Condvar)>,
     notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
     listen_token: Arc<Mutex<Option<Token>>>,
 }
@@ -81,6 +83,7 @@ impl Peripheral {
             properties: properties,
             characteristics_map: Arc::new(Mutex::new(BiHashMap::new())),
             characteristics: characteristics,
+            characteristics_discovered_wait: Arc::new((Mutex::new(false),Condvar::new())),
             notification_handlers: notification_handlers,
             listen_token: Arc::new(Mutex::new(None)),
         }
@@ -196,6 +199,13 @@ impl Peripheral {
         if let Some(name) = args.get("Name") {
             debug!("Updating local name to \"{:?}\"", name);
             properties.local_name = name.as_str().map(|s| s.to_string());
+        }
+
+        if let Some(services_resolved) = args.get("ServicesResolved") {
+            // All services have been discovered, time to inform anyone waiting.
+            let (lock, cvar) = &*self.characteristics_discovered_wait;
+            *lock.lock().unwrap() = services_resolved.0.as_u64().unwrap() > 0;
+            cvar.notify_all();
         }
 
         // if let Some(services) = args.get("ServiceData") {
@@ -335,7 +345,13 @@ impl ApiPeripheral for Peripheral {
         _start: u16,
         _end: u16,
     ) -> Result<Vec<Characteristic>> {
-        unimplemented!()
+        let (lock, cvar) = &*self.characteristics_discovered_wait;
+        let has_services = lock.lock().unwrap();
+        if !*has_services {
+            let _guard = cvar.wait_while(has_services, |b| !*b).unwrap();
+        }
+
+        Ok(self.characteristics.lock().unwrap().clone().into_iter().collect())
     }
 
     fn command_async(

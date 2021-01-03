@@ -369,11 +369,6 @@ impl Central<Peripheral> for Adapter {
     fn start_scan<'a>(&'a self) -> Result<()> {
         use dbus::blocking::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesAdded as IA;
 
-        if self.proxy().discovering()? {
-            warn!("start_scan() already called");
-            return Ok(());
-        }
-
         // remove the previous token if it's still awkwardly overstaying their welcome...
         if let Some((_t, token)) = self.match_tokens.remove(&TokenType::Discovery) {
             warn!("Removing previous match token");
@@ -400,11 +395,6 @@ impl Central<Peripheral> for Adapter {
 
                         if let Some(device) = args.interfaces.get(BLUEZ_INTERFACE_DEVICE) {
                             adapter.add_device(&path, device).unwrap();
-                        } else {
-                            debug!(
-                                "Interface added to /org/bluez was not a '{}'",
-                                BLUEZ_INTERFACE_DEVICE
-                            );
                         }
 
                         return true;

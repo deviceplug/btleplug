@@ -191,13 +191,13 @@ impl Peripheral {
         properties.discovery_count += 1;
 
         if let Some(connected) = args.get("Connected") {
-            debug!("Updating connected to \"{:?}\"", connected.0);
+            debug!("Updating \"{}\" connected to \"{:?}\"", self.address, connected.0);
             self.connected
                 .store(connected.0.as_u64().unwrap() > 0, Ordering::Relaxed);
         }
 
         if let Some(name) = args.get("Name") {
-            debug!("Updating local name to \"{:?}\"", name);
+            debug!("Updating \"{}\" local name to \"{:?}\"", self.address, name);
             properties.local_name = name.as_str().map(|s| s.to_string());
         }
 
@@ -221,7 +221,7 @@ impl Peripheral {
         // As of writing this: ManufacturerData returns a 'Variant({<manufacturer_id>: Variant([<manufacturer_data>])})'.
         // This Variant wrapped dictionary and array is difficult to navigate. So uh.. trust me, this works on my machine™.
         if let Some(manufacturer_data) = args.get("ManufacturerData") {
-            debug!("Updating manufacturer data \"{:?}\"", manufacturer_data);
+            debug!("Updating \"{}\" manufacturer data \"{:?}\"", self.address, manufacturer_data);
             let mut result = Vec::<u8>::new();
             // dbus-rs doesn't really have a dictionary API... so need to iterate two at a time and make a key-value pair.
             if let Some(mut iter) = manufacturer_data.0.as_iter() {
@@ -250,7 +250,7 @@ impl Peripheral {
         }
 
         if let Some(address_type) = args.get("AddressType") {
-            debug!("Updating address type \"{:?}\"", address_type);
+            debug!("Updating \"{}\" address type \"{:?}\"", self.address, address_type);
             properties.address_type = address_type
                 .as_str()
                 .map(|address_type| AddressType::from_str(address_type).unwrap_or_default())
@@ -258,7 +258,7 @@ impl Peripheral {
         }
 
         if let Some(rssi) = args.get("RSSI") {
-            debug!("Updating RSSI \"{:?}\"", rssi);
+            debug!("Updating \"{}\" RSSI \"{:?}\"", self.address, rssi);
             properties.tx_power_level = rssi.as_i64().map(|rssi| rssi as i8);
         }
     }

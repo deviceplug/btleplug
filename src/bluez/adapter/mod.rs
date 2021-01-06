@@ -22,15 +22,14 @@ use super::{
 use dashmap::DashMap;
 use dbus::{
     arg::{RefArg, Variant},
-    blocking::{stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged, Proxy, SyncConnection},
+    blocking::{Proxy, SyncConnection},
     channel::Token,
-    message::{MatchRule, Message, SignalArgs},
+    message::MatchRule,
     Path,
 };
 
 use std::{
     self,
-    collections::HashMap,
     iter::Iterator,
     str::FromStr,
     sync::{
@@ -55,7 +54,6 @@ use crate::bluez::adapter::peripheral::Peripheral;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum TokenType {
     Discovery,
-    PeripheralPropertyChanged,
 }
 
 type ParseCharPropFlagsResult<T> = std::result::Result<T, ParseCharPropFlagsError>;
@@ -359,7 +357,7 @@ impl Central<Peripheral> for Adapter {
         self.manager.event_receiver()
     }
 
-    fn filter_duplicates(&self, enabled: bool) {
+    fn filter_duplicates(&self, _enabled: bool) {
         todo!()
         // self.filter_duplicates
         // .clone()
@@ -395,6 +393,12 @@ impl Central<Peripheral> for Adapter {
 
                         if let Some(device) = args.interfaces.get(BLUEZ_INTERFACE_DEVICE) {
                             adapter.add_device(&path, device).unwrap();
+                        } else if let Some(service) = args.interfaces.get(BLUEZ_INTERFACE_SERVICE) {
+                            adapter.add_characteristic(&path, service).unwrap();
+                        } else if let Some(characteristic) =
+                            args.interfaces.get(BLUEZ_INTERFACE_CHARACTERISTIC)
+                        {
+                            adapter.add_characteristic(&path, characteristic).unwrap();
                         }
 
                         return true;
@@ -424,7 +428,7 @@ impl Central<Peripheral> for Adapter {
         self.manager.peripheral(address)
     }
 
-    fn active(&self, enabled: bool) {
+    fn active(&self, _enabled: bool) {
         todo!()
     }
 }

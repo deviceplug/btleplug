@@ -11,14 +11,11 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use crate::{Error, api::CharPropFlags, bluez::{BLUEZ_DEST, bluez_dbus::device::OrgBluezDevice1}};
-use bimap::{BiHashMap, Overwritten};
-use dashmap::DashMap;
 use dbus::{
-    arg::{Array, RefArg, Variant},
+    arg::{RefArg, Variant},
     blocking::{stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged, Proxy, SyncConnection},
     channel::Token,
-    message::{MatchRule, Message, SignalArgs},
+    message::{Message, SignalArgs},
     Path,
 };
 
@@ -26,11 +23,15 @@ use bytes::BufMut;
 
 use crate::{
     api::{
-        AdapterManager, AddressType, BDAddr, Characteristic, CommandCallback, NotificationHandler,
-        Peripheral as ApiPeripheral, PeripheralProperties, RequestCallback, UUID,
+        AdapterManager, AddressType, BDAddr, CharPropFlags, Characteristic, CommandCallback,
+        NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties, RequestCallback,
+        UUID,
     },
-    bluez::util,
-    Result,
+    bluez::{
+        BLUEZ_DEST, BlueZHandle, BlueZType,
+        bluez_dbus::device::OrgBluezDevice1,
+    },
+    Error, Result,
 };
 
 use std::{
@@ -38,9 +39,8 @@ use std::{
     fmt::{self, Debug, Display, Formatter},
     sync::{
         atomic::{AtomicBool, Ordering},
-        Condvar,
         mpsc::{Receiver, Sender},
-        Arc, Mutex,
+        Arc, Condvar, Mutex,
     },
     time::Duration,
 };
@@ -54,7 +54,7 @@ pub struct Peripheral {
     connected: Arc<AtomicBool>,
     properties: Arc<Mutex<PeripheralProperties>>,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
-    characteristics_map: Arc<Mutex<BiHashMap<String, UUID>>>,
+    characteristics_map: Arc<Mutex<HashMap<u16, (String, BlueZHandle, Characteristic)>>>,
     characteristics_discovered_wait: Arc<(Mutex<bool>, Condvar)>,
     notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
     listen_token: Arc<Mutex<Option<Token>>>,
@@ -81,9 +81,9 @@ impl Peripheral {
             address: address,
             connected: connected,
             properties: properties,
-            characteristics_map: Arc::new(Mutex::new(BiHashMap::new())),
+            characteristics_map: Arc::new(Mutex::new(HashMap::new())),
             characteristics: characteristics,
-            characteristics_discovered_wait: Arc::new((Mutex::new(false),Condvar::new())),
+            characteristics_discovered_wait: Arc::new((Mutex::new(false), Condvar::new())),
             notification_handlers: notification_handlers,
             listen_token: Arc::new(Mutex::new(None)),
         }
@@ -137,46 +137,77 @@ impl Peripheral {
     pub fn add_characteristic(
         &self,
         path: &str,
-        characteristic: UUID,
+        uuid: UUID,
         properties: CharPropFlags,
     ) -> Result<()> {
         trace!(
             "Adding characteristic {} ({:?}) under {}",
-            characteristic, properties, path
+            uuid,
+            properties,
+            path
         );
         let mut path_uuid_map = self.characteristics_map.lock().unwrap();
+        let handle: BlueZHandle = path.parse()?;
+        let characteristic = Characteristic {
+            uuid: uuid,
+            value_handle: handle.handle,
+            properties: properties,
+            end_handle: 0,
+            start_handle: 0,
+        };
 
-        // Insert the DBus-Path and UUID pair. neither values should already exist.
-        let result = path_uuid_map.insert(path.to_string(), characteristic);
-        match result {
-            Overwritten::Left(old_path, old_characteristic) => error!(
+        let result =
+            path_uuid_map.insert(handle.handle, (path.to_string(), handle, characteristic));
+        if let Some((_old_path, old_handle, _old_characteristic)) = result {
+            error!(
                 "Found (and replaced) existing DBus characteristic mapping!\n\tOld: {} -> {}\n\tNew: {} -> {}",
-                old_path, old_characteristic,
-                path, characteristic,
-            ),
-            Overwritten::Right(old_path, old_characteristic) => error!(
-                "Found (and replaced) existing DBus characteristic mapping!\n\tOld: {} -> {}\n\tNew: {} -> {}",
-                old_path, old_characteristic,
-                path, characteristic,
-            ),
-            Overwritten::Both((old_path, new_characteristic), (new_path, old_characteristic)) => error!(
-                "Found (and replaced) two existing DBus characteristic mapping!\n\t First: {} -> {}\n\tSecond: {} -> {}\n\t   New: {} -> {}",
-                old_path, new_characteristic,
-                new_path, old_characteristic,
-                path, characteristic,
-            ),
-            _ => {},
+                old_handle.handle, path,
+                handle.handle, path,
+            )
         }
 
-        // DBus doesn't directly expose "handles" for devices, just a DBus path that indirectly contains them.
-        // It is not worth the effort to parse and figure out ranges...
-        self.characteristics.lock().unwrap().insert(Characteristic {
-            start_handle: 0,
-            end_handle: 0,
-            value_handle: 0,
-            uuid: characteristic,
-            properties: properties,
-        });
+        Ok(())
+    }
+
+    fn build_characteristic_ranges(&self) -> Result<()> {
+        let handles = self.characteristics_map.lock().unwrap();
+
+        let mut services = handles
+            .iter()
+            .filter(|(_k, (_p, h, _v))| h.typ == BlueZType::Service)
+            .map(|(_h, (_p, k, v))| (k, v))
+            .peekable();
+
+        let mut result = self.characteristics.lock().unwrap();
+        result.clear();
+
+        while let Some((handle, characteristic)) = services.next() {
+            let next = services.peek();
+            result.insert(Characteristic {
+                start_handle: handle.handle,
+                end_handle: next.map_or(u16::MAX, |n| n.0.handle - 1),
+                value_handle: handle.handle,
+                properties: characteristic.properties,
+                uuid: characteristic.uuid.clone(),
+            });
+        }
+
+        let mut characteristics = handles
+            .iter()
+            .filter(|(_h, (_p, k, _v))| k.typ == BlueZType::Characteristic)
+            .map(|(_h, (_p, k, v))| (k, v))
+            .peekable();
+
+        while let Some((handle, characteristic)) = characteristics.next() {
+            let next = characteristics.peek();
+            result.insert(Characteristic {
+                start_handle: handle.handle,
+                end_handle: next.map_or(u16::MAX, |n| n.0.handle - 1),
+                value_handle: handle.handle,
+                properties: characteristic.properties,
+                uuid: characteristic.uuid.clone(),
+            });
+        }
 
         Ok(())
     }
@@ -191,7 +222,10 @@ impl Peripheral {
         properties.discovery_count += 1;
 
         if let Some(connected) = args.get("Connected") {
-            debug!("Updating \"{}\" connected to \"{:?}\"", self.address, connected.0);
+            debug!(
+                "Updating \"{}\" connected to \"{:?}\"",
+                self.address, connected.0
+            );
             self.connected
                 .store(connected.0.as_u64().unwrap() > 0, Ordering::Relaxed);
         }
@@ -202,9 +236,14 @@ impl Peripheral {
         }
 
         if let Some(services_resolved) = args.get("ServicesResolved") {
+            let services_resolved = services_resolved.0.as_u64().unwrap() > 0;
+            if services_resolved {
+                // Need to prase and figure out handle ranges for all discovered characteristics.
+                self.build_characteristic_ranges().unwrap();
+            }
             // All services have been discovered, time to inform anyone waiting.
             let (lock, cvar) = &*self.characteristics_discovered_wait;
-            *lock.lock().unwrap() = services_resolved.0.as_u64().unwrap() > 0;
+            *lock.lock().unwrap() = services_resolved;
             cvar.notify_all();
         }
 
@@ -221,7 +260,10 @@ impl Peripheral {
         // As of writing this: ManufacturerData returns a 'Variant({<manufacturer_id>: Variant([<manufacturer_data>])})'.
         // This Variant wrapped dictionary and array is difficult to navigate. So uh.. trust me, this works on my machine™.
         if let Some(manufacturer_data) = args.get("ManufacturerData") {
-            debug!("Updating \"{}\" manufacturer data \"{:?}\"", self.address, manufacturer_data);
+            debug!(
+                "Updating \"{}\" manufacturer data \"{:?}\"",
+                self.address, manufacturer_data
+            );
             let mut result = Vec::<u8>::new();
             // dbus-rs doesn't really have a dictionary API... so need to iterate two at a time and make a key-value pair.
             if let Some(mut iter) = manufacturer_data.0.as_iter() {
@@ -250,7 +292,10 @@ impl Peripheral {
         }
 
         if let Some(address_type) = args.get("AddressType") {
-            debug!("Updating \"{}\" address type \"{:?}\"", self.address, address_type);
+            debug!(
+                "Updating \"{}\" address type \"{:?}\"",
+                self.address, address_type
+            );
             properties.address_type = address_type
                 .as_str()
                 .map(|address_type| AddressType::from_str(address_type).unwrap_or_default())
@@ -268,11 +313,12 @@ impl Peripheral {
             .with_proxy(BLUEZ_DEST, &self.path, Duration::from_secs(30))
     }
 
-    pub fn proxy_for(&self, characteristic: &UUID) -> Option<Proxy<&SyncConnection>> {
-        self.characteristics_map
-            .lock().unwrap()
-            .get_by_right(characteristic)
-            .map(|path| self.connection.with_proxy(BLUEZ_DEST, path.clone(), Duration::from_secs(30)))
+    pub fn proxy_for(&self, characteristic: &Characteristic) -> Option<Proxy<&SyncConnection>> {
+        let map = self.characteristics_map.lock().unwrap();
+        map.get(&characteristic.value_handle).map(|(path, _h, _c)| {
+            self.connection
+                .with_proxy(BLUEZ_DEST, path.clone(), Duration::from_secs(30))
+        })
     }
 }
 
@@ -358,7 +404,14 @@ impl ApiPeripheral for Peripheral {
             let _guard = cvar.wait_while(has_services, |b| !*b).unwrap();
         }
 
-        Ok(self.characteristics.lock().unwrap().clone().into_iter().collect())
+        Ok(self
+            .characteristics
+            .lock()
+            .unwrap()
+            .clone()
+            .into_iter()
+            .filter(|c| c.value_handle >= _start && c.value_handle <= _end)
+            .collect())
     }
 
     fn command_async(
@@ -370,11 +423,12 @@ impl ApiPeripheral for Peripheral {
         unimplemented!()
     }
 
-    fn command(&self, characteristic: &Characteristic, _data: &[u8]) -> Result<()> {
+    fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
         use crate::bluez::bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1;
-        Ok(self.proxy_for(&characteristic.uuid)
-            .map(|p| p.write_value(Vec::from(_data), HashMap::new()))
-            .ok_or(Error::DeviceNotFound)??)
+        Ok(self
+            .proxy_for(&characteristic)
+            .map(|p| p.write_value(Vec::from(data), HashMap::new()))
+            .ok_or(Error::NotSupported("write_without_response".to_string()))??)
     }
 
     fn request_async(
@@ -386,8 +440,10 @@ impl ApiPeripheral for Peripheral {
         unimplemented!()
     }
 
-    fn request(&self, _characteristic: &Characteristic, _data: &[u8]) -> Result<Vec<u8>> {
-        unimplemented!()
+    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<Vec<u8>> {
+        self.command(characteristic, data)?;
+
+        self.read(characteristic)
     }
 
     fn read_async(&self, _characteristic: &Characteristic, _handler: Option<RequestCallback>) {
@@ -396,9 +452,10 @@ impl ApiPeripheral for Peripheral {
 
     fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
         use crate::bluez::bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1;
-        Ok(self.proxy_for(&characteristic.uuid)
+        Ok(self
+            .proxy_for(&characteristic)
             .map(|p| p.read_value(HashMap::new()))
-            .ok_or(Error::DeviceNotFound)??)
+            .ok_or(Error::NotSupported("read".to_string()))??)
     }
 
     fn read_by_type_async(
@@ -410,8 +467,28 @@ impl ApiPeripheral for Peripheral {
         unimplemented!()
     }
 
-    fn read_by_type(&self, _characteristic: &Characteristic, _uuid: UUID) -> Result<Vec<u8>> {
-        unimplemented!()
+    // Is this looking for a characteristic with a descriptor? or a service with a characteristic?
+    fn read_by_type(&self, characteristic: &Characteristic, uuid: UUID) -> Result<Vec<u8>> {
+        if let Some(characteristic) =
+            self.characteristics_map
+                .lock()
+                .unwrap()
+                .iter()
+                .find_map(|(_k, (_p, _h, c))| {
+                    if c.uuid == uuid
+                        && c.value_handle >= characteristic.start_handle
+                        && c.value_handle <= characteristic.end_handle
+                    {
+                        Some(c)
+                    } else {
+                        None
+                    }
+                })
+        {
+            self.read(characteristic)
+        } else {
+            Err(Error::NotSupported("read_by_type".to_string()))
+        }
     }
 
     fn subscribe(&self, _characteristic: &Characteristic) -> Result<()> {

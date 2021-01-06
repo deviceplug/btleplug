@@ -11,8 +11,6 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use std::time::Duration;
-
 use crate::Error;
 
 impl From<dbus::Error> for Error {

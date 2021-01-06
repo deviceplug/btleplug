@@ -12,10 +12,7 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use std::{
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::Arc,
     time::Duration,
 };
 

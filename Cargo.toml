@@ -68,6 +68,6 @@ rand = "0.8.2"
 # The build script uses `dbus-codegen` to generate BlueZ's DBus traits for use in the linux library.
 # The `build.rs` file does nothing on other platforms.
 [target.'cfg(target_os = "linux")'.build-dependencies.dbus-codegen]
-version = "0.9.0"
+version = "0.9"
 # Disable the default feature which requires the DBus C API to be installed.
 default-features = false

@@ -17,7 +17,7 @@ mod peripheral;
 
 use super::{
     bluez_dbus::adapter::OrgBluezAdapter1, BLUEZ_DEST, BLUEZ_INTERFACE_CHARACTERISTIC,
-    BLUEZ_INTERFACE_DEVICE, BLUEZ_INTERFACE_SERVICE,
+    BLUEZ_INTERFACE_DEVICE, BLUEZ_INTERFACE_SERVICE, BLUEZ_PATH_PREFIX,
 };
 use dashmap::DashMap;
 use dbus::{
@@ -218,7 +218,7 @@ impl Adapter {
                 }
             })
             .map(|(path, characteristic)| {
-                Ok(self.add_characteristic(path.as_str().unwrap(), characteristic)?)
+                Ok(self.add_attribute(path.as_str().unwrap(), characteristic)?)
             })
             .collect::<Result<()>>()?;
 
@@ -234,7 +234,7 @@ impl Adapter {
                 }
             })
             .map(|(path, characteristic)| {
-                Ok(self.add_characteristic(path.as_str().unwrap(), characteristic)?)
+                Ok(self.add_attribute(path.as_str().unwrap(), characteristic)?)
             })
             .collect::<Result<()>>()?;
 
@@ -286,13 +286,13 @@ impl Adapter {
                 error!("Could not parse Bluetooth address");
             }
         } else {
-            error!("Could not retrieve 'Address' from DBus 'InterfaceAdded' message with interface 'org.bluez.Device1'");
+            error!("Could not retrieve 'Address' from DBus 'InterfaceAdded' message with interface '{}'", BLUEZ_INTERFACE_DEVICE);
         }
 
         Ok(())
     }
 
-    fn add_characteristic(
+    fn add_attribute(
         &self,
         path: &str,
         characteristic: &::std::collections::HashMap<String, Variant<Box<dyn RefArg + 'static>>>,
@@ -326,7 +326,7 @@ impl Adapter {
                     CharPropFlags::new()
                 };
 
-                device.add_characteristic(path, uuid, flags)?;
+                device.add_attribute(path, uuid, flags)?;
             } else {
                 error!("Got a service object for an unknown device \"{:?}\"", path);
             }
@@ -386,19 +386,22 @@ impl Central<Peripheral> for Adapter {
                     .add_match(MatchRule::new(), move |args: IA, _c, _msg| {
                         trace!("Received 'InterfacesAdded' signal");
                         let path = args.object;
-                        if !path.starts_with("/org/bluez") {
-                            debug!("Path for signal did not start with \"/org/bluez\"");
+                        if !path.starts_with(BLUEZ_PATH_PREFIX) {
+                            debug!(
+                                "Path for signal did not start with \"{}\"",
+                                BLUEZ_PATH_PREFIX
+                            );
                             return true;
                         }
 
                         if let Some(device) = args.interfaces.get(BLUEZ_INTERFACE_DEVICE) {
                             adapter.add_device(&path, device).unwrap();
                         } else if let Some(service) = args.interfaces.get(BLUEZ_INTERFACE_SERVICE) {
-                            adapter.add_characteristic(&path, service).unwrap();
+                            adapter.add_attribute(&path, service).unwrap();
                         } else if let Some(characteristic) =
                             args.interfaces.get(BLUEZ_INTERFACE_CHARACTERISTIC)
                         {
-                            adapter.add_characteristic(&path, characteristic).unwrap();
+                            adapter.add_attribute(&path, characteristic).unwrap();
                         }
 
                         return true;

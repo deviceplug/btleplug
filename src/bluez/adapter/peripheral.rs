@@ -27,10 +27,7 @@ use crate::{
         NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties, RequestCallback,
         UUID,
     },
-    bluez::{
-        BLUEZ_DEST, BlueZHandle, BlueZType,
-        bluez_dbus::device::OrgBluezDevice1,
-    },
+    bluez::{bluez_dbus::device::OrgBluezDevice1, AttributeType, Handle, BLUEZ_DEST},
     Error, Result,
 };
 
@@ -54,7 +51,7 @@ pub struct Peripheral {
     connected: Arc<AtomicBool>,
     properties: Arc<Mutex<PeripheralProperties>>,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
-    characteristics_map: Arc<Mutex<HashMap<u16, (String, BlueZHandle, Characteristic)>>>,
+    attributes_map: Arc<Mutex<HashMap<u16, (String, Handle, Characteristic)>>>,
     characteristics_discovered_wait: Arc<(Mutex<bool>, Condvar)>,
     notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
     listen_token: Arc<Mutex<Option<Token>>>,
@@ -81,7 +78,7 @@ impl Peripheral {
             address: address,
             connected: connected,
             properties: properties,
-            characteristics_map: Arc::new(Mutex::new(HashMap::new())),
+            attributes_map: Arc::new(Mutex::new(HashMap::new())),
             characteristics: characteristics,
             characteristics_discovered_wait: Arc::new((Mutex::new(false), Condvar::new())),
             notification_handlers: notification_handlers,
@@ -95,18 +92,20 @@ impl Peripheral {
         _connection: &SyncConnection,
         message: &Message,
     ) -> bool {
-        assert_eq!(
-            self.path,
-            message.path().unwrap().into_static().as_str().unwrap(),
-            "Message path did not match!"
-        );
-
-        self.update_properties(&args.changed_properties);
-        if !args.invalidated_properties.is_empty() {
-            warn!(
-                "TODO: Got some properties to invalidate!\n\t{:?}",
-                args.invalidated_properties
-            );
+        let path = message.path().unwrap().into_static();
+        let path = path.as_str().unwrap();
+        if !path.starts_with(self.path.as_str()) {
+            if let Ok(_handle) = path.parse::<Handle>() {
+                todo!("Support for handling properties changed on an attribute");
+            } else {
+                self.update_properties(&args.changed_properties);
+                if !args.invalidated_properties.is_empty() {
+                    warn!(
+                        "TODO: Got some properties to invalidate!\n\t{:?}",
+                        args.invalidated_properties
+                    );
+                }
+            }
         }
 
         true
@@ -114,9 +113,7 @@ impl Peripheral {
 
     pub fn listen(&mut self, listener: &SyncConnection) -> Result<()> {
         let peripheral = self.clone();
-        let mut rule = PropertiesPropertiesChanged::match_rule(None, None);
-        // Due to weird lifetime decisions, it was easier to set rule.path, than to pass it in as an argument...
-        rule.path = Some(Path::new(&self.path).unwrap());
+        let rule = PropertiesPropertiesChanged::match_rule(None, None);
         let token =
             listener.add_match(rule, move |a, s, m| peripheral.properties_changed(a, s, m))?;
         *self.listen_token.lock().unwrap() = Some(token);
@@ -134,21 +131,17 @@ impl Peripheral {
         Ok(())
     }
 
-    pub fn add_characteristic(
-        &self,
-        path: &str,
-        uuid: UUID,
-        properties: CharPropFlags,
-    ) -> Result<()> {
+    pub fn add_attribute(&self, path: &str, uuid: UUID, properties: CharPropFlags) -> Result<()> {
         trace!(
-            "Adding characteristic {} ({:?}) under {}",
+            "Adding attribute {} ({:?}) under {}",
             uuid,
             properties,
             path
         );
-        let mut path_uuid_map = self.characteristics_map.lock().unwrap();
-        let handle: BlueZHandle = path.parse()?;
-        let characteristic = Characteristic {
+        let mut path_uuid_map = self.attributes_map.lock().unwrap();
+        let handle: Handle = path.parse()?;
+        // Create a placeholder attribute to store properties and uuid
+        let attribute = Characteristic {
             uuid: uuid,
             value_handle: handle.handle,
             properties: properties,
@@ -156,8 +149,7 @@ impl Peripheral {
             start_handle: 0,
         };
 
-        let result =
-            path_uuid_map.insert(handle.handle, (path.to_string(), handle, characteristic));
+        let result = path_uuid_map.insert(handle.handle, (path.to_string(), handle, attribute));
         if let Some((_old_path, old_handle, _old_characteristic)) = result {
             error!(
                 "Found (and replaced) existing DBus characteristic mapping!\n\tOld: {} -> {}\n\tNew: {} -> {}",
@@ -170,42 +162,43 @@ impl Peripheral {
     }
 
     fn build_characteristic_ranges(&self) -> Result<()> {
-        let handles = self.characteristics_map.lock().unwrap();
+        let handles = self.attributes_map.lock().unwrap();
 
         let mut services = handles
             .iter()
-            .filter(|(_k, (_p, h, _v))| h.typ == BlueZType::Service)
+            .filter(|(_k, (_p, h, _v))| h.typ == AttributeType::Service)
             .map(|(_h, (_p, k, v))| (k, v))
             .peekable();
 
         let mut result = self.characteristics.lock().unwrap();
         result.clear();
 
-        while let Some((handle, characteristic)) = services.next() {
+        // TODO: Verify that service attributes are returned as characteristics
+        while let Some((handle, attribute)) = services.next() {
             let next = services.peek();
             result.insert(Characteristic {
                 start_handle: handle.handle,
                 end_handle: next.map_or(u16::MAX, |n| n.0.handle - 1),
                 value_handle: handle.handle,
-                properties: characteristic.properties,
-                uuid: characteristic.uuid.clone(),
+                properties: attribute.properties,
+                uuid: attribute.uuid.clone(),
             });
         }
 
         let mut characteristics = handles
             .iter()
-            .filter(|(_h, (_p, k, _v))| k.typ == BlueZType::Characteristic)
+            .filter(|(_h, (_p, k, _v))| k.typ == AttributeType::Characteristic)
             .map(|(_h, (_p, k, v))| (k, v))
             .peekable();
 
-        while let Some((handle, characteristic)) = characteristics.next() {
+        while let Some((handle, attribute)) = characteristics.next() {
             let next = characteristics.peek();
             result.insert(Characteristic {
                 start_handle: handle.handle,
                 end_handle: next.map_or(u16::MAX, |n| n.0.handle - 1),
                 value_handle: handle.handle,
-                properties: characteristic.properties,
-                uuid: characteristic.uuid.clone(),
+                properties: attribute.properties,
+                uuid: attribute.uuid.clone(),
             });
         }
 
@@ -314,7 +307,7 @@ impl Peripheral {
     }
 
     pub fn proxy_for(&self, characteristic: &Characteristic) -> Option<Proxy<&SyncConnection>> {
-        let map = self.characteristics_map.lock().unwrap();
+        let map = self.attributes_map.lock().unwrap();
         map.get(&characteristic.value_handle).map(|(path, _h, _c)| {
             self.connection
                 .with_proxy(BLUEZ_DEST, path.clone(), Duration::from_secs(30))
@@ -470,7 +463,7 @@ impl ApiPeripheral for Peripheral {
     // Is this looking for a characteristic with a descriptor? or a service with a characteristic?
     fn read_by_type(&self, characteristic: &Characteristic, uuid: UUID) -> Result<Vec<u8>> {
         if let Some(characteristic) =
-            self.characteristics_map
+            self.attributes_map
                 .lock()
                 .unwrap()
                 .iter()

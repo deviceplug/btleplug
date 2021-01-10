@@ -16,6 +16,7 @@ mod bluez_dbus;
 pub mod manager;
 mod util;
 
+const BLUEZ_PATH_PREFIX: &str = "/org/bluez";
 const BLUEZ_DEST: &str = "org.bluez";
 const BLUEZ_INTERFACE_ADAPTER: &str = "org.bluez.Adapter1";
 const BLUEZ_INTERFACE_DEVICE: &str = "org.bluez.Device1";
@@ -23,19 +24,19 @@ const BLUEZ_INTERFACE_SERVICE: &str = "org.bluez.GattService1";
 const BLUEZ_INTERFACE_CHARACTERISTIC: &str = "org.bluez.GattCharacteristic1";
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-enum BlueZType {
+enum AttributeType {
     Service,
     Characteristic,
     Descriptor,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-struct BlueZHandle {
-    typ: BlueZType,
+struct Handle {
+    typ: AttributeType,
     parent: u16,
     handle: u16,
 }
 
-impl PartialOrd for BlueZHandle {
+impl PartialOrd for Handle {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         if self.handle == other.parent {
             return Some(std::cmp::Ordering::Greater);
@@ -52,18 +53,18 @@ impl PartialOrd for BlueZHandle {
         return None;
     }
 }
-impl Ord for BlueZHandle {
+impl Ord for Handle {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.partial_cmp(other).unwrap()
     }
 }
-impl std::str::FromStr for BlueZHandle {
+impl std::str::FromStr for Handle {
     type Err = crate::Error;
 
-    fn from_str(s: &str) -> std::result::Result<BlueZHandle, crate::Error> {
+    fn from_str(s: &str) -> std::result::Result<Handle, crate::Error> {
         // serviceXXXX/charYYYY/descriptorZZZZ
-        let mut handle = BlueZHandle {
-            typ: BlueZType::Service,
+        let mut handle = Handle {
+            typ: AttributeType::Service,
             parent: 0,
             handle: 0,
         };
@@ -72,15 +73,15 @@ impl std::str::FromStr for BlueZHandle {
         };
 
         if let Some(descriptor) = s.find("descriptor") {
-            handle.typ = BlueZType::Descriptor;
+            handle.typ = AttributeType::Descriptor;
             handle.handle = get_handle(descriptor);
             handle.parent = get_handle(descriptor - 5);
         } else if let Some(characteristic) = s.find("char") {
-            handle.typ = BlueZType::Characteristic;
+            handle.typ = AttributeType::Characteristic;
             handle.handle = get_handle(characteristic);
             handle.parent = get_handle(characteristic - 5);
         } else if let Some(service) = s.find("service") {
-            handle.typ = BlueZType::Service;
+            handle.typ = AttributeType::Service;
             handle.handle = get_handle(service);
             handle.parent = 0
         } else {
@@ -97,14 +98,14 @@ mod tests {
 
     #[test]
     fn test_parse_descriptor_handle() {
-        let handle: BlueZHandle =
+        let handle: Handle =
             "/org/bluez/hci0/dev_01_02_03_04_05_06/service0025/char0026/descriptor0027"
                 .parse()
                 .unwrap();
         assert_eq!(
             handle,
-            BlueZHandle {
-                typ: BlueZType::Descriptor,
+            Handle {
+                typ: AttributeType::Descriptor,
                 handle: 0x27_u16,
                 parent: 0x26_u16
             }
@@ -112,13 +113,13 @@ mod tests {
     }
     #[test]
     fn test_parse_characteristic_handle() {
-        let handle: BlueZHandle = "/org/bluez/hci0/dev_01_02_03_04_05_06/service0025/char0026"
+        let handle: Handle = "/org/bluez/hci0/dev_01_02_03_04_05_06/service0025/char0026"
             .parse()
             .unwrap();
         assert_eq!(
             handle,
-            BlueZHandle {
-                typ: BlueZType::Characteristic,
+            Handle {
+                typ: AttributeType::Characteristic,
                 handle: 0x26_u16,
                 parent: 0x25_u16
             }
@@ -126,13 +127,13 @@ mod tests {
     }
     #[test]
     fn test_parse_service_handle() {
-        let handle: BlueZHandle = "/org/bluez/hci0/dev_01_02_03_04_05_06/service0025"
+        let handle: Handle = "/org/bluez/hci0/dev_01_02_03_04_05_06/service0025"
             .parse()
             .unwrap();
         assert_eq!(
             handle,
-            BlueZHandle {
-                typ: BlueZType::Service,
+            Handle {
+                typ: AttributeType::Service,
                 handle: 0x25_u16,
                 parent: 0_u16
             }

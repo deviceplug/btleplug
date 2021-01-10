@@ -35,12 +35,18 @@ use std::{
     collections::{BTreeSet, HashMap},
     fmt::{self, Debug, Display, Formatter},
     sync::{
-        atomic::{AtomicBool, Ordering},
         mpsc::{Receiver, Sender},
         Arc, Condvar, Mutex,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
+
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+enum PeripheralState {
+    NotConnected,
+    Connected,
+    ServicesResolved,
+}
 
 #[derive(Clone)]
 pub struct Peripheral {
@@ -48,11 +54,10 @@ pub struct Peripheral {
     connection: Arc<SyncConnection>,
     path: String,
     address: BDAddr,
-    connected: Arc<AtomicBool>,
     properties: Arc<Mutex<PeripheralProperties>>,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
     attributes_map: Arc<Mutex<HashMap<u16, (String, Handle, Characteristic)>>>,
-    characteristics_discovered_wait: Arc<(Mutex<bool>, Condvar)>,
+    state: Arc<(Mutex<PeripheralState>, Condvar)>,
     notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
     listen_token: Arc<Mutex<Option<Token>>>,
 }
@@ -68,7 +73,6 @@ impl Peripheral {
         properties.address = address;
         let properties = Arc::new(Mutex::new(properties));
         let characteristics = Arc::new(Mutex::new(BTreeSet::new()));
-        let connected = Arc::new(AtomicBool::new(false));
         let notification_handlers = Arc::new(Mutex::new(Vec::new()));
 
         Peripheral {
@@ -76,11 +80,10 @@ impl Peripheral {
             connection: connection,
             path: path.to_string(),
             address: address,
-            connected: connected,
+            state: Arc::new((Mutex::new(PeripheralState::NotConnected), Condvar::new())),
             properties: properties,
             attributes_map: Arc::new(Mutex::new(HashMap::new())),
             characteristics: characteristics,
-            characteristics_discovered_wait: Arc::new((Mutex::new(false), Condvar::new())),
             notification_handlers: notification_handlers,
             listen_token: Arc::new(Mutex::new(None)),
         }
@@ -224,12 +227,19 @@ impl Peripheral {
         properties.discovery_count += 1;
 
         if let Some(connected) = args.get("Connected") {
+            let connected = connected.0.as_u64().unwrap() > 0;
             debug!(
                 "Updating \"{}\" connected to \"{:?}\"",
-                self.address, connected.0
+                self.address, connected
             );
-            self.connected
-                .store(connected.0.as_u64().unwrap() > 0, Ordering::Relaxed);
+            let (ref lock, ref cvar) = *self.state;
+            let mut state = lock.lock().unwrap();
+            if connected && *state == PeripheralState::NotConnected {
+                *state = PeripheralState::Connected;
+            } else if !connected {
+                *state = PeripheralState::NotConnected;
+            }
+            cvar.notify_all();
         }
 
         if let Some(name) = args.get("Name") {
@@ -244,8 +254,10 @@ impl Peripheral {
                 self.build_characteristic_ranges().unwrap();
             }
             // All services have been discovered, time to inform anyone waiting.
-            let (lock, cvar) = &*self.characteristics_discovered_wait;
-            *lock.lock().unwrap() = services_resolved;
+            let (ref lock, ref cvar) = *self.state;
+            if services_resolved {
+                *lock.lock().unwrap() = PeripheralState::ServicesResolved;
+            }
             cvar.notify_all();
         }
 
@@ -380,11 +392,37 @@ impl ApiPeripheral for Peripheral {
     }
 
     fn is_connected(&self) -> bool {
-        self.connected.load(Ordering::Relaxed)
+        *self.state.0.lock().unwrap() >= PeripheralState::Connected
     }
 
     fn connect(&self) -> Result<()> {
-        Ok(self.proxy().connect()?)
+        let started = Instant::now();
+        if let Err(error) = self.proxy().connect() {
+            match error.name() {
+                Some("org.bluez.Error.AlreadyConnected") => Ok(()),
+                Some("org.bluez.Error.Failed") => {
+                    error!(
+                        "BlueZ Failed to connect to \"{:?}\": {}",
+                        self.address,
+                        error.message().unwrap()
+                    );
+                    Err(Error::NotConnected)
+                }
+                _ => Err(error)?,
+            }
+        } else {
+            Ok(())
+        }?;
+        // For somereason, BlueZ may return an Okay result before the the device is actually connected...
+        // So lets wait for the "connected" property to update to true
+        let (ref lock, ref cvar) = *self.state;
+        let timeout = Duration::from_secs(30) - Instant::now().duration_since(started);
+        // Map the result of the wait_timeout_while(...) to match our Result<()>
+        cvar.wait_timeout_while(lock.lock().unwrap(), timeout, |c| {
+            *c < PeripheralState::Connected
+        })
+        .map_err(|_| Error::TimedOut(Duration::from_secs(30)))
+        .map(|_| ())
     }
 
     fn disconnect(&self) -> Result<()> {
@@ -400,11 +438,17 @@ impl ApiPeripheral for Peripheral {
         _start: u16,
         _end: u16,
     ) -> Result<Vec<Characteristic>> {
-        let (lock, cvar) = &*self.characteristics_discovered_wait;
-        let has_services = lock.lock().unwrap();
-        if !*has_services {
-            let _guard = cvar.wait_while(has_services, |b| !*b).unwrap();
+        let (ref lock, ref cvar) = *self.state;
+        trace!("Waiting for all services to be resolved");
+        let _guard = cvar
+            .wait_while(lock.lock().unwrap(), |b| *b == PeripheralState::Connected)
+            .unwrap();
+
+        if *_guard == PeripheralState::NotConnected {
+            return Err(Error::NotConnected);
         }
+
+        debug!("All services are now resolved!");
 
         Ok(self
             .characteristics

@@ -17,14 +17,14 @@ mod peripheral;
 
 use super::{
     bluez_dbus::adapter::OrgBluezAdapter1, BLUEZ_DEST, BLUEZ_INTERFACE_CHARACTERISTIC,
-    BLUEZ_INTERFACE_DEVICE, BLUEZ_INTERFACE_SERVICE, BLUEZ_PATH_PREFIX,
+    BLUEZ_INTERFACE_DEVICE, BLUEZ_INTERFACE_SERVICE,
 };
 use dashmap::DashMap;
 use dbus::{
     arg::{RefArg, Variant},
     blocking::{Proxy, SyncConnection},
     channel::Token,
-    message::MatchRule,
+    message::SignalArgs,
     Path,
 };
 
@@ -53,7 +53,8 @@ use crate::bluez::adapter::peripheral::Peripheral;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum TokenType {
-    Discovery,
+    DeviceDiscovery,
+    DeviceLost,
 }
 
 type ParseCharPropFlagsResult<T> = std::result::Result<T, ParseCharPropFlagsError>;
@@ -131,16 +132,26 @@ impl Adapter {
             thread_handle: Arc::new(Mutex::new(None)),
         };
 
+        adapter.setup();
+
+        Ok(adapter)
+    }
+
+    fn setup(&self) {
+        use dbus::blocking::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as InterfacesRemoved;
+        let mut lost_rule = InterfacesRemoved::match_rule(None, None);
+        lost_rule.path = Some(Path::from("/"));
+
         // // Enable watching the DBus channel for new messages
         // conn.channel().set_watch_enabled(true);
         // let watcher = conn.channel().watch();
         // // watcher.
-        let listener = adapter.listener.clone();
-        let should_stop = adapter.should_stop.clone();
+        let listener = self.listener.clone();
+        let should_stop = self.should_stop.clone();
 
         // Spawn a new thread to process incoming DBus messages.
         // This thread gets cleaned up in the 'impl Drop for Adapter'
-        *adapter.thread_handle.lock().unwrap() = Some(thread::spawn(move || {
+        *self.thread_handle.lock().unwrap() = Some(thread::spawn(move || {
             while !should_stop.load(Ordering::Relaxed) {
                 // listener is protected by a mutex. as calling `process()` when a proxy is awaiting a reply will cause the reply to be dropped...
                 let lock = listener.lock();
@@ -150,7 +161,29 @@ impl Adapter {
             }
         }));
 
-        Ok(adapter)
+        let adapter = self.clone();
+        self.match_tokens.insert(
+            TokenType::DeviceLost,
+            self.listener
+                .lock()
+                .add_match(lost_rule, move |args: InterfacesRemoved, _c, _msg| {
+                    trace!("Received 'InterfacesRemoved' signal");
+                    let path = args.object;
+
+                    if args.interfaces.iter().any(|s| s == BLUEZ_INTERFACE_DEVICE) {
+                        adapter.remove_device(&path).unwrap();
+                    } else if args.interfaces.iter().any(|s| s == BLUEZ_INTERFACE_SERVICE) {
+                    } else if args
+                        .interfaces
+                        .iter()
+                        .any(|s| s == BLUEZ_INTERFACE_CHARACTERISTIC)
+                    {
+                    }
+
+                    return true;
+                })
+                .unwrap(),
+        );
     }
 
     pub fn proxy(&self) -> Proxy<&SyncConnection> {
@@ -205,9 +238,7 @@ impl Adapter {
         adapter_objects
             .clone()
             .filter_map(|(p, i)| i.get(BLUEZ_INTERFACE_SERVICE).map(|a| (p, a)))
-            .map(|(path, attribute)| {
-                Ok(self.add_attribute(path.as_str().unwrap(), attribute)?)
-            })
+            .map(|(path, attribute)| Ok(self.add_attribute(path.as_str().unwrap(), attribute)?))
             .collect::<Result<()>>()?;
 
         trace!("Fetching known peripheral characteristics");
@@ -215,9 +246,7 @@ impl Adapter {
         adapter_objects
             .clone()
             .filter_map(|(p, i)| i.get(BLUEZ_INTERFACE_CHARACTERISTIC).map(|a| (p, a)))
-            .map(|(path, attribute)| {
-                Ok(self.add_attribute(path.as_str().unwrap(), attribute)?)
-            })
+            .map(|(path, attribute)| Ok(self.add_attribute(path.as_str().unwrap(), attribute)?))
             .collect::<Result<()>>()?;
 
         // TODO: Descriptors are nested behind characteristics, and their UUID may be used more than once.
@@ -234,6 +263,28 @@ impl Adapter {
         Ok(())
     }
 
+    fn remove_device(&self, path: &str) -> Result<()> {
+        if let Some(address) = path
+            .strip_prefix(format!("{}/dev_", self.path).as_str())
+            .and_then(|p| p[..17].replace("_", ":").parse::<BDAddr>().ok())
+        {
+            debug!("Removing device \"{:?}\"", address);
+            let listener = self.listener.lock();
+            debug!("Got listener lock");
+            if let Some(peripheral) = self.manager.peripheral(address) {
+                peripheral.stop_listening(&*listener).unwrap()
+            } else {
+                error!("Device \"{:?}\" not found!", address);
+            }
+
+            self.manager.emit(CentralEvent::DeviceLost(address));
+        } else {
+            error!("Could not parse path {:?}", path)
+        }
+
+        Ok(())
+    }
+
     /// Helper function to add a org.bluez.Device1 object to the adapter manager
     fn add_device(
         &self,
@@ -245,11 +296,14 @@ impl Adapter {
                 let address: BDAddr = address.parse()?;
                 // Ignore devices that are blocked, else they'll make this lirbary a bit harder to manage
                 // TODO: Should we allow blocked devices to be "discovered"?
-                if device.get("Blocked").map_or(false, |b| b.0.as_u64().map_or(false, |b| b > 0)) {
-                    info!("Skipping blocked device \"{:?}\"", address);   
+                if device
+                    .get("Blocked")
+                    .map_or(false, |b| b.0.as_u64().map_or(false, |b| b > 0))
+                {
+                    info!("Skipping blocked device \"{:?}\"", address);
                     return Ok(());
                 }
-                let mut peripheral = self.manager.peripheral(address).unwrap_or_else(|| {
+                let peripheral = self.manager.peripheral(address).unwrap_or_else(|| {
                     Peripheral::new(self.manager.clone(), self.connection.clone(), path, address)
                 });
                 peripheral.update_properties(&device);
@@ -351,10 +405,10 @@ impl Central<Peripheral> for Adapter {
     }
 
     fn start_scan<'a>(&'a self) -> Result<()> {
-        use dbus::blocking::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesAdded as IA;
+        use dbus::blocking::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesAdded as InterfacesAdded;
 
         // remove the previous token if it's still awkwardly overstaying their welcome...
-        if let Some((_t, token)) = self.match_tokens.remove(&TokenType::Discovery) {
+        if let Some((_t, token)) = self.match_tokens.remove(&TokenType::DeviceDiscovery) {
             warn!("Removing previous match token");
             self.listener.lock().remove_match(token)?;
         }
@@ -363,22 +417,18 @@ impl Central<Peripheral> for Adapter {
         self.get_existing_peripherals()?;
 
         trace!("Starting discovery listener");
-        let adapter = self.clone();
         {
+            let mut discovered_rule = InterfacesAdded::match_rule(None, None);
+            discovered_rule.path = Some(Path::from("/"));
+
+            let adapter = self.clone();
             self.match_tokens.insert(
-                TokenType::Discovery,
-                self.listener
-                    .lock()
-                    .add_match(MatchRule::new(), move |args: IA, _c, _msg| {
+                TokenType::DeviceDiscovery,
+                self.listener.lock().add_match(
+                    discovered_rule,
+                    move |args: InterfacesAdded, _c, _msg| {
                         trace!("Received 'InterfacesAdded' signal");
                         let path = args.object;
-                        if !path.starts_with(BLUEZ_PATH_PREFIX) {
-                            debug!(
-                                "Path for signal did not start with \"{}\"",
-                                BLUEZ_PATH_PREFIX
-                            );
-                            return true;
-                        }
 
                         if let Some(device) = args.interfaces.get(BLUEZ_INTERFACE_DEVICE) {
                             adapter.add_device(&path, device).unwrap();
@@ -391,7 +441,8 @@ impl Central<Peripheral> for Adapter {
                         }
 
                         return true;
-                    })?,
+                    },
+                )?,
             );
         }
 
@@ -400,7 +451,7 @@ impl Central<Peripheral> for Adapter {
     }
 
     fn stop_scan(&self) -> Result<()> {
-        if let Some((_t, token)) = self.match_tokens.remove(&TokenType::Discovery) {
+        if let Some((_t, token)) = self.match_tokens.remove(&TokenType::DeviceDiscovery) {
             trace!("Stopping discovery listener");
             self.listener.lock().remove_match(token)?;
         }

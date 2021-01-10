@@ -23,9 +23,9 @@ use bytes::BufMut;
 
 use crate::{
     api::{
-        AdapterManager, AddressType, BDAddr, CharPropFlags, Characteristic, CommandCallback,
-        NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties, RequestCallback,
-        ValueNotification, UUID,
+        AdapterManager, AddressType, BDAddr, CentralEvent, CharPropFlags, Characteristic,
+        CommandCallback, NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties,
+        RequestCallback, ValueNotification, UUID,
     },
     bluez::{bluez_dbus::device::OrgBluezDevice1, AttributeType, Handle, BLUEZ_DEST},
     Error, Result,
@@ -34,10 +34,7 @@ use crate::{
 use std::{
     collections::{BTreeSet, HashMap},
     fmt::{self, Debug, Display, Formatter},
-    sync::{
-        mpsc::{Receiver, Sender},
-        Arc, Condvar, Mutex,
-    },
+    sync::{Arc, Condvar, Mutex},
     time::{Duration, Instant},
 };
 
@@ -102,7 +99,14 @@ impl Peripheral {
                 if args.changed_properties.contains_key("Value") {
                     let notification = ValueNotification {
                         handle: Some(handle.handle),
-                        uuid: self.attributes_map.lock().unwrap().get(&handle.handle).unwrap().2.uuid,
+                        uuid: self
+                            .attributes_map
+                            .lock()
+                            .unwrap()
+                            .get(&handle.handle)
+                            .unwrap()
+                            .2
+                            .uuid,
                         value: dbus::arg::prop_cast::<Vec<u8>>(&args.changed_properties, "Value")
                             .cloned()
                             .unwrap_or_default(),
@@ -139,10 +143,10 @@ impl Peripheral {
         true
     }
 
-    pub fn listen(&mut self, listener: &SyncConnection) -> Result<()> {
+    pub fn listen(&self, listener: &SyncConnection) -> Result<()> {
         let peripheral = self.clone();
         let mut rule = PropertiesPropertiesChanged::match_rule(None, None);
-        // For some silly lifetime reasons, we need to assign path separately... 
+        // For some silly lifetime reasons, we need to assign path separately...
         rule.path = Some(Path::from(self.path.clone()));
         // And also, we're interested in properties changed on all sub elements
         rule.path_is_namespace = true;
@@ -153,7 +157,8 @@ impl Peripheral {
         Ok(())
     }
 
-    pub fn stop_listening(&mut self, listener: &SyncConnection) -> Result<()> {
+    pub fn stop_listening(&self, listener: &SyncConnection) -> Result<()> {
+        trace!("Stop listening for events");
         let mut token = self.listen_token.lock().unwrap();
         if token.is_some() {
             listener.remove_match(token.unwrap())?;
@@ -254,9 +259,17 @@ impl Peripheral {
             );
             let (ref lock, ref cvar) = *self.state;
             let mut state = lock.lock().unwrap();
-            if connected && *state == PeripheralState::NotConnected {
-                *state = PeripheralState::Connected;
-            } else if !connected {
+            if connected {
+                if *state < PeripheralState::Connected {
+                    self.adapter
+                        .emit(CentralEvent::DeviceConnected(self.address));
+                    *state = PeripheralState::Connected;
+                }
+            } else {
+                if *state >= PeripheralState::Connected {
+                    self.adapter
+                        .emit(CentralEvent::DeviceDisconnected(self.address));
+                }
                 *state = PeripheralState::NotConnected;
             }
             cvar.notify_all();
@@ -345,6 +358,8 @@ impl Peripheral {
             debug!("Updating \"{}\" RSSI \"{:?}\"", self.address, rssi);
             properties.tx_power_level = rssi;
         }
+
+        self.adapter.emit(CentralEvent::DeviceUpdated(self.address));
     }
 
     pub fn proxy(&self) -> Proxy<&SyncConnection> {

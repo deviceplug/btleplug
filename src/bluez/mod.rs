@@ -16,7 +16,6 @@ mod bluez_dbus;
 pub mod manager;
 mod util;
 
-const BLUEZ_PATH_PREFIX: &str = "/org/bluez";
 const BLUEZ_DEST: &str = "org.bluez";
 const BLUEZ_INTERFACE_ADAPTER: &str = "org.bluez.Adapter1";
 const BLUEZ_INTERFACE_DEVICE: &str = "org.bluez.Device1";

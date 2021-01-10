@@ -196,13 +196,7 @@ impl Adapter {
         // first, objects that implement org.bluez.Device1,
         adapter_objects
             .clone()
-            .filter_map(|(p, i)| {
-                if let Some(device) = i.get(BLUEZ_INTERFACE_DEVICE) {
-                    Some((p, device))
-                } else {
-                    None
-                }
-            })
+            .filter_map(|(p, i)| i.get(BLUEZ_INTERFACE_DEVICE).map(|d| (p, d)))
             .map(|(path, device)| Ok(self.add_device(path.as_str().unwrap(), device)?))
             .collect::<Result<()>>()?;
 
@@ -210,15 +204,9 @@ impl Adapter {
         // then, objects that implement org.bluez.GattService1 as they depend on devices being known first
         adapter_objects
             .clone()
-            .filter_map(|(p, i)| {
-                if let Some(c) = i.get(BLUEZ_INTERFACE_SERVICE) {
-                    Some((p, c))
-                } else {
-                    None
-                }
-            })
-            .map(|(path, characteristic)| {
-                Ok(self.add_attribute(path.as_str().unwrap(), characteristic)?)
+            .filter_map(|(p, i)| i.get(BLUEZ_INTERFACE_SERVICE).map(|a| (p, a)))
+            .map(|(path, attribute)| {
+                Ok(self.add_attribute(path.as_str().unwrap(), attribute)?)
             })
             .collect::<Result<()>>()?;
 
@@ -226,15 +214,9 @@ impl Adapter {
         // then, objects that implement org.bluez.GattService1 as they depend on devices being known first
         adapter_objects
             .clone()
-            .filter_map(|(p, i)| {
-                if let Some(c) = i.get(BLUEZ_INTERFACE_CHARACTERISTIC) {
-                    Some((p, c))
-                } else {
-                    None
-                }
-            })
-            .map(|(path, characteristic)| {
-                Ok(self.add_attribute(path.as_str().unwrap(), characteristic)?)
+            .filter_map(|(p, i)| i.get(BLUEZ_INTERFACE_CHARACTERISTIC).map(|a| (p, a)))
+            .map(|(path, attribute)| {
+                Ok(self.add_attribute(path.as_str().unwrap(), attribute)?)
             })
             .collect::<Result<()>>()?;
 
@@ -243,10 +225,10 @@ impl Adapter {
         // trace!("Fetching known peripheral descriptors");
         // adapter_objects
         //     .clone()
-        //     .filter_map(|(p, i)| if let Some(c) = i.get("org.bluez.GattDescriptor1") { Some((p,c)) } else { None })
-        //     .map(
-        //         |(path, characteristic)| Ok(self.add_characteristic(path.as_str().unwrap(), characteristic)?),
-        //     )
+        //     .filter_map(|(p, i)| i.get(BLUEZ_INTERFACE_DESCRIPTOR).map(|a| (p, a)))
+        //     .map(|(path, descriptor)| {
+        //         Ok(self.add_attribute(path.as_str().unwrap(), descriptor)?)
+        //     })
         //     .collect::<Result<()>>()?;
 
         Ok(())

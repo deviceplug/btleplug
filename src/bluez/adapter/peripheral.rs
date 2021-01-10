@@ -243,8 +243,9 @@ impl Peripheral {
         }
 
         if let Some(name) = args.get("Name") {
+            let name = name.as_str().map(|s| s.to_string());
             debug!("Updating \"{}\" local name to \"{:?}\"", self.address, name);
-            properties.local_name = name.as_str().map(|s| s.to_string());
+            properties.local_name = name;
         }
 
         if let Some(services_resolved) = args.get("ServicesResolved") {
@@ -306,19 +307,23 @@ impl Peripheral {
         }
 
         if let Some(address_type) = args.get("AddressType") {
+            let address_type = address_type
+                .as_str()
+                .map(|address_type| AddressType::from_str(address_type).unwrap_or_default())
+                .unwrap_or_default();
+
             debug!(
                 "Updating \"{}\" address type \"{:?}\"",
                 self.address, address_type
             );
-            properties.address_type = address_type
-                .as_str()
-                .map(|address_type| AddressType::from_str(address_type).unwrap_or_default())
-                .unwrap_or_default();
+
+            properties.address_type = address_type;
         }
 
         if let Some(rssi) = args.get("RSSI") {
+            let rssi = rssi.as_i64().map(|rssi| rssi as i8);
             debug!("Updating \"{}\" RSSI \"{:?}\"", self.address, rssi);
-            properties.tx_power_level = rssi.as_i64().map(|rssi| rssi as i8);
+            properties.tx_power_level = rssi;
         }
     }
 

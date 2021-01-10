@@ -1,5 +1,6 @@
 #[allow(unused_imports)]
 use rand::{thread_rng, Rng};
+use simple_logger::SimpleLogger;
 #[allow(dead_code)]
 #[allow(unused_imports)]
 use std::thread;
@@ -9,7 +10,7 @@ use std::time::Duration;
 use btleplug::api::{Central, Characteristic, Peripheral, UUID};
 #[allow(unused_imports)]
 #[cfg(target_os = "linux")]
-use btleplug::bluez::{adapter::Adapter, adapter::ConnectedAdapter, manager::Manager};
+use btleplug::bluez::{adapter::Adapter, manager::Manager};
 #[allow(unused_imports)]
 #[cfg(target_os = "macos")]
 use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
@@ -18,25 +19,14 @@ use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
 use btleplug::winrtble::{adapter::Adapter, manager::Manager};
 
 #[cfg(target_os = "linux")]
-fn connect_to(adapter: &Adapter) -> ConnectedAdapter {
-    adapter
-        .connect()
-        .expect("Error connecting to BLE Adapter....") //linux
-}
-#[cfg(target_os = "linux")]
-fn print_adapter_info(adapter: &ConnectedAdapter) {
+fn print_adapter_info(adapter: &Adapter) {
     println!(
         "connected adapter {:?} is UP: {:?}",
-        adapter.adapter.name,
-        adapter.adapter.is_up()
+        adapter.name(),
+        adapter.is_up()
     );
-    println!("adapter states : {:?}", adapter.adapter.states);
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos"))]
-fn connect_to(adapter: &Adapter) -> &Adapter {
-    adapter //windows 10
-}
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 fn print_adapter_info(_adapter: &Adapter) {
     println!("adapter info can't be printed on Windows 10 or mac");
@@ -49,6 +39,7 @@ If you are getting run time error like that :
  on linux
 **/
 fn main() {
+    SimpleLogger::new().init().unwrap();
     let manager = Manager::new().unwrap();
     let adapter_list = manager.adapters().unwrap();
     if adapter_list.len() <= 0 {
@@ -57,22 +48,16 @@ fn main() {
         for adapter in adapter_list.iter() {
             println!("connecting to BLE adapter: ...");
 
-            let connected_adapter = if cfg!(windows) {
-                connect_to(&adapter)
-            } else {
-                connect_to(&adapter)
-            };
-            // let connected_adapter = connect_to(&adapter);
-            print_adapter_info(&connected_adapter);
-            connected_adapter
+            print_adapter_info(&adapter);
+            adapter
                 .start_scan()
                 .expect("Can't scan BLE adapter for connected devices...");
             thread::sleep(Duration::from_secs(2));
-            if connected_adapter.peripherals().is_empty() {
+            if adapter.peripherals().is_empty() {
                 eprintln!("->>> BLE peripheral devices were not found, sorry. Exiting...");
             } else {
                 // all peripheral devices in range
-                for peripheral in connected_adapter.peripherals().iter() {
+                for peripheral in adapter.peripherals().iter() {
                     println!(
                         "peripheral : {:?} is connected: {:?}",
                         peripheral.properties().local_name,

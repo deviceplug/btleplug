@@ -261,6 +261,12 @@ impl Adapter {
         if let Some(address) = device.get("Address") {
             if let Some(address) = address.as_str() {
                 let address: BDAddr = address.parse()?;
+                // Ignore devices that are blocked, else they'll make this lirbary a bit harder to manage
+                // TODO: Should we allow blocked devices to be "discovered"?
+                if device.get("Blocked").map_or(false, |b| b.0.as_u64().map_or(false, |b| b > 0)) {
+                    info!("Skipping blocked device \"{:?}\"", address);   
+                    return Ok(());
+                }
                 let mut peripheral = self.manager.peripheral(address).unwrap_or_else(|| {
                     Peripheral::new(self.manager.clone(), self.connection.clone(), path, address)
                 });
@@ -327,8 +333,6 @@ impl Adapter {
                 };
 
                 device.add_attribute(path, uuid, flags)?;
-            } else {
-                error!("Got a service object for an unknown device \"{:?}\"", path);
             }
         } else {
             return Err(Error::Other(

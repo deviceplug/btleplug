@@ -25,7 +25,7 @@ use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CharPropFlags, Characteristic, CommandCallback,
         NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties, RequestCallback,
-        UUID,
+        ValueNotification, UUID,
     },
     bluez::{bluez_dbus::device::OrgBluezDevice1, AttributeType, Handle, BLUEZ_DEST},
     Error, Result,
@@ -98,8 +98,28 @@ impl Peripheral {
         let path = message.path().unwrap().into_static();
         let path = path.as_str().unwrap();
         if path.starts_with(self.path.as_str()) {
-            if let Ok(_handle) = path.parse::<Handle>() {
-                warn!("TODO: Support for handling properties changed on an attribute");
+            if let Ok(handle) = path.parse::<Handle>() {
+                if args.changed_properties.contains_key("Value") {
+                    let notification = ValueNotification {
+                        handle: Some(handle.handle),
+                        uuid: self.attributes_map.lock().unwrap().get(&handle.handle).unwrap().2.uuid,
+                        value: dbus::arg::prop_cast::<Vec<u8>>(&args.changed_properties, "Value")
+                            .cloned()
+                            .unwrap_or_default(),
+                    };
+                    self.notification_handlers
+                        .lock()
+                        .unwrap()
+                        .iter_mut()
+                        .for_each(|h| {
+                            h(notification.clone());
+                        });
+                } else {
+                    error!(
+                        "Unhandled properties changed on an attribute\n\t{:?}\n\t{:?}",
+                        path, args.changed_properties
+                    );
+                }
             } else {
                 self.update_properties(&args.changed_properties);
                 if !args.invalidated_properties.is_empty() {
@@ -542,15 +562,24 @@ impl ApiPeripheral for Peripheral {
         }
     }
 
-    fn subscribe(&self, _characteristic: &Characteristic) -> Result<()> {
-        unimplemented!()
+    fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
+        use crate::bluez::bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1;
+        Ok(self
+            .proxy_for(characteristic)
+            .ok_or(Error::NotSupported("subscribe".to_string()))?
+            .start_notify()?)
     }
 
     fn unsubscribe(&self, _characteristic: &Characteristic) -> Result<()> {
-        unimplemented!()
+        use crate::bluez::bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1;
+        Ok(self
+            .proxy_for(_characteristic)
+            .ok_or(Error::NotSupported("unsubscribe".to_string()))?
+            .stop_notify()?)
     }
 
-    fn on_notification(&self, _handler: NotificationHandler) {
-        unimplemented!()
+    fn on_notification(&self, handler: NotificationHandler) {
+        let mut list = self.notification_handlers.lock().unwrap();
+        list.push(handler);
     }
 }

@@ -94,9 +94,9 @@ impl Peripheral {
     ) -> bool {
         let path = message.path().unwrap().into_static();
         let path = path.as_str().unwrap();
-        if !path.starts_with(self.path.as_str()) {
+        if path.starts_with(self.path.as_str()) {
             if let Ok(_handle) = path.parse::<Handle>() {
-                todo!("Support for handling properties changed on an attribute");
+                warn!("TODO: Support for handling properties changed on an attribute");
             } else {
                 self.update_properties(&args.changed_properties);
                 if !args.invalidated_properties.is_empty() {
@@ -106,6 +106,11 @@ impl Peripheral {
                     );
                 }
             }
+        } else {
+            error!(
+                "Got properties changed for {}, but does not start with {}",
+                path, self.path
+            );
         }
 
         true
@@ -113,7 +118,11 @@ impl Peripheral {
 
     pub fn listen(&mut self, listener: &SyncConnection) -> Result<()> {
         let peripheral = self.clone();
-        let rule = PropertiesPropertiesChanged::match_rule(None, None);
+        let mut rule = PropertiesPropertiesChanged::match_rule(None, None);
+        // For some silly lifetime reasons, we need to assign path separately... 
+        rule.path = Some(Path::from(self.path.clone()));
+        // And also, we're interested in properties changed on all sub elements
+        rule.path_is_namespace = true;
         let token =
             listener.add_match(rule, move |a, s, m| peripheral.properties_changed(a, s, m))?;
         *self.listen_token.lock().unwrap() = Some(token);

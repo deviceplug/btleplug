@@ -21,21 +21,17 @@ use dbus::{
 
 use bytes::BufMut;
 
-use crate::{
-    api::{
+use crate::{Error, Result, api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, CharPropFlags, Characteristic,
         CommandCallback, NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties,
         RequestCallback, ValueNotification, UUID,
-    },
-    bluez::{bluez_dbus::device::OrgBluezDevice1, AttributeType, Handle, BLUEZ_DEST},
-    Error, Result,
-};
+    }, bluez::{AttributeType, BLUEZ_DEST, DEFAULT_TIMEOUT, Handle, bluez_dbus::device::OrgBluezDevice1}};
 
 use std::{
     collections::{BTreeSet, HashMap},
     fmt::{self, Debug, Display, Formatter},
     sync::{Arc, Condvar, Mutex},
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
@@ -364,14 +360,14 @@ impl Peripheral {
 
     pub fn proxy(&self) -> Proxy<&SyncConnection> {
         self.connection
-            .with_proxy(BLUEZ_DEST, &self.path, Duration::from_secs(30))
+            .with_proxy(BLUEZ_DEST, &self.path, DEFAULT_TIMEOUT)
     }
 
     pub fn proxy_for(&self, characteristic: &Characteristic) -> Option<Proxy<&SyncConnection>> {
         let map = self.attributes_map.lock().unwrap();
         map.get(&characteristic.value_handle).map(|(path, _h, _c)| {
             self.connection
-                .with_proxy(BLUEZ_DEST, path.clone(), Duration::from_secs(30))
+                .with_proxy(BLUEZ_DEST, path.clone(), DEFAULT_TIMEOUT)
         })
     }
 }
@@ -448,6 +444,7 @@ impl ApiPeripheral for Peripheral {
                     );
                     Err(Error::NotConnected)
                 }
+                Some("org.freedesktop.DBus.Error.NoReply") => Err(Error::TimedOut(DEFAULT_TIMEOUT)),
                 _ => Err(error)?,
             }
         } else {
@@ -456,12 +453,12 @@ impl ApiPeripheral for Peripheral {
         // For somereason, BlueZ may return an Okay result before the the device is actually connected...
         // So lets wait for the "connected" property to update to true
         let (ref lock, ref cvar) = *self.state;
-        let timeout = Duration::from_secs(30) - Instant::now().duration_since(started);
+        let timeout = DEFAULT_TIMEOUT - Instant::now().duration_since(started);
         // Map the result of the wait_timeout_while(...) to match our Result<()>
         cvar.wait_timeout_while(lock.lock().unwrap(), timeout, |c| {
             *c < PeripheralState::Connected
         })
-        .map_err(|_| Error::TimedOut(Duration::from_secs(30)))
+        .map_err(|_| Error::TimedOut(DEFAULT_TIMEOUT))
         .map(|_| ())
     }
 

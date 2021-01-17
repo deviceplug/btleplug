@@ -17,7 +17,7 @@ mod peripheral;
 
 use super::{
     bluez_dbus::adapter::OrgBluezAdapter1, BLUEZ_DEST, BLUEZ_INTERFACE_CHARACTERISTIC,
-    BLUEZ_INTERFACE_DEVICE, BLUEZ_INTERFACE_SERVICE,
+    BLUEZ_INTERFACE_DEVICE, BLUEZ_INTERFACE_SERVICE, DEFAULT_TIMEOUT,
 };
 use dashmap::DashMap;
 use dbus::{
@@ -119,7 +119,7 @@ assert_impl_all!(Adapter: Sync, Send);
 impl Adapter {
     pub(crate) fn from_dbus_path(path: &Path) -> Result<Adapter> {
         let conn = Arc::new(SyncConnection::new_system()?);
-        let proxy = conn.with_proxy(BLUEZ_DEST, path, Duration::from_secs(5));
+        let proxy = conn.with_proxy(BLUEZ_DEST, path, DEFAULT_TIMEOUT);
         info!("DevInfo: {:?}", proxy.address()?);
 
         let adapter = Adapter {
@@ -188,7 +188,7 @@ impl Adapter {
 
     pub fn proxy(&self) -> Proxy<&SyncConnection> {
         self.connection
-            .with_proxy(BLUEZ_DEST, &self.path, Duration::from_secs(5))
+            .with_proxy(BLUEZ_DEST, &self.path, DEFAULT_TIMEOUT)
     }
 
     pub fn is_up(&self) -> Result<bool> {
@@ -213,9 +213,7 @@ impl Adapter {
 
     fn get_existing_peripherals(&self) -> Result<()> {
         use dbus::blocking::stdintf::org_freedesktop_dbus::ObjectManager;
-        let proxy = self
-            .connection
-            .with_proxy(BLUEZ_DEST, "/", Duration::from_secs(5));
+        let proxy = self.connection.with_proxy(BLUEZ_DEST, "/", DEFAULT_TIMEOUT);
         let objects = proxy.get_managed_objects()?;
 
         trace!("Fetching already known peripherals from \"{}\"", self.path);

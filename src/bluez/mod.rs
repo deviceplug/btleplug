@@ -22,6 +22,8 @@ const BLUEZ_INTERFACE_DEVICE: &str = "org.bluez.Device1";
 const BLUEZ_INTERFACE_SERVICE: &str = "org.bluez.GattService1";
 const BLUEZ_INTERFACE_CHARACTERISTIC: &str = "org.bluez.GattCharacteristic1";
 
+const DEFAULT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 enum AttributeType {
     Service,

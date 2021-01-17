@@ -27,7 +27,7 @@
 //! use std::time::Duration;
 //! use rand::{Rng, thread_rng};
 //! #[cfg(target_os = "linux")]
-//! use btleplug::bluez::{adapter::ConnectedAdapter, manager::Manager};
+//! use btleplug::bluez::{adapter::Adapter, manager::Manager};
 //! #[cfg(target_os = "windows")]
 //! use btleplug::winrtble::{adapter::Adapter, manager::Manager};
 //! #[cfg(target_os = "macos")]
@@ -37,26 +37,12 @@
 //! // adapter retreival works differently depending on your platform right now.
 //! // API needs to be aligned.
 //!
-//! #[cfg(any(target_os = "windows", target_os = "macos"))]
-//! fn get_central(manager: &Manager) -> Adapter {
-//!     let adapters = manager.adapters().unwrap();
-//!     adapters.into_iter().nth(0).unwrap()
-//! }
-//!
-//! #[cfg(target_os = "linux")]
-//! fn get_central(manager: &Manager) -> ConnectedAdapter {
-//!     let adapters = manager.adapters().unwrap();
-//!     let adapter = adapters.into_iter().nth(0).unwrap();
-//!     adapter.connect().unwrap()
-//! }
-//!
 //! pub fn main() {
 //!     let manager = Manager::new().unwrap();
 //!
 //!     // get the first bluetooth adapter
-//!     //
-//!     // connect to the adapter
-//!     let central = get_central(&manager);
+//!     let adapters = manager.adapters().unwrap();
+//!     let central = adapters.into_iter().nth(0).unwrap();
 //!
 //!     // start scanning for devices
 //!     central.start_scan().unwrap();

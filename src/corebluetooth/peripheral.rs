@@ -21,8 +21,8 @@ use crate::{
     Error, Result,
 };
 use async_std::{
+    channel::{self, Receiver, Sender},
     prelude::StreamExt,
-    sync::{Receiver, Sender},
     task,
 };
 use std::{

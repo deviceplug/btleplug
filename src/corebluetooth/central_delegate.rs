@@ -17,7 +17,7 @@
 // according to those terms.
 
 use async_std::{
-    sync::{channel, Receiver, Sender},
+    channel::{Receiver, Sender},
     task,
 };
 use std::{collections::HashMap, slice, str::FromStr, sync::Once};
@@ -190,7 +190,7 @@ pub mod CentralDelegate {
 
     extern "C" fn delegate_init(delegate: &mut Object, _cmd: Sel) -> *mut Object {
         trace!("delegate_init");
-        let (sender, recv) = channel::<CentralDelegateEvent>(256);
+        let (sender, recv) = async_std::channel::bounded::<CentralDelegateEvent>(256);
         // TODO Should these maybe be Option<T>, so we can denote when we've
         // dropped? Not quite sure how delegate lifetime works here.
         let sendbox = Box::new(sender);

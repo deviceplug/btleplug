@@ -3,8 +3,8 @@ use super::peripheral::Peripheral;
 use crate::api::{AdapterManager, BDAddr, Central, CentralEvent};
 use crate::Result;
 use async_std::{
+    channel::{self, Sender},
     prelude::StreamExt,
-    sync::{channel, Sender},
     task,
 };
 use std::convert::TryInto;
@@ -24,7 +24,7 @@ pub fn uuid_to_bdaddr(uuid: &String) -> BDAddr {
 
 impl Adapter {
     pub fn new() -> Self {
-        let (sender, mut receiver) = channel(256);
+        let (sender, mut receiver) = channel::bounded(256);
         let adapter_sender = run_corebluetooth_thread(sender);
         // Since init currently blocked until the state update, we know the
         // receiver is dropped after that. We can pick it up here and make it

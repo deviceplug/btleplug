@@ -446,8 +446,16 @@ impl Central<Peripheral> for Adapter {
             );
         }
 
-        debug!("Starting discovery");
-        Ok(self.proxy().start_discovery()?)
+        if let Err(error) = self.proxy().start_discovery() {
+            match error.name() {
+                // Don't error if BlueZ has already started scanning.
+                Some("org.bluez.Error.InProgress") => Ok(()),
+                _ => Err(error)?,
+            }
+        } else {
+            debug!("Starting discovery");
+            Ok(())
+        }
     }
 
     fn stop_scan(&self) -> Result<()> {
@@ -456,8 +464,16 @@ impl Central<Peripheral> for Adapter {
             self.listener.lock().remove_match(token)?;
         }
 
-        debug!("Stopping discovery");
-        Ok(self.proxy().stop_discovery()?)
+        if let Err(error) = self.proxy().stop_discovery() {
+            match error.name() {
+                // Don't error if BlueZ has already stopped scanning.
+                Some("org.bluez.Error.InProgress") => Ok(()),
+                _ => Err(error)?,
+            }
+        } else {
+            debug!("Stopping discovery");
+            Ok(())
+        }
     }
 
     fn peripherals(&self) -> Vec<Peripheral> {

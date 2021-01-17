@@ -3,7 +3,10 @@ fn main() {
 }
 
 mod build {
-    use std::{env, path::{Path, PathBuf}};
+    use std::{
+        env,
+        path::{Path, PathBuf},
+    };
     pub fn build() {
         // Only rebuild if the script, or one of the XML files is changed.
         println!("cargo:rerun-if-changed=build.rs");

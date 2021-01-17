@@ -11,9 +11,7 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use std::{
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use dbus::blocking::{stdintf::org_freedesktop_dbus::ObjectManager, SyncConnection};
 
@@ -40,9 +38,7 @@ impl Manager {
     /// Returns the list of adapters available on the system.
     pub fn adapters(&self) -> Result<Vec<Adapter>> {
         // Create a convenience proxy connection that's already namespaced to org.bluez
-        let bluez = self
-            .dbus_conn
-            .with_proxy(BLUEZ_DEST, "/", DEFAULT_TIMEOUT);
+        let bluez = self.dbus_conn.with_proxy(BLUEZ_DEST, "/", DEFAULT_TIMEOUT);
 
         // First, use org.freedesktop.DBus.ObjectManager to query org.bluez
         // for adapters

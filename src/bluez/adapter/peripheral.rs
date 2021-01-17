@@ -21,11 +21,17 @@ use dbus::{
 
 use bytes::BufMut;
 
-use crate::{Error, Result, api::{
+use crate::{
+    api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, CharPropFlags, Characteristic,
         CommandCallback, NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties,
         RequestCallback, ValueNotification, UUID,
-    }, bluez::{AttributeType, BLUEZ_DEST, DEFAULT_TIMEOUT, Handle, bluez_dbus::device::OrgBluezDevice1}};
+    },
+    bluez::{
+        bluez_dbus::device::OrgBluezDevice1, AttributeType, Handle, BLUEZ_DEST, DEFAULT_TIMEOUT,
+    },
+    Error, Result,
+};
 
 use std::{
     collections::{BTreeSet, HashMap},
@@ -114,7 +120,7 @@ impl Peripheral {
                         .for_each(|h| {
                             h(notification.clone());
                         });
-                }else if args.changed_properties.contains_key("Notifying") {
+                } else if args.changed_properties.contains_key("Notifying") {
                     // TODO: Keep track of subscribed and unsubscribed characteristics?
                 } else {
                     warn!(

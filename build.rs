@@ -2,14 +2,8 @@ fn main() {
     build::build()
 }
 
-#[cfg(not(target_os = "linux"))]
 mod build {
-    pub fn build() {}
-}
-
-#[cfg(target_os = "linux")]
-mod build {
-    use std::path::{Path, PathBuf};
+    use std::{env, path::{Path, PathBuf}};
     pub fn build() {
         // Only rebuild if the script, or one of the XML files is changed.
         println!("cargo:rerun-if-changed=build.rs");
@@ -19,41 +13,44 @@ mod build {
             ..dbus_codegen::GenOpts::default()
         };
 
-        let base_path = Path::new("src/bluez/bluez_dbus/");
+        let output_path = Path::new(env::var("OUT_DIR").unwrap().as_str()).join("bluez_dbus/");
+        let input_path = Path::new("src/bluez/bluez_dbus/");
+
+        std::fs::create_dir_all(&output_path).unwrap();
 
         generate_dbus_interfaces(
-            base_path.join("bluez-dbus-introspect-manager.xml"),
-            base_path.join("manager.rs"),
+            input_path.join("bluez-dbus-introspect-manager.xml"),
+            output_path.join("manager.rs"),
             &options,
         )
         .unwrap();
         generate_dbus_interfaces(
-            base_path.join("bluez-dbus-introspect-adapter.xml"),
-            base_path.join("adapter.rs"),
+            input_path.join("bluez-dbus-introspect-adapter.xml"),
+            output_path.join("adapter.rs"),
             &options,
         )
         .unwrap();
         generate_dbus_interfaces(
-            base_path.join("bluez-dbus-introspect-device.xml"),
-            base_path.join("device.rs"),
+            input_path.join("bluez-dbus-introspect-device.xml"),
+            output_path.join("device.rs"),
             &options,
         )
         .unwrap();
         generate_dbus_interfaces(
-            base_path.join("bluez-dbus-introspect-gatt-service.xml"),
-            base_path.join("gatt_service.rs"),
+            input_path.join("bluez-dbus-introspect-gatt-service.xml"),
+            output_path.join("gatt_service.rs"),
             &options,
         )
         .unwrap();
         generate_dbus_interfaces(
-            base_path.join("bluez-dbus-introspect-gatt-characteristic.xml"),
-            base_path.join("gatt_characteristic.rs"),
+            input_path.join("bluez-dbus-introspect-gatt-characteristic.xml"),
+            output_path.join("gatt_characteristic.rs"),
             &options,
         )
         .unwrap();
         generate_dbus_interfaces(
-            base_path.join("bluez-dbus-introspect-gatt-descriptor.xml"),
-            base_path.join("gatt_descriptor.rs"),
+            input_path.join("bluez-dbus-introspect-gatt-descriptor.xml"),
+            output_path.join("gatt_descriptor.rs"),
             &options,
         )
         .unwrap();

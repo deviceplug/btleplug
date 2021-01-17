@@ -114,8 +114,10 @@ impl Peripheral {
                         .for_each(|h| {
                             h(notification.clone());
                         });
+                }else if args.changed_properties.contains_key("Notifying") {
+                    // TODO: Keep track of subscribed and unsubscribed characteristics?
                 } else {
-                    error!(
+                    warn!(
                         "Unhandled properties changed on an attribute\n\t{:?}\n\t{:?}",
                         path, args.changed_properties
                     );
@@ -124,7 +126,7 @@ impl Peripheral {
                 self.update_properties(&args.changed_properties);
                 if !args.invalidated_properties.is_empty() {
                     warn!(
-                        "TODO: Got some properties to invalidate!\n\t{:?}",
+                        "TODO: Got some properties to invalidate\n\t{:?}",
                         args.invalidated_properties
                     );
                 }
@@ -182,15 +184,7 @@ impl Peripheral {
             start_handle: 0,
         };
 
-        let result = path_uuid_map.insert(handle.handle, (path.to_string(), handle, attribute));
-        if let Some((_old_path, old_handle, _old_characteristic)) = result {
-            error!(
-                "Found (and replaced) existing DBus characteristic mapping!\n\tOld: {} -> {}\n\tNew: {} -> {}",
-                old_handle.handle, path,
-                handle.handle, path,
-            )
-        }
-
+        path_uuid_map.insert(handle.handle, (path.to_string(), handle, attribute));
         Ok(())
     }
 

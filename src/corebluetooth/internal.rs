@@ -16,8 +16,8 @@ use super::{
 };
 use crate::api::{CharPropFlags, Characteristic, UUID};
 use async_std::{
+    channel::{self, Receiver, Sender},
     prelude::{FutureExt, StreamExt},
-    sync::{channel, Receiver, Sender},
     task,
 };
 use objc::{
@@ -214,7 +214,7 @@ pub enum CoreBluetoothEvent {
     AdapterConnected,
     AdapterError,
     // name, identifier, event receiver, message sender
-    DeviceDiscovered(Uuid, String, async_std::sync::Receiver<CBPeripheralEvent>),
+    DeviceDiscovered(Uuid, String, Receiver<CBPeripheralEvent>),
     DeviceUpdated(Uuid, String),
     // identifier
     DeviceLost(Uuid),
@@ -232,7 +232,7 @@ enum InternalLoopMessage {
 impl CoreBluetoothInternal {
     pub fn new(
         message_receiver: Receiver<CoreBluetoothMessage>,
-        event_sender: async_std::sync::Sender<CoreBluetoothEvent>,
+        event_sender: Sender<CoreBluetoothEvent>,
     ) -> Self {
         // Pretty sure these come preallocated?
         unsafe {
@@ -268,7 +268,7 @@ impl CoreBluetoothInternal {
             //     self.connect_peripheral(*peripheral);
             // }
             // Create our channels
-            let (event_sender, event_receiver) = async_std::sync::channel(256);
+            let (event_sender, event_receiver) = channel::bounded(256);
             self.peripherals
                 .insert(uuid, CBPeripheral::new(peripheral, event_sender));
             self.dispatch_event(CoreBluetoothEvent::DeviceDiscovered(
@@ -594,7 +594,7 @@ impl Drop for CoreBluetoothInternal {
 pub fn run_corebluetooth_thread(
     event_sender: Sender<CoreBluetoothEvent>,
 ) -> Sender<CoreBluetoothMessage> {
-    let (sender, receiver) = channel::<CoreBluetoothMessage>(256);
+    let (sender, receiver) = channel::bounded::<CoreBluetoothMessage>(256);
     thread::spawn(move || {
         let mut cbi = CoreBluetoothInternal::new(receiver, event_sender);
         loop {

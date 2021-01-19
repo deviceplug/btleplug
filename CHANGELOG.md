@@ -1,3 +1,9 @@
+# 0.5.5 (2021-01-18)
+
+## Bugfixes
+
+- Fix dependency issue with async-std channels
+
 # 0.5.4 (2020-10-06)
 
 ## Bugfixes

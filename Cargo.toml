@@ -21,20 +21,20 @@ path = "src/lib.rs"
 # crate-type = ["staticlib"]
 
 [dependencies]
-libc = "0.2.79"
-nix = "0.18.0"
-bytes = "0.5.6"
-num = "0.3.0"
-log = "0.4.11"
+libc = "0.2.82"
+nix = "0.19.1"
+bytes = "1.0.1"
+num = "0.3.1"
+log = "0.4.13"
 enum_primitive = "0.1.1"
 bitflags = "1.2.1"
 failure = "0.1.8"
 failure_derive = "0.1.8"
-backtrace = "0.3.51"
-async-std = { version = "1.6.5", features = ["unstable"] }
-uuid = "0.8.1"
-serde = { version = "1.0.116", features = ["derive"], default-features = false, optional = true }
-dashmap = "3.11.10"
+backtrace = "0.3.55"
+async-std = "1.9.0"
+uuid = "0.8.2"
+serde = { version = "1.0.119", features = ["derive"], default-features = false, optional = true }
+dashmap = "4.0.2"
 
 [dependencies.nom]
 # This is stuck at 4 until we update the bluez core
@@ -55,4 +55,4 @@ objc = "0.2.7"
 cocoa = "0.24.0"
 
 [dev-dependencies]
-rand = "0.7.3"
+rand = "0.8.2"

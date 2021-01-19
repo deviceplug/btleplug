@@ -17,9 +17,9 @@ use super::{
 use crate::api::{CharPropFlags, Characteristic, UUID};
 use async_std::{
     channel::{self, Receiver, Sender},
-    prelude::{FutureExt, StreamExt},
     task,
 };
+use futures::{FutureExt, StreamExt, select};
 use objc::{
     rc::StrongPtr,
     runtime::{Object, YES},

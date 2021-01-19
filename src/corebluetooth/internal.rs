@@ -468,17 +468,24 @@ impl CoreBluetoothInternal {
 
     pub fn wait_for_message(&mut self) -> bool {
         let mut delegate_receiver_clone = self.delegate_receiver.clone();
+        /*
         let delegate_future =
             async { InternalLoopMessage::Delegate(delegate_receiver_clone.next().await.unwrap()) };
-
+        */
         let mut adapter_receiver_clone = self.message_receiver.clone();
-
+/*
         let adapter_future =
             async { InternalLoopMessage::Adapter(adapter_receiver_clone.next().await.unwrap()) };
-
+*/
         let msg = task::block_on(async {
-            let race_future = delegate_future.race(adapter_future);
-            race_future.await
+            select! {
+                delegate_msg = delegate_receiver_clone.next().fuse() => {
+                    InternalLoopMessage::Delegate(delegate_msg.unwrap())
+                }
+                adapter_msg = adapter_receiver_clone.next().fuse() => {
+                    InternalLoopMessage::Adapter(adapter_msg.unwrap())
+                }
+            }
         });
 
         match msg {

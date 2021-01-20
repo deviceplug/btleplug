@@ -57,15 +57,7 @@ where
 
     pub fn emit(&self, event: CentralEvent) {
         //debug!("emitted {:?}", event);
-        match event {
-            CentralEvent::DeviceDisconnected(addr) => {
-                self.peripherals.remove(&addr);
-            }
-            CentralEvent::DeviceLost(addr) => {
-                self.peripherals.remove(&addr);
-            }
-            _ => {}
-        }
+
         // Since we hold a receiver, this will never fail unless we fill the
         // channel. Whether that's a good idea is another question entirely.
         self.event_sender.lock().unwrap().send(event).unwrap();
@@ -86,6 +78,10 @@ where
         );
         assert_eq!(peripheral.address(), addr, "Device has unexpected address."); // TODO remove addr argument
         self.peripherals.insert(addr, peripheral);
+    }
+
+    pub fn remove_peripheral(&self, addr: &BDAddr) {
+        self.peripherals.remove(addr);
     }
 
     pub fn update_peripheral(&self, addr: BDAddr, peripheral: PeripheralType) {

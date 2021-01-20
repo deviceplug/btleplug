@@ -15,7 +15,7 @@ use super::{ble::characteristic::BLECharacteristic, ble::device::BLEDevice, util
 use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, CommandCallback,
-        NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties, RequestCallback,
+        NotificationHandler, DiscoveryHandler, Peripheral as ApiPeripheral, PeripheralProperties, RequestCallback,
         ValueNotification, UUID,
     },
     common::util,
@@ -230,6 +230,11 @@ impl ApiPeripheral for Peripheral {
         Err(Error::NotConnected)
     }
 
+    fn on_discovery(&self, characteristic_uuid: UUID, handler: DiscoveryHandler) {
+        // Characteristic discovery is synchronous for the winrtble implementation
+        unimplemented!();
+    }
+
     /// Discovers characteristics within the specified range of handles. This is a synchronous
     /// operation.
     fn discover_characteristics_in_range(
@@ -314,7 +319,7 @@ impl ApiPeripheral for Peripheral {
                     handle: None,
                     value,
                 };
-                util::invoke_handlers(&notification_handlers, &notification);
+                util::invoke_notification_handlers(&notification_handlers, &notification);
             }))
         } else {
             Err(Error::NotSupported("subscribe".into()))

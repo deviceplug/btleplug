@@ -1,7 +1,9 @@
 extern crate btleplug;
 extern crate rand;
 
-use btleplug::api::{Central, CentralEvent};
+use async_std::task;
+
+use btleplug::api::{Central, CentralEvent, Peripheral, UUID};
 #[cfg(target_os = "linux")]
 use btleplug::bluez::{adapter::ConnectedAdapter, manager::Manager};
 #[cfg(target_os = "macos")]
@@ -23,6 +25,48 @@ fn get_central(manager: &Manager) -> ConnectedAdapter {
     let adapters = manager.adapters().unwrap();
     let adapter = adapters.into_iter().nth(0).unwrap();
     adapter.connect().unwrap()
+}
+
+#[cfg(target_os = "macos")]
+fn discover_and_read_characteristic<P: 'static + Peripheral>(peripheral: P) {
+    let characteristic_uuid: UUID = "00:00".parse().unwrap();
+    let peripheral_clone = peripheral.clone();
+    peripheral.on_discovery(
+        characteristic_uuid,
+        Box::new(move |characteristic| {
+            println!(
+                "I found the characteristic I was looking for: {:?}",
+                characteristic
+            );
+            let another_clone = peripheral_clone.clone();
+            task::spawn(async move {
+                loop {
+                    let value: Result<Vec<u8>, _> = another_clone.read(&characteristic);
+                    println!("I read the value: {:?}", value);
+                    task::sleep(std::time::Duration::from_secs(1)).await;
+                }
+            });
+        }),
+    );
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+fn discover_and_read_characteristic<P: 'static + Peripheral>(peripheral: P) {
+    let characteristic_uuid: UUID = "00:00".parse().unwrap();
+    let characteristics = peripheral.discover_characteristics().unwrap();
+    for c in characteristics {
+        if c.uuid == characteristic_uuid {
+            let peripheral_clone = peripheral.clone();
+            task::spawn(async move {
+                loop {
+                    let value: Result<Vec<u8>, _> = peripheral_clone.read(&c);
+                    println!("I read the value: {:?}", value);
+                    task::sleep(std::time::Duration::from_secs(1)).await;
+                }
+            });
+            break;
+        }
+    }
 }
 
 pub fn main() {
@@ -56,6 +100,9 @@ pub fn main() {
             }
             CentralEvent::DeviceConnected(bd_addr) => {
                 println!("DeviceConnected: {:?}", bd_addr);
+                if let Some(peripheral) = central.peripheral(bd_addr) {
+                    discover_and_read_characteristic(peripheral);
+                }
             }
             CentralEvent::DeviceDisconnected(bd_addr) => {
                 println!("DeviceDisconnected: {:?}", bd_addr);

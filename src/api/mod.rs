@@ -126,11 +126,17 @@ pub struct ValueNotification {
     pub value: Vec<u8>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CharacteristicsDiscovery {
+    pub characteristics_set: BTreeSet<Characteristic>,
+}
+
 pub type Callback<T> = Box<dyn Fn(Result<T>) + Send>;
 pub type CommandCallback = Callback<()>;
 pub type RequestCallback = Callback<Vec<u8>>;
 
 pub type NotificationHandler = Box<dyn FnMut(ValueNotification) + Send>;
+pub type DiscoveryHandler = Box<dyn FnMut(Characteristic) + Send>;
 
 /// A Bluetooth UUID. These can either be 2 bytes or 16 bytes long. UUIDs uniquely identify various
 /// objects in the Bluetooth universe.
@@ -309,8 +315,13 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     /// Terminates a connection to the device. This is a synchronous operation.
     fn disconnect(&self) -> Result<()>;
 
-    /// Discovers all characteristics for the device. This is a synchronous operation.
+    /// Discovers all characteristics for the device. This is an asynchronous operation.
     fn discover_characteristics(&self) -> Result<Vec<Characteristic>>;
+
+    /// Adds handler to fire after characteristic a characteristic is found.
+    /// This method should only be used after a connection has been established. Note
+    /// that the handler will be called in a common thread, so it should not block.
+    fn on_discovery(&self, characteristic_uuid: UUID, handler: DiscoveryHandler);
 
     /// Discovers characteristics within the specified range of handles. This is a synchronous
     /// operation.

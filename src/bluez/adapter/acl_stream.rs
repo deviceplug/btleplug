@@ -253,7 +253,7 @@ impl ACLStream {
                     .and_then(|h| self.get_uuid_by_handle(h))
                     .expect("How did we get here without a handle?");
 
-                util::invoke_handlers(&self.notification_handlers, &n);
+                util::invoke_notification_handlers(&self.notification_handlers, &n);
             }
             Err(err) => {
                 error!("failed to parse notification: {:?}", err);

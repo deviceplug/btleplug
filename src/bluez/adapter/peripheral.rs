@@ -14,8 +14,8 @@
 use crate::{
     api::{
         AddressType, BDAddr, Callback, Central, CharPropFlags, Characteristic, CommandCallback,
-        NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties, RequestCallback,
-        UUID, UUID::B16,
+        DiscoveryHandler, NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties,
+        RequestCallback, UUID, UUID::B16,
     },
     bluez::{
         adapter::acl_stream::ACLStream,
@@ -508,6 +508,11 @@ impl ApiPeripheral for Peripheral {
 
     fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
         self.discover_characteristics_in_range(0x0001, 0xFFFF)
+    }
+
+    fn on_discovery(&self, characteristic_uuid: UUID, handler: DiscoveryHandler) {
+        // Characteristic discovery is synchronous for the bluez implementation
+        unimplemented!();
     }
 
     fn discover_characteristics_in_range(

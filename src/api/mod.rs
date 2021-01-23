@@ -28,6 +28,7 @@ use std::{
     fmt::{self, Debug, Display, Formatter},
     str::FromStr,
 };
+use thiserror::Error;
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -86,11 +87,11 @@ impl Debug for BDAddr {
 
 type ParseBDAddrResult<T> = std::result::Result<T, ParseBDAddrError>;
 
-#[derive(Debug, Fail, Clone, PartialEq)]
+#[derive(Debug, Error, Clone, PartialEq)]
 pub enum ParseBDAddrError {
-    #[fail(display = "Bluetooth address has to be 6 bytes long")]
+    #[error("Bluetooth address has to be 6 bytes long")]
     IncorrectByteCount,
-    #[fail(display = "Malformed integer in Bluetooth address")]
+    #[error("Malformed integer in Bluetooth address")]
     InvalidInt,
 }
 
@@ -172,11 +173,11 @@ impl Debug for UUID {
 
 type ParseUUIDResult<T> = std::result::Result<T, ParseUUIDError>;
 
-#[derive(Debug, Fail, Clone, PartialEq)]
+#[derive(Debug, Error, Clone, PartialEq)]
 pub enum ParseUUIDError {
-    #[fail(display = "UUID has to be either 2 or 16 bytes long")]
+    #[error("UUID has to be either 2 or 16 bytes long")]
     IncorrectByteCount,
-    #[fail(display = "Malformed integer in UUID")]
+    #[error("Malformed integer in UUID")]
     InvalidInt,
 }
 

@@ -108,9 +108,7 @@ extern crate num;
 #[macro_use]
 extern crate bitflags;
 
-extern crate failure;
-#[macro_use]
-extern crate failure_derive;
+extern crate thiserror;
 
 use std::result;
 use std::time::Duration;
@@ -124,24 +122,24 @@ pub mod corebluetooth;
 #[cfg(target_os = "windows")]
 pub mod winrtble;
 
-#[derive(Debug, Fail, Clone)]
+#[derive(Debug, thiserror::Error, Clone)]
 pub enum Error {
-    #[fail(display = "Permission denied")]
+    #[error("Permission denied")]
     PermissionDenied,
 
-    #[fail(display = "Device not found")]
+    #[error("Device not found")]
     DeviceNotFound,
 
-    #[fail(display = "Not connected")]
+    #[error("Not connected")]
     NotConnected,
 
-    #[fail(display = "The operation is not supported: {}", _0)]
+    #[error("The operation is not supported: {}", _0)]
     NotSupported(String),
 
-    #[fail(display = "Timed out after {:?}", _0)]
+    #[error("Timed out after {:?}", _0)]
     TimedOut(Duration),
 
-    #[fail(display = "{}", _0)]
+    #[error("{}", _0)]
     Other(String),
 }
 

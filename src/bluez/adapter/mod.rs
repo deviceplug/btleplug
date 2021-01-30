@@ -306,7 +306,7 @@ impl Adapter {
     fn add_device(&self, path: &str, device: OrgBluezDevice1Properties) -> Result<()> {
         if let Some(address) = device.address() {
             let address: BDAddr = address.parse()?;
-            // Ignore devices that are blocked, else they'll make this lirbary a bit harder to manage
+            // Ignore devices that are blocked, else they'll make this library a bit harder to manage
             // TODO: Should we allow blocked devices to be "discovered"?
             if device.blocked().unwrap_or(false) {
                 info!("Skipping blocked device \"{:?}\"", address);

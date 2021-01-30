@@ -17,12 +17,13 @@ mod peripheral;
 
 use super::{
     bluez_dbus::adapter::OrgBluezAdapter1, bluez_dbus::device::OrgBluezDevice1Properties,
-    BLUEZ_DEST, BLUEZ_INTERFACE_CHARACTERISTIC, BLUEZ_INTERFACE_DEVICE, BLUEZ_INTERFACE_SERVICE,
+    bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1Properties, BLUEZ_DEST,
+    BLUEZ_INTERFACE_CHARACTERISTIC, BLUEZ_INTERFACE_DEVICE, BLUEZ_INTERFACE_SERVICE,
     DEFAULT_TIMEOUT,
 };
 use dashmap::DashMap;
 use dbus::{
-    arg::{RefArg, Variant},
+    arg::RefArg,
     blocking::{Proxy, SyncConnection},
     channel::Token,
     message::SignalArgs,
@@ -239,15 +240,25 @@ impl Adapter {
         adapter_objects
             .clone()
             .filter_map(|(p, i)| i.get(BLUEZ_INTERFACE_SERVICE).map(|a| (p, a)))
-            .map(|(path, attribute)| Ok(self.add_attribute(path.as_str().unwrap(), attribute)?))
+            .map(|(path, attribute)| {
+                Ok(self.add_attribute(
+                    path.as_str().unwrap(),
+                    OrgBluezGattCharacteristic1Properties(attribute),
+                )?)
+            })
             .collect::<Result<()>>()?;
 
         trace!("Fetching known peripheral characteristics");
-        // then, objects that implement org.bluez.GattService1 as they depend on devices being known first
+        // then, objects that implement org.bluez.GattCharacteristic1 as they depend on devices being known first
         adapter_objects
             .clone()
             .filter_map(|(p, i)| i.get(BLUEZ_INTERFACE_CHARACTERISTIC).map(|a| (p, a)))
-            .map(|(path, attribute)| Ok(self.add_attribute(path.as_str().unwrap(), attribute)?))
+            .map(|(path, attribute)| {
+                Ok(self.add_attribute(
+                    path.as_str().unwrap(),
+                    OrgBluezGattCharacteristic1Properties(attribute),
+                )?)
+            })
             .collect::<Result<()>>()?;
 
         // TODO: Descriptors are nested behind characteristics, and their UUID may be used more than once.
@@ -327,7 +338,7 @@ impl Adapter {
     fn add_attribute(
         &self,
         path: &str,
-        characteristic: &::std::collections::HashMap<String, Variant<Box<dyn RefArg + 'static>>>,
+        characteristic: OrgBluezGattCharacteristic1Properties,
     ) -> Result<()> {
         // Convert "/org/bluez/hciXX/dev_XX_XX_XX_XX_XX_XX/serviceXX" into "XX:XX:XX:XX:XX:XX"
         if let Some(device_id) = path.strip_prefix(format!("{}/dev_", self.path).as_str()) {
@@ -335,25 +346,18 @@ impl Adapter {
 
             if let Some(device) = self.manager.peripheral(device_id) {
                 trace!("Adding characteristic \"{}\" on \"{:?}\"", path, device_id);
-                let uuid: UUID = characteristic
-                    .get("UUID")
-                    .unwrap()
-                    .as_str()
-                    .unwrap()
-                    .parse()?;
-                let flags = if let Some(flags) = characteristic.get("Flags") {
-                    flags
-                        .0
-                        .as_iter()
-                        .unwrap()
-                        .map(|s| s.as_str().unwrap().parse::<CharPropFlags>())
-                        .fold(Ok(CharPropFlags::new()), |a, f| {
+                let uuid: UUID = characteristic.uuid().unwrap().parse()?;
+                let flags = if let Some(flags) = characteristic.flags() {
+                    flags.iter().map(|s| s.parse::<CharPropFlags>()).fold(
+                        Ok(CharPropFlags::new()),
+                        |a, f| {
                             if f.is_ok() {
                                 Ok(f.unwrap() | a.unwrap())
                             } else {
                                 f
                             }
-                        })?
+                        },
+                    )?
                 } else {
                     CharPropFlags::new()
                 };
@@ -425,9 +429,14 @@ impl Central<Peripheral> for Adapter {
                         {
                             adapter.add_device(&path, device).unwrap();
                         } else if let Some(service) = args.interfaces.get(BLUEZ_INTERFACE_SERVICE) {
-                            adapter.add_attribute(&path, service).unwrap();
+                            adapter
+                                .add_attribute(
+                                    &path,
+                                    OrgBluezGattCharacteristic1Properties(service),
+                                )
+                                .unwrap();
                         } else if let Some(characteristic) =
-                            args.interfaces.get(BLUEZ_INTERFACE_CHARACTERISTIC)
+                            OrgBluezGattCharacteristic1Properties::from_interfaces(&args.interfaces)
                         {
                             adapter.add_attribute(&path, characteristic).unwrap();
                         }

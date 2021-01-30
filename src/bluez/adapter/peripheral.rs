@@ -12,7 +12,7 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use dbus::{
-    arg::{RefArg, Variant},
+    arg::{cast, RefArg},
     blocking::{stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged, Proxy, SyncConnection},
     channel::Token,
     message::{Message, SignalArgs},
@@ -28,7 +28,8 @@ use crate::{
         RequestCallback, ValueNotification, UUID,
     },
     bluez::{
-        bluez_dbus::device::OrgBluezDevice1, AttributeType, Handle, BLUEZ_DEST, DEFAULT_TIMEOUT,
+        bluez_dbus::device::OrgBluezDevice1, bluez_dbus::device::OrgBluezDevice1Properties,
+        AttributeType, Handle, BLUEZ_DEST, DEFAULT_TIMEOUT,
     },
     Error, Result,
 };
@@ -129,7 +130,7 @@ impl Peripheral {
                     );
                 }
             } else {
-                self.update_properties(&args.changed_properties);
+                self.update_properties(OrgBluezDevice1Properties(&args.changed_properties));
                 if !args.invalidated_properties.is_empty() {
                     warn!(
                         "TODO: Got some properties to invalidate\n\t{:?}",
@@ -238,17 +239,13 @@ impl Peripheral {
         Ok(())
     }
 
-    pub fn update_properties(
-        &self,
-        args: &::std::collections::HashMap<String, Variant<Box<dyn RefArg + 'static>>>,
-    ) {
+    pub fn update_properties(&self, args: OrgBluezDevice1Properties) {
         trace!("Updating peripheral properties");
         let mut properties = self.properties.lock().unwrap();
 
         properties.discovery_count += 1;
 
-        if let Some(connected) = args.get("Connected") {
-            let connected = connected.0.as_u64().unwrap() > 0;
+        if let Some(connected) = args.connected() {
             debug!(
                 "Updating \"{}\" connected to \"{:?}\"",
                 self.address, connected
@@ -271,14 +268,12 @@ impl Peripheral {
             cvar.notify_all();
         }
 
-        if let Some(name) = args.get("Name") {
-            let name = name.as_str().map(|s| s.to_string());
+        if let Some(name) = args.name() {
             debug!("Updating \"{}\" local name to \"{:?}\"", self.address, name);
-            properties.local_name = name;
+            properties.local_name = Some(name.to_owned());
         }
 
-        if let Some(services_resolved) = args.get("ServicesResolved") {
-            let services_resolved = services_resolved.0.as_u64().unwrap() > 0;
+        if let Some(services_resolved) = args.services_resolved() {
             if services_resolved {
                 // Need to prase and figure out handle ranges for all discovered characteristics.
                 self.build_characteristic_ranges().unwrap();
@@ -303,43 +298,24 @@ impl Peripheral {
 
         // As of writing this: ManufacturerData returns a 'Variant({<manufacturer_id>: Variant([<manufacturer_data>])})'.
         // This Variant wrapped dictionary and array is difficult to navigate. So uh.. trust me, this works on my machine™.
-        if let Some(manufacturer_data) = args.get("ManufacturerData") {
+        if let Some(manufacturer_data) = args.manufacturer_data() {
             debug!(
                 "Updating \"{}\" manufacturer data \"{:?}\"",
                 self.address, manufacturer_data
             );
             let mut result = Vec::<u8>::new();
-            // dbus-rs doesn't really have a dictionary API... so need to iterate two at a time and make a key-value pair.
-            if let Some(mut iter) = manufacturer_data.0.as_iter() {
-                loop {
-                    if let (Some(id), Some(data)) = (iter.next(), iter.next()) {
-                        // This API is terrible.. why can't I just get an array out, why is it all wrapped in a Variant?
-                        let data: Vec<u8> = data
-                            .as_iter() // 🎶 The Variant is connected to the
-                            .unwrap() // Array type!
-                            .next() // The Array type is connected to the
-                            .unwrap() // Array of integers!
-                            .as_iter() // Lets convert the
-                            .unwrap() // integers to a
-                            .map(|b| b.as_u64().unwrap() as u8) // array of bytes...
-                            .collect(); // I got too lazy to make it rhyme... 🎶
-
-                        result.put_u16_le(id.as_u64().map(|v| v as u16).unwrap());
-                        result.extend(data);
-                    } else {
-                        break;
-                    }
+            for (manufacturer_id, data) in manufacturer_data {
+                if let Some(data) = cast::<Vec<u8>>(&data.0) {
+                    result.put_u16_le(*manufacturer_id);
+                    result.extend(data);
                 }
             }
             // 🎉
             properties.manufacturer_data = Some(result);
         }
 
-        if let Some(address_type) = args.get("AddressType") {
-            let address_type = address_type
-                .as_str()
-                .map(|address_type| AddressType::from_str(address_type).unwrap_or_default())
-                .unwrap_or_default();
+        if let Some(address_type) = args.address_type() {
+            let address_type = AddressType::from_str(address_type).unwrap_or_default();
 
             debug!(
                 "Updating \"{}\" address type \"{:?}\"",
@@ -349,10 +325,10 @@ impl Peripheral {
             properties.address_type = address_type;
         }
 
-        if let Some(rssi) = args.get("RSSI") {
-            let rssi = rssi.as_i64().map(|rssi| rssi as i8);
+        if let Some(rssi) = args.rssi() {
+            let rssi = rssi as i8;
             debug!("Updating \"{}\" RSSI \"{:?}\"", self.address, rssi);
-            properties.tx_power_level = rssi;
+            properties.tx_power_level = Some(rssi);
         }
 
         self.adapter.emit(CentralEvent::DeviceUpdated(self.address));

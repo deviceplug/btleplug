@@ -16,8 +16,9 @@
 mod peripheral;
 
 use super::{
-    bluez_dbus::adapter::OrgBluezAdapter1, BLUEZ_DEST, BLUEZ_INTERFACE_CHARACTERISTIC,
-    BLUEZ_INTERFACE_DEVICE, BLUEZ_INTERFACE_SERVICE, DEFAULT_TIMEOUT,
+    bluez_dbus::adapter::OrgBluezAdapter1, bluez_dbus::device::OrgBluezDevice1Properties,
+    BLUEZ_DEST, BLUEZ_INTERFACE_CHARACTERISTIC, BLUEZ_INTERFACE_DEVICE, BLUEZ_INTERFACE_SERVICE,
+    DEFAULT_TIMEOUT,
 };
 use dashmap::DashMap;
 use dbus::{
@@ -228,7 +229,9 @@ impl Adapter {
         adapter_objects
             .clone()
             .filter_map(|(p, i)| i.get(BLUEZ_INTERFACE_DEVICE).map(|d| (p, d)))
-            .map(|(path, device)| Ok(self.add_device(path.as_str().unwrap(), device)?))
+            .map(|(path, device)| {
+                Ok(self.add_device(path.as_str().unwrap(), OrgBluezDevice1Properties(device))?)
+            })
             .collect::<Result<()>>()?;
 
         trace!("Fetching known peripheral services");
@@ -284,46 +287,35 @@ impl Adapter {
     }
 
     /// Helper function to add a org.bluez.Device1 object to the adapter manager
-    fn add_device(
-        &self,
-        path: &str,
-        device: &::std::collections::HashMap<String, Variant<Box<dyn RefArg + 'static>>>,
-    ) -> Result<()> {
-        if let Some(address) = device.get("Address") {
-            if let Some(address) = address.as_str() {
-                let address: BDAddr = address.parse()?;
-                // Ignore devices that are blocked, else they'll make this lirbary a bit harder to manage
-                // TODO: Should we allow blocked devices to be "discovered"?
-                if device
-                    .get("Blocked")
-                    .map_or(false, |b| b.0.as_u64().map_or(false, |b| b > 0))
+    fn add_device(&self, path: &str, device: OrgBluezDevice1Properties) -> Result<()> {
+        if let Some(address) = device.address() {
+            let address: BDAddr = address.parse()?;
+            // Ignore devices that are blocked, else they'll make this lirbary a bit harder to manage
+            // TODO: Should we allow blocked devices to be "discovered"?
+            if device.blocked().unwrap_or(false) {
+                info!("Skipping blocked device \"{:?}\"", address);
+                return Ok(());
+            }
+            let peripheral = self.manager.peripheral(address).unwrap_or_else(|| {
+                Peripheral::new(self.manager.clone(), self.connection.clone(), path, address)
+            });
+            peripheral.update_properties(device);
+            if !self.manager.has_peripheral(&address) {
+                info!(
+                    "Adding discovered peripheral \"{}\" on \"{}\"",
+                    address, self.path
+                );
                 {
-                    info!("Skipping blocked device \"{:?}\"", address);
-                    return Ok(());
+                    let listener = self.listener.lock();
+                    peripheral.listen(&listener)?;
+                    // TODO: cal peripheral.stop_listening(...) when the peripheral is removed.
                 }
-                let peripheral = self.manager.peripheral(address).unwrap_or_else(|| {
-                    Peripheral::new(self.manager.clone(), self.connection.clone(), path, address)
-                });
-                peripheral.update_properties(&device);
-                if !self.manager.has_peripheral(&address) {
-                    info!(
-                        "Adding discovered peripheral \"{}\" on \"{}\"",
-                        address, self.path
-                    );
-                    {
-                        let listener = self.listener.lock();
-                        peripheral.listen(&listener)?;
-                        // TODO: cal peripheral.stop_listening(...) when the peripheral is removed.
-                    }
-                    self.manager.add_peripheral(address, peripheral);
-                    self.manager.emit(CentralEvent::DeviceDiscovered(address));
-                } else {
-                    info!("Updating peripheral \"{}\"", address);
-                    self.manager.update_peripheral(address, peripheral);
-                    self.manager.emit(CentralEvent::DeviceUpdated(address));
-                }
+                self.manager.add_peripheral(address, peripheral);
+                self.manager.emit(CentralEvent::DeviceDiscovered(address));
             } else {
-                error!("Could not parse Bluetooth address");
+                info!("Updating peripheral \"{}\"", address);
+                self.manager.update_peripheral(address, peripheral);
+                self.manager.emit(CentralEvent::DeviceUpdated(address));
             }
         } else {
             error!("Could not retrieve 'Address' from DBus 'InterfaceAdded' message with interface '{}'", BLUEZ_INTERFACE_DEVICE);
@@ -428,7 +420,9 @@ impl Central<Peripheral> for Adapter {
                         trace!("Received 'InterfacesAdded' signal");
                         let path = args.object;
 
-                        if let Some(device) = args.interfaces.get(BLUEZ_INTERFACE_DEVICE) {
+                        if let Some(device) =
+                            OrgBluezDevice1Properties::from_interfaces(&args.interfaces)
+                        {
                             adapter.add_device(&path, device).unwrap();
                         } else if let Some(service) = args.interfaces.get(BLUEZ_INTERFACE_SERVICE) {
                             adapter.add_attribute(&path, service).unwrap();

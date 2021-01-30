@@ -13,6 +13,7 @@ mod build {
         let options = dbus_codegen::GenOpts {
             methodtype: None,
             genericvariant: true,
+            propnewtype: true,
             ..dbus_codegen::GenOpts::default()
         };
 

@@ -17,9 +17,10 @@ mod peripheral;
 
 use super::{
     bluez_dbus::adapter::OrgBluezAdapter1, bluez_dbus::device::OrgBluezDevice1Properties,
-    bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1Properties, BLUEZ_DEST,
-    BLUEZ_INTERFACE_CHARACTERISTIC, BLUEZ_INTERFACE_DEVICE, BLUEZ_INTERFACE_SERVICE,
-    DEFAULT_TIMEOUT,
+    bluez_dbus::device::ORG_BLUEZ_DEVICE1_NAME,
+    bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1Properties,
+    bluez_dbus::gatt_characteristic::ORG_BLUEZ_GATT_CHARACTERISTIC1_NAME,
+    bluez_dbus::gatt_service::ORG_BLUEZ_GATT_SERVICE1_NAME, BLUEZ_DEST, DEFAULT_TIMEOUT,
 };
 use dashmap::DashMap;
 use dbus::{
@@ -172,13 +173,17 @@ impl Adapter {
                     trace!("Received 'InterfacesRemoved' signal");
                     let path = args.object;
 
-                    if args.interfaces.iter().any(|s| s == BLUEZ_INTERFACE_DEVICE) {
+                    if args.interfaces.iter().any(|s| s == ORG_BLUEZ_DEVICE1_NAME) {
                         adapter.remove_device(&path).unwrap();
-                    } else if args.interfaces.iter().any(|s| s == BLUEZ_INTERFACE_SERVICE) {
                     } else if args
                         .interfaces
                         .iter()
-                        .any(|s| s == BLUEZ_INTERFACE_CHARACTERISTIC)
+                        .any(|s| s == ORG_BLUEZ_GATT_SERVICE1_NAME)
+                    {
+                    } else if args
+                        .interfaces
+                        .iter()
+                        .any(|s| s == ORG_BLUEZ_GATT_CHARACTERISTIC1_NAME)
                     {
                     }
 
@@ -229,7 +234,7 @@ impl Adapter {
         // first, objects that implement org.bluez.Device1,
         adapter_objects
             .clone()
-            .filter_map(|(p, i)| i.get(BLUEZ_INTERFACE_DEVICE).map(|d| (p, d)))
+            .filter_map(|(p, i)| i.get(ORG_BLUEZ_DEVICE1_NAME).map(|d| (p, d)))
             .map(|(path, device)| {
                 Ok(self.add_device(path.as_str().unwrap(), OrgBluezDevice1Properties(device))?)
             })
@@ -239,7 +244,7 @@ impl Adapter {
         // then, objects that implement org.bluez.GattService1 as they depend on devices being known first
         adapter_objects
             .clone()
-            .filter_map(|(p, i)| i.get(BLUEZ_INTERFACE_SERVICE).map(|a| (p, a)))
+            .filter_map(|(p, i)| i.get(ORG_BLUEZ_GATT_SERVICE1_NAME).map(|a| (p, a)))
             .map(|(path, attribute)| {
                 Ok(self.add_attribute(
                     path.as_str().unwrap(),
@@ -252,7 +257,7 @@ impl Adapter {
         // then, objects that implement org.bluez.GattCharacteristic1 as they depend on devices being known first
         adapter_objects
             .clone()
-            .filter_map(|(p, i)| i.get(BLUEZ_INTERFACE_CHARACTERISTIC).map(|a| (p, a)))
+            .filter_map(|(p, i)| i.get(ORG_BLUEZ_GATT_CHARACTERISTIC1_NAME).map(|a| (p, a)))
             .map(|(path, attribute)| {
                 Ok(self.add_attribute(
                     path.as_str().unwrap(),
@@ -329,7 +334,7 @@ impl Adapter {
                 self.manager.emit(CentralEvent::DeviceUpdated(address));
             }
         } else {
-            error!("Could not retrieve 'Address' from DBus 'InterfaceAdded' message with interface '{}'", BLUEZ_INTERFACE_DEVICE);
+            error!("Could not retrieve 'Address' from DBus 'InterfaceAdded' message with interface '{}'", ORG_BLUEZ_DEVICE1_NAME);
         }
 
         Ok(())
@@ -428,7 +433,9 @@ impl Central<Peripheral> for Adapter {
                             OrgBluezDevice1Properties::from_interfaces(&args.interfaces)
                         {
                             adapter.add_device(&path, device).unwrap();
-                        } else if let Some(service) = args.interfaces.get(BLUEZ_INTERFACE_SERVICE) {
+                        } else if let Some(service) =
+                            args.interfaces.get(ORG_BLUEZ_GATT_SERVICE1_NAME)
+                        {
                             adapter
                                 .add_attribute(
                                     &path,

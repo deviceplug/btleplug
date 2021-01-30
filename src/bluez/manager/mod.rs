@@ -17,7 +17,7 @@ use dbus::blocking::{stdintf::org_freedesktop_dbus::ObjectManager, SyncConnectio
 
 use crate::{bluez::adapter::Adapter, Result};
 
-use super::{BLUEZ_DEST, BLUEZ_INTERFACE_ADAPTER, DEFAULT_TIMEOUT};
+use super::{bluez_dbus::adapter::ORG_BLUEZ_ADAPTER1_NAME, BLUEZ_DEST, DEFAULT_TIMEOUT};
 
 /// This struct is the interface into BlueZ. It can be used to list, manage, and connect to bluetooth
 /// adapters.
@@ -45,7 +45,7 @@ impl Manager {
         let adapters = bluez
             .get_managed_objects()?
             .into_iter()
-            .filter(|(_k, v)| v.keys().any(|i| i.starts_with(BLUEZ_INTERFACE_ADAPTER)))
+            .filter(|(_k, v)| v.keys().any(|i| i.starts_with(ORG_BLUEZ_ADAPTER1_NAME)))
             .map(|(path, _v)| Adapter::from_dbus_path(&path))
             .collect::<Result<Vec<_>>>()?;
 

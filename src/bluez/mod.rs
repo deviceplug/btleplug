@@ -17,10 +17,6 @@ pub mod manager;
 mod util;
 
 const BLUEZ_DEST: &str = "org.bluez";
-const BLUEZ_INTERFACE_ADAPTER: &str = "org.bluez.Adapter1";
-const BLUEZ_INTERFACE_DEVICE: &str = "org.bluez.Device1";
-const BLUEZ_INTERFACE_SERVICE: &str = "org.bluez.GattService1";
-const BLUEZ_INTERFACE_CHARACTERISTIC: &str = "org.bluez.GattCharacteristic1";
 
 const DEFAULT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 

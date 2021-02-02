@@ -39,11 +39,6 @@ dashmap = "4.0.2"
 futures = "0.3.12"
 parking_lot = "0.11.1"
 
-[dependencies.nom]
-# This is stuck at 4 until we update the bluez core
-version = "^4"
-features = ["verbose-errors"]
-
 [dependencies.winrt]
 # This is stuck at 0.6 until we update the UWP core
 version = "^0.6"

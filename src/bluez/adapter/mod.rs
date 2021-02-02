@@ -32,11 +32,7 @@ use std::{
     self,
     iter::Iterator,
     str::FromStr,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        mpsc::Receiver,
-        Arc, Mutex,
-    },
+    sync::{mpsc::Receiver, Arc, Condvar, Mutex},
     thread::{self, JoinHandle},
     time::Duration,
 };
@@ -109,7 +105,7 @@ pub struct Adapter {
     manager: AdapterManager<Peripheral>,
     match_tokens: Arc<DashMap<TokenType, Token>>,
 
-    should_stop: Arc<AtomicBool>,
+    should_stop: Arc<(Condvar, Mutex<bool>)>,
     thread_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
@@ -128,7 +124,7 @@ impl Adapter {
             path: path.to_string(),
             manager: AdapterManager::new(),
             match_tokens: Arc::new(DashMap::new()),
-            should_stop: Arc::new(AtomicBool::new(false)),
+            should_stop: Arc::new((Condvar::new(), Mutex::new(false))),
             thread_handle: Arc::new(Mutex::new(None)),
         };
 
@@ -152,12 +148,21 @@ impl Adapter {
         // Spawn a new thread to process incoming DBus messages.
         // This thread gets cleaned up in the 'impl Drop for Adapter'
         *self.thread_handle.lock().unwrap() = Some(thread::spawn(move || {
-            while !should_stop.load(Ordering::Relaxed) {
-                // listener is protected by a mutex. as calling `process()` when a proxy is awaiting a reply will cause the reply to be dropped...
+            let (cvar, should_stop) = &*should_stop;
+            loop {
+                let (should_stop, _timeout_result) = cvar
+                    .wait_timeout(should_stop.lock().unwrap(), Duration::from_millis(100))
+                    .unwrap();
+                if *should_stop {
+                    break;
+                }
+
+                // listener is protected by a mutex. as calling `process()` when any proxied request is awaiting a reply, will cause the reply to be dropped...
                 let lock = listener.lock();
+                // Important! The [parking_log::ReentrantMutex] promotes fairness, that is, eventually giving
+                //  other threads waiting on a lock to get the lock. Where as, Rust's std::sync::Mutex does not.
+                //  See: https://docs.rs/parking_lot/0.11.1/parking_lot/type.Mutex.html#fairness
                 while lock.process(Duration::from_secs(0)).unwrap() {}
-                drop(lock);
-                thread::sleep(Duration::from_millis(100));
             }
         }));
 
@@ -392,7 +397,11 @@ impl Drop for Adapter {
         let mut thread_handle = self.thread_handle.lock().unwrap();
         let handle = std::mem::replace(&mut *thread_handle, None);
         if let Some(handle) = handle {
-            self.should_stop.store(true, Ordering::Relaxed);
+            let (cvar, should_stop) = &*self.should_stop;
+            // mimicing a cancelation token though a ConVar<bool>
+            *should_stop.lock().unwrap() = true;
+            cvar.notify_all();
+
             handle.join().unwrap();
         }
     }

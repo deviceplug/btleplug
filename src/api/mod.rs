@@ -23,7 +23,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::Receiver;
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, HashMap},
     convert::TryFrom,
     fmt::{self, Debug, Display, Formatter},
     str::FromStr,
@@ -296,8 +296,9 @@ pub struct PeripheralProperties {
     pub local_name: Option<String>,
     /// The transmission power level for the device
     pub tx_power_level: Option<i8>,
-    /// Unstructured data set by the device manufacturer
-    pub manufacturer_data: Option<Vec<u8>>,
+    /// Advertisement data specific to the device manufacturer. The keys of this map are
+    /// 'manufacturer IDs', while the values are arbitrary data.
+    pub manufacturer_data: HashMap<u16, Vec<u8>>,
     /// Number of times we've seen advertising reports for this device
     pub discovery_count: u32,
     /// True if we've discovered the device before

@@ -108,8 +108,8 @@ where
         {
             current_peripheral.properties().local_name = peripheral.properties().local_name;
         }
-        if peripheral.properties().manufacturer_data.is_some()
-            && current_peripheral.properties().manufacturer_data.is_none()
+        if !peripheral.properties().manufacturer_data.is_empty()
+            && current_peripheral.properties().manufacturer_data.is_empty()
         {
             current_peripheral.properties().manufacturer_data =
                 peripheral.properties().manufacturer_data;

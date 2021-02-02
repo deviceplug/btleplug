@@ -26,7 +26,7 @@ use async_std::{
     task,
 };
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, HashMap},
     fmt::{self, Debug, Display, Formatter},
     iter::FromIterator,
     sync::{Arc, Mutex},
@@ -64,7 +64,7 @@ impl Peripheral {
             address_type: AddressType::Random,
             local_name: Some(local_name),
             tx_power_level: None,
-            manufacturer_data: None,
+            manufacturer_data: HashMap::new(),
             discovery_count: 1,
             has_scan_response: true,
         };

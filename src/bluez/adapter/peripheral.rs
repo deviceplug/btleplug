@@ -19,8 +19,6 @@ use dbus::{
     Path,
 };
 
-use bytes::BufMut;
-
 use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, CharPropFlags, Characteristic,
@@ -298,15 +296,17 @@ impl Peripheral {
                 "Updating \"{}\" manufacturer data \"{:?}\"",
                 self.address, manufacturer_data
             );
-            let mut result = Vec::<u8>::new();
-            for (manufacturer_id, data) in manufacturer_data {
-                if let Some(data) = cast::<Vec<u8>>(&data.0) {
-                    result.put_u16_le(*manufacturer_id);
-                    result.extend(data);
-                }
-            }
-            // 🎉
-            properties.manufacturer_data = Some(result);
+            properties.manufacturer_data = manufacturer_data
+                .into_iter()
+                .filter_map(|(&k, v)| {
+                    if let Some(v) = cast::<Vec<u8>>(&v.0) {
+                        Some((k, v.to_owned()))
+                    } else {
+                        warn!("Manufacturer data had wrong type: {:?}", &v.0);
+                        None
+                    }
+                })
+                .collect();
         }
 
         if let Some(address_type) = args.address_type() {

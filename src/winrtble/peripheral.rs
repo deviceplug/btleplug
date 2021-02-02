@@ -14,9 +14,8 @@
 use super::{bindings, ble::characteristic::BLECharacteristic, ble::device::BLEDevice, utils};
 use crate::{
     api::{
-        AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, CommandCallback,
-        NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties, RequestCallback,
-        ValueNotification, UUID,
+        AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, NotificationHandler,
+        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, UUID,
     },
     common::util,
     Error, Result,
@@ -239,17 +238,6 @@ impl ApiPeripheral for Peripheral {
         Ok(Vec::new())
     }
 
-    /// Sends a command (`write-without-response`) to the characteristic. Takes an optional callback
-    /// that will be notified in case of error or when the command has been successfully acked by the
-    /// device.
-    fn command_async(
-        &self,
-        _characteristic: &Characteristic,
-        _data: &[u8],
-        _handler: Option<CommandCallback>,
-    ) {
-    }
-
     /// Sends a command (write without response) to the characteristic. Synchronously returns a
     /// `Result` with an error set if the command was not accepted by the device.
     fn command(&self, _characteristic: &Characteristic, _data: &[u8]) -> Result<()> {
@@ -260,32 +248,10 @@ impl ApiPeripheral for Peripheral {
         }
     }
 
-    /// Sends a request (write) to the device. Takes an optional callback with either an error if
-    /// the request was not accepted or the response from the device.
-    fn request_async(
-        &self,
-        _characteristic: &Characteristic,
-        _data: &[u8],
-        _handler: Option<RequestCallback>,
-    ) {
-    }
-
     /// Sends a request (write) to the device. Synchronously returns either an error if the request
     /// was not accepted or the response from the device.
     fn request(&self, _characteristic: &Characteristic, _data: &[u8]) -> Result<Vec<u8>> {
         Ok(Vec::new())
-    }
-
-    /// Sends a read-by-type request to device for the range of handles covered by the
-    /// characteristic and for the specified declaration UUID. See
-    /// [here](https://www.bluetooth.com/specifications/gatt/declarations) for valid UUIDs.
-    /// Takes an optional callback that will be called with an error or the device response.
-    fn read_by_type_async(
-        &self,
-        _characteristic: &Characteristic,
-        _uuid: UUID,
-        _handler: Option<RequestCallback>,
-    ) {
     }
 
     /// Sends a read-by-type request to device for the range of handles covered by the
@@ -338,8 +304,6 @@ impl ApiPeripheral for Peripheral {
         let mut list = self.notification_handlers.lock().unwrap();
         list.push(handler);
     }
-
-    fn read_async(&self, _characteristic: &Characteristic, _handler: Option<RequestCallback>) {}
 
     fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
         if let Some(ble_characteristic) = self.ble_characteristics.get(&characteristic.uuid) {

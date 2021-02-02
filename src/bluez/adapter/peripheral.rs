@@ -30,6 +30,7 @@ use crate::{
     bluez::{
         bluez_dbus::device::OrgBluezDevice1, AttributeType, Handle, BLUEZ_DEST, DEFAULT_TIMEOUT,
     },
+    common::util::invoke_handlers,
     Error, Result,
 };
 
@@ -113,13 +114,7 @@ impl Peripheral {
                             .cloned()
                             .unwrap_or_default(),
                     };
-                    self.notification_handlers
-                        .lock()
-                        .unwrap()
-                        .iter_mut()
-                        .for_each(|h| {
-                            h(notification.clone());
-                        });
+                    invoke_handlers(&self.notification_handlers, &notification);
                 } else if args.changed_properties.contains_key("Notifying") {
                     // TODO: Keep track of subscribed and unsubscribed characteristics?
                 } else {

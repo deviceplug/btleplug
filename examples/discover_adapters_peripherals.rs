@@ -21,9 +21,9 @@ use btleplug::winrtble::{adapter::Adapter, manager::Manager};
 #[cfg(target_os = "linux")]
 fn print_adapter_info(adapter: &Adapter) {
     println!(
-        "connected adapter {:?} is UP: {:?}",
+        "connected adapter {:?} is powered: {:?}",
         adapter.name(),
-        adapter.is_up()
+        adapter.is_powered()
     );
 }
 

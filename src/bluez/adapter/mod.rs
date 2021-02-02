@@ -173,11 +173,13 @@ impl Adapter {
                     if args.interfaces.iter().any(|s| s == BLUEZ_INTERFACE_DEVICE) {
                         adapter.remove_device(&path).unwrap();
                     } else if args.interfaces.iter().any(|s| s == BLUEZ_INTERFACE_SERVICE) {
+                        // Ignore Services that get removed, the BTLEPlug API doesn't support that
                     } else if args
                         .interfaces
                         .iter()
                         .any(|s| s == BLUEZ_INTERFACE_CHARACTERISTIC)
                     {
+                        // Ignore Characteristics that get removed, the BTLEPlug API doesn't support that
                     }
 
                     return true;
@@ -191,8 +193,14 @@ impl Adapter {
             .with_proxy(BLUEZ_DEST, &self.path, DEFAULT_TIMEOUT)
     }
 
-    pub fn is_up(&self) -> Result<bool> {
+    /// Get the adapter's powered state. This also indicates the appropriate connectable state of the adapter.
+    pub fn is_powered(&self) -> Result<bool> {
         Ok(self.proxy().powered()?)
+    }
+
+    /// Switch an adapter on or off. This will also set the appropriate connectable state of the adapter.
+    pub fn set_powered(&self, powered: bool) -> Result<()> {
+        Ok(self.proxy().set_powered(powered)?)
     }
 
     pub fn name(&self) -> Result<String> {

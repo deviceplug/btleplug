@@ -344,9 +344,9 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     /// `Result` with an error set if the command was not accepted by the device.
     fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()>;
 
-    /// Sends a request (write) to the device. Synchronously returns either an error if the request
-    /// was not accepted or the response from the device.
-    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<Vec<u8>>;
+    /// Sends a request (write) to the characteristic. Synchronously returns a `Result` with an
+    /// error set if the request was not accepted by the device.
+    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()>;
 
     /// Sends a request (read) to the device. Synchronously returns either an error if the request
     /// was not accepted or the response from the device.

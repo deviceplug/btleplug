@@ -476,10 +476,8 @@ impl ApiPeripheral for Peripheral {
             .ok_or(Error::NotSupported("write_without_response".to_string()))??)
     }
 
-    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<Vec<u8>> {
-        self.command(characteristic, data)?;
-
-        self.read(characteristic)
+    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
+        self.command(characteristic, data)
     }
 
     fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {

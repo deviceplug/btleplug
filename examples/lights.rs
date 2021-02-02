@@ -1,16 +1,13 @@
 extern crate btleplug;
 extern crate rand;
 
+use btleplug::api::{Central, Peripheral, UUID};
 #[cfg(target_os = "linux")]
 use btleplug::bluez::manager::Manager;
 #[cfg(target_os = "macos")]
 use btleplug::corebluetooth::manager::Manager;
 #[cfg(target_os = "windows")]
 use btleplug::winrtble::manager::Manager;
-use btleplug::{
-    api::{Central, Peripheral, UUID},
-    Error, Result,
-};
 use rand::{thread_rng, Rng};
 use std::thread;
 use std::time::Duration;

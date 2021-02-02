@@ -24,8 +24,8 @@ use bytes::BufMut;
 use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, CharPropFlags, Characteristic,
-        CommandCallback, NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties,
-        RequestCallback, ValueNotification, UUID,
+        NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification,
+        UUID,
     },
     bluez::{
         bluez_dbus::device::OrgBluezDevice1, bluez_dbus::device::OrgBluezDevice1Properties,
@@ -468,15 +468,6 @@ impl ApiPeripheral for Peripheral {
             .collect())
     }
 
-    fn command_async(
-        &self,
-        _characteristic: &Characteristic,
-        _data: &[u8],
-        _handler: Option<CommandCallback>,
-    ) {
-        unimplemented!()
-    }
-
     fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
         use crate::bluez::bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1;
         Ok(self
@@ -485,23 +476,10 @@ impl ApiPeripheral for Peripheral {
             .ok_or(Error::NotSupported("write_without_response".to_string()))??)
     }
 
-    fn request_async(
-        &self,
-        _characteristic: &Characteristic,
-        _data: &[u8],
-        _handler: Option<RequestCallback>,
-    ) {
-        unimplemented!()
-    }
-
     fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<Vec<u8>> {
         self.command(characteristic, data)?;
 
         self.read(characteristic)
-    }
-
-    fn read_async(&self, _characteristic: &Characteristic, _handler: Option<RequestCallback>) {
-        unimplemented!()
     }
 
     fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
@@ -510,15 +488,6 @@ impl ApiPeripheral for Peripheral {
             .proxy_for(&characteristic)
             .map(|p| p.read_value(HashMap::new()))
             .ok_or(Error::NotSupported("read".to_string()))??)
-    }
-
-    fn read_by_type_async(
-        &self,
-        _characteristic: &Characteristic,
-        _uuid: UUID,
-        _handler: Option<RequestCallback>,
-    ) {
-        unimplemented!()
     }
 
     // Is this looking for a characteristic with a descriptor? or a service with a characteristic?

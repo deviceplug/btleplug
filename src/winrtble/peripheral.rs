@@ -78,20 +78,18 @@ impl Peripheral {
             }
         }
         if let Ok(manufacturer_data) = advertisement.manufacturer_data() {
-            let mut data = Vec::new();
-            for i in &manufacturer_data {
-                let d = i;
-                let company_id = d.company_id().unwrap();
-                let buffer = d.data().unwrap();
-                let reader = DataReader::from_buffer(&buffer).unwrap();
-                let len = reader.unconsumed_buffer_length().unwrap() as usize;
-                let mut input = vec![0u8; len + 2];
-                reader.read_bytes(&mut input[2..(len + 2)]).unwrap();
-                input[0] = company_id as u8;
-                input[1] = (company_id >> 8) as u8;
-                data.append(&mut input);
-            }
-            properties.manufacturer_data = Some(data)
+            properties.manufacturer_data = manufacturer_data
+                .into_iter()
+                .map(|d| {
+                    let company_id = d.company_id().unwrap();
+                    let buffer = d.data().unwrap();
+                    let reader = DataReader::from_buffer(&buffer).unwrap();
+                    let len = reader.unconsumed_buffer_length().unwrap() as usize;
+                    let mut data = vec![0u8; len];
+                    reader.read_bytes(&mut data).unwrap();
+                    (company_id, data)
+                })
+                .collect();
         }
 
         // windows does not provide the address type in the advertisement event args but only in the device object

@@ -237,14 +237,7 @@ impl ApiPeripheral for Peripheral {
 
     /// Sends a request (write) to the device. Synchronously returns either an error if the request
     /// was not accepted or the response from the device.
-    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<Vec<u8>> {
-        // Not sure what to return, since a write will not respond with the data. So, erm, let's
-        // just return what was passed in.
-        let mut result = Vec::<u8>::new();
-        for i in 0..data.len() {
-            result.push(data[i]);
-        }
-
+    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
         task::block_on(async {
             let fut = CoreBluetoothReplyFuture::default();
             self.message_sender
@@ -262,7 +255,7 @@ impl ApiPeripheral for Peripheral {
                 }
             }
         });
-        Ok(result)
+        Ok(())
     }
 
     /// Sends a read-by-type request to device for the range of handles covered by the

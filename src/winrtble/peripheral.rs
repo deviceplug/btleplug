@@ -246,7 +246,7 @@ impl ApiPeripheral for Peripheral {
         if let Some(ble_characteristic) = self.ble_characteristics.get(&_characteristic.uuid) {
             ble_characteristic.write_value(_data)
         } else {
-            Err(Error::NotSupported("read_by_type".into()))
+            Err(Error::NotSupported("command".into()))
         }
     }
 

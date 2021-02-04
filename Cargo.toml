@@ -37,6 +37,7 @@ serde = { version = "1.0.119", features = ["derive"], default-features = false, 
 dashmap = "4.0.2"
 futures = "0.3.12"
 parking_lot = "0.11.1"
+displaydoc = "0.1.7"
 
 [dependencies.winrt]
 version = "0.7"

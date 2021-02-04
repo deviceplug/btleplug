@@ -49,6 +49,8 @@ use crate::{
 };
 
 use crate::bluez::adapter::peripheral::Peripheral;
+use displaydoc::Display;
+use thiserror::Error;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum TokenType {
@@ -58,9 +60,9 @@ enum TokenType {
 
 type ParseCharPropFlagsResult<T> = std::result::Result<T, ParseCharPropFlagsError>;
 
-#[derive(Debug, Fail, Clone, PartialEq)]
+#[derive(Debug, Error, Display, Clone, PartialEq)]
 pub enum ParseCharPropFlagsError {
-    #[fail(display = "BlueZ characteristic flag \"{}\" is unknown", _0)]
+    /// BlueZ characteristic flag "{0}" is unknown
     UnknownFlag(String),
 }
 

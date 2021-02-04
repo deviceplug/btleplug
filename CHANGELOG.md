@@ -1,3 +1,17 @@
+# 0.6.0 (2021-02-04)
+
+## Features
+
+- Complete rewrite of Bluez core
+  - Now uses DBus API instead of raw socket access
+- Windows support moved to WinRT library
+- Move from failure to thiserror for error handling
+  - failure was deprecated a while ago
+
+## Bugfixes
+
+- Windows UWP no longer panics on scan when radio not connected.
+
 # 0.5.5 (2021-01-18)
 
 ## Bugfixes

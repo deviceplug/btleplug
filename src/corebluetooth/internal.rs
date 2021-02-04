@@ -19,7 +19,7 @@ use async_std::{
     channel::{self, Receiver, Sender},
     task,
 };
-use futures::{FutureExt, StreamExt, select};
+use futures::{select, FutureExt, StreamExt};
 use objc::{
     rc::StrongPtr,
     runtime::{Object, YES},
@@ -473,10 +473,10 @@ impl CoreBluetoothInternal {
             async { InternalLoopMessage::Delegate(delegate_receiver_clone.next().await.unwrap()) };
         */
         let mut adapter_receiver_clone = self.message_receiver.clone();
-/*
-        let adapter_future =
-            async { InternalLoopMessage::Adapter(adapter_receiver_clone.next().await.unwrap()) };
-*/
+        /*
+                let adapter_future =
+                    async { InternalLoopMessage::Adapter(adapter_receiver_clone.next().await.unwrap()) };
+        */
         let msg = task::block_on(async {
             select! {
                 delegate_msg = delegate_receiver_clone.next().fuse() => {

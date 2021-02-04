@@ -61,17 +61,17 @@ pub fn to_guid(uuid: &UUID) -> Guid {
     println!("{}", uuid_s);
     match uuid {
         UUID::B128(a) => {
-            let mut data4:[u8; 8] = [0; 8];
+            let mut data4: [u8; 8] = [0; 8];
             for i in 0..8 {
                 data4[7 - i] = a[i];
             }
-            let mut data3:u16 = u16::from(a[9]) << 8;
+            let mut data3: u16 = u16::from(a[9]) << 8;
             data3 |= u16::from(a[8]);
 
-            let mut data2:u16 = u16::from(a[11]) << 8;
+            let mut data2: u16 = u16::from(a[11]) << 8;
             data2 |= u16::from(a[10]);
 
-            let mut data1:u32 = u32::from(a[15]) << 24;
+            let mut data1: u32 = u32::from(a[15]) << 24;
             data1 |= u32::from(a[14]) << 16;
             data1 |= u32::from(a[13]) << 8;
             data1 |= u32::from(a[12]);

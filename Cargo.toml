@@ -22,25 +22,23 @@ path = "src/lib.rs"
 
 [dependencies]
 static_assertions = "1.1.0"
-libc = "0.2.82"
+libc = "0.2.85"
 nix = "0.19.1"
 bytes = "1.0.1"
 num = "0.3.1"
-log = "0.4.13"
+log = "0.4.14"
 enum_primitive = "0.1.1"
 bitflags = "1.2.1"
 thiserror = "1.0.23"
-backtrace = "0.3.55"
+backtrace = "0.3.56"
 async-std = "1.9.0"
 uuid = "0.8.2"
-serde = { version = "1.0.119", features = ["derive"], default-features = false, optional = true }
+serde = { version = "1.0.123", features = ["derive"], default-features = false, optional = true }
 dashmap = "4.0.2"
 futures = "0.3.12"
 parking_lot = "0.11.1"
 displaydoc = "0.1.7"
-
-[dependencies.winrt]
-version = "0.7"
+winrt = "0.7.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = "0.9.1"
@@ -55,7 +53,7 @@ cocoa = "0.24.0"
 
 [dev-dependencies]
 simple_logger = "1.11.0"
-rand = "0.8.2"
+rand = "0.8.3"
 
 # The build script uses `dbus-codegen` to generate BlueZ's DBus traits for use in the linux library.
 # The `build.rs` file does nothing on other platforms.

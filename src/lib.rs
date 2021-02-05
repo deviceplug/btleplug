@@ -80,6 +80,7 @@ extern crate libc;
 #[macro_use]
 extern crate log;
 
+#[cfg(target_os = "linux")]
 #[macro_use]
 extern crate static_assertions;
 

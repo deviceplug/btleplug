@@ -14,7 +14,7 @@ use super::{
 use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, NotificationHandler,
-        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, UUID,
+        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, WriteKind, UUID,
     },
     common::util,
     Error, Result,
@@ -203,10 +203,9 @@ impl ApiPeripheral for Peripheral {
         Ok(v)
     }
 
-    /// Sends a command (write without response) to the characteristic. Synchronously returns a
-    /// `Result` with an error set if the command was not accepted by the device.
-    fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
-        info!("Trying to command!");
+    /// Write some data to the characteristic. Returns an error if the write couldn't be send or (in
+    /// the case of a write-with-response) if the device returns an error.
+    fn write(&self, characteristic: &Characteristic, data: &[u8], kind: WriteKind) -> Result<()> {
         task::block_on(async {
             let fut = CoreBluetoothReplyFuture::default();
             self.message_sender
@@ -214,35 +213,13 @@ impl ApiPeripheral for Peripheral {
                     self.uuid,
                     get_apple_uuid(characteristic.uuid),
                     Vec::from(data),
+                    kind,
                     fut.get_state_clone(),
                 ))
                 .await?;
             match fut.await {
                 CoreBluetoothReply::Ok => {}
-                _ => panic!("Didn't subscribe!"),
-            }
-            Ok(())
-        })
-    }
-
-    /// Sends a request (write) to the device. Synchronously returns either an error if the request
-    /// was not accepted or the response from the device.
-    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
-        task::block_on(async {
-            let fut = CoreBluetoothReplyFuture::default();
-            self.message_sender
-                .send(CoreBluetoothMessage::WriteValueWithResponse(
-                    self.uuid,
-                    get_apple_uuid(characteristic.uuid),
-                    Vec::from(data),
-                    fut.get_state_clone(),
-                ))
-                .await?;
-            match fut.await {
-                CoreBluetoothReply::Ok => {}
-                _ => {
-                    panic!("Shouldn't get anything but read result!");
-                }
+                reply => panic!("Unexpected reply: {:?}", reply),
             }
             Ok(())
         })

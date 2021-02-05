@@ -15,7 +15,7 @@ use super::{bindings, ble::characteristic::BLECharacteristic, ble::device::BLEDe
 use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, NotificationHandler,
-        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, UUID,
+        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, WriteKind, UUID,
     },
     common::util,
     Error, Result,
@@ -228,20 +228,15 @@ impl ApiPeripheral for Peripheral {
         Err(Error::NotConnected)
     }
 
-    /// Sends a command (write without response) to the characteristic. Synchronously returns a
-    /// `Result` with an error set if the command was not accepted by the device.
-    fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
+    /// Write some data to the characteristic. Returns an error if the write couldn't be send or (in
+    /// the case of a write-with-response) if the device returns an error.
+    fn write(&self, characteristic: &Characteristic, data: &[u8], kind: WriteKind) -> Result<()> {
+        // TODO: Use the WriteKind.
         if let Some(ble_characteristic) = self.ble_characteristics.get(&characteristic.uuid) {
             ble_characteristic.write_value(data)
         } else {
-            Err(Error::NotSupported("command".into()))
+            Err(Error::NotSupported("write".into()))
         }
-    }
-
-    /// Sends a request (write) to the device.  Synchronously returns a `Result` with an error set
-    /// if the request was not accepted by the device.
-    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
-        self.command(characteristic, data)
     }
 
     /// Sends a read-by-type request to device for the range of handles covered by the

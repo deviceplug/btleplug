@@ -1,5 +1,10 @@
 # 0.6.0 (2021-02-04)
 
+## Breaking API Changes
+
+- Removed many _async methods that were unimplemented
+- Stopped returning write values when not needed.
+
 ## Features
 
 - Complete rewrite of Bluez core

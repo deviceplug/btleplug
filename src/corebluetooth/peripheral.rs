@@ -156,7 +156,7 @@ impl ApiPeripheral for Peripheral {
     }
 
     /// The set of characteristics we've discovered for this device. This will be empty until
-    /// `discover_characteristics` or `discover_characteristics_in_range` is called.
+    /// `discover_characteristics` is called.
     fn characteristics(&self) -> BTreeSet<Characteristic> {
         self.characteristics.lock().unwrap().clone()
     }
@@ -201,16 +201,6 @@ impl ApiPeripheral for Peripheral {
         let chrs = self.characteristics.lock().unwrap().clone();
         let v = Vec::from_iter(chrs.into_iter());
         Ok(v)
-    }
-
-    /// Discovers characteristics within the specified range of handles. This is a synchronous
-    /// operation.
-    fn discover_characteristics_in_range(
-        &self,
-        _start: u16,
-        _end: u16,
-    ) -> Result<Vec<Characteristic>> {
-        panic!("NOT IMPLEMENTED");
     }
 
     /// Sends a command (write without response) to the characteristic. Synchronously returns a

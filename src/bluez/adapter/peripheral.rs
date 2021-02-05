@@ -12,7 +12,7 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use dbus::{
-    arg::{cast, RefArg},
+    arg::{cast, PropMap, RefArg, Variant},
     blocking::{stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged, Proxy, SyncConnection},
     channel::Token,
     message::{Message, SignalArgs},
@@ -23,11 +23,12 @@ use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, CharPropFlags, Characteristic,
         NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification,
-        UUID,
+        WriteKind, UUID,
     },
     bluez::{
         bluez_dbus::device::OrgBluezDevice1, bluez_dbus::device::OrgBluezDevice1Properties,
-        AttributeType, Handle, BLUEZ_DEST, DEFAULT_TIMEOUT,
+        bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1, AttributeType, Handle,
+        BLUEZ_DEST, DEFAULT_TIMEOUT,
     },
     common::util::invoke_handlers,
     Error, Result,
@@ -459,20 +460,25 @@ impl ApiPeripheral for Peripheral {
             .collect())
     }
 
-    fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
-        use crate::bluez::bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1;
+    fn write(&self, characteristic: &Characteristic, data: &[u8], kind: WriteKind) -> Result<()> {
+        let mut options: PropMap = HashMap::new();
+        options.insert(
+            "type".to_string(),
+            Variant(Box::new(
+                match kind {
+                    WriteKind::WithResponse => "request",
+                    WriteKind::WithoutResponse => "command",
+                }
+                .to_string(),
+            )),
+        );
         Ok(self
             .proxy_for(&characteristic)
-            .map(|p| p.write_value(Vec::from(data), HashMap::new()))
-            .ok_or(Error::NotSupported("write_without_response".to_string()))??)
-    }
-
-    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
-        self.command(characteristic, data)
+            .map(|p| p.write_value(Vec::from(data), options))
+            .ok_or(Error::NotSupported("write".to_string()))??)
     }
 
     fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
-        use crate::bluez::bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1;
         Ok(self
             .proxy_for(&characteristic)
             .map(|p| p.read_value(HashMap::new()))
@@ -504,7 +510,6 @@ impl ApiPeripheral for Peripheral {
     }
 
     fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
-        use crate::bluez::bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1;
         Ok(self
             .proxy_for(characteristic)
             .ok_or(Error::NotSupported("subscribe".to_string()))?
@@ -512,7 +517,6 @@ impl ApiPeripheral for Peripheral {
     }
 
     fn unsubscribe(&self, _characteristic: &Characteristic) -> Result<()> {
-        use crate::bluez::bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1;
         Ok(self
             .proxy_for(_characteristic)
             .ok_or(Error::NotSupported("unsubscribe".to_string()))?

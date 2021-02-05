@@ -303,6 +303,16 @@ pub struct PeripheralProperties {
     pub has_scan_response: bool,
 }
 
+/// The type of write operation to use.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WriteKind {
+    /// A write operation where the device is expected to respond with a confirmation or error. Also
+    /// known as a request.
+    WithResponse,
+    /// A write-without-response, also known as a command.
+    WithoutResponse,
+}
+
 /// Peripheral is the device that you would like to communicate with (the "server" of BLE). This
 /// struct contains both the current state of the device (its properties, characteristics, etc.)
 /// as well as functions for communication.
@@ -332,13 +342,9 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     /// Discovers all characteristics for the device. This is a synchronous operation.
     fn discover_characteristics(&self) -> Result<Vec<Characteristic>>;
 
-    /// Sends a command (write without response) to the characteristic. Synchronously returns a
-    /// `Result` with an error set if the command was not accepted by the device.
-    fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()>;
-
-    /// Sends a request (write) to the characteristic. Synchronously returns a `Result` with an
-    /// error set if the request was not accepted by the device.
-    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()>;
+    /// Write some data to the characteristic. Returns an error if the write couldn't be send or (in
+    /// the case of a write-with-response) if the device returns an error.
+    fn write(&self, characteristic: &Characteristic, data: &[u8], kind: WriteKind) -> Result<()>;
 
     /// Sends a request (read) to the device. Synchronously returns either an error if the request
     /// was not accepted or the response from the device.

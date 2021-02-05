@@ -14,7 +14,7 @@ use super::{
     future::{BtlePlugFuture, BtlePlugFutureStateShared},
     utils::{CoreBluetoothUtils, NSStringUtils},
 };
-use crate::api::{CharPropFlags, Characteristic, UUID};
+use crate::api::{CharPropFlags, Characteristic, WriteKind, UUID};
 use async_std::{
     channel::{self, Receiver, Sender},
     task,
@@ -104,7 +104,7 @@ impl CBCharacteristic {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum CoreBluetoothReply {
     ReadResult(Vec<u8>),
     Connected(BTreeSet<Characteristic>),
@@ -243,10 +243,14 @@ pub enum CoreBluetoothMessage {
     DisconnectDevice(Uuid, CoreBluetoothReplyStateShared),
     // device uuid, characteristic uuid, future
     ReadValue(Uuid, Uuid, CoreBluetoothReplyStateShared),
-    // device uuid, characteristic uuid, data, future
-    WriteValue(Uuid, Uuid, Vec<u8>, CoreBluetoothReplyStateShared),
-    // device uuid, characteristic uuid, data, future
-    WriteValueWithResponse(Uuid, Uuid, Vec<u8>, CoreBluetoothReplyStateShared),
+    // device uuid, characteristic uuid, data, kind, future
+    WriteValue(
+        Uuid,
+        Uuid,
+        Vec<u8>,
+        WriteKind,
+        CoreBluetoothReplyStateShared,
+    ),
     // device uuid, characteristic uuid, future
     Subscribe(Uuid, Uuid, CoreBluetoothReplyStateShared),
     // device uuid, characteristic uuid, future
@@ -444,17 +448,20 @@ impl CoreBluetoothInternal {
         peripheral_uuid: Uuid,
         characteristic_uuid: Uuid,
         data: Vec<u8>,
+        kind: WriteKind,
         fut: CoreBluetoothReplyStateShared,
-        with_response: bool,
     ) {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
-                info!("Writing value! With response: {}", with_response);
+                info!("Writing value! With kind {:?}", kind);
                 cb::peripheral_writevalue_forcharacteristic(
                     *p.peripheral,
                     ns::data(data.as_ptr(), data.len() as c_uint),
                     *c.characteristic,
-                    if with_response { 1 } else { 0 },
+                    match kind {
+                        WriteKind::WithResponse => 0,
+                        WriteKind::WithoutResponse => 1,
+                    },
                 );
                 c.write_future_state.push_front(fut);
             }
@@ -596,15 +603,13 @@ impl CoreBluetoothInternal {
                     CoreBluetoothMessage::ReadValue(peripheral_uuid, char_uuid, fut) => {
                         self.read_value(peripheral_uuid, char_uuid, fut)
                     }
-                    CoreBluetoothMessage::WriteValue(peripheral_uuid, char_uuid, data, fut) => {
-                        self.write_value(peripheral_uuid, char_uuid, data, fut, false)
-                    }
-                    CoreBluetoothMessage::WriteValueWithResponse(
+                    CoreBluetoothMessage::WriteValue(
                         peripheral_uuid,
                         char_uuid,
                         data,
+                        kind,
                         fut,
-                    ) => self.write_value(peripheral_uuid, char_uuid, data, fut, true),
+                    ) => self.write_value(peripheral_uuid, char_uuid, data, kind, fut),
                     CoreBluetoothMessage::Subscribe(peripheral_uuid, char_uuid, fut) => {
                         self.subscribe(peripheral_uuid, char_uuid, fut)
                     }

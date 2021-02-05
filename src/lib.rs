@@ -32,7 +32,7 @@
 //! use btleplug::winrtble::{adapter::Adapter, manager::Manager};
 //! #[cfg(target_os = "macos")]
 //! use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
-//! use btleplug::api::{UUID, Central, Peripheral};
+//! use btleplug::api::{Central, Peripheral, WriteKind, UUID};
 //!
 //! // adapter retreival works differently depending on your platform right now.
 //! // API needs to be aligned.
@@ -69,7 +69,7 @@
 //!     let mut rng = thread_rng();
 //!     for _ in 0..20 {
 //!         let color_cmd = vec![0x56, rng.gen(), rng.gen(), rng.gen(), 0x00, 0xF0, 0xAA];
-//!         light.command(&cmd_char, &color_cmd).unwrap();
+//!         light.write(&cmd_char, &color_cmd, WriteKind::WithoutResponse).unwrap();
 //!         thread::sleep(Duration::from_millis(200));
 //!     }
 //! }

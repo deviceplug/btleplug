@@ -315,7 +315,7 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     fn properties(&self) -> PeripheralProperties;
 
     /// The set of characteristics we've discovered for this device. This will be empty until
-    /// `discover_characteristics` or `discover_characteristics_in_range` is called.
+    /// `discover_characteristics` is called.
     fn characteristics(&self) -> BTreeSet<Characteristic>;
 
     /// Returns true iff we are currently connected to the device.
@@ -331,14 +331,6 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
 
     /// Discovers all characteristics for the device. This is a synchronous operation.
     fn discover_characteristics(&self) -> Result<Vec<Characteristic>>;
-
-    /// Discovers characteristics within the specified range of handles. This is a synchronous
-    /// operation.
-    fn discover_characteristics_in_range(
-        &self,
-        start: u16,
-        end: u16,
-    ) -> Result<Vec<Characteristic>>;
 
     /// Sends a command (write without response) to the characteristic. Synchronously returns a
     /// `Result` with an error set if the command was not accepted by the device.

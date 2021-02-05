@@ -438,14 +438,6 @@ impl ApiPeripheral for Peripheral {
     }
 
     fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
-        self.discover_characteristics_in_range(0x0001, 0xFFFF)
-    }
-
-    fn discover_characteristics_in_range(
-        &self,
-        _start: u16,
-        _end: u16,
-    ) -> Result<Vec<Characteristic>> {
         let (ref lock, ref cvar) = *self.state;
         trace!("Waiting for all services to be resolved");
         let _guard = cvar
@@ -464,7 +456,6 @@ impl ApiPeripheral for Peripheral {
             .unwrap()
             .clone()
             .into_iter()
-            .filter(|c| c.value_handle >= _start && c.value_handle <= _end)
             .collect())
     }
 

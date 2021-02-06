@@ -11,7 +11,7 @@
 use super::{
     central_delegate::{CentralDelegate, CentralDelegateEvent},
     framework::{cb, ns},
-    future::{BtlePlugFuture, BtlePlugFutureState, BtlePlugFutureStateShared},
+    future::{BtlePlugFuture, BtlePlugFutureStateShared},
     utils::{CoreBluetoothUtils, NSStringUtils},
 };
 use crate::api::{CharPropFlags, Characteristic, UUID};
@@ -118,7 +118,6 @@ pub enum CBPeripheralEvent {
     Notification(Uuid, Vec<u8>),
 }
 
-pub type CoreBluetoothReplyState = BtlePlugFutureState<CoreBluetoothReply>;
 pub type CoreBluetoothReplyStateShared = BtlePlugFutureStateShared<CoreBluetoothReply>;
 pub type CoreBluetoothReplyFuture = BtlePlugFuture<CoreBluetoothReply>;
 
@@ -204,10 +203,6 @@ impl CBPeripheral {
                 .set_reply(CoreBluetoothReply::Connected(char_set));
         }
     }
-
-    // Allows the manager to send an event in our place, which will let us line
-    // up with peripheral event expectations.
-    pub(in super::internal) fn send_event() {}
 }
 
 // All of CoreBluetooth is basically async. It's all just waiting on delegate
@@ -261,7 +256,6 @@ pub enum CoreBluetoothMessage {
 #[derive(Debug)]
 pub enum CoreBluetoothEvent {
     AdapterConnected,
-    AdapterError,
     // name, identifier, event receiver, message sender
     DeviceDiscovered(Uuid, Option<String>, Receiver<CBPeripheralEvent>),
     DeviceUpdated(Uuid, String),
@@ -275,8 +269,6 @@ pub enum CoreBluetoothEvent {
 enum InternalLoopMessage {
     Delegate(CentralDelegateEvent),
     Adapter(CoreBluetoothMessage),
-    // If the delegate or adapter go away, we're done.
-    LoopFinished,
 }
 
 impl CoreBluetoothInternal {
@@ -588,7 +580,6 @@ impl CoreBluetoothInternal {
                         peripheral_id,
                         characteristic_id,
                     ) => self.on_characteristic_written(peripheral_id, characteristic_id),
-                    _ => info!("Unknown type!"),
                 };
                 true
             }
@@ -620,11 +611,9 @@ impl CoreBluetoothInternal {
                     CoreBluetoothMessage::Unsubscribe(peripheral_uuid, char_uuid, fut) => {
                         self.unsubscribe(peripheral_uuid, char_uuid, fut)
                     }
-                    _ => {}
                 };
                 true
             }
-            LoopFinished => false,
         }
     }
 

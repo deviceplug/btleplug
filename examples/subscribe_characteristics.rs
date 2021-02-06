@@ -20,7 +20,7 @@ use btleplug::api::{UUID, ValueNotification, Central, CentralEvent, Peripheral, 
 const PERIPHERAL_NAME_MATCH_FILTER: &'static str = "Neuro";
 // string to match with BLE name
 const SUBSCRIBE_TO_CHARACTERISTIC: UUID = UUID::B128( // only NOTIFY type should be specified   s
-                                                      [0x1B, 0xC5, 0xD5, 0xA5, 0x02, 0x00, 0xCF, 0x88, 0xE4, 0x11, 0xB9, 0xD6, 0x03, 0x00, 0x2F, 0x3D]);
+    [0x1B, 0xC5, 0xD5, 0xA5, 0x02, 0x00, 0xCF, 0x88, 0xE4, 0x11, 0xB9, 0xD6, 0x03, 0x00, 0x2F, 0x3D]);
 //3D:2F:00:03:D6:B9:11:E4:88:CF:00:02:A5:D5:C5:1B
 // const DEVICE_COMMAND: UUID = UUID::B16(0x4600);
 // const DEVICE_COMMAND: Vec<u8> = vec![0x46];

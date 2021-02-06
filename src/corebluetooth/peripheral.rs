@@ -20,7 +20,7 @@ use crate::{
     Error, Result,
 };
 use async_std::{
-    channel::{Receiver, Sender},
+    channel::{Receiver, SendError, Sender},
     prelude::StreamExt,
     task,
 };
@@ -179,7 +179,7 @@ impl ApiPeripheral for Peripheral {
                     self.uuid,
                     fut.get_state_clone(),
                 ))
-                .await;
+                .await?;
             match fut.await {
                 CoreBluetoothReply::Connected(chars) => {
                     *(self.characteristics.lock().unwrap()) = chars;
@@ -187,9 +187,9 @@ impl ApiPeripheral for Peripheral {
                 }
                 _ => panic!("Shouldn't get anything but connected!"),
             }
-        });
-        info!("Device connected!");
-        Ok(())
+            info!("Device connected!");
+            Ok(())
+        })
     }
 
     /// Terminates a connection to the device. This is a synchronous operation.
@@ -217,13 +217,13 @@ impl ApiPeripheral for Peripheral {
                     Vec::from(data),
                     fut.get_state_clone(),
                 ))
-                .await;
+                .await?;
             match fut.await {
                 CoreBluetoothReply::Ok => {}
                 _ => panic!("Didn't subscribe!"),
             }
-        });
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Sends a request (write) to the device. Synchronously returns either an error if the request
@@ -238,15 +238,15 @@ impl ApiPeripheral for Peripheral {
                     Vec::from(data),
                     fut.get_state_clone(),
                 ))
-                .await;
+                .await?;
             match fut.await {
                 CoreBluetoothReply::Ok => {}
                 _ => {
                     panic!("Shouldn't get anything but read result!");
                 }
             }
-        });
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Sends a read-by-type request to device for the range of handles covered by the
@@ -269,13 +269,13 @@ impl ApiPeripheral for Peripheral {
                     get_apple_uuid(characteristic.uuid),
                     fut.get_state_clone(),
                 ))
-                .await;
+                .await?;
             match fut.await {
                 CoreBluetoothReply::Ok => info!("subscribed!"),
                 _ => panic!("Didn't subscribe!"),
             }
-        });
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Disables either notify or indicate (depending on support) for the specified characteristic.
@@ -290,13 +290,13 @@ impl ApiPeripheral for Peripheral {
                     get_apple_uuid(characteristic.uuid),
                     fut.get_state_clone(),
                 ))
-                .await;
+                .await?;
             match fut.await {
                 CoreBluetoothReply::Ok => {}
                 _ => panic!("Didn't unsubscribe!"),
             }
-        });
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Registers a handler that will be called when value notification messages are received from
@@ -309,7 +309,6 @@ impl ApiPeripheral for Peripheral {
 
     fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
         info!("Trying read!");
-        let mut result = Vec::<u8>::new();
         task::block_on(async {
             let fut = CoreBluetoothReplyFuture::default();
             self.message_sender
@@ -318,16 +317,19 @@ impl ApiPeripheral for Peripheral {
                     get_apple_uuid(characteristic.uuid),
                     fut.get_state_clone(),
                 ))
-                .await;
+                .await?;
             match fut.await {
-                CoreBluetoothReply::ReadResult(chars) => {
-                    result = chars;
-                }
+                CoreBluetoothReply::ReadResult(chars) => Ok(chars),
                 _ => {
                     panic!("Shouldn't get anything but read result!");
                 }
             }
-        });
-        Ok(result)
+        })
+    }
+}
+
+impl<T> From<SendError<T>> for Error {
+    fn from(_: SendError<T>) -> Self {
+        Error::Other("Channel closed".to_string())
     }
 }

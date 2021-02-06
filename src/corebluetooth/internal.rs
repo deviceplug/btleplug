@@ -301,7 +301,9 @@ impl CoreBluetoothInternal {
     fn dispatch_event(&self, event: CoreBluetoothEvent) {
         let s = self.event_sender.clone();
         task::block_on(async {
-            s.send(event).await;
+            if let Err(e) = s.send(event).await {
+                error!("Error dispatching event: {:?}", e);
+            }
         });
     }
 
@@ -413,9 +415,13 @@ impl CoreBluetoothInternal {
                         .set_reply(CoreBluetoothReply::ReadResult(data_clone));
                 } else {
                     task::block_on(async {
-                        p.event_sender
+                        if let Err(e) = p
+                            .event_sender
                             .send(CBPeripheralEvent::Notification(characteristic_uuid, data))
-                            .await;
+                            .await
+                        {
+                            error!("Error sending notification event: {}", e);
+                        }
                     });
                 }
             }

@@ -240,7 +240,9 @@ pub mod CentralDelegate {
     extern "C" fn send_delegate_event(delegate: &mut Object, event: CentralDelegateEvent) {
         let sender = delegate_get_sender_clone(delegate);
         task::block_on(async {
-            sender.send(event).await;
+            if let Err(e) = sender.send(event).await {
+                error!("Error sending delegate event: {}", e);
+            }
         });
     }
 

@@ -1,3 +1,65 @@
+# 0.6.0 (2021-02-04)
+
+## Breaking API Changes
+
+- Removed many _async methods that were unimplemented
+- Stopped returning write values when not needed.
+
+## Features
+
+- Complete rewrite of Bluez core
+  - Now uses DBus API instead of raw socket access
+- Windows support moved to WinRT library
+- Move from failure to thiserror for error handling
+  - failure was deprecated a while ago
+
+## Bugfixes
+
+- Windows UWP no longer panics on scan when radio not connected.
+
+# 0.5.5 (2021-01-18)
+
+## Bugfixes
+
+- Fix dependency issue with async-std channels
+
+# 0.5.4 (2020-10-06)
+
+## Bugfixes
+
+- Fix issue where library panics whenever a characteristic is read instead of
+  notified on macOS.
+
+# 0.5.3 (2020-10-05)
+
+## Bugfixes
+
+- Fix issue where library panics whenever a characteristic is written without
+  response on macOS.
+
+# 0.5.2 (2020-10-04)
+
+## Features
+
+- UUID now takes simplified inputs for from_str()
+- Read/Write added for CoreBluetooth
+- Example improvements
+
+## Bugfixes
+
+- Windows UWP characteristics now actually reads on read(), instead of just
+  returning []
+
+## Bugfixes
+
+# 0.5.1 (2020-08-03)
+
+## Bugfixes
+
+* Fixed issue with peripheral updates in adapter manager wiping out peripherals
+  completely (#64)
+* Ran rustfmt (misformatted code is a bug ok?)
+
 # 0.5.0 (2020-07-26)
 
 ## Features

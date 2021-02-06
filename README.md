@@ -4,7 +4,10 @@
 [![Crates.io Downloads](https://img.shields.io/crates/d/btleplug)](https://crates.io/crates/btleplug)
 [![Crates.io License](https://img.shields.io/crates/l/btleplug)](https://crates.io/crates/btleplug)
 
+[![Discord](https://img.shields.io/discord/738080600032018443.svg?logo=discord)](https://discord.gg/QGhMFzR)
+
 [![Github donate button](https://img.shields.io/badge/github-donate-ff69b4.svg)](https://www.github.com/sponsors/qdot)
+
 
 btleplug is a Rust BLE library, support Windows 10, macOS, Linux, and
 possibly iOS. It is currently made up of parts of other abandoned
@@ -114,12 +117,10 @@ Beyond that, some of our other goals are:
   - Please hold off on filing more issues until base implementation is
     landed.
 - **WASM/WebBluetooth**
-  - This seems more useful for a stunt hack than anything, but I love
-    a good stunt hack.
-  - We'd probably want
-    [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen) to
-    support WebBluetooth via its API extensions, and just build a shim
-    on top of that?
+  - WebBluetooth has been added to wasm-bindgen's web-sys by @qdot, and a full
+    implementation has been done in other libraries that could easily be ported
+    here. This is now definitely in the works, once the new API surface is
+    solidified.
   - [Tracking issue here](https://github.com/deviceplug/btleplug/issues/13)
   - Please hold off on filing more issues until base implementation is
     landed.
@@ -144,7 +145,7 @@ Beyond that, some of our other goals are:
 | GATT Server Disconnect Event |X|X|X|
 | Write to Characteristic (Sync) |X|X|X|
 | Write to Characteristic (Async) |||X|
-| Read from Characteristic (Sync) |X||X|
+| Read from Characteristic (Sync) |X|X|X|
 | Read from Characteristic (Async) |X|||
 | Subscribe to Characteristic (Sync) |X|X|X|
 | Subscribe to Characteristic (Async) ||||

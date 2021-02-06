@@ -11,7 +11,6 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-
 //! BtlePlug is a Bluetooth Low Energy (BLE) central module library for Rust. It
 //! currently supports Windows 10, macOS (and possibly iOS), Linux (using BlueZ
 //! sockets instead of D-Bus). Android support is coming in a future update.
@@ -28,7 +27,7 @@
 //! use std::time::Duration;
 //! use rand::{Rng, thread_rng};
 //! #[cfg(target_os = "linux")]
-//! use btleplug::bluez::{adapter::ConnectedAdapter, manager::Manager};
+//! use btleplug::bluez::{adapter::Adapter, manager::Manager};
 //! #[cfg(target_os = "windows")]
 //! use btleplug::winrtble::{adapter::Adapter, manager::Manager};
 //! #[cfg(target_os = "macos")]
@@ -38,26 +37,12 @@
 //! // adapter retreival works differently depending on your platform right now.
 //! // API needs to be aligned.
 //!
-//! #[cfg(any(target_os = "windows", target_os = "macos"))]
-//! fn get_central(manager: &Manager) -> Adapter {
-//!     let adapters = manager.adapters().unwrap();
-//!     adapters.into_iter().nth(0).unwrap()
-//! }
-//!
-//! #[cfg(target_os = "linux")]
-//! fn get_central(manager: &Manager) -> ConnectedAdapter {
-//!     let adapters = manager.adapters().unwrap();
-//!     let adapter = adapters.into_iter().nth(0).unwrap();
-//!     adapter.connect().unwrap()
-//! }
-//!
 //! pub fn main() {
 //!     let manager = Manager::new().unwrap();
 //!
 //!     // get the first bluetooth adapter
-//!     //
-//!     // connect to the adapter
-//!     let central = get_central(&manager);
+//!     let adapters = manager.adapters().unwrap();
+//!     let central = adapters.into_iter().nth(0).unwrap();
 //!
 //!     // start scanning for devices
 //!     central.start_scan().unwrap();
@@ -97,69 +82,65 @@ extern crate log;
 
 #[cfg(target_os = "linux")]
 #[macro_use]
+extern crate static_assertions;
+
+#[cfg(target_os = "linux")]
 extern crate nix;
 
 #[cfg(target_os = "windows")]
 extern crate winrt;
 
-#[cfg(any(target_os = "macos", target_os="ios"))]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 #[macro_use]
 extern crate objc;
 
 // We won't actually use anything specifically out of this crate. However, if we
 // want the CoreBluetooth code to compile, we need the objc protocols
 // (specifically, the core bluetooth protocols) exposed by it.
-#[cfg(any(target_os = "macos", target_os="ios"))]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 extern crate cocoa;
 
 extern crate bytes;
 
 #[cfg(target_os = "linux")]
-#[macro_use]
 extern crate enum_primitive;
 extern crate num;
-
-#[cfg(target_os = "linux")]
-#[macro_use]
-extern crate nom;
 
 #[macro_use]
 extern crate bitflags;
 
-extern crate failure;
-#[macro_use]
-extern crate failure_derive;
+extern crate thiserror;
 
 use std::result;
 use std::time::Duration;
 
+pub mod api;
 #[cfg(target_os = "linux")]
 pub mod bluez;
+mod common;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+pub mod corebluetooth;
 #[cfg(target_os = "windows")]
 pub mod winrtble;
-#[cfg(any(target_os = "macos", target_os="ios"))]
-pub mod corebluetooth;
-pub mod api;
-mod common;
 
-#[derive(Debug, Fail, Clone)]
+#[derive(Debug, thiserror::Error, Clone)]
 pub enum Error {
-    #[fail(display = "Permission denied")]
+    #[error("Permission denied")]
     PermissionDenied,
 
-    #[fail(display = "Device not found")]
+    #[error("Device not found")]
     DeviceNotFound,
 
-    #[fail(display = "Not connected")]
+    #[error("Not connected")]
     NotConnected,
 
-    #[fail(display = "The operation is not supported: {}", _0)]
+    #[error("The operation is not supported: {}", _0)]
     NotSupported(String),
 
-    #[fail(display = "Timed out after {:?}", _0)]
+    #[error("Timed out after {:?}", _0)]
     TimedOut(Duration),
 
-    #[fail(display = "{}", _0)]
+    #[error("{}", _0)]
     Other(String),
 }
 

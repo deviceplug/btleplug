@@ -1,40 +1,27 @@
 extern crate btleplug;
 extern crate rand;
 
+use btleplug::api::{Central, Peripheral, UUID};
+#[cfg(target_os = "linux")]
+use btleplug::bluez::manager::Manager;
+#[cfg(target_os = "macos")]
+use btleplug::corebluetooth::manager::Manager;
+#[cfg(target_os = "windows")]
+use btleplug::winrtble::manager::Manager;
+use rand::{thread_rng, Rng};
 use std::thread;
 use std::time::Duration;
-use rand::{Rng, thread_rng};
-#[cfg(target_os = "linux")]
-use btleplug::bluez::{adapter::ConnectedAdapter, manager::Manager};
-#[cfg(target_os = "windows")]
-use btleplug::winrtble::{adapter::Adapter, manager::Manager};
-#[cfg(target_os = "macos")]
-use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
-use btleplug::api::{UUID, Central, Peripheral};
-
-// adapter retreival works differently depending on your platform right now.
-// API needs to be aligned.
-
-#[cfg(any(target_os = "windows", target_os = "macos"))]
-fn get_central(manager: &Manager) -> Adapter {
-    let adapters = manager.adapters().unwrap();
-    adapters.into_iter().nth(0).unwrap()
-}
-
-#[cfg(target_os = "linux")]
-fn get_central(manager: &Manager) -> ConnectedAdapter {
-    let adapters = manager.adapters().unwrap();
-    let adapter = adapters.into_iter().nth(0).unwrap();
-    adapter.connect().unwrap()
-}
 
 pub fn main() {
     let manager = Manager::new().unwrap();
 
     // get the first bluetooth adapter
-    //
-    // connect to the adapter
-    let central = get_central(&manager);
+    let central = manager
+        .adapters()
+        .expect("Unable to fetch adapter list.")
+        .into_iter()
+        .nth(0)
+        .expect("Unable to find adapters.");
 
     // start scanning for devices
     central.start_scan().unwrap();
@@ -43,9 +30,16 @@ pub fn main() {
     thread::sleep(Duration::from_secs(2));
 
     // find the device we're interested in
-    let light = central.peripherals().into_iter()
-        .find(|p| p.properties().local_name.iter()
-            .any(|name| name.contains("LEDBlue"))).unwrap();
+    let light = central
+        .peripherals()
+        .into_iter()
+        .find(|p| {
+            p.properties()
+                .local_name
+                .iter()
+                .any(|name| name.contains("LEDBlue"))
+        })
+        .expect("No lights found");
 
     // connect to the device
     light.connect().unwrap();
@@ -55,7 +49,10 @@ pub fn main() {
 
     // find the characteristic we want
     let chars = light.characteristics();
-    let cmd_char = chars.iter().find(|c| c.uuid == UUID::B16(0xFFE9)).unwrap();
+    let cmd_char = chars
+        .iter()
+        .find(|c| c.uuid == UUID::B16(0xFFE9))
+        .expect("Unable to find characterics");
 
     // dance party
     let mut rng = thread_rng();

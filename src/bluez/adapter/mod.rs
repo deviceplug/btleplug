@@ -11,413 +11,496 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-mod acl_stream;
+// mod acl_stream;
+// mod dbus;
 mod peripheral;
 
-use libc;
-use nom;
-use bytes::{BytesMut, BufMut};
+use super::{
+    bluez_dbus::adapter::OrgBluezAdapter1, bluez_dbus::device::OrgBluezDevice1Properties,
+    bluez_dbus::device::ORG_BLUEZ_DEVICE1_NAME,
+    bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1Properties,
+    bluez_dbus::gatt_characteristic::ORG_BLUEZ_GATT_CHARACTERISTIC1_NAME,
+    bluez_dbus::gatt_service::ORG_BLUEZ_GATT_SERVICE1_NAME, BLUEZ_DEST, DEFAULT_TIMEOUT,
+};
 use dashmap::DashMap;
+use dbus::{
+    arg::RefArg,
+    blocking::{Proxy, SyncConnection},
+    channel::Token,
+    message::SignalArgs,
+    Path,
+};
 
 use std::{
     self,
-    ffi::CStr,
-    collections::HashSet,
-    sync::{Arc, mpsc::Receiver, atomic::{AtomicBool, Ordering}},
-    thread,
+    iter::Iterator,
+    str::FromStr,
+    sync::{mpsc::Receiver, Arc, Condvar, Mutex},
+    thread::{self, JoinHandle},
+    time::Duration,
 };
 
-use crate::Result;
-use crate::api::{CentralEvent, BDAddr, Central, AdapterManager};
+use parking_lot::ReentrantMutex;
 
-use crate::bluez::{
-    util::handle_error,
-    protocol::hci,
-    adapter::peripheral::Peripheral,
-    constants::*,
-    ioctl,
+use crate::{api::UUID, Result};
+use crate::{
+    api::{AdapterManager, BDAddr, Central, CentralEvent, CharPropFlags},
+    Error,
 };
 
+use crate::bluez::adapter::peripheral::Peripheral;
+use displaydoc::Display;
+use thiserror::Error;
 
-#[derive(Copy, Debug)]
-#[repr(C)]
-pub struct HCIDevStats {
-    pub err_rx : u32,
-    pub err_tx : u32,
-    pub cmd_tx : u32,
-    pub evt_rx : u32,
-    pub acl_tx : u32,
-    pub acl_rx : u32,
-    pub sco_tx : u32,
-    pub sco_rx : u32,
-    pub byte_rx : u32,
-    pub byte_tx : u32,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum TokenType {
+    DeviceDiscovery,
+    DeviceLost,
 }
 
-impl Clone for HCIDevStats{
-    fn clone(&self) -> Self { *self }
+type ParseCharPropFlagsResult<T> = std::result::Result<T, ParseCharPropFlagsError>;
+
+#[derive(Debug, Error, Display, Clone, PartialEq)]
+pub enum ParseCharPropFlagsError {
+    /// BlueZ characteristic flag "{0}" is unknown
+    UnknownFlag(String),
 }
 
-impl HCIDevStats {
-    fn default() -> HCIDevStats {
-        HCIDevStats {
-            err_rx: 0u32,
-            err_tx: 0u32,
-            cmd_tx: 0u32,
-            evt_rx: 0u32,
-            acl_tx: 0u32,
-            acl_rx: 0u32,
-            sco_tx: 0u32,
-            sco_rx: 0u32,
-            byte_rx: 0u32,
-            byte_tx: 0u32
+impl From<ParseCharPropFlagsError> for Error {
+    fn from(e: ParseCharPropFlagsError) -> Self {
+        Error::Other(format!("ParseUUIDError: {}", e))
+    }
+}
+
+impl FromStr for CharPropFlags {
+    type Err = ParseCharPropFlagsError;
+
+    fn from_str(s: &str) -> ParseCharPropFlagsResult<Self> {
+        match s {
+            "broadcast" => Ok(CharPropFlags::BROADCAST),
+            "read" => Ok(CharPropFlags::READ),
+            "write-without-response" => Ok(CharPropFlags::WRITE_WITHOUT_RESPONSE),
+            "write" => Ok(CharPropFlags::WRITE),
+            "notify" => Ok(CharPropFlags::NOTIFY),
+            "indicate" => Ok(CharPropFlags::INDICATE),
+            "authenticated-signed-writes" => Ok(CharPropFlags::AUTHENTICATED_SIGNED_WRITES),
+            "extended-properties" => Ok(CharPropFlags::EXTENDED_PROPERTIES),
+
+            // TODO: Support these extended properties
+            "reliable-write" => Ok(CharPropFlags::empty()),
+            "writable-auxiliaries" => Ok(CharPropFlags::empty()),
+            "encrypt-read" => Ok(CharPropFlags::empty()),
+            "encrypt-write" => Ok(CharPropFlags::empty()),
+            "encrypt-authenticated-read" => Ok(CharPropFlags::empty()),
+            "encrypt-authenticated-write" => Ok(CharPropFlags::empty()),
+            "authorize" => Ok(CharPropFlags::empty()),
+
+            _ => Err(ParseCharPropFlagsError::UnknownFlag(s.to_string())),
         }
     }
 }
 
-#[derive(Copy, Debug)]
-#[repr(C)]
-pub struct HCIDevInfo {
-    pub dev_id : u16,
-    pub name : [libc::c_char; 8],
-    pub bdaddr : BDAddr,
-    pub flags : u32,
-    pub type_ : u8,
-    pub features : [u8; 8],
-    pub pkt_type : u32,
-    pub link_policy : u32,
-    pub link_mode : u32,
-    pub acl_mtu : u16,
-    pub acl_pkts : u16,
-    pub sco_mtu : u16,
-    pub sco_pkts : u16,
-    pub stat : HCIDevStats,
+/// Adapter represents a physical bluetooth interface in your system, for example a bluetooth
+/// dongle.
+#[derive(Clone)]
+pub struct Adapter {
+    connection: Arc<SyncConnection>,
+    listener: Arc<ReentrantMutex<SyncConnection>>,
+    path: String,
+    manager: AdapterManager<Peripheral>,
+    match_tokens: Arc<DashMap<TokenType, Token>>,
+
+    should_stop: Arc<(Condvar, Mutex<bool>)>,
+    thread_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
-impl Clone for HCIDevInfo {
-    fn clone(&self) -> Self { *self }
-}
+assert_impl_all!(SyncConnection: Sync, Send);
+assert_impl_all!(Adapter: Sync, Send);
 
-impl HCIDevInfo {
-    pub fn default() -> HCIDevInfo {
-        HCIDevInfo {
-            dev_id: 0,
-            name: [0 as libc::c_char; 8],
-            bdaddr: BDAddr { address: [0u8; 6] },
-            flags: 0u32,
-            type_: 0u8,
-            features: [0u8; 8],
-            pkt_type: 0u32,
-            link_policy: 0u32,
-            link_mode: 0u32,
-            acl_mtu: 0u16,
-            acl_pkts: 0u16,
-            sco_mtu: 0u16,
-            sco_pkts: 0u16,
-            stat: HCIDevStats::default()
-        }
-    }
-}
+impl Adapter {
+    pub(crate) fn from_dbus_path(path: &Path) -> Result<Adapter> {
+        let conn = Arc::new(SyncConnection::new_system()?);
+        let proxy = conn.with_proxy(BLUEZ_DEST, path, DEFAULT_TIMEOUT);
+        info!("DevInfo: {:?}", proxy.address()?);
 
-#[derive(Copy, Debug)]
-#[repr(C)]
-struct SockaddrHCI {
-    hci_family: libc::sa_family_t,
-    hci_dev: u16,
-    hci_channel: u16,
-}
-
-impl Clone for SockaddrHCI {
-    fn clone(&self) -> Self { *self }
-}
-
-
-#[derive(Debug, Copy, Clone)]
-pub enum AdapterType {
-    BrEdr,
-    Amp,
-    Unknown(u8)
-}
-
-impl AdapterType {
-    fn parse(typ: u8) -> AdapterType {
-        match typ {
-            0 => AdapterType::BrEdr,
-            1 => AdapterType::Amp,
-            x => AdapterType::Unknown(x),
-        }
-    }
-
-    fn num(&self) -> u8 {
-        match *self {
-            AdapterType::BrEdr => 0,
-            AdapterType::Amp => 1,
-            AdapterType::Unknown(x) => x,
-        }
-    }
-}
-
-#[derive(Hash, Eq, PartialEq, Debug, Copy, Clone)]
-pub enum AdapterState {
-    Up, Init, Running, Raw, PScan, IScan, Inquiry, Auth, Encrypt
-}
-
-impl AdapterState {
-    fn parse(flags: u32) -> HashSet<AdapterState> {
-        use self::AdapterState::*;
-
-        let states = [Up, Init, Running, Raw, PScan, IScan, Inquiry, Auth, Encrypt];
-
-        let mut set = HashSet::new();
-        for (i, f) in states.iter().enumerate() {
-            if flags & (1 << (i & 31)) as u32 != 0 {
-                set.insert(f.clone());
-            }
-        }
-
-        set
-    }
-}
-
-/// The [`Central`](../../api/trait.Central.html) implementation for BlueZ.
-#[derive(Clone, Debug)]
-pub struct ConnectedAdapter {
-    pub adapter: Adapter,
-    adapter_fd: i32,
-    should_stop: Arc<AtomicBool>,
-    pub scan_enabled: Arc<AtomicBool>,
-    pub active: Arc<AtomicBool>,
-    pub filter_duplicates: Arc<AtomicBool>,
-    handle_map: Arc<DashMap<u16, BDAddr>>,
-    manager: AdapterManager<Peripheral>
-}
-
-impl ConnectedAdapter {
-    pub fn new(adapter: &Adapter) -> Result<ConnectedAdapter> {
-        let adapter_fd = handle_error(unsafe {
-            libc::socket(libc::AF_BLUETOOTH, libc::SOCK_RAW | libc::SOCK_CLOEXEC, 1)
-        })?;
-
-        let addr = SockaddrHCI {
-            hci_family: libc::AF_BLUETOOTH as u16,
-            hci_dev: adapter.dev_id,
-            hci_channel: 0,
-        };
-
-        handle_error(unsafe {
-            libc::bind(adapter_fd, &addr as *const SockaddrHCI as *const libc::sockaddr,
-                       std::mem::size_of::<SockaddrHCI>() as u32)
-        })?;
-
-        let should_stop = Arc::new(AtomicBool::new(false));
-
-        let connected = ConnectedAdapter {
-            adapter: adapter.clone(),
-            adapter_fd,
-            active: Arc::new(AtomicBool::new(true)),
-            filter_duplicates: Arc::new(AtomicBool::new(false)),
-            should_stop,
-            scan_enabled: Arc::new(AtomicBool::new(false)),
-            handle_map: Arc::new(DashMap::new()),
+        let adapter = Adapter {
+            connection: conn,
+            listener: Arc::new(ReentrantMutex::new(SyncConnection::new_system()?)),
+            path: path.to_string(),
             manager: AdapterManager::new(),
+            match_tokens: Arc::new(DashMap::new()),
+            should_stop: Arc::new((Condvar::new(), Mutex::new(false))),
+            thread_handle: Arc::new(Mutex::new(None)),
         };
 
-        connected.add_raw_socket_reader(adapter_fd);
+        adapter.setup();
 
-        connected.set_socket_filter()?;
-
-        Ok(connected)
+        Ok(adapter)
     }
 
-    fn set_socket_filter(&self) -> Result<()> {
-        let mut filter = BytesMut::with_capacity(14);
-        let type_mask = (1 << HCI_COMMAND_PKT) | (1 << HCI_EVENT_PKT) as u8 | (1 << HCI_ACLDATA_PKT) as u8;
-        let event_mask1 = (1 << EVT_DISCONN_COMPLETE) | (1 << EVT_ENCRYPT_CHANGE) |
-            (1 << EVT_CMD_COMPLETE) | (1 << EVT_CMD_STATUS);
-        let event_mask2 = 1 << (EVT_LE_META_EVENT - 32);
-        let opcode = 0;
+    fn setup(&self) {
+        use dbus::blocking::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as InterfacesRemoved;
+        let mut lost_rule = InterfacesRemoved::match_rule(None, None);
+        lost_rule.path = Some(Path::from("/"));
 
-        filter.put_u32_le(type_mask as u32);
-        filter.put_u32_le(event_mask1 as u32);
-        filter.put_u32_le(event_mask2 as u32);
-        filter.put_u16_le(opcode);
+        // // Enable watching the DBus channel for new messages
+        // conn.channel().set_watch_enabled(true);
+        // let watcher = conn.channel().watch();
+        // // watcher.
+        let listener = self.listener.clone();
+        let should_stop = self.should_stop.clone();
 
-        handle_error(unsafe {
-            libc::setsockopt(self.adapter_fd, SOL_HCI, HCI_FILTER,
-                             filter.as_mut_ptr() as *mut _ as *mut libc::c_void,
-                             filter.len() as u32)
-        })?;
+        // Spawn a new thread to process incoming DBus messages.
+        // This thread gets cleaned up in the 'impl Drop for Adapter'
+        *self.thread_handle.lock().unwrap() = Some(thread::spawn(move || {
+            let (cvar, should_stop) = &*should_stop;
+            loop {
+                let (should_stop, _timeout_result) = cvar
+                    .wait_timeout(should_stop.lock().unwrap(), Duration::from_millis(100))
+                    .unwrap();
+                if *should_stop {
+                    break;
+                }
+
+                // listener is protected by a mutex. as calling `process()` when any proxied request is awaiting a reply, will cause the reply to be dropped...
+                let lock = listener.lock();
+                // Important! The [parking_log::ReentrantMutex] promotes fairness, that is, eventually giving
+                //  other threads waiting on a lock to get the lock. Where as, Rust's std::sync::Mutex does not.
+                //  See: https://docs.rs/parking_lot/0.11.1/parking_lot/type.Mutex.html#fairness
+                while lock.process(Duration::from_secs(0)).unwrap() {}
+            }
+        }));
+
+        let adapter = self.clone();
+        self.match_tokens.insert(
+            TokenType::DeviceLost,
+            self.listener
+                .lock()
+                .add_match(lost_rule, move |args: InterfacesRemoved, _c, _msg| {
+                    trace!("Received 'InterfacesRemoved' signal");
+                    let path = args.object;
+
+                    if args.interfaces.iter().any(|s| s == ORG_BLUEZ_DEVICE1_NAME) {
+                        adapter.remove_device(&path).unwrap();
+                    } else if args
+                        .interfaces
+                        .iter()
+                        .any(|s| s == ORG_BLUEZ_GATT_SERVICE1_NAME)
+                    {
+                        // Ignore Services that get removed, the BTLEPlug API doesn't support that
+                    } else if args
+                        .interfaces
+                        .iter()
+                        .any(|s| s == ORG_BLUEZ_GATT_CHARACTERISTIC1_NAME)
+                    {
+                        // Ignore Characteristics that get removed, the BTLEPlug API doesn't support that
+                    }
+
+                    return true;
+                })
+                .unwrap(),
+        );
+    }
+
+    pub fn proxy(&self) -> Proxy<&SyncConnection> {
+        self.connection
+            .with_proxy(BLUEZ_DEST, &self.path, DEFAULT_TIMEOUT)
+    }
+
+    /// Get the adapter's powered state. This also indicates the appropriate connectable state of the adapter.
+    pub fn is_powered(&self) -> Result<bool> {
+        Ok(self.proxy().powered()?)
+    }
+
+    /// Switch an adapter on or off. This will also set the appropriate connectable state of the adapter.
+    pub fn set_powered(&self, powered: bool) -> Result<()> {
+        Ok(self.proxy().set_powered(powered)?)
+    }
+
+    pub fn name(&self) -> Result<String> {
+        Ok(self.proxy().name()?)
+    }
+
+    pub fn address(&self) -> Result<BDAddr> {
+        Ok(self.proxy().address()?.parse()?)
+    }
+
+    pub fn discoverable(&self) -> Result<bool> {
+        Ok(self.proxy().discoverable()?)
+    }
+
+    pub fn set_discoverable(&self, enabled: bool) -> Result<()> {
+        Ok(self.proxy().set_discoverable(enabled)?)
+    }
+
+    fn get_existing_peripherals(&self) -> Result<()> {
+        use dbus::blocking::stdintf::org_freedesktop_dbus::ObjectManager;
+        let proxy = self.connection.with_proxy(BLUEZ_DEST, "/", DEFAULT_TIMEOUT);
+        let objects = proxy.get_managed_objects()?;
+
+        trace!("Fetching already known peripherals from \"{}\"", self.path);
+
+        // A lot of out of order objects get returned, and we need to add them in order
+        // Let's start off by filtering out objects that belong to this adapter
+        let adapter_objects = objects
+            .iter()
+            .filter(|(p, _i)| p.as_str().unwrap().starts_with(self.path.as_str()));
+
+        // first, objects that implement org.bluez.Device1,
+        adapter_objects
+            .clone()
+            .filter_map(|(p, i)| i.get(ORG_BLUEZ_DEVICE1_NAME).map(|d| (p, d)))
+            .map(|(path, device)| {
+                Ok(self.add_device(path.as_str().unwrap(), OrgBluezDevice1Properties(device))?)
+            })
+            .collect::<Result<()>>()?;
+
+        trace!("Fetching known peripheral services");
+        // then, objects that implement org.bluez.GattService1 as they depend on devices being known first
+        adapter_objects
+            .clone()
+            .filter_map(|(p, i)| i.get(ORG_BLUEZ_GATT_SERVICE1_NAME).map(|a| (p, a)))
+            .map(|(path, attribute)| {
+                Ok(self.add_attribute(
+                    path.as_str().unwrap(),
+                    OrgBluezGattCharacteristic1Properties(attribute),
+                )?)
+            })
+            .collect::<Result<()>>()?;
+
+        trace!("Fetching known peripheral characteristics");
+        // then, objects that implement org.bluez.GattCharacteristic1 as they depend on devices being known first
+        adapter_objects
+            .clone()
+            .filter_map(|(p, i)| i.get(ORG_BLUEZ_GATT_CHARACTERISTIC1_NAME).map(|a| (p, a)))
+            .map(|(path, attribute)| {
+                Ok(self.add_attribute(
+                    path.as_str().unwrap(),
+                    OrgBluezGattCharacteristic1Properties(attribute),
+                )?)
+            })
+            .collect::<Result<()>>()?;
+
+        // TODO: Descriptors are nested behind characteristics, and their UUID may be used more than once.
+        //       btleplug will need to refactor it's API before descriptors may be supported.
+        // trace!("Fetching known peripheral descriptors");
+        // adapter_objects
+        //     .clone()
+        //     .filter_map(|(p, i)| i.get(BLUEZ_INTERFACE_DESCRIPTOR).map(|a| (p, a)))
+        //     .map(|(path, descriptor)| {
+        //         Ok(self.add_attribute(path.as_str().unwrap(), descriptor)?)
+        //     })
+        //     .collect::<Result<()>>()?;
+
         Ok(())
     }
 
-    fn add_raw_socket_reader(&self, fd: i32) {
-        let should_stop = self.should_stop.clone();
-        let connected = self.clone();
+    fn remove_device(&self, path: &str) -> Result<()> {
+        if let Some(address) = path
+            .strip_prefix(format!("{}/dev_", self.path).as_str())
+            .and_then(|p| p[..17].replace("_", ":").parse::<BDAddr>().ok())
+        {
+            debug!("Removing device \"{:?}\"", address);
+            let listener = self.listener.lock();
+            debug!("Got listener lock");
+            if let Some(peripheral) = self.manager.peripheral(address) {
+                peripheral.stop_listening(&*listener).unwrap()
+            } else {
+                error!("Device \"{:?}\" not found!", address);
+            }
 
-        thread::spawn(move || {
-            let mut buf = [0u8; 2048];
-            let mut cur: Vec<u8> = vec![];
+            self.manager.emit(CentralEvent::DeviceLost(address));
+        } else {
+            error!("Could not parse path {:?}", path)
+        }
 
-            while !should_stop.load(Ordering::Relaxed) {
-                // debug!("reading");
-                let len = handle_error(unsafe {
-                    libc::read(fd, buf.as_mut_ptr() as *mut _ as *mut libc::c_void, buf.len()) as i32
-                }).unwrap_or(0) as usize;
-                if len == 0 {
-                    continue;
-                }
+        Ok(())
+    }
 
-                cur.put_slice(&buf[0..len]);
-
-                let mut new_cur: Option<Vec<u8>> = Some(vec![]);
+    /// Helper function to add a org.bluez.Device1 object to the adapter manager
+    fn add_device(&self, path: &str, device: OrgBluezDevice1Properties) -> Result<()> {
+        if let Some(address) = device.address() {
+            let address: BDAddr = address.parse()?;
+            // Ignore devices that are blocked, else they'll make this library a bit harder to manage
+            // TODO: Should we allow blocked devices to be "discovered"?
+            if device.blocked().unwrap_or(false) {
+                info!("Skipping blocked device \"{:?}\"", address);
+                return Ok(());
+            }
+            let peripheral = self.manager.peripheral(address).unwrap_or_else(|| {
+                Peripheral::new(self.manager.clone(), self.connection.clone(), path, address)
+            });
+            peripheral.update_properties(device);
+            if !self.manager.has_peripheral(&address) {
+                info!(
+                    "Adding discovered peripheral \"{}\" on \"{}\"",
+                    address, self.path
+                );
                 {
-                    let result = {
-                        hci::message(&cur)
-                    };
+                    let listener = self.listener.lock();
+                    peripheral.listen(&listener)?;
+                    // TODO: cal peripheral.stop_listening(...) when the peripheral is removed.
+                }
+                self.manager.add_peripheral(address, peripheral);
+                self.manager.emit(CentralEvent::DeviceDiscovered(address));
+            } else {
+                info!("Updating peripheral \"{}\"", address);
+                self.manager.update_peripheral(address, peripheral);
+                self.manager.emit(CentralEvent::DeviceUpdated(address));
+            }
+        } else {
+            error!("Could not retrieve 'Address' from DBus 'InterfaceAdded' message with interface '{}'", ORG_BLUEZ_DEVICE1_NAME);
+        }
 
-                    match result {
-                        Ok((left, result)) => {
-                            ConnectedAdapter::handle(&connected, result);
-                            if !left.is_empty() {
-                                new_cur = Some(left.to_owned());
-                            };
-                        }
-                        Err(nom::Err::Incomplete(_)) => {
-                            new_cur = None;
+        Ok(())
+    }
+
+    fn add_attribute(
+        &self,
+        path: &str,
+        characteristic: OrgBluezGattCharacteristic1Properties,
+    ) -> Result<()> {
+        // Convert "/org/bluez/hciXX/dev_XX_XX_XX_XX_XX_XX/serviceXX" into "XX:XX:XX:XX:XX:XX"
+        if let Some(device_id) = path.strip_prefix(format!("{}/dev_", self.path).as_str()) {
+            let device_id: BDAddr = device_id[..17].replace("_", ":").parse()?;
+
+            if let Some(device) = self.manager.peripheral(device_id) {
+                trace!("Adding characteristic \"{}\" on \"{:?}\"", path, device_id);
+                let uuid: UUID = characteristic.uuid().unwrap().parse()?;
+                let flags = if let Some(flags) = characteristic.flags() {
+                    flags.iter().map(|s| s.parse::<CharPropFlags>()).fold(
+                        Ok(CharPropFlags::new()),
+                        |a, f| {
+                            if f.is_ok() {
+                                Ok(f.unwrap() | a.unwrap())
+                            } else {
+                                f
+                            }
                         },
-                        Err(nom::Err::Error(err)) | Err(nom::Err::Failure(err)) => {
-                            error!("parse error {:?}\nfrom: {:?}", err, cur);
-                        }
-                    }
+                    )?
+                } else {
+                    CharPropFlags::new()
                 };
 
-                cur = new_cur.unwrap_or(cur);
+                device.add_attribute(path, uuid, flags)?;
             }
-        });
-    }
-
-    fn emit(&self, event: CentralEvent) {
-        debug!("emitted {:?}", event);
-        self.manager.emit(event);
-    }
-
-    fn handle(&self, message: hci::Message) {
-        debug!("got message {:?}", message);
-
-        match message {
-            hci::Message::LEAdvertisingReport(info) => {
-                let address = info.bdaddr.clone();
-                let info_clone = info.clone();
-                let peripheral = Peripheral::new(self.clone(), info.bdaddr);
-                peripheral.handle_device_message(&hci::Message::LEAdvertisingReport(info));
-                if !self.manager.has_peripheral(&address) {
-                    warn!("{:?}", info_clone);
-                    self.manager.add_peripheral(address, peripheral);                    
-                    self.emit(CentralEvent::DeviceDiscovered(address.clone()))
-                } else {
-                    self.manager.update_peripheral(address, peripheral);
-                    self.emit(CentralEvent::DeviceUpdated(address.clone()))
-                }
-            }
-            hci::Message::LEConnComplete(info) => {
-                info!("connected to {:?}", info);
-                let address = info.bdaddr.clone();
-                let handle = info.handle.clone();
-                match self.peripheral(address) {
-                    Some(peripheral) => {
-                        peripheral.handle_device_message(&hci::Message::LEConnComplete(info))
-                    }
-                    // todo: there's probably a better way to handle this case
-                    None => warn!("Got connection for unknown device {}", info.bdaddr)
-                }
-
-                self.handle_map.insert(handle, address);
-
-                self.emit(CentralEvent::DeviceConnected(address));
-            }
-            hci::Message::ACLDataPacket(data) => {
-                let message = hci::Message::ACLDataPacket(data);
-
-                // TODO this is a bit risky from a deadlock perspective (note mutexes are not
-                // reentrant in rust!)
-                let peripherals = self.manager.peripherals();
-
-                for peripheral in peripherals {
-                    // we don't know the handler => device mapping, so send to all and let them filter
-                    peripheral.handle_device_message(&message);
-                }
-            },
-            hci::Message::DisconnectComplete { handle, .. } => {
-                match self.handle_map.remove(&handle) {
-                    Some(addr) => {
-                        match self.peripheral(addr.1) {
-                            Some(peripheral) => peripheral.handle_device_message(&message),
-                            None => warn!("got disconnect for unknown device {}", addr.1),
-                        };
-                        self.emit(CentralEvent::DeviceDisconnected(addr.1));
-                    }
-                    None => {
-                        warn!("got disconnect for unknown handle {}", handle);
-                    }
-                }
-            }
-            _ => {
-                // skip
-            }
+        } else {
+            return Err(Error::Other(
+                "Invalid DBus path for characteristic".to_string(),
+            ));
         }
-    }
 
-    fn write(&self, message: & [u8]) -> Result<()> {
-        debug!("writing({}) {:?}", self.adapter_fd, message);
-        let ptr = message.as_ptr();
-        handle_error(unsafe {
-            libc::write(self.adapter_fd, ptr as *const libc::c_void, message.len()) as i32
-        })?;
         Ok(())
-    }
-
-    fn set_scan_params(&self) -> Result<()> {
-        let mut data = BytesMut::with_capacity(7);
-        data.put_u8(if self.active.load(Ordering::Relaxed) { 1 } else { 0 }); // scan_type = active or passive
-        data.put_u16_le(0x0010); // interval ms
-        data.put_u16_le(0x0010); // window ms
-        data.put_u8(0); // own_type = public
-        data.put_u8(0); // filter_policy = public
-        let mut buf = hci::hci_command(LE_SET_SCAN_PARAMETERS_CMD, &*data);
-        self.write(&mut *buf)
-    }
-
-    fn set_scan_enabled(&self, enabled: bool) -> Result<()> {
-        let mut data = BytesMut::with_capacity(2);
-        data.put_u8(if enabled { 1 } else { 0 }); // enabled
-        data.put_u8(if self.filter_duplicates.load(Ordering::Relaxed) { 1 } else { 0 }); // filter duplicates
-
-        self.scan_enabled.clone().store(enabled, Ordering::Relaxed);
-        let mut buf = hci::hci_command(LE_SET_SCAN_ENABLE_CMD, &*data);
-        self.write(&mut *buf)
     }
 }
 
-impl Central<Peripheral> for ConnectedAdapter {
+impl Drop for Adapter {
+    /// Cleans up the thread started in Adapter::new()
+    fn drop(&mut self) {
+        let mut thread_handle = self.thread_handle.lock().unwrap();
+        let handle = std::mem::replace(&mut *thread_handle, None);
+        if let Some(handle) = handle {
+            let (cvar, should_stop) = &*self.should_stop;
+            // mimicing a cancelation token though a ConVar<bool>
+            *should_stop.lock().unwrap() = true;
+            cvar.notify_all();
+
+            handle.join().unwrap();
+        }
+    }
+}
+
+impl Central<Peripheral> for Adapter {
     fn event_receiver(&self) -> Option<Receiver<CentralEvent>> {
         self.manager.event_receiver()
     }
 
-    fn active(&self, enabled: bool) {
-        self.active.clone().store(enabled, Ordering::Relaxed);
+    fn filter_duplicates(&self, _enabled: bool) {
+        todo!()
+        // self.filter_duplicates
+        // .clone()
+        // .store(enabled, Ordering::Relaxed);
     }
 
-    fn filter_duplicates(&self, enabled: bool) {
-        self.filter_duplicates.clone().store(enabled, Ordering::Relaxed);
-    }
+    fn start_scan<'a>(&'a self) -> Result<()> {
+        use dbus::blocking::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesAdded as InterfacesAdded;
 
-    fn start_scan(&self) -> Result<()> {
-        self.set_scan_params()?;
-        self.set_scan_enabled(true)
+        // remove the previous token if it's still awkwardly overstaying their welcome...
+        if let Some((_t, token)) = self.match_tokens.remove(&TokenType::DeviceDiscovery) {
+            warn!("Removing previous match token");
+            self.listener.lock().remove_match(token)?;
+        }
+
+        // TODO: Should this be invoked earlier? Do we need to rely on the application to called 'start_scan()' before fetching peripherals that may already be known to bluez?
+        self.get_existing_peripherals()?;
+
+        trace!("Starting discovery listener");
+        {
+            let mut discovered_rule = InterfacesAdded::match_rule(None, None);
+            discovered_rule.path = Some(Path::from("/"));
+
+            let adapter = self.clone();
+            self.match_tokens.insert(
+                TokenType::DeviceDiscovery,
+                self.listener.lock().add_match(
+                    discovered_rule,
+                    move |args: InterfacesAdded, _c, _msg| {
+                        trace!("Received 'InterfacesAdded' signal");
+                        let path = args.object;
+
+                        if let Some(device) =
+                            OrgBluezDevice1Properties::from_interfaces(&args.interfaces)
+                        {
+                            adapter.add_device(&path, device).unwrap();
+                        } else if let Some(service) =
+                            args.interfaces.get(ORG_BLUEZ_GATT_SERVICE1_NAME)
+                        {
+                            adapter
+                                .add_attribute(
+                                    &path,
+                                    OrgBluezGattCharacteristic1Properties(service),
+                                )
+                                .unwrap();
+                        } else if let Some(characteristic) =
+                            OrgBluezGattCharacteristic1Properties::from_interfaces(&args.interfaces)
+                        {
+                            adapter.add_attribute(&path, characteristic).unwrap();
+                        }
+
+                        return true;
+                    },
+                )?,
+            );
+        }
+
+        if let Err(error) = self.proxy().start_discovery() {
+            match error.name() {
+                // Don't error if BlueZ has already started scanning.
+                Some("org.bluez.Error.InProgress") => Ok(()),
+                _ => Err(error)?,
+            }
+        } else {
+            debug!("Starting discovery");
+            Ok(())
+        }
     }
 
     fn stop_scan(&self) -> Result<()> {
-        self.set_scan_enabled(false)
+        if let Some((_t, token)) = self.match_tokens.remove(&TokenType::DeviceDiscovery) {
+            trace!("Stopping discovery listener");
+            self.listener.lock().remove_match(token)?;
+        }
+
+        if let Err(error) = self.proxy().stop_discovery() {
+            match error.name() {
+                // Don't error if BlueZ has already stopped scanning.
+                Some("org.bluez.Error.InProgress") => Ok(()),
+                _ => Err(error)?,
+            }
+        } else {
+            debug!("Stopping discovery");
+            Ok(())
+        }
     }
 
     fn peripherals(&self) -> Vec<Peripheral> {
@@ -427,60 +510,8 @@ impl Central<Peripheral> for ConnectedAdapter {
     fn peripheral(&self, address: BDAddr) -> Option<Peripheral> {
         self.manager.peripheral(address)
     }
-}
 
-/// Adapter represents a physical bluetooth interface in your system, for example a bluetooth
-/// dongle.
-#[derive(Debug, Clone)]
-pub struct Adapter {
-    /// The name of the adapter.
-    pub name: String,
-
-    /// The device id of the adapter.
-    pub dev_id: u16,
-
-    /// The address of the adapter.
-    pub addr: BDAddr,
-
-    /// The type of the adapater.
-    pub typ: AdapterType,
-
-    /// The set of states that the adapater is in.
-    pub states: HashSet<AdapterState>,
-
-    /// Properties of the adapter.
-    pub info: HCIDevInfo,
-}
-
-impl Adapter {
-    pub fn from_device_info(di: &HCIDevInfo) -> Adapter {
-        info!("DevInfo: {:?}", di);
-        Adapter {
-            name: String::from(unsafe { CStr::from_ptr(di.name.as_ptr()).to_str().unwrap() }),
-            dev_id: di.dev_id,
-            addr: di.bdaddr,
-            typ: AdapterType::parse((di.type_ & 0x30) >> 4),
-            states: AdapterState::parse(di.flags),
-            info: di.clone(),
-        }
-    }
-
-    pub fn from_dev_id(ctl: i32, dev_id: u16) -> Result<Adapter> {
-        let mut di = HCIDevInfo::default();
-        di.dev_id = dev_id;
-
-        unsafe {
-            ioctl::hci_get_dev_info(ctl, &mut di)?;
-        }
-
-        Ok(Adapter::from_device_info(&di))
-    }
-
-    pub fn is_up(&self) -> bool {
-        self.states.contains(&AdapterState::Up)
-    }
-
-    pub fn connect(&self) -> Result<ConnectedAdapter> {
-        ConnectedAdapter::new(self)
+    fn active(&self, _enabled: bool) {
+        todo!()
     }
 }

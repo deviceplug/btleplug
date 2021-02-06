@@ -8,8 +8,7 @@
 use super::adapter::Adapter;
 use crate::Result;
 
-pub struct Manager {
-}
+pub struct Manager {}
 
 impl Manager {
     pub fn new() -> Result<Self> {
@@ -17,8 +16,7 @@ impl Manager {
     }
 
     pub fn adapters(&self) -> Result<Vec<Adapter>> {
-
-        Ok(vec!(Adapter::new()))
+        Ok(vec![Adapter::new()])
         // TODO What do we do if there is no bluetooth adapter, like on an older
         // macbook pro? Will BluetoothAdapter::init() fail?
     }

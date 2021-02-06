@@ -8,29 +8,29 @@
 // For more info on handling CoreBluetooth Managers (and possibly having
 // multiple), see https://forums.developer.apple.com/thread/20810
 
-use crate::api::{Characteristic, CharPropFlags, UUID};
 use super::{
     central_delegate::{CentralDelegate, CentralDelegateEvent},
+    framework::{cb, ns},
+    future::{BtlePlugFuture, BtlePlugFutureState, BtlePlugFutureStateShared},
     utils::{CoreBluetoothUtils, NSStringUtils},
-    future::{BtlePlugFutureState, BtlePlugFutureStateShared, BtlePlugFuture},
-    framework::{cb, ns}
 };
+use crate::api::{CharPropFlags, Characteristic, UUID};
 use async_std::{
+    channel::{self, Receiver, Sender},
     task,
-    sync::{channel, Sender, Receiver},
-    prelude::{StreamExt, FutureExt},
 };
+use futures::{select, FutureExt, StreamExt};
 use objc::{
-    rc::{StrongPtr},
+    rc::StrongPtr,
     runtime::{Object, YES},
 };
-use uuid::Uuid;
 use std::{
-    collections::{HashMap, BTreeSet, VecDeque},
-    thread,
+    collections::{BTreeSet, HashMap, VecDeque},
     os::raw::c_uint,
     str::FromStr,
+    thread,
 };
+use uuid::Uuid;
 
 struct CBCharacteristic {
     pub characteristic: StrongPtr,
@@ -45,7 +45,8 @@ struct CBCharacteristic {
 impl CBCharacteristic {
     pub fn new(characteristic: StrongPtr) -> Self {
         let properties = CBCharacteristic::form_flags(*characteristic);
-        let uuid = CoreBluetoothUtils::uuid_to_canonical_uuid_string(cb::attribute_uuid(*characteristic));
+        let uuid =
+            CoreBluetoothUtils::uuid_to_canonical_uuid_string(cb::attribute_uuid(*characteristic));
         let uuid = Uuid::from_str(&uuid).unwrap();
         Self {
             characteristic,
@@ -109,7 +110,7 @@ struct CBPeripheral {
     pub characteristics: HashMap<Uuid, CBCharacteristic>,
     pub event_sender: Sender<CBPeripheralEvent>,
     pub connected_future_state: Option<CoreBluetoothReplyStateShared>,
-    characteristic_update_count: u32
+    characteristic_update_count: u32,
 }
 
 impl CBPeripheral {
@@ -120,7 +121,7 @@ impl CBPeripheral {
             characteristics: HashMap::new(),
             event_sender,
             connected_future_state: None,
-            characteristic_update_count: 0
+            characteristic_update_count: 0,
         }
     }
 
@@ -130,7 +131,8 @@ impl CBPeripheral {
 
     pub fn set_characteristics(&mut self, characteristics: HashMap<Uuid, StrongPtr>) {
         for (c_uuid, c_obj) in characteristics {
-            self.characteristics.insert(c_uuid, CBCharacteristic::new(c_obj));
+            self.characteristics
+                .insert(c_uuid, CBCharacteristic::new(c_obj));
         }
         // It's time for QUESTIONABLE ASSUMPTIONS.
         //
@@ -171,8 +173,7 @@ impl CBPeripheral {
 
     // Allows the manager to send an event in our place, which will let us line
     // up with peripheral event expectations.
-    pub(in super::internal) fn send_event() {
-    }
+    pub(in super::internal) fn send_event() {}
 }
 
 // All of CoreBluetooth is basically async. It's all just waiting on delegate
@@ -201,6 +202,8 @@ pub enum CoreBluetoothMessage {
     ReadValue(Uuid, Uuid, CoreBluetoothReplyStateShared),
     // device uuid, characteristic uuid, data, future
     WriteValue(Uuid, Uuid, Vec<u8>, CoreBluetoothReplyStateShared),
+    // device uuid, characteristic uuid, data, future
+    WriteValueWithResponse(Uuid, Uuid, Vec<u8>, CoreBluetoothReplyStateShared),
     // device uuid, characteristic uuid, future
     Subscribe(Uuid, Uuid, CoreBluetoothReplyStateShared),
     // device uuid, characteristic uuid, future
@@ -211,7 +214,7 @@ pub enum CoreBluetoothEvent {
     AdapterConnected,
     AdapterError,
     // name, identifier, event receiver, message sender
-    DeviceDiscovered(Uuid, String, async_std::sync::Receiver<CBPeripheralEvent>),
+    DeviceDiscovered(Uuid, String, Receiver<CBPeripheralEvent>),
     DeviceUpdated(Uuid, String),
     // identifier
     DeviceLost(Uuid),
@@ -227,7 +230,10 @@ enum InternalLoopMessage {
 }
 
 impl CoreBluetoothInternal {
-    pub fn new(message_receiver: Receiver<CoreBluetoothMessage>, event_sender: async_std::sync::Sender<CoreBluetoothEvent>) -> Self {
+    pub fn new(
+        message_receiver: Receiver<CoreBluetoothMessage>,
+        event_sender: Sender<CoreBluetoothEvent>,
+    ) -> Self {
         // Pretty sure these come preallocated?
         unsafe {
             let delegate = StrongPtr::new(CentralDelegate::delegate());
@@ -237,7 +243,7 @@ impl CoreBluetoothInternal {
                 delegate_receiver: CentralDelegate::delegate_receiver_clone(*delegate),
                 event_sender,
                 message_receiver,
-                delegate
+                delegate,
             }
         }
     }
@@ -262,14 +268,22 @@ impl CoreBluetoothInternal {
             //     self.connect_peripheral(*peripheral);
             // }
             // Create our channels
-            let (event_sender, event_receiver) = async_std::sync::channel(256);
-            self.peripherals.insert(uuid,
-                                    CBPeripheral::new(peripheral, event_sender));
-            self.dispatch_event(CoreBluetoothEvent::DeviceDiscovered(uuid, name, event_receiver));
+            let (event_sender, event_receiver) = channel::bounded(256);
+            self.peripherals
+                .insert(uuid, CBPeripheral::new(peripheral, event_sender));
+            self.dispatch_event(CoreBluetoothEvent::DeviceDiscovered(
+                uuid,
+                name,
+                event_receiver,
+            ));
         }
     }
 
-    fn on_discovered_services(&mut self, peripheral_uuid: Uuid, service_map: HashMap<Uuid, StrongPtr>) {
+    fn on_discovered_services(
+        &mut self,
+        peripheral_uuid: Uuid,
+        service_map: HashMap<Uuid, StrongPtr>,
+    ) {
         info!("Found services!");
         for id in service_map.keys() {
             info!("{}", id);
@@ -279,7 +293,11 @@ impl CoreBluetoothInternal {
         }
     }
 
-    fn on_discovered_characteristics(&mut self, peripheral_uuid: Uuid, char_map: HashMap<Uuid, StrongPtr>) {
+    fn on_discovered_characteristics(
+        &mut self,
+        peripheral_uuid: Uuid,
+        char_map: HashMap<Uuid, StrongPtr>,
+    ) {
         info!("Found chars!");
         for id in char_map.keys() {
             info!("{}", id);
@@ -319,12 +337,47 @@ impl CoreBluetoothInternal {
         }
     }
 
-    fn on_characteristic_notified(&mut self, peripheral_uuid: Uuid, characteristic_uuid: Uuid, data: Vec<u8>) {
+    fn on_characteristic_read(
+        &mut self,
+        peripheral_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        data: Vec<u8>,
+    ) {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
-                task::block_on(async {
-                    p.event_sender.send(CBPeripheralEvent::Notification(characteristic_uuid, data)).await;
-                });
+                info!("Got read event!");
+
+                let mut data_clone = Vec::new();
+                for byte in data.iter() {
+                    data_clone.push(*byte);
+                }
+                // Reads and notifications both return the same callback. If
+                // we're trying to do a read, we'll have a future we can
+                // fulfill. Otherwise, just treat the returned value as a
+                // notification and use the event system.
+                if c.read_future_state.len() > 0 {
+                    let state = c.read_future_state.pop_back().unwrap();
+                    state
+                        .lock()
+                        .unwrap()
+                        .set_reply(CoreBluetoothReply::ReadResult(data_clone));
+                } else {
+                    task::block_on(async {
+                        p.event_sender
+                            .send(CBPeripheralEvent::Notification(characteristic_uuid, data))
+                            .await;
+                    });
+                }
+            }
+        }
+    }
+
+    fn on_characteristic_written(&mut self, peripheral_uuid: Uuid, characteristic_uuid: Uuid) {
+        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
+            if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
+                info!("Got written event!");
+                let state = c.write_future_state.pop_back().unwrap();
+                state.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
             }
         }
     }
@@ -338,35 +391,76 @@ impl CoreBluetoothInternal {
         }
     }
 
-    // Assume this is write without response
-    fn write_value(&mut self, peripheral_uuid: Uuid, characteristic_uuid: Uuid, data: Vec<u8>, fut: CoreBluetoothReplyStateShared) {
+    fn write_value(
+        &mut self,
+        peripheral_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        data: Vec<u8>,
+        fut: CoreBluetoothReplyStateShared,
+        with_response: bool,
+    ) {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
-                info!("Writing value!");
-                cb::peripheral_writevalue_forcharacteristic(*p.peripheral, ns::data(data.as_ptr(), data.len() as c_uint), *c.characteristic);
-                fut.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
+                info!("Writing value! With response: {}", with_response);
+                cb::peripheral_writevalue_forcharacteristic(
+                    *p.peripheral,
+                    ns::data(data.as_ptr(), data.len() as c_uint),
+                    *c.characteristic,
+                    if with_response { 1 } else { 0 },
+                );
+                c.write_future_state.push_front(fut);
             }
         }
     }
 
-    fn read_value(&mut self, peripheral_uuid: Uuid, characteristic_uuid: Uuid, fut: CoreBluetoothReplyStateShared) {
+    fn read_value(
+        &mut self,
+        peripheral_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        fut: CoreBluetoothReplyStateShared,
+    ) {
+        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
+            if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
+                info!("Reading value!");
+                cb::peripheral_readvalue_forcharacteristic(*p.peripheral, *c.characteristic);
+                c.read_future_state.push_front(fut);
+            }
+        }
     }
 
-    fn subscribe(&mut self, peripheral_uuid: Uuid, characteristic_uuid: Uuid, fut: CoreBluetoothReplyStateShared) {
+    fn subscribe(
+        &mut self,
+        peripheral_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        fut: CoreBluetoothReplyStateShared,
+    ) {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
                 info!("Setting subscribe!");
-                cb::peripheral_setnotifyvalue_forcharacteristic(*p.peripheral, objc::runtime::YES, *c.characteristic);
+                cb::peripheral_setnotifyvalue_forcharacteristic(
+                    *p.peripheral,
+                    objc::runtime::YES,
+                    *c.characteristic,
+                );
                 c.subscribe_future_state.push_front(fut);
             }
         }
     }
 
-    fn unsubscribe(&mut self, peripheral_uuid: Uuid, characteristic_uuid: Uuid, fut: CoreBluetoothReplyStateShared) {
+    fn unsubscribe(
+        &mut self,
+        peripheral_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        fut: CoreBluetoothReplyStateShared,
+    ) {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
                 info!("Setting subscribe!");
-                cb::peripheral_setnotifyvalue_forcharacteristic(*p.peripheral, objc::runtime::NO, *c.characteristic);
+                cb::peripheral_setnotifyvalue_forcharacteristic(
+                    *p.peripheral,
+                    objc::runtime::NO,
+                    *c.characteristic,
+                );
                 c.unsubscribe_future_state.push_front(fut);
             }
         }
@@ -374,19 +468,24 @@ impl CoreBluetoothInternal {
 
     pub fn wait_for_message(&mut self) -> bool {
         let mut delegate_receiver_clone = self.delegate_receiver.clone();
-        let delegate_future = async {
-            InternalLoopMessage::Delegate(delegate_receiver_clone.next().await.unwrap())
-        };
-
+        /*
+        let delegate_future =
+            async { InternalLoopMessage::Delegate(delegate_receiver_clone.next().await.unwrap()) };
+        */
         let mut adapter_receiver_clone = self.message_receiver.clone();
-
-        let adapter_future = async {
-            InternalLoopMessage::Adapter(adapter_receiver_clone.next().await.unwrap())
-        };
-
+        /*
+                let adapter_future =
+                    async { InternalLoopMessage::Adapter(adapter_receiver_clone.next().await.unwrap()) };
+        */
         let msg = task::block_on(async {
-            let race_future = delegate_future.race(adapter_future);
-            race_future.await
+            select! {
+                delegate_msg = delegate_receiver_clone.next().fuse() => {
+                    InternalLoopMessage::Delegate(delegate_msg.unwrap())
+                }
+                adapter_msg = adapter_receiver_clone.next().fuse() => {
+                    InternalLoopMessage::Adapter(adapter_msg.unwrap())
+                }
+            }
         });
 
         match msg {
@@ -398,28 +497,45 @@ impl CoreBluetoothInternal {
                     // TODO We should probably also register some sort of
                     // "ready" variable in our adapter that will cause scans/etc
                     // to fail if this hasn't updated.
-                    CentralDelegateEvent::DidUpdateState =>
-                        self.dispatch_event(CoreBluetoothEvent::AdapterConnected),
-                    CentralDelegateEvent::DiscoveredPeripheral(peripheral) =>
-                        self.on_discovered_peripheral(peripheral),
-                    CentralDelegateEvent::DiscoveredServices(peripheral_id, service_map) =>
-                        self.on_discovered_services(peripheral_id, service_map),
-                    CentralDelegateEvent::DiscoveredCharacteristics(peripheral_id, char_map) =>
-                        self.on_discovered_characteristics(peripheral_id, char_map),
-                    CentralDelegateEvent::ConnectedDevice(peripheral_id) =>
-                        self.on_peripheral_connect(peripheral_id),
-                    CentralDelegateEvent::DisconnectedDevice(peripheral_id) =>
-                        self.on_peripheral_disconnect(peripheral_id),
-                    CentralDelegateEvent::CharacteristicSubscribed(peripheral_id, characteristic_id) =>
-                        self.on_characteristic_subscribed(peripheral_id, characteristic_id),
-                    CentralDelegateEvent::CharacteristicUnsubscribed(peripheral_id, characteristic_id) =>
-                        self.on_characteristic_unsubscribed(peripheral_id, characteristic_id),
-                    CentralDelegateEvent::CharacteristicNotified(peripheral_id, characteristic_id, data) =>
-                        self.on_characteristic_notified(peripheral_id, characteristic_id, data),
+                    CentralDelegateEvent::DidUpdateState => {
+                        self.dispatch_event(CoreBluetoothEvent::AdapterConnected)
+                    }
+                    CentralDelegateEvent::DiscoveredPeripheral(peripheral) => {
+                        self.on_discovered_peripheral(peripheral)
+                    }
+                    CentralDelegateEvent::DiscoveredServices(peripheral_id, service_map) => {
+                        self.on_discovered_services(peripheral_id, service_map)
+                    }
+                    CentralDelegateEvent::DiscoveredCharacteristics(peripheral_id, char_map) => {
+                        self.on_discovered_characteristics(peripheral_id, char_map)
+                    }
+                    CentralDelegateEvent::ConnectedDevice(peripheral_id) => {
+                        self.on_peripheral_connect(peripheral_id)
+                    }
+                    CentralDelegateEvent::DisconnectedDevice(peripheral_id) => {
+                        self.on_peripheral_disconnect(peripheral_id)
+                    }
+                    CentralDelegateEvent::CharacteristicSubscribed(
+                        peripheral_id,
+                        characteristic_id,
+                    ) => self.on_characteristic_subscribed(peripheral_id, characteristic_id),
+                    CentralDelegateEvent::CharacteristicUnsubscribed(
+                        peripheral_id,
+                        characteristic_id,
+                    ) => self.on_characteristic_unsubscribed(peripheral_id, characteristic_id),
+                    CentralDelegateEvent::CharacteristicNotified(
+                        peripheral_id,
+                        characteristic_id,
+                        data,
+                    ) => self.on_characteristic_read(peripheral_id, characteristic_id, data),
+                    CentralDelegateEvent::CharacteristicWritten(
+                        peripheral_id,
+                        characteristic_id,
+                    ) => self.on_characteristic_written(peripheral_id, characteristic_id),
                     _ => info!("Unknown type!"),
                 };
                 true
-            },
+            }
             InternalLoopMessage::Adapter(adapter_msg) => {
                 info!("Adapter message!");
                 match adapter_msg {
@@ -429,20 +545,30 @@ impl CoreBluetoothInternal {
                         info!("got connectdevice msg!");
                         self.connect_peripheral(peripheral_uuid, fut);
                     }
-                    CoreBluetoothMessage::DisconnectDevice(peripheral_uuid, fut) => {},
-                    CoreBluetoothMessage::ReadValue(peripheral_uuid, char_uuid, fut) =>
-                        self.read_value(peripheral_uuid, char_uuid, fut),
-                    CoreBluetoothMessage::WriteValue(peripheral_uuid, char_uuid, data, fut) =>
-                        self.write_value(peripheral_uuid, char_uuid, data, fut),
-                    CoreBluetoothMessage::Subscribe(peripheral_uuid, char_uuid, fut) =>
-                        self.subscribe(peripheral_uuid, char_uuid, fut),
-                    CoreBluetoothMessage::Unsubscribe(peripheral_uuid, char_uuid, fut) =>
-                        self.unsubscribe(peripheral_uuid, char_uuid, fut),
-                    _ => {},
+                    CoreBluetoothMessage::DisconnectDevice(peripheral_uuid, fut) => {}
+                    CoreBluetoothMessage::ReadValue(peripheral_uuid, char_uuid, fut) => {
+                        self.read_value(peripheral_uuid, char_uuid, fut)
+                    }
+                    CoreBluetoothMessage::WriteValue(peripheral_uuid, char_uuid, data, fut) => {
+                        self.write_value(peripheral_uuid, char_uuid, data, fut, false)
+                    }
+                    CoreBluetoothMessage::WriteValueWithResponse(
+                        peripheral_uuid,
+                        char_uuid,
+                        data,
+                        fut,
+                    ) => self.write_value(peripheral_uuid, char_uuid, data, fut, true),
+                    CoreBluetoothMessage::Subscribe(peripheral_uuid, char_uuid, fut) => {
+                        self.subscribe(peripheral_uuid, char_uuid, fut)
+                    }
+                    CoreBluetoothMessage::Unsubscribe(peripheral_uuid, char_uuid, fut) => {
+                        self.unsubscribe(peripheral_uuid, char_uuid, fut)
+                    }
+                    _ => {}
                 };
                 true
-            },
-            LoopFinished => false
+            }
+            LoopFinished => false,
         }
     }
 
@@ -451,9 +577,9 @@ impl CoreBluetoothInternal {
         let options = ns::mutabledictionary();
         // NOTE: If duplicates are not allowed then a peripheral will not show
         // up again once connected and then disconnected.
-        ns::mutabledictionary_setobject_forkey(options,
-                                               ns::number_withbool(YES),
-                                               unsafe { cb::CENTRALMANAGERSCANOPTIONALLOWDUPLICATESKEY });
+        ns::mutabledictionary_setobject_forkey(options, ns::number_withbool(YES), unsafe {
+            cb::CENTRALMANAGERSCANOPTIONALLOWDUPLICATESKEY
+        });
         cb::centralmanager_scanforperipherals_options(*self.manager, options);
     }
 
@@ -472,8 +598,10 @@ impl Drop for CoreBluetoothInternal {
     }
 }
 
-pub fn run_corebluetooth_thread(event_sender: Sender<CoreBluetoothEvent>) -> Sender<CoreBluetoothMessage> {
-    let (sender, receiver) = channel::<CoreBluetoothMessage>(256);
+pub fn run_corebluetooth_thread(
+    event_sender: Sender<CoreBluetoothEvent>,
+) -> Sender<CoreBluetoothMessage> {
+    let (sender, receiver) = channel::bounded::<CoreBluetoothMessage>(256);
     thread::spawn(move || {
         let mut cbi = CoreBluetoothInternal::new(receiver, event_sender);
         loop {

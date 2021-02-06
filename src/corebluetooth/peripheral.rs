@@ -5,34 +5,30 @@
 // Licensed under the BSD 3-Clause license. See LICENSE file in the project root
 // for full license information.
 
-use crate::{
-    api::{
-        AddressType, BDAddr, PeripheralProperties, CommandCallback,
-        NotificationHandler, RequestCallback, UUID, Peripheral as ApiPeripheral,
-        Characteristic, CentralEvent, ValueNotification, AdapterManager
-    },
-    common::util,
-    Result, Error
-};
 use super::{
     adapter::uuid_to_bdaddr,
     internal::{
-        CoreBluetoothMessage, CoreBluetoothReplyFuture,
-        CoreBluetoothReply, CBPeripheralEvent,
-    }
+        CBPeripheralEvent, CoreBluetoothMessage, CoreBluetoothReply, CoreBluetoothReplyFuture,
+    },
 };
-use std::{
-    fmt::{self, Debug, Display, Formatter},
-    collections::{BTreeSet},
-    iter::FromIterator,
-    sync::{
-        Arc, Mutex
-    }
+use crate::{
+    api::{
+        AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, NotificationHandler,
+        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, UUID,
+    },
+    common::util,
+    Error, Result,
 };
 use async_std::{
-    sync::{Receiver, Sender},
-    task,
+    channel::{self, Receiver, Sender},
     prelude::StreamExt,
+    task,
+};
+use std::{
+    collections::{BTreeSet, HashMap},
+    fmt::{self, Debug, Display, Formatter},
+    iter::FromIterator,
+    sync::{Arc, Mutex},
 };
 use uuid::Uuid;
 
@@ -51,7 +47,13 @@ pub struct Peripheral {
 }
 
 impl Peripheral {
-    pub fn new(uuid: Uuid, local_name: String, manager: AdapterManager<Self>, event_receiver: Receiver<CBPeripheralEvent>, message_sender: Sender<CoreBluetoothMessage>) -> Self {
+    pub fn new(
+        uuid: Uuid,
+        local_name: String,
+        manager: AdapterManager<Self>,
+        event_receiver: Receiver<CBPeripheralEvent>,
+        message_sender: Sender<CoreBluetoothMessage>,
+    ) -> Self {
         // Since we're building the object, we have an active advertisement.
         // Build properties now.
         let properties = PeripheralProperties {
@@ -61,7 +63,7 @@ impl Peripheral {
             address_type: AddressType::Random,
             local_name: Some(local_name),
             tx_power_level: None,
-            manufacturer_data: None,
+            manufacturer_data: HashMap::new(),
             discovery_count: 1,
             has_scan_response: true,
         };
@@ -78,11 +80,14 @@ impl Peripheral {
                 if let Some(CBPeripheralEvent::Notification(uuid, data)) = event {
                     let mut id = *uuid.as_bytes();
                     id.reverse();
-                    util::invoke_handlers(&nh_clone, &ValueNotification {
-                        uuid: UUID::B128(id),
-                        handle: None,
-                        value: data,
-                    });
+                    util::invoke_handlers(
+                        &nh_clone,
+                        &ValueNotification {
+                            uuid: UUID::B128(id),
+                            handle: None,
+                            value: data,
+                        },
+                    );
                 } else {
                     error!("Unhandled CBPeripheralEvent");
                 }
@@ -168,7 +173,12 @@ impl ApiPeripheral for Peripheral {
         info!("Trying device connect!");
         task::block_on(async {
             let fut = CoreBluetoothReplyFuture::default();
-            self.message_sender.send(CoreBluetoothMessage::ConnectDevice(self.uuid, fut.get_state_clone())).await;
+            self.message_sender
+                .send(CoreBluetoothMessage::ConnectDevice(
+                    self.uuid,
+                    fut.get_state_clone(),
+                ))
+                .await;
             match fut.await {
                 CoreBluetoothReply::Connected(chars) => {
                     *(self.characteristics.lock().unwrap()) = chars;
@@ -195,15 +205,12 @@ impl ApiPeripheral for Peripheral {
 
     /// Discovers characteristics within the specified range of handles. This is a synchronous
     /// operation.
-    fn discover_characteristics_in_range(&self, _start: u16, _end: u16) -> Result<Vec<Characteristic>> {
+    fn discover_characteristics_in_range(
+        &self,
+        _start: u16,
+        _end: u16,
+    ) -> Result<Vec<Characteristic>> {
         panic!("NOT IMPLEMENTED");
-    }
-
-    /// Sends a command (`write-without-response`) to the characteristic. Takes an optional callback
-    /// that will be notified in case of error or when the command has been successfully acked by the
-    /// device.
-    fn command_async(&self, _characteristic: &Characteristic, _data: &[u8], _handler: Option<CommandCallback>) {
-        info!("Trying to command!");
     }
 
     /// Sends a command (write without response) to the characteristic. Synchronously returns a
@@ -212,42 +219,50 @@ impl ApiPeripheral for Peripheral {
         info!("Trying to command!");
         task::block_on(async {
             let fut = CoreBluetoothReplyFuture::default();
-            self.message_sender.send(CoreBluetoothMessage::WriteValue(self.uuid, get_apple_uuid(characteristic.uuid), Vec::from(data), fut.get_state_clone())).await;
+            self.message_sender
+                .send(CoreBluetoothMessage::WriteValue(
+                    self.uuid,
+                    get_apple_uuid(characteristic.uuid),
+                    Vec::from(data),
+                    fut.get_state_clone(),
+                ))
+                .await;
             match fut.await {
-                CoreBluetoothReply::Ok => {},
+                CoreBluetoothReply::Ok => {}
                 _ => panic!("Didn't subscribe!"),
             }
         });
         Ok(())
     }
 
-    /// Sends a request (write) to the device. Takes an optional callback with either an error if
-    /// the request was not accepted or the response from the device.
-    fn request_async(&self, _characteristic: &Characteristic,
-                     _data: &[u8], _handler: Option<RequestCallback>) {
-
-    }
-
     /// Sends a request (write) to the device. Synchronously returns either an error if the request
     /// was not accepted or the response from the device.
-    fn request(&self, _characteristic: &Characteristic, _data: &[u8]) -> Result<Vec<u8>> {
-        Ok(Vec::new())
-    }
-
-    /// Sends a read-by-type request to device for the range of handles covered by the
-    /// characteristic and for the specified declaration UUID. See
-    /// [here](https://www.bluetooth.com/specifications/gatt/declarations) for valid UUIDs.
-    /// Takes an optional callback that will be called with an error or the device response.
-    fn read_by_type_async(&self, _characteristic: &Characteristic,
-                          _uuid: UUID, _handler: Option<RequestCallback>) {
+    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
+        task::block_on(async {
+            let fut = CoreBluetoothReplyFuture::default();
+            self.message_sender
+                .send(CoreBluetoothMessage::WriteValueWithResponse(
+                    self.uuid,
+                    get_apple_uuid(characteristic.uuid),
+                    Vec::from(data),
+                    fut.get_state_clone(),
+                ))
+                .await;
+            match fut.await {
+                CoreBluetoothReply::Ok => {}
+                _ => {
+                    panic!("Shouldn't get anything but read result!");
+                }
+            }
+        });
+        Ok(())
     }
 
     /// Sends a read-by-type request to device for the range of handles covered by the
     /// characteristic and for the specified declaration UUID. See
     /// [here](https://www.bluetooth.com/specifications/gatt/declarations) for valid UUIDs.
     /// Synchronously returns either an error or the device response.
-    fn read_by_type(&self, _characteristic: &Characteristic,
-                    _uuid: UUID) -> Result<Vec<u8>> {
+    fn read_by_type(&self, _characteristic: &Characteristic, _uuid: UUID) -> Result<Vec<u8>> {
         Err(Error::NotSupported("read_by_type".into()))
     }
 
@@ -257,7 +272,13 @@ impl ApiPeripheral for Peripheral {
         info!("Trying to subscribe!");
         task::block_on(async {
             let fut = CoreBluetoothReplyFuture::default();
-            self.message_sender.send(CoreBluetoothMessage::Subscribe(self.uuid, get_apple_uuid(characteristic.uuid), fut.get_state_clone())).await;
+            self.message_sender
+                .send(CoreBluetoothMessage::Subscribe(
+                    self.uuid,
+                    get_apple_uuid(characteristic.uuid),
+                    fut.get_state_clone(),
+                ))
+                .await;
             match fut.await {
                 CoreBluetoothReply::Ok => info!("subscribed!"),
                 _ => panic!("Didn't subscribe!"),
@@ -272,9 +293,15 @@ impl ApiPeripheral for Peripheral {
         info!("Trying to unsubscribe!");
         task::block_on(async {
             let fut = CoreBluetoothReplyFuture::default();
-            self.message_sender.send(CoreBluetoothMessage::Unsubscribe(self.uuid, get_apple_uuid(characteristic.uuid), fut.get_state_clone())).await;
+            self.message_sender
+                .send(CoreBluetoothMessage::Unsubscribe(
+                    self.uuid,
+                    get_apple_uuid(characteristic.uuid),
+                    fut.get_state_clone(),
+                ))
+                .await;
             match fut.await {
-                CoreBluetoothReply::Ok => {},
+                CoreBluetoothReply::Ok => {}
                 _ => panic!("Didn't unsubscribe!"),
             }
         });
@@ -289,10 +316,27 @@ impl ApiPeripheral for Peripheral {
         list.push(handler);
     }
 
-    fn read_async(&self, _characteristic: &Characteristic, _handler: Option<RequestCallback>) {
-    }
-
-    fn read(&self, _characteristic: &Characteristic) -> Result<Vec<u8>> {
-        Ok(vec!())
+    fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
+        info!("Trying read!");
+        let mut result = Vec::<u8>::new();
+        task::block_on(async {
+            let fut = CoreBluetoothReplyFuture::default();
+            self.message_sender
+                .send(CoreBluetoothMessage::ReadValue(
+                    self.uuid,
+                    get_apple_uuid(characteristic.uuid),
+                    fut.get_state_clone(),
+                ))
+                .await;
+            match fut.await {
+                CoreBluetoothReply::ReadResult(chars) => {
+                    result = chars;
+                }
+                _ => {
+                    panic!("Shouldn't get anything but read result!");
+                }
+            }
+        });
+        Ok(result)
     }
 }

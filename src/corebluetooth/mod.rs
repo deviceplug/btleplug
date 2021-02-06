@@ -9,11 +9,11 @@
 // pub mod manager;
 // pub mod adapter;
 // pub mod peripheral;
-mod internal;
+pub mod adapter;
 mod central_delegate;
 mod framework;
-mod utils;
-pub mod manager;
-pub mod adapter;
-pub mod peripheral;
 mod future;
+mod internal;
+pub mod manager;
+pub mod peripheral;
+mod utils;

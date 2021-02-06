@@ -11,131 +11,44 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use std::{
-    slice::Iter,
-    iter::Take,
-    sync::Mutex,
-    mem,
-};
+use std::sync::Arc;
 
-use libc::{self, SOCK_RAW, AF_BLUETOOTH};
-use nix::sys::ioctl::ioctl_param_type;
+use dbus::blocking::{stdintf::org_freedesktop_dbus::ObjectManager, SyncConnection};
 
-use crate::{
-    bluez::{
-        util::handle_error,
-        adapter::{Adapter, ConnectedAdapter},
-        constants::*,
-        ioctl
-    },
-    Result
-};
+use crate::{bluez::adapter::Adapter, Result};
 
-#[derive(Debug, Copy)]
-#[repr(C)]
-pub struct HCIDevReq {
-    pub dev_id: u16,
-    pub dev_opt: u32,
-}
-
-impl Clone for HCIDevReq {
-    fn clone(&self) -> Self { *self }
-}
-
-impl Default for HCIDevReq {
-    fn default() -> Self {
-        HCIDevReq {
-            dev_id: 0,
-            dev_opt: 0,
-        }
-    }
-}
-
-#[derive(Copy)]
-#[repr(C)]
-pub struct HCIDevListReq {
-    dev_num: u16,
-    dev_reqs: [HCIDevReq; 16],
-}
-
-impl HCIDevListReq {
-    pub fn iter(&self) -> Take<Iter<HCIDevReq>> {
-        self.dev_reqs.iter().take(self.dev_num as usize)
-    }
-}
-
-impl Clone for HCIDevListReq {
-    fn clone(&self) -> Self { *self }
-}
-
-impl Default for HCIDevListReq {
-    fn default() -> Self {
-        HCIDevListReq {
-            dev_num: 16u16,
-            dev_reqs: unsafe { mem::zeroed() },
-        }
-    }
-}
+use super::{bluez_dbus::adapter::ORG_BLUEZ_ADAPTER1_NAME, BLUEZ_DEST, DEFAULT_TIMEOUT};
 
 /// This struct is the interface into BlueZ. It can be used to list, manage, and connect to bluetooth
 /// adapters.
 pub struct Manager {
-    ctl_fd: Mutex<i32>
+    dbus_conn: Arc<SyncConnection>,
 }
+assert_impl_all!(Manager: Sync, Send);
 
 impl Manager {
     /// Constructs a new manager to communicate with the BlueZ system. Only one Manager should be
     /// created by your application.
     pub fn new() -> Result<Manager> {
-        let fd = handle_error(unsafe { libc::socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI) })?;
-        Ok(Manager { ctl_fd: Mutex::new(fd) })
+        Ok(Manager {
+            dbus_conn: Arc::new(SyncConnection::new_system()?),
+        })
     }
 
     /// Returns the list of adapters available on the system.
     pub fn adapters(&self) -> Result<Vec<Adapter>> {
-        let mut result: Vec<Adapter> = vec![];
+        // Create a convenience proxy connection that's already namespaced to org.bluez
+        let bluez = self.dbus_conn.with_proxy(BLUEZ_DEST, "/", DEFAULT_TIMEOUT);
 
-        let ctl = self.ctl_fd.lock().unwrap();
+        // First, use org.freedesktop.DBus.ObjectManager to query org.bluez
+        // for adapters
+        let adapters = bluez
+            .get_managed_objects()?
+            .into_iter()
+            .filter(|(_k, v)| v.keys().any(|i| i.starts_with(ORG_BLUEZ_ADAPTER1_NAME)))
+            .map(|(path, _v)| Adapter::from_dbus_path(&path))
+            .collect::<Result<Vec<_>>>()?;
 
-        let mut dev_list = HCIDevListReq::default();
-
-        unsafe {
-            ioctl::hci_get_dev_list(*ctl, &mut dev_list)?;
-        }
-
-        for dev_req in dev_list.iter() {
-            let adapter = Adapter::from_dev_id(*ctl, dev_req.dev_id)?;
-            result.push(adapter);
-        }
-
-        Ok(result)
-    }
-
-    /// Updates the state of an adapter.
-    pub fn update(&self, adapter: &Adapter) -> Result<Adapter> {
-        let ctl = self.ctl_fd.lock().unwrap();
-        Adapter::from_dev_id(*ctl, adapter.dev_id)
-    }
-
-    /// Disables an adapter.
-    pub fn down(&self, adapter: &Adapter) -> Result<Adapter> {
-        let ctl = self.ctl_fd.lock().unwrap();
-        unsafe { ioctl::hci_dev_down(*ctl, adapter.dev_id as ioctl_param_type)? };
-        Adapter::from_dev_id(*ctl, adapter.dev_id)
-    }
-
-    /// Enables an adapater.
-    pub fn up(&self, adapter: &Adapter) -> Result<Adapter> {
-        let ctl = self.ctl_fd.lock().unwrap();
-        unsafe {
-            ioctl::hci_dev_up(*ctl, adapter.dev_id as ioctl_param_type)?;
-        }
-        Adapter::from_dev_id(*ctl, adapter.dev_id)
-    }
-
-    /// Establishes a connection to an adapter. Returns a `ConnectedAdapter`, which is the
-    /// [`Central`](../../api/trait.Central.html) implementation for BlueZ.
-    pub fn connect(&self, adapter: &Adapter) -> Result<ConnectedAdapter> {
-        ConnectedAdapter::new(adapter)
+        Ok(adapters)
     }
 }

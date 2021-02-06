@@ -11,357 +11,375 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
+use dbus::{
+    arg::{cast, RefArg},
+    blocking::{stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged, Proxy, SyncConnection},
+    channel::Token,
+    message::{Message, SignalArgs},
+    Path,
+};
+
 use crate::{
-    Result,
-    Error,
-    api::{Characteristic, CharPropFlags, Callback, PeripheralProperties, BDAddr, Central,
-          Peripheral as ApiPeripheral, AddressType, RequestCallback, CommandCallback,
-          UUID, UUID::B16, NotificationHandler},
-    bluez::{
-        adapter::acl_stream::{ACLStream},
-        adapter::ConnectedAdapter,
-        util::handle_error,
-        constants::*,
-        protocol::{ hci, att, hci::ACLData}
+    api::{
+        AdapterManager, AddressType, BDAddr, CentralEvent, CharPropFlags, Characteristic,
+        NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification,
+        UUID,
     },
+    bluez::{
+        bluez_dbus::device::OrgBluezDevice1, bluez_dbus::device::OrgBluezDevice1Properties,
+        AttributeType, Handle, BLUEZ_DEST, DEFAULT_TIMEOUT,
+    },
+    common::util::invoke_handlers,
+    Error, Result,
 };
 
 use std::{
-    mem::size_of,
-    collections::{BTreeSet, VecDeque},
-    sync::{
-        Arc,
-        Mutex,
-        atomic::Ordering,
-        mpsc::{
-            self, Sender, Receiver, channel,
-        },
-        RwLock,
-        Condvar,
-    },
-    fmt::{Debug, Formatter, self, Display},
-    time::Duration,
+    collections::{BTreeSet, HashMap},
+    fmt::{self, Debug, Display, Formatter},
+    sync::{Arc, Condvar, Mutex},
+    time::Instant,
 };
 
-use libc;
-use bytes::{BytesMut, BufMut};
-
-#[derive(Copy, Debug)]
-#[repr(C)]
-pub struct SockaddrL2 {
-    l2_family: libc::sa_family_t,
-    l2_psm: u16,
-    l2_bdaddr: BDAddr,
-    l2_cid: u16,
-    l2_bdaddr_type: u8,
-}
-impl Clone for SockaddrL2 {
-    fn clone(&self) -> Self { *self }
-}
-
-#[derive(Copy, Debug, Default)]
-#[repr(C)]
-struct L2CapOptions {
-    omtu: u16,
-    imtu: u16,
-    flush_to: u16,
-    mode: u8,
-    fcs : u8,
-    max_tx: u8,
-    txwin_size: u16,
-}
-impl Clone for L2CapOptions {
-    fn clone(&self) -> Self { *self }
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+enum PeripheralState {
+    NotConnected,
+    Connected,
+    ServicesResolved,
 }
 
 #[derive(Clone)]
 pub struct Peripheral {
-    c_adapter: ConnectedAdapter,
+    adapter: AdapterManager<Self>,
+    connection: Arc<SyncConnection>,
+    path: String,
     address: BDAddr,
     properties: Arc<Mutex<PeripheralProperties>>,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
-    stream: Arc<RwLock<Option<ACLStream>>>,
-    connection_tx: Arc<Mutex<Sender<u16>>>,
-    connection_rx: Arc<Mutex<Receiver<u16>>>,
-    message_queue: Arc<Mutex<VecDeque<ACLData>>>,
+    attributes_map: Arc<Mutex<HashMap<u16, (String, Handle, Characteristic)>>>,
+    state: Arc<(Mutex<PeripheralState>, Condvar)>,
     notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
+    listen_token: Arc<Mutex<Option<Token>>>,
 }
+
+impl Peripheral {
+    pub fn new(
+        adapter: AdapterManager<Self>,
+        connection: Arc<SyncConnection>,
+        path: &str,
+        address: BDAddr,
+    ) -> Self {
+        let mut properties = PeripheralProperties::default();
+        properties.address = address;
+        let properties = Arc::new(Mutex::new(properties));
+        let characteristics = Arc::new(Mutex::new(BTreeSet::new()));
+        let notification_handlers = Arc::new(Mutex::new(Vec::new()));
+
+        Peripheral {
+            adapter: adapter,
+            connection: connection,
+            path: path.to_string(),
+            address: address,
+            state: Arc::new((Mutex::new(PeripheralState::NotConnected), Condvar::new())),
+            properties: properties,
+            attributes_map: Arc::new(Mutex::new(HashMap::new())),
+            characteristics: characteristics,
+            notification_handlers: notification_handlers,
+            listen_token: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub fn properties_changed(
+        &self,
+        args: PropertiesPropertiesChanged,
+        _connection: &SyncConnection,
+        message: &Message,
+    ) -> bool {
+        let path = message.path().unwrap().into_static();
+        let path = path.as_str().unwrap();
+        if path.starts_with(self.path.as_str()) {
+            if let Ok(handle) = path.parse::<Handle>() {
+                if args.changed_properties.contains_key("Value") {
+                    let notification = ValueNotification {
+                        handle: Some(handle.handle),
+                        uuid: self
+                            .attributes_map
+                            .lock()
+                            .unwrap()
+                            .get(&handle.handle)
+                            .unwrap()
+                            .2
+                            .uuid,
+                        value: dbus::arg::prop_cast::<Vec<u8>>(&args.changed_properties, "Value")
+                            .cloned()
+                            .unwrap_or_default(),
+                    };
+                    invoke_handlers(&self.notification_handlers, &notification);
+                } else if args.changed_properties.contains_key("Notifying") {
+                    // TODO: Keep track of subscribed and unsubscribed characteristics?
+                } else {
+                    warn!(
+                        "Unhandled properties changed on an attribute\n\t{:?}\n\t{:?}",
+                        path, args.changed_properties
+                    );
+                }
+            } else {
+                self.update_properties(OrgBluezDevice1Properties(&args.changed_properties));
+                if !args.invalidated_properties.is_empty() {
+                    warn!(
+                        "TODO: Got some properties to invalidate\n\t{:?}",
+                        args.invalidated_properties
+                    );
+                }
+            }
+        } else {
+            error!(
+                "Got properties changed for {}, but does not start with {}",
+                path, self.path
+            );
+        }
+
+        true
+    }
+
+    pub fn listen(&self, listener: &SyncConnection) -> Result<()> {
+        let peripheral = self.clone();
+        let mut rule = PropertiesPropertiesChanged::match_rule(None, None);
+        // For some silly lifetime reasons, we need to assign path separately...
+        rule.path = Some(Path::from(self.path.clone()));
+        // And also, we're interested in properties changed on all sub elements
+        rule.path_is_namespace = true;
+        let token =
+            listener.add_match(rule, move |a, s, m| peripheral.properties_changed(a, s, m))?;
+        *self.listen_token.lock().unwrap() = Some(token);
+
+        Ok(())
+    }
+
+    pub fn stop_listening(&self, listener: &SyncConnection) -> Result<()> {
+        trace!("Stop listening for events");
+        let mut token = self.listen_token.lock().unwrap();
+        if token.is_some() {
+            listener.remove_match(token.unwrap())?;
+            *token = None;
+        }
+
+        Ok(())
+    }
+
+    pub fn add_attribute(&self, path: &str, uuid: UUID, properties: CharPropFlags) -> Result<()> {
+        trace!(
+            "Adding attribute {} ({:?}) under {}",
+            uuid,
+            properties,
+            path
+        );
+        let mut path_uuid_map = self.attributes_map.lock().unwrap();
+        let handle: Handle = path.parse()?;
+        // Create a placeholder attribute to store properties and uuid
+        let attribute = Characteristic {
+            uuid: uuid,
+            value_handle: handle.handle,
+            properties: properties,
+            end_handle: 0,
+            start_handle: 0,
+        };
+
+        path_uuid_map.insert(handle.handle, (path.to_string(), handle, attribute));
+        Ok(())
+    }
+
+    fn build_characteristic_ranges(&self) -> Result<()> {
+        let handles = self.attributes_map.lock().unwrap();
+
+        let mut services = handles
+            .iter()
+            .filter(|(_k, (_p, h, _v))| h.typ == AttributeType::Service)
+            .map(|(_h, (_p, k, v))| (k, v))
+            .peekable();
+
+        let mut result = self.characteristics.lock().unwrap();
+        result.clear();
+
+        // TODO: Verify that service attributes are returned as characteristics
+        while let Some((handle, attribute)) = services.next() {
+            let next = services.peek();
+            result.insert(Characteristic {
+                start_handle: handle.handle,
+                end_handle: next.map_or(u16::MAX, |n| n.0.handle - 1),
+                value_handle: handle.handle,
+                properties: attribute.properties,
+                uuid: attribute.uuid.clone(),
+            });
+        }
+
+        let mut characteristics = handles
+            .iter()
+            .filter(|(_h, (_p, k, _v))| k.typ == AttributeType::Characteristic)
+            .map(|(_h, (_p, k, v))| (k, v))
+            .peekable();
+
+        while let Some((handle, attribute)) = characteristics.next() {
+            let next = characteristics.peek();
+            result.insert(Characteristic {
+                start_handle: handle.handle,
+                end_handle: next.map_or(u16::MAX, |n| n.0.handle - 1),
+                value_handle: handle.handle,
+                properties: attribute.properties,
+                uuid: attribute.uuid.clone(),
+            });
+        }
+
+        Ok(())
+    }
+
+    pub fn update_properties(&self, args: OrgBluezDevice1Properties) {
+        trace!("Updating peripheral properties");
+        let mut properties = self.properties.lock().unwrap();
+
+        properties.discovery_count += 1;
+
+        if let Some(connected) = args.connected() {
+            debug!(
+                "Updating \"{}\" connected to \"{:?}\"",
+                self.address, connected
+            );
+            let (ref lock, ref cvar) = *self.state;
+            let mut state = lock.lock().unwrap();
+            if connected {
+                if *state < PeripheralState::Connected {
+                    self.adapter
+                        .emit(CentralEvent::DeviceConnected(self.address));
+                    *state = PeripheralState::Connected;
+                }
+            } else {
+                if *state >= PeripheralState::Connected {
+                    self.adapter
+                        .emit(CentralEvent::DeviceDisconnected(self.address));
+                }
+                *state = PeripheralState::NotConnected;
+            }
+            cvar.notify_all();
+        }
+
+        if let Some(name) = args.name() {
+            debug!("Updating \"{}\" local name to \"{:?}\"", self.address, name);
+            properties.local_name = Some(name.to_owned());
+        }
+
+        if let Some(services_resolved) = args.services_resolved() {
+            if services_resolved {
+                // Need to prase and figure out handle ranges for all discovered characteristics.
+                self.build_characteristic_ranges().unwrap();
+            }
+            // All services have been discovered, time to inform anyone waiting.
+            let (ref lock, ref cvar) = *self.state;
+            if services_resolved {
+                *lock.lock().unwrap() = PeripheralState::ServicesResolved;
+            }
+            cvar.notify_all();
+        }
+
+        // if let Some(services) = args.get("ServiceData") {
+        //     debug!("Updating services to \"{:?}\"", services);
+
+        //     if let Some(mut iter) = services.0.as_iter() {
+        //         loop {
+        //             if let (Some(uuid), ())
+        //         }
+        //     }
+        // }
+
+        // As of writing this: ManufacturerData returns a 'Variant({<manufacturer_id>: Variant([<manufacturer_data>])})'.
+        // This Variant wrapped dictionary and array is difficult to navigate. So uh.. trust me, this works on my machine™.
+        if let Some(manufacturer_data) = args.manufacturer_data() {
+            debug!(
+                "Updating \"{}\" manufacturer data \"{:?}\"",
+                self.address, manufacturer_data
+            );
+            properties.manufacturer_data = manufacturer_data
+                .into_iter()
+                .filter_map(|(&k, v)| {
+                    if let Some(v) = cast::<Vec<u8>>(&v.0) {
+                        Some((k, v.to_owned()))
+                    } else {
+                        warn!("Manufacturer data had wrong type: {:?}", &v.0);
+                        None
+                    }
+                })
+                .collect();
+        }
+
+        if let Some(address_type) = args.address_type() {
+            let address_type = AddressType::from_str(address_type).unwrap_or_default();
+
+            debug!(
+                "Updating \"{}\" address type \"{:?}\"",
+                self.address, address_type
+            );
+
+            properties.address_type = address_type;
+        }
+
+        if let Some(rssi) = args.rssi() {
+            let rssi = rssi as i8;
+            debug!("Updating \"{}\" RSSI \"{:?}\"", self.address, rssi);
+            properties.tx_power_level = Some(rssi);
+        }
+
+        self.adapter.emit(CentralEvent::DeviceUpdated(self.address));
+    }
+
+    pub fn proxy(&self) -> Proxy<&SyncConnection> {
+        self.connection
+            .with_proxy(BLUEZ_DEST, &self.path, DEFAULT_TIMEOUT)
+    }
+
+    pub fn proxy_for(&self, characteristic: &Characteristic) -> Option<Proxy<&SyncConnection>> {
+        let map = self.attributes_map.lock().unwrap();
+        map.get(&characteristic.value_handle).map(|(path, _h, _c)| {
+            self.connection
+                .with_proxy(BLUEZ_DEST, path.clone(), DEFAULT_TIMEOUT)
+        })
+    }
+}
+
+assert_impl_all!(Peripheral: Sync, Send);
 
 impl Display for Peripheral {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let connected = if self.is_connected() { " connected" } else { "" };
+        let connected = if self.is_connected() {
+            " connected"
+        } else {
+            ""
+        };
         let properties = self.properties.lock().unwrap();
-        write!(f, "{} {}{}", self.address, properties.local_name.clone()
-            .unwrap_or("(unknown)".to_string()), connected)
+        write!(
+            f,
+            "{} {}{}",
+            self.address,
+            properties
+                .local_name
+                .clone()
+                .unwrap_or("(unknown)".to_string()),
+            connected
+        )
     }
 }
 
 impl Debug for Peripheral {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let connected = if self.is_connected() { " connected" } else { "" };
+        let connected = if self.is_connected() {
+            " connected"
+        } else {
+            ""
+        };
         let properties = self.properties.lock().unwrap();
         let characteristics = self.characteristics.lock().unwrap();
-        write!(f, "{} properties: {:?}, characteristics: {:?} {}", self.address, *properties,
-               *characteristics, connected)
-    }
-}
-
-impl Peripheral {
-    pub fn new(c_adapter: ConnectedAdapter, address: BDAddr) -> Peripheral {
-        let (connection_tx, connection_rx) = channel();
-        Peripheral {
-            c_adapter, address,
-            properties: Arc::new(Mutex::new(PeripheralProperties::default())),
-            characteristics: Arc::new(Mutex::new(BTreeSet::new())),
-            stream: Arc::new(RwLock::new(Option::None)),
-            connection_tx: Arc::new(Mutex::new(connection_tx)),
-            connection_rx: Arc::new(Mutex::new(connection_rx)),
-            message_queue: Arc::new(Mutex::new(VecDeque::new())),
-            notification_handlers: Arc::new(Mutex::new(vec!())),
-        }
-    }
-
-    pub fn handle_device_message(&self, message: &hci::Message) {
-        match message {
-            &hci::Message::LEAdvertisingReport(ref info) => {
-                assert_eq!(self.address, info.bdaddr, "received message for wrong device");
-                use crate::bluez::protocol::hci::LEAdvertisingData::*;
-
-                let mut properties = self.properties.lock().unwrap();
-
-                properties.discovery_count += 1;
-                properties.address_type = if info.bdaddr_type == 1 {
-                    AddressType::Random
-                } else {
-                    AddressType::Public
-                };
-
-                properties.address = info.bdaddr;
-
-                if info.evt_type == 4 {
-                    // discover event
-                    properties.has_scan_response = true;
-                } else {
-                    // TODO: reset service data
-                }
-
-                for datum in info.data.iter() {
-                    match datum {
-                        &LocalName(ref name) => {
-                            properties.local_name = Some(name.clone());
-                        }
-                        &TxPowerLevel(ref power) => {
-                            properties.tx_power_level = Some(power.clone());
-                        }
-                        &ManufacturerSpecific(ref data) => {
-                            properties.manufacturer_data = Some(data.clone());
-                        }
-                        _ => {
-                            // skip for now
-                        }
-                    }
-                }
-            }
-            &hci::Message::LEConnComplete(ref info) => {
-                assert_eq!(self.address, info.bdaddr, "received message for wrong device");
-
-                debug!("got le conn complete {:?}", info);
-                self.connection_tx.lock().unwrap().send(info.handle.clone()).unwrap();
-            }
-            &hci::Message::ACLDataPacket(ref data) => {
-                let handle = data.handle.clone();
-                match self.stream.try_read() {
-                    Ok(stream) => {
-                        stream.iter().for_each(|stream| {
-                            if stream.handle == handle {
-                                debug!("got data packet for {}: {:?}", self.address, data);
-                                stream.receive(data);
-                            }
-                        });
-                    }
-                    Err(_e) => {
-                        // we can't access the stream right now because we're still connecting, so
-                        // we'll push the message onto a queue for now
-                        let mut queue = self.message_queue.lock().unwrap();
-                        queue.push_back(data.clone());
-                    }
-                }
-            },
-            &hci::Message::DisconnectComplete {..} => {
-                // destroy our stream
-                debug!("removing stream for {} due to disconnect", self.address);
-                let mut stream = self.stream.write().unwrap();
-                *stream = None;
-                // TODO clean up our sockets
-            },
-            msg => {
-                debug!("ignored message {:?}", msg);
-            }
-        }
-    }
-
-    fn request_raw_async(&self, data: &mut[u8], handler: Option<RequestCallback>) {
-        let l = self.stream.read().unwrap();
-        match l.as_ref().ok_or(Error::NotConnected) {
-            Ok(stream) => {
-                stream.write(&mut *data, handler);
-            }
-            Err(err) => {
-                if let Some(h) = handler {
-                    h(Err(err));
-                }
-            }
-        }
-    }
-
-    fn request_raw(&self, data: &mut [u8]) -> Result<Vec<u8>> {
-        Peripheral::wait_until_done(|done: RequestCallback| {
-            // TODO this copy can be avoided
-            let mut data = data.to_vec();
-            self.request_raw_async(&mut data, Some(done));
-        })
-    }
-
-    fn request_by_handle(&self, handle: u16, data: &[u8], handler: Option<RequestCallback>) {
-        let mut buf = BytesMut::with_capacity(3 + data.len());
-        buf.put_u8(ATT_OP_WRITE_REQ);
-        buf.put_u16_le(handle);
-        buf.put(data);
-        self.request_raw_async(&mut buf, handler);
-    }
-
-    fn notify(&self, characteristic: &Characteristic, enable: bool) -> Result<()> {
-        info!("setting notify for {}/{:?} to {}", self.address, characteristic.uuid, enable);
-        let mut buf = att::read_by_type_req(
-            characteristic.start_handle, characteristic.end_handle, B16(GATT_CLIENT_CHARAC_CFG_UUID));
-
-        let data = self.request_raw(&mut buf)?;
-
-        match att::notify_response(&data) {
-            Ok(resp) => {
-                let use_notify = characteristic.properties.contains(CharPropFlags::NOTIFY);
-                let use_indicate = characteristic.properties.contains(CharPropFlags::INDICATE);
-
-                let mut value = resp.1.value;
-
-                if enable {
-                    if use_notify {
-                        value |= 0x0001;
-                    } else if use_indicate {
-                        value |= 0x0002;
-                    }
-                } else {
-                    if use_notify {
-                        value &= 0xFFFE;
-                    } else if use_indicate {
-                        value &= 0xFFFD;
-                    }
-                }
-
-                let mut value_buf = BytesMut::with_capacity(2);
-                value_buf.put_u16_le(value);
-                let data = Peripheral::wait_until_done(|done: RequestCallback| {
-                    self.request_by_handle(resp.1.handle, &*value_buf, Some(done))
-                })?;
-
-                if data.len() > 0 && data[0] == ATT_OP_WRITE_RESP {
-                    debug!("Got response from notify: {:?}", data);
-                    return Ok(());
-                } else {
-                    warn!("Unexpected notify response: {:?}", data);
-                    return Err(Error::Other("Failed to set notify".to_string()));
-                }
-            }
-            Err(err) => {
-                debug!("failed to parse notify response: {:?}", err);
-                return Err(Error::Other("failed to get characteristic state".to_string()));
-            }
-        };
-    }
-
-    fn wait_until_done<F, T: Clone + Send + 'static>(operation: F) -> Result<T> where F: for<'a> Fn(Callback<T>) {
-        let pair = Arc::new((Mutex::new(None), Condvar::new()));
-        let pair2 = pair.clone();
-        let on_finish = Box::new(move|result: Result<T>| {
-            let &(ref lock, ref cvar) = &*pair2;
-            let mut done = lock.lock().unwrap();
-            *done = Some(result.clone());
-            cvar.notify_one();
-        });
-
-        operation(on_finish);
-
-        // wait until we're done
-        let &(ref lock, ref cvar) = &*pair;
-
-        let mut done = lock.lock().unwrap();
-        while (*done).is_none() {
-            done = cvar.wait(done).unwrap();
-        }
-
-        // TODO: this copy is avoidable
-        (*done).clone().unwrap()
-    }
-
-    fn setup_connection(&self, fd: i32) -> Result<u16> {
-        let local_addr = SockaddrL2 {
-            l2_family: libc::AF_BLUETOOTH as libc::sa_family_t,
-            l2_psm: 0,
-            l2_bdaddr: self.c_adapter.adapter.addr,
-            l2_cid: ATT_CID,
-            l2_bdaddr_type: self.c_adapter.adapter.typ.num() as u8,
-        };
-
-        // bind to the socket
-        handle_error(unsafe {
-            libc::bind(fd, &local_addr as *const SockaddrL2 as *const libc::sockaddr,
-                       size_of::<SockaddrL2>() as u32)
-        })?;
-        debug!("bound to socket {}", fd);
-
-        // configure it as a bluetooth socket
-        let mut opt = [1u8, 0];
-        handle_error(unsafe {
-            libc::setsockopt(fd, libc::SOL_BLUETOOTH, 4, opt.as_mut_ptr() as *mut libc::c_void, 2)
-        })?;
-        debug!("configured socket {}", fd);
-
-        let addr = SockaddrL2 {
-            l2_family: libc::AF_BLUETOOTH as u16,
-            l2_psm: 0,
-            l2_bdaddr: self.address,
-            l2_cid: ATT_CID,
-            l2_bdaddr_type: self.properties.lock().unwrap().address_type.num() as u8,
-        };
-
-        // connect to the device
-        handle_error(unsafe {
-            libc::connect(fd, &addr as *const SockaddrL2 as *const libc::sockaddr,
-                          size_of::<SockaddrL2>() as u32)
-        })?;
-        debug!("connected to device {} over socket {}", self.address, fd);
-
-        // restart scanning if we were already, as connecting to a device seems to kill it
-        if self.c_adapter.scan_enabled.load(Ordering::Relaxed) {
-            self.c_adapter.start_scan()?;
-            debug!("restarted scanning");
-        }
-
-        // wait until we get the connection notice
-        let timeout = Duration::from_secs(20);
-        match self.connection_rx.lock().unwrap().recv_timeout(timeout) {
-            Ok(handle) => {
-                return Ok(handle);
-            }
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                return Err(Error::TimedOut(timeout.clone()));
-            }
-            err => {
-                // unexpected error
-                err.unwrap();
-                unreachable!();
-            }
-        };
+        write!(
+            f,
+            "{} properties: {:?}, characteristics: {:?} {}",
+            self.address, *properties, *characteristics, connected
+        )
     }
 }
 
@@ -381,209 +399,137 @@ impl ApiPeripheral for Peripheral {
     }
 
     fn is_connected(&self) -> bool {
-        let l = self.stream.try_read();
-        return l.is_ok() && l.unwrap().is_some();
+        *self.state.0.lock().unwrap() >= PeripheralState::Connected
     }
 
     fn connect(&self) -> Result<()> {
-        // take lock on stream
-        let mut stream = self.stream.write().unwrap();
-
-        if stream.is_some() {
-            // we're already connected, just return
-            return Ok(());
-        }
-
-        // create the socket on which we'll communicate with the device
-        let fd = handle_error(unsafe {
-            libc::socket(libc::AF_BLUETOOTH, libc::SOCK_SEQPACKET, 0)
-        })?;
-        debug!("created socket {} to communicate with device", fd);
-
-        match self.setup_connection(fd) {
-            Ok(handle) => {
-                // create the acl stream that will communicate with the device
-                let s = ACLStream::new(self.c_adapter.adapter.clone(),
-                                       self.address, self.characteristics.clone(), handle, fd, self.notification_handlers.clone());
-
-                // replay missed messages
-                let mut queue = self.message_queue.lock().unwrap();
-                while !queue.is_empty() {
-                    let msg = queue.pop_back().unwrap();
-                    if s.handle == msg.handle {
-                        s.receive(&msg);
-                    }
+        let started = Instant::now();
+        if let Err(error) = self.proxy().connect() {
+            match error.name() {
+                Some("org.bluez.Error.AlreadyConnected") => Ok(()),
+                Some("org.bluez.Error.Failed") => {
+                    error!(
+                        "BlueZ Failed to connect to \"{:?}\": {}",
+                        self.address,
+                        error.message().unwrap()
+                    );
+                    Err(Error::NotConnected)
                 }
-
-                *stream = Some(s);
+                Some("org.freedesktop.DBus.Error.NoReply") => Err(Error::TimedOut(DEFAULT_TIMEOUT)),
+                _ => Err(error)?,
             }
-            Err(e) => {
-                // close the socket we opened
-                debug!("Failed to connect ({}), closing socket {}", e, fd);
-                handle_error(unsafe { libc::close(fd) })?;
-                return Err(e)
-            }
-        }
-
-        Ok(())
+        } else {
+            Ok(())
+        }?;
+        // For somereason, BlueZ may return an Okay result before the the device is actually connected...
+        // So lets wait for the "connected" property to update to true
+        let (ref lock, ref cvar) = *self.state;
+        let timeout = DEFAULT_TIMEOUT - Instant::now().duration_since(started);
+        // Map the result of the wait_timeout_while(...) to match our Result<()>
+        cvar.wait_timeout_while(lock.lock().unwrap(), timeout, |c| {
+            *c < PeripheralState::Connected
+        })
+        .map_err(|_| Error::TimedOut(DEFAULT_TIMEOUT))
+        .map(|_| ())
     }
 
-
-
     fn disconnect(&self) -> Result<()> {
-        let mut l = self.stream.write().unwrap();
-
-        if l.is_none() {
-            // we're already disconnected
-            return Ok(());
-        }
-
-        let handle = l.as_ref().unwrap().handle;
-
-        let mut data = BytesMut::with_capacity(3);
-        data.put_u16_le(handle);
-        data.put_u8(HCI_OE_USER_ENDED_CONNECTION);
-        let mut buf = hci::hci_command(DISCONNECT_CMD, &*data);
-        self.c_adapter.write(&mut *buf)?;
-
-        *l = None;
-        Ok(())
+        Ok(self.proxy().disconnect()?)
     }
 
     fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
         self.discover_characteristics_in_range(0x0001, 0xFFFF)
     }
 
-    fn discover_characteristics_in_range(&self, start: u16, end: u16) -> Result<Vec<Characteristic>> {
-        let mut results = vec![];
-        let mut start = start;
-        loop {
-            debug!("discovering chars in range [{}, {}]", start, end);
+    fn discover_characteristics_in_range(
+        &self,
+        _start: u16,
+        _end: u16,
+    ) -> Result<Vec<Characteristic>> {
+        let (ref lock, ref cvar) = *self.state;
+        trace!("Waiting for all services to be resolved");
+        let _guard = cvar
+            .wait_while(lock.lock().unwrap(), |b| *b == PeripheralState::Connected)
+            .unwrap();
 
-            let mut buf = att::read_by_type_req(start, end, B16(GATT_CHARAC_UUID));
-            let data = self.request_raw(&mut buf)?;
-
-            match att::characteristics(&data) {
-                Ok(result) => {
-                    match result.1 {
-                        Ok(chars) => {
-                            debug!("Chars: {:#?}", chars);
-
-                            // TODO this copy can be removed
-                            results.extend(chars.clone());
-
-                            if let Some(ref last) = chars.iter().last() {
-                                if last.start_handle < end - 1 {
-                                    start = last.start_handle + 1;
-                                    continue;
-                                }
-                            }
-                            break;
-                        }
-                        Err(err) => {
-                            // this generally means we should stop iterating
-                            debug!("got error: {:?}", err);
-                            break;
-                        }
-                    }
-                }
-                Err(err) => {
-                    error!("failed to parse chars: {:?}", err);
-                    return Err(Error::Other(format!("failed to parse characteristics response {:?}",
-                                                    err)));
-                }
-            }
+        if *_guard == PeripheralState::NotConnected {
+            return Err(Error::NotConnected);
         }
 
-        // fix the end handles (we don't get them directly from device, so we have to infer)
-        for i in 0..results.len() {
-            (*results.get_mut(i).unwrap()).end_handle =
-                results.get(i + 1).map(|c| c.end_handle).unwrap_or(end);
-        }
+        debug!("All services are now resolved!");
 
-        // update our cache
-        let mut lock = self.characteristics.lock().unwrap();
-        results.iter().for_each(|c| { lock.insert(c.clone());});
-
-        Ok(results)
-    }
-
-    fn command_async(&self, characteristic: &Characteristic, data: &[u8], handler: Option<CommandCallback>) {
-        let l = self.stream.read().unwrap();
-        match l.as_ref() {
-            Some(stream) => {
-                let mut buf = BytesMut::with_capacity(3 + data.len());
-                buf.put_u8(ATT_OP_WRITE_CMD);
-                buf.put_u16_le(characteristic.value_handle);
-                buf.put(data);
-
-                stream.write_cmd(&mut *buf, handler);
-            }
-            None => {
-                handler.iter().for_each(|h| h(Err(Error::NotConnected)));
-            }
-        }
+        Ok(self
+            .characteristics
+            .lock()
+            .unwrap()
+            .clone()
+            .into_iter()
+            .filter(|c| c.value_handle >= _start && c.value_handle <= _end)
+            .collect())
     }
 
     fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
-        Peripheral::wait_until_done(|done: CommandCallback| {
-            self.command_async(characteristic, data, Some(done));
-        })
+        use crate::bluez::bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1;
+        Ok(self
+            .proxy_for(&characteristic)
+            .map(|p| p.write_value(Vec::from(data), HashMap::new()))
+            .ok_or(Error::NotSupported("write_without_response".to_string()))??)
     }
 
-    fn request_async(&self, characteristic: &Characteristic, data: &[u8], handler: Option<RequestCallback>) {
-        self.request_by_handle(characteristic.value_handle, data, handler);
-    }
-
-    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<Vec<u8>> {
-        Peripheral::wait_until_done(|done: RequestCallback| {
-            self.request_async(characteristic, data, Some(done));
-        })
-    }
-
-    fn read_async(&self, characteristic: &Characteristic, handler: Option<RequestCallback>) {
-        let mut buf = att::read_req(characteristic.value_handle);
-        self.request_raw_async(&mut buf, handler);
+    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
+        self.command(characteristic, data)
     }
 
     fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
-        Peripheral::wait_until_done(|done: RequestCallback| {
-            self.read_async(characteristic, Some(done));
-        })
+        use crate::bluez::bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1;
+        Ok(self
+            .proxy_for(&characteristic)
+            .map(|p| p.read_value(HashMap::new()))
+            .ok_or(Error::NotSupported("read".to_string()))??)
     }
 
-    fn read_by_type_async(&self, characteristic: &Characteristic, uuid: UUID,
-                          handler: Option<RequestCallback>) {
-        let mut buf = att::read_by_type_req(characteristic.start_handle, characteristic.end_handle, uuid);
-        self.request_raw_async(&mut buf, handler);
-    }
-
+    // Is this looking for a characteristic with a descriptor? or a service with a characteristic?
     fn read_by_type(&self, characteristic: &Characteristic, uuid: UUID) -> Result<Vec<u8>> {
-        Peripheral::wait_until_done(|done: RequestCallback| {
-            self.read_by_type_async(characteristic, uuid, Some(done));
-        })
+        if let Some(characteristic) =
+            self.attributes_map
+                .lock()
+                .unwrap()
+                .iter()
+                .find_map(|(_k, (_p, _h, c))| {
+                    if c.uuid == uuid
+                        && c.value_handle >= characteristic.start_handle
+                        && c.value_handle <= characteristic.end_handle
+                    {
+                        Some(c)
+                    } else {
+                        None
+                    }
+                })
+        {
+            self.read(characteristic)
+        } else {
+            Err(Error::NotSupported("read_by_type".to_string()))
+        }
     }
-
 
     fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
-        self.notify(characteristic, true)
+        use crate::bluez::bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1;
+        Ok(self
+            .proxy_for(characteristic)
+            .ok_or(Error::NotSupported("subscribe".to_string()))?
+            .start_notify()?)
     }
 
-    fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
-        self.notify(characteristic, false)
+    fn unsubscribe(&self, _characteristic: &Characteristic) -> Result<()> {
+        use crate::bluez::bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1;
+        Ok(self
+            .proxy_for(_characteristic)
+            .ok_or(Error::NotSupported("unsubscribe".to_string()))?
+            .stop_notify()?)
     }
 
     fn on_notification(&self, handler: NotificationHandler) {
-        // TODO handle the disconnected case better
-        let l = self.stream.read().unwrap();
-        match l.as_ref() {
-            Some(_) => {
-                let mut list = self.notification_handlers.lock().unwrap();
-                list.push(handler);
-            }
-            None => {
-                error!("tried to subscribe to notifications, but not yet connected")
-            }
-        }
+        let mut list = self.notification_handlers.lock().unwrap();
+        list.push(handler);
     }
 }

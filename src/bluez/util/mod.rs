@@ -11,38 +11,18 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use nix;
-use nix::errno::Errno;
+use crate::Error;
 
-use crate::{Result, Error};
-
-fn errno_to_error(errno: Errno) -> Error {
-    match errno {
-        Errno::EPERM => Error::PermissionDenied,
-        Errno::ENODEV => Error::DeviceNotFound,
-        Errno::ENOTCONN => Error::NotConnected,
-        _ => Error::Other(errno.to_string())
-    }
-}
-
-impl From<nix::Error> for Error {
-    fn from(e: nix::Error) -> Self {
-        match e {
-            nix::Error::Sys(errno) => {
-                errno_to_error(errno)
-            },
-            _ => {
-                Error::Other(e.to_string())
-            }
+impl From<dbus::Error> for Error {
+    fn from(e: dbus::Error) -> Self {
+        match e.name() {
+            // Some("org.freedesktop.DBus.Error.NoReply") => Error::TimedOut(Duration::new(0,0)), // How to express a TimedOut error without a duration?
+            // TODO: translate other dbus errors into relevant btleplug::Error kind
+            _ => Error::Other(format!(
+                "{}: {}",
+                e.name().unwrap_or("Unknown DBus error"),
+                e.message().unwrap_or("Unknown DBus error.")
+            )),
         }
-    }
-}
-
-pub fn handle_error(v: i32) -> Result<i32> {
-    if v < 0 {
-        debug!("got error {}", Errno::last());
-        Err(errno_to_error(Errno::last()))
-    } else {
-        Ok(v)
     }
 }

@@ -3,7 +3,7 @@ extern crate rand;
 
 use btleplug::api::{Central, CentralEvent};
 #[cfg(target_os = "linux")]
-use btleplug::bluez::{adapter::ConnectedAdapter, manager::Manager};
+use btleplug::bluez::{adapter::Adapter, manager::Manager};
 #[cfg(target_os = "macos")]
 use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
 #[cfg(target_os = "windows")]
@@ -12,17 +12,9 @@ use btleplug::winrtble::{adapter::Adapter, manager::Manager};
 // adapter retrieval works differently depending on your platform right now.
 // API needs to be aligned.
 
-#[cfg(any(target_os = "windows", target_os = "macos"))]
 fn get_central(manager: &Manager) -> Adapter {
     let adapters = manager.adapters().unwrap();
     adapters.into_iter().nth(0).unwrap()
-}
-
-#[cfg(target_os = "linux")]
-fn get_central(manager: &Manager) -> ConnectedAdapter {
-    let adapters = manager.adapters().unwrap();
-    let adapter = adapters.into_iter().nth(0).unwrap();
-    adapter.connect().unwrap()
 }
 
 pub fn main() {

@@ -16,31 +16,27 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use std::{
-    sync::Once,
-    collections::{HashMap},
-    str::FromStr,
-    slice,
-};
 use async_std::{
+    channel::{Receiver, Sender},
     task,
-    sync::{channel, Sender, Receiver},
 };
+use std::{collections::HashMap, slice, str::FromStr, sync::Once};
 
 use objc::{
     declare::ClassDecl,
+    rc::StrongPtr,
     runtime::{Class, Object, Protocol, Sel},
-    rc::StrongPtr
 };
 
 use super::{
-    framework::{nil, cb, ns},
+    framework::{cb, nil, ns},
     utils::{CoreBluetoothUtils, NSStringUtils},
 };
 
 use uuid::Uuid;
 
-use libc::c_void;
+use libc::{c_char, c_void};
+use std::ffi::CStr;
 
 pub enum CentralDelegateEvent {
     DidUpdateState,
@@ -55,6 +51,7 @@ pub enum CentralDelegateEvent {
     CharacteristicSubscribed(Uuid, Uuid),
     CharacteristicUnsubscribed(Uuid, Uuid),
     CharacteristicNotified(Uuid, Uuid, Vec<u8>),
+    CharacteristicWritten(Uuid, Uuid),
     // TODO Deal with descriptors at some point, but not a huge worry at the moment.
     // DiscoveredDescriptors(String, )
 }
@@ -75,14 +72,22 @@ pub mod CentralDelegate {
             // Just clone here and return, so we don't have to worry about
             // accidentally screwing up ownership by passing the bare pointer
             // outside.
-            (*(*(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_RECEIVER_IVAR) as *mut Receiver<CentralDelegateEvent>)).clone()
+            (*(*(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_RECEIVER_IVAR)
+                as *mut Receiver<CentralDelegateEvent>))
+                .clone()
         }
     }
 
     pub fn delegate_drop_channel(delegate: *mut Object) {
         unsafe {
-            let _ = Box::from_raw(*(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_RECEIVER_IVAR) as *mut Receiver<CentralDelegateEvent>);
-            let _ = Box::from_raw(*(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR) as *mut Sender<CentralDelegateEvent>);
+            let _ = Box::from_raw(
+                *(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_RECEIVER_IVAR)
+                    as *mut Receiver<CentralDelegateEvent>,
+            );
+            let _ = Box::from_raw(
+                *(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR)
+                    as *mut Sender<CentralDelegateEvent>,
+            );
         }
     }
 
@@ -92,7 +97,11 @@ pub mod CentralDelegate {
     fn delegate_class() -> &'static Class {
         trace!("delegate_class");
         static REGISTER_DELEGATE_CLASS: Once = Once::new();
-        let mut decl = ClassDecl::new("BtlePlugCentralManagerDelegate", Class::get("NSObject").unwrap()).unwrap();
+        let mut decl = ClassDecl::new(
+            "BtlePlugCentralManagerDelegate",
+            Class::get("NSObject").unwrap(),
+        )
+        .unwrap();
 
         REGISTER_DELEGATE_CLASS.call_once(|| {
             decl.add_protocol(Protocol::get("CBCentralManagerDelegate").unwrap());
@@ -144,47 +153,69 @@ pub mod CentralDelegate {
         Class::get("BtlePlugCentralManagerDelegate").unwrap()
     }
 
+    fn localized_description(error: *mut Object) -> String {
+        if error == nil {
+            "".to_string()
+        } else {
+            unsafe {
+                let nsstring: *mut Object = msg_send![error, localizedDescription];
+                let c_string: *const c_char = msg_send![nsstring, UTF8String];
+                let c_str: &CStr = CStr::from_ptr(c_string);
+                let str_slice: &str = c_str.to_str().unwrap();
+                str_slice.to_owned()
+            }
+        }
+    }
+
     ////////////////////////////////////////////////////////////////
     //
     // Utility functions
     //
     ////////////////////////////////////////////////////////////////
 
-    extern fn delegate_get_sender_clone(delegate: &mut Object) -> Sender<CentralDelegateEvent> {
+    extern "C" fn delegate_get_sender_clone(delegate: &mut Object) -> Sender<CentralDelegateEvent> {
         unsafe {
-            (*(*(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR) as *mut Sender<CentralDelegateEvent>)).clone()
+            (*(*(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR)
+                as *mut Sender<CentralDelegateEvent>))
+                .clone()
         }
     }
 
-    extern fn send_delegate_event(delegate: &mut Object, event: CentralDelegateEvent) {
+    extern "C" fn send_delegate_event(delegate: &mut Object, event: CentralDelegateEvent) {
         let sender = delegate_get_sender_clone(delegate);
         task::block_on(async {
             sender.send(event).await;
         });
     }
 
-    extern fn delegate_init(delegate: &mut Object, _cmd: Sel) -> *mut Object {
+    extern "C" fn delegate_init(delegate: &mut Object, _cmd: Sel) -> *mut Object {
         trace!("delegate_init");
-        let (sender, recv) = channel::<CentralDelegateEvent>(256);
+        let (sender, recv) = async_std::channel::bounded::<CentralDelegateEvent>(256);
         // TODO Should these maybe be Option<T>, so we can denote when we've
         // dropped? Not quite sure how delegate lifetime works here.
         let sendbox = Box::new(sender);
         let recvbox = Box::new(recv);
         unsafe {
             trace!("Storing off ivars!");
-            delegate.set_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR, Box::into_raw(sendbox) as *mut c_void);
-            delegate.set_ivar::<*mut c_void>(DELEGATE_RECEIVER_IVAR, Box::into_raw(recvbox) as *mut c_void);
+            delegate.set_ivar::<*mut c_void>(
+                DELEGATE_SENDER_IVAR,
+                Box::into_raw(sendbox) as *mut c_void,
+            );
+            delegate.set_ivar::<*mut c_void>(
+                DELEGATE_RECEIVER_IVAR,
+                Box::into_raw(recvbox) as *mut c_void,
+            );
         }
         delegate
     }
 
-    extern fn get_characteristic_value(characteristic: *mut Object) -> Vec<u8> {
+    extern "C" fn get_characteristic_value(characteristic: *mut Object) -> Vec<u8> {
         info!("Getting data!");
         let value = cb::characteristic_value(characteristic);
         let length = ns::data_length(value);
         if length == 0 {
             info!("data is 0?");
-            return vec!();
+            return vec![];
         }
 
         let bytes = ns::data_bytes(value);
@@ -199,7 +230,11 @@ pub mod CentralDelegate {
     //
     ////////////////////////////////////////////////////////////////
 
-    extern fn delegate_centralmanagerdidupdatestate(delegate: &mut Object, _cmd: Sel, _central: *mut Object) {
+    extern "C" fn delegate_centralmanagerdidupdatestate(
+        delegate: &mut Object,
+        _cmd: Sel,
+        _central: *mut Object,
+    ) {
         trace!("delegate_centralmanagerdidupdatestate");
         send_delegate_event(delegate, CentralDelegateEvent::DidUpdateState);
     }
@@ -208,8 +243,16 @@ pub mod CentralDelegate {
     //     trace!("delegate_centralmanager_willrestorestate");
     // }
 
-    extern fn delegate_centralmanager_didconnectperipheral(delegate: &mut Object, _cmd: Sel, _central: *mut Object, peripheral: *mut Object) {
-        trace!("delegate_centralmanager_didconnectperipheral {}", CoreBluetoothUtils::peripheral_debug(peripheral));
+    extern "C" fn delegate_centralmanager_didconnectperipheral(
+        delegate: &mut Object,
+        _cmd: Sel,
+        _central: *mut Object,
+        peripheral: *mut Object,
+    ) {
+        trace!(
+            "delegate_centralmanager_didconnectperipheral {}",
+            CoreBluetoothUtils::peripheral_debug(peripheral)
+        );
         cb::peripheral_setdelegate(peripheral, delegate);
         cb::peripheral_discoverservices(peripheral);
         let uuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
@@ -217,8 +260,17 @@ pub mod CentralDelegate {
         send_delegate_event(delegate, CentralDelegateEvent::ConnectedDevice(uuid));
     }
 
-    extern fn delegate_centralmanager_diddisconnectperipheral_error(delegate: &mut Object, _cmd: Sel, _central: *mut Object, peripheral: *mut Object, _error: *mut Object) {
-        trace!("delegate_centralmanager_diddisconnectperipheral_error {}", CoreBluetoothUtils::peripheral_debug(peripheral));
+    extern "C" fn delegate_centralmanager_diddisconnectperipheral_error(
+        delegate: &mut Object,
+        _cmd: Sel,
+        _central: *mut Object,
+        peripheral: *mut Object,
+        _error: *mut Object,
+    ) {
+        trace!(
+            "delegate_centralmanager_diddisconnectperipheral_error {}",
+            CoreBluetoothUtils::peripheral_debug(peripheral)
+        );
         let uuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
         let uuid = Uuid::from_str(&NSStringUtils::string_to_string(uuid_nsstring)).unwrap();
         send_delegate_event(delegate, CentralDelegateEvent::DisconnectedDevice(uuid));
@@ -228,14 +280,27 @@ pub mod CentralDelegate {
     //     trace!("delegate_centralmanager_didfailtoconnectperipheral_error");
     // }
 
-    extern fn delegate_centralmanager_diddiscoverperipheral_advertisementdata_rssi(delegate: &mut Object, _cmd: Sel, _central: *mut Object, peripheral: *mut Object, _adv_data: *mut Object, _rssi: *mut Object) {
-        trace!("delegate_centralmanager_diddiscoverperipheral_advertisementdata_rssi {}", CoreBluetoothUtils::peripheral_debug(peripheral));
+    extern "C" fn delegate_centralmanager_diddiscoverperipheral_advertisementdata_rssi(
+        delegate: &mut Object,
+        _cmd: Sel,
+        _central: *mut Object,
+        peripheral: *mut Object,
+        _adv_data: *mut Object,
+        _rssi: *mut Object,
+    ) {
+        trace!(
+            "delegate_centralmanager_diddiscoverperipheral_advertisementdata_rssi {}",
+            CoreBluetoothUtils::peripheral_debug(peripheral)
+        );
 
         let held_peripheral;
         unsafe {
             held_peripheral = StrongPtr::retain(peripheral);
         }
-        send_delegate_event(delegate, CentralDelegateEvent::DiscoveredPeripheral(held_peripheral));
+        send_delegate_event(
+            delegate,
+            CentralDelegateEvent::DiscoveredPeripheral(held_peripheral),
+        );
     }
 
     ////////////////////////////////////////////////////////////////
@@ -244,8 +309,17 @@ pub mod CentralDelegate {
     //
     ////////////////////////////////////////////////////////////////
 
-    extern fn delegate_peripheral_diddiscoverservices(delegate: &mut Object, _cmd: Sel, peripheral: *mut Object, error: *mut Object) {
-        trace!("delegate_peripheral_diddiscoverservices {} {}", CoreBluetoothUtils::peripheral_debug(peripheral), if error != nil {"error"} else {""});
+    extern "C" fn delegate_peripheral_diddiscoverservices(
+        delegate: &mut Object,
+        _cmd: Sel,
+        peripheral: *mut Object,
+        error: *mut Object,
+    ) {
+        trace!(
+            "delegate_peripheral_diddiscoverservices {} {}",
+            CoreBluetoothUtils::peripheral_debug(peripheral),
+            localized_description(error)
+        );
         if error == nil {
             let services = cb::peripheral_services(peripheral);
             let mut service_map = HashMap::new();
@@ -268,12 +342,29 @@ pub mod CentralDelegate {
             }
             let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
             let puuid_str = NSStringUtils::string_to_string(puuid_nsstring);
-            send_delegate_event(delegate, CentralDelegateEvent::DiscoveredServices(Uuid::from_str(&puuid_str).unwrap(), service_map));
+            send_delegate_event(
+                delegate,
+                CentralDelegateEvent::DiscoveredServices(
+                    Uuid::from_str(&puuid_str).unwrap(),
+                    service_map,
+                ),
+            );
         }
     }
 
-    extern fn delegate_peripheral_diddiscoverincludedservicesforservice_error(_delegate: &mut Object, _cmd: Sel, peripheral: *mut Object, service: *mut Object, error: *mut Object) {
-        trace!("delegate_peripheral_diddiscoverincludedservicesforservice_error {} {} {}", CoreBluetoothUtils::peripheral_debug(peripheral), CoreBluetoothUtils::service_debug(service), if error != nil {"error"} else {""});
+    extern "C" fn delegate_peripheral_diddiscoverincludedservicesforservice_error(
+        _delegate: &mut Object,
+        _cmd: Sel,
+        peripheral: *mut Object,
+        service: *mut Object,
+        error: *mut Object,
+    ) {
+        trace!(
+            "delegate_peripheral_diddiscoverincludedservicesforservice_error {} {} {}",
+            CoreBluetoothUtils::peripheral_debug(peripheral),
+            CoreBluetoothUtils::service_debug(service),
+            localized_description(error)
+        );
         if error == nil {
             let includes = cb::service_includedservices(service);
             for i in 0..ns::array_count(includes) {
@@ -283,8 +374,19 @@ pub mod CentralDelegate {
         }
     }
 
-    extern fn delegate_peripheral_diddiscovercharacteristicsforservice_error(delegate: &mut Object, _cmd: Sel, peripheral: *mut Object, service: *mut Object, error: *mut Object) {
-        trace!("delegate_peripheral_diddiscovercharacteristicsforservice_error {} {} {}", CoreBluetoothUtils::peripheral_debug(peripheral), CoreBluetoothUtils::service_debug(service), if error != nil {"error"} else {""});
+    extern "C" fn delegate_peripheral_diddiscovercharacteristicsforservice_error(
+        delegate: &mut Object,
+        _cmd: Sel,
+        peripheral: *mut Object,
+        service: *mut Object,
+        error: *mut Object,
+    ) {
+        trace!(
+            "delegate_peripheral_diddiscovercharacteristicsforservice_error {} {} {}",
+            CoreBluetoothUtils::peripheral_debug(peripheral),
+            CoreBluetoothUtils::service_debug(service),
+            localized_description(error)
+        );
         if error == nil {
             let mut char_map = HashMap::new();
             let chars = cb::service_characteristics(service);
@@ -303,30 +405,72 @@ pub mod CentralDelegate {
             }
             let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
             let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
-            send_delegate_event(delegate, CentralDelegateEvent::DiscoveredCharacteristics(puuid, char_map));
+            send_delegate_event(
+                delegate,
+                CentralDelegateEvent::DiscoveredCharacteristics(puuid, char_map),
+            );
         }
     }
 
-    extern fn delegate_peripheral_didupdatevalueforcharacteristic_error(delegate: &mut Object, _cmd: Sel, peripheral: *mut Object, characteristic: *mut Object, error: *mut Object) {
-        trace!("delegate_peripheral_didupdatevalueforcharacteristic_error {} {} {}", CoreBluetoothUtils::peripheral_debug(peripheral), CoreBluetoothUtils::characteristic_debug(characteristic), if error != nil {"error"} else {""});
+    extern "C" fn delegate_peripheral_didupdatevalueforcharacteristic_error(
+        delegate: &mut Object,
+        _cmd: Sel,
+        peripheral: *mut Object,
+        characteristic: *mut Object,
+        error: *mut Object,
+    ) {
+        trace!(
+            "delegate_peripheral_didupdatevalueforcharacteristic_error {} {} {}",
+            CoreBluetoothUtils::peripheral_debug(peripheral),
+            CoreBluetoothUtils::characteristic_debug(characteristic),
+            localized_description(error)
+        );
         if error == nil {
             let v = get_characteristic_value(characteristic);
             let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
             let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
             let cuuid_nsstring = cb::uuid_uuidstring(cb::attribute_uuid(characteristic));
             let cuuid = Uuid::from_str(&NSStringUtils::string_to_string(cuuid_nsstring)).unwrap();
-            send_delegate_event(delegate, CentralDelegateEvent::CharacteristicNotified(puuid, cuuid, v));
+            send_delegate_event(
+                delegate,
+                CentralDelegateEvent::CharacteristicNotified(puuid, cuuid, v),
+            );
             // Notify BluetoothGATTCharacteristic::read_value that read was successful.
         }
     }
 
-    extern fn delegate_peripheral_didwritevalueforcharacteristic_error(_delegate: &mut Object, _cmd: Sel, peripheral: *mut Object, characteristic: *mut Object, error: *mut Object) {
-        trace!("delegate_peripheral_didwritevalueforcharacteristic_error {} {} {}", CoreBluetoothUtils::peripheral_debug(peripheral), CoreBluetoothUtils::characteristic_debug(characteristic), if error != nil {"error"} else {""});
+    extern "C" fn delegate_peripheral_didwritevalueforcharacteristic_error(
+        delegate: &mut Object,
+        _cmd: Sel,
+        peripheral: *mut Object,
+        characteristic: *mut Object,
+        error: *mut Object,
+    ) {
+        trace!(
+            "delegate_peripheral_didwritevalueforcharacteristic_error {} {} {}",
+            CoreBluetoothUtils::peripheral_debug(peripheral),
+            CoreBluetoothUtils::characteristic_debug(characteristic),
+            localized_description(error)
+        );
         if error == nil {
+            let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
+            let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
+            let cuuid_nsstring = cb::uuid_uuidstring(cb::attribute_uuid(characteristic));
+            let cuuid = Uuid::from_str(&NSStringUtils::string_to_string(cuuid_nsstring)).unwrap();
+            send_delegate_event(
+                delegate,
+                CentralDelegateEvent::CharacteristicWritten(puuid, cuuid),
+            );
         }
     }
 
-    extern fn delegate_peripheral_didupdatenotificationstateforcharacteristic_error(delegate: &mut Object, _cmd: Sel, peripheral: *mut Object, characteristic: *mut Object, _error: *mut Object) {
+    extern "C" fn delegate_peripheral_didupdatenotificationstateforcharacteristic_error(
+        delegate: &mut Object,
+        _cmd: Sel,
+        peripheral: *mut Object,
+        characteristic: *mut Object,
+        _error: *mut Object,
+    ) {
         trace!("delegate_peripheral_didupdatenotificationstateforcharacteristic_error");
         // TODO check for error here
         let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
@@ -334,9 +478,15 @@ pub mod CentralDelegate {
         let cuuid_nsstring = cb::uuid_uuidstring(cb::attribute_uuid(characteristic));
         let cuuid = Uuid::from_str(&NSStringUtils::string_to_string(cuuid_nsstring)).unwrap();
         if cb::characteristic_isnotifying(characteristic) == objc::runtime::YES {
-            send_delegate_event(delegate, CentralDelegateEvent::CharacteristicSubscribed(puuid, cuuid));
+            send_delegate_event(
+                delegate,
+                CentralDelegateEvent::CharacteristicSubscribed(puuid, cuuid),
+            );
         } else {
-            send_delegate_event(delegate, CentralDelegateEvent::CharacteristicUnsubscribed(puuid, cuuid));
+            send_delegate_event(
+                delegate,
+                CentralDelegateEvent::CharacteristicUnsubscribed(puuid, cuuid),
+            );
         }
     }
 
@@ -352,10 +502,17 @@ pub mod CentralDelegate {
     //     trace!("delegate_peripheral_didwritevaluefordescriptor_error");
     // }
 
-    extern fn delegate_peripheral_didreadrssi_error(_delegate: &mut Object, _cmd: Sel, peripheral: *mut Object, _rssi: *mut Object, error: *mut Object) {
-        trace!("delegate_peripheral_didreadrssi_error {}", CoreBluetoothUtils::peripheral_debug(peripheral));
-        if error == nil {
-        }
+    extern "C" fn delegate_peripheral_didreadrssi_error(
+        _delegate: &mut Object,
+        _cmd: Sel,
+        peripheral: *mut Object,
+        _rssi: *mut Object,
+        error: *mut Object,
+    ) {
+        trace!(
+            "delegate_peripheral_didreadrssi_error {}",
+            CoreBluetoothUtils::peripheral_debug(peripheral)
+        );
+        if error == nil {}
     }
-
 }

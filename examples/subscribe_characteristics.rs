@@ -2,13 +2,12 @@ use std::thread;
 use std::time::Duration;
 use async_std::{
     prelude::{FutureExt, StreamExt},
-    sync::{channel, Receiver},
     task,
 };
 
 #[allow(unused_imports)]
 #[cfg(target_os = "linux")]
-use btleplug::bluez::{adapter::Adapter, adapter::ConnectedAdapter, manager::Manager};
+use btleplug::bluez::{adapter::Adapter, manager::Manager};
 #[allow(unused_imports)]
 #[cfg(target_os = "windows")]
 use btleplug::winrtble::{adapter::Adapter, manager::Manager};
@@ -18,30 +17,26 @@ use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
 #[allow(unused_imports)]
 use btleplug::api::{UUID, ValueNotification, Central, CentralEvent, Peripheral, Characteristic, CharPropFlags};
 
-const PERIPHERAL_NAME_MATCH_FILTER:&'static str = "Neuro"; // string to match with BLE name
+const PERIPHERAL_NAME_MATCH_FILTER: &'static str = "Neuro";
+// string to match with BLE name
 const SUBSCRIBE_TO_CHARACTERISTIC: UUID = UUID::B128( // only NOTIFY type should be specified   s
-        [0x1B, 0xC5, 0xD5, 0xA5, 0x02, 0x00, 0xCF, 0x88, 0xE4, 0x11, 0xB9, 0xD6, 0x03, 0x00, 0x2F, 0x3D]);
-        //3D:2F:00:03:D6:B9:11:E4:88:CF:00:02:A5:D5:C5:1B
+                                                      [0x1B, 0xC5, 0xD5, 0xA5, 0x02, 0x00, 0xCF, 0x88, 0xE4, 0x11, 0xB9, 0xD6, 0x03, 0x00, 0x2F, 0x3D]);
+//3D:2F:00:03:D6:B9:11:E4:88:CF:00:02:A5:D5:C5:1B
 // const DEVICE_COMMAND: UUID = UUID::B16(0x4600);
 // const DEVICE_COMMAND: Vec<u8> = vec![0x46];
 
 #[cfg(target_os = "linux")]
-fn connect_to(adapter: &Adapter) -> ConnectedAdapter {
-        adapter.connect().expect("Error connecting to BLE Adapter....") //linux
-}
-#[cfg(target_os = "linux")]
-fn print_adapter_info(adapter: &ConnectedAdapter) {
-    println!("connected adapter {:?} is UP: {:?}", adapter.adapter.name, adapter.adapter.is_up());
-    println!("adapter states : {:?}", adapter.adapter.states);
+fn print_adapter_info(adapter: &Adapter) {
+    println!(
+        "connected adapter {:?} is powered: {:?}",
+        adapter.name(),
+        adapter.is_powered()
+    );
 }
 
-#[cfg(target_os = "windows")]
-fn connect_to(adapter: &Adapter) -> &Adapter {
-    adapter //windows 10
-}
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 fn print_adapter_info(_adapter: &Adapter) {
-    println!("adapter info can't be printed on Windows 10");
+    println!("adapter info can't be printed on Windows 10 or mac");
 }
 
 fn my_on_notification_handler(data: ValueNotification) {
@@ -63,22 +58,16 @@ fn main() {
         for adapter in adapter_list.iter() {
             println!("connecting to BLE adapter: ...");
 
-            let connected_adapter = if cfg!(windows) {
-                connect_to(&adapter)
-            } else {
-                connect_to(&adapter)
-            };
-            // let connected_adapter = connect_to(&adapter);
-            print_adapter_info(&connected_adapter);
-            connected_adapter.start_scan().expect("Can't scan BLE adapter for connected devices...");
+            print_adapter_info(&adapter);
+            adapter.start_scan().expect("Can't scan BLE adapter for connected devices...");
             thread::sleep(Duration::from_secs(2));
             // let mut handle;
 
-            if connected_adapter.peripherals().is_empty() {
+            if adapter.peripherals().is_empty() {
                 eprintln!("->>> BLE peripheral devices were not found, sorry. Exiting...");
             } else {
                 // all peripheral devices in range
-                for peripheral in connected_adapter.peripherals().iter() {
+                for peripheral in adapter.peripherals().iter() {
                     println!("peripheral : {:?} is connected: {:?}", peripheral.properties().local_name, peripheral.is_connected());
                     // filter needed peripheral
                     if peripheral.properties().local_name.is_some()
@@ -100,16 +89,16 @@ fn main() {
                                         println!("Lets try subscribe to desired CHARACTERISTIC...: {:?}", char_item.uuid);
                                         // do subscribe
                                         //     peripheral.on_notification(Box::new(my_on_notification_handler));
-                                            peripheral.on_notification(
-                                                Box::new(|data: ValueNotification| {
-                                                    let handle = thread::spawn( move|| {
-                                                        println!("Received data from [{:?}] = {:?}", data.uuid, data.value.get(0));
-                                                    });
-                                                })
-                                            );
-                                            let subscribe_result = peripheral.subscribe(&char_item);
-                                            let is_subscribed = subscribe_result.is_ok();
-                                            println!("Is subscribed? = {}", is_subscribed);
+                                        peripheral.on_notification(
+                                            Box::new(|data: ValueNotification| {
+                                                let handle = thread::spawn(move || {
+                                                    println!("Received data from [{:?}] = {:?}", data.uuid, data.value.get(0));
+                                                });
+                                            })
+                                        );
+                                        let subscribe_result = peripheral.subscribe(&char_item);
+                                        let is_subscribed = subscribe_result.is_ok();
+                                        println!("Is subscribed? = {}", is_subscribed);
                                         if is_subscribed {
                                             // send command to device
                                             let DEVICE_COMMAND = vec![0x46];
@@ -120,7 +109,6 @@ fn main() {
                                                 thread::sleep(Duration::from_millis(10));
                                             }
                                         }
-
                                     }
                                 }
                             }
@@ -167,4 +155,4 @@ fn main() {
                                 }
                                 _ => {}
                             };
-                            connected_adapter.on_event(Box::new(on_event));*/
+                            adapter.on_event(Box::new(on_event));*/

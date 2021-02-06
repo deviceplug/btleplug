@@ -10,7 +10,7 @@ use async_std::{
 use std::convert::TryInto;
 use std::sync::mpsc::Receiver;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Adapter {
     manager: AdapterManager<Peripheral>,
     sender: Sender<CoreBluetoothMessage>,

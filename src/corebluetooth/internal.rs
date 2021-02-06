@@ -26,6 +26,8 @@ use objc::{
 };
 use std::{
     collections::{BTreeSet, HashMap, VecDeque},
+    fmt::{self, Debug, Formatter},
+    ops::Deref,
     os::raw::c_uint,
     str::FromStr,
     thread,
@@ -40,6 +42,20 @@ struct CBCharacteristic {
     pub write_future_state: VecDeque<CoreBluetoothReplyStateShared>,
     pub subscribe_future_state: VecDeque<CoreBluetoothReplyStateShared>,
     pub unsubscribe_future_state: VecDeque<CoreBluetoothReplyStateShared>,
+}
+
+impl Debug for CBCharacteristic {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.debug_struct("CBCharacteristic")
+            .field("characteristic", self.characteristic.deref())
+            .field("uuid", &self.uuid)
+            .field("properties", &self.properties)
+            .field("read_future_state", &self.read_future_state)
+            .field("write_future_state", &self.write_future_state)
+            .field("subscribe_future_state", &self.subscribe_future_state)
+            .field("unsubscribe_future_state", &self.unsubscribe_future_state)
+            .finish()
+    }
 }
 
 impl CBCharacteristic {
@@ -88,6 +104,7 @@ impl CBCharacteristic {
     }
 }
 
+#[derive(Debug)]
 pub enum CoreBluetoothReply {
     ReadResult(Vec<u8>),
     Connected(BTreeSet<Characteristic>),
@@ -95,6 +112,7 @@ pub enum CoreBluetoothReply {
     Err(String),
 }
 
+#[derive(Debug)]
 pub enum CBPeripheralEvent {
     Disconnected,
     Notification(Uuid, Vec<u8>),
@@ -111,6 +129,22 @@ struct CBPeripheral {
     pub event_sender: Sender<CBPeripheralEvent>,
     pub connected_future_state: Option<CoreBluetoothReplyStateShared>,
     characteristic_update_count: u32,
+}
+
+impl Debug for CBPeripheral {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.debug_struct("CBPeripheral")
+            .field("peripheral", self.peripheral.deref())
+            .field("services", &self.services.keys().collect::<Vec<_>>())
+            .field("characteristics", &self.characteristics)
+            .field("event_sender", &self.event_sender)
+            .field("connected_future_state", &self.connected_future_state)
+            .field(
+                "characteristic_update_count",
+                &self.characteristic_update_count,
+            )
+            .finish()
+    }
 }
 
 impl CBPeripheral {
@@ -193,6 +227,20 @@ struct CoreBluetoothInternal {
     message_receiver: Receiver<CoreBluetoothMessage>,
 }
 
+impl Debug for CoreBluetoothInternal {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.debug_struct("CoreBluetoothInternal")
+            .field("manager", self.manager.deref())
+            .field("delegate", self.delegate.deref())
+            .field("peripherals", &self.peripherals)
+            .field("delegate_receiver", &self.delegate_receiver)
+            .field("event_sender", &self.event_sender)
+            .field("message_receiver", &self.message_receiver)
+            .finish()
+    }
+}
+
+#[derive(Debug)]
 pub enum CoreBluetoothMessage {
     StartScanning,
     StopScanning,
@@ -210,6 +258,7 @@ pub enum CoreBluetoothMessage {
     Unsubscribe(Uuid, Uuid, CoreBluetoothReplyStateShared),
 }
 
+#[derive(Debug)]
 pub enum CoreBluetoothEvent {
     AdapterConnected,
     AdapterError,
@@ -222,6 +271,7 @@ pub enum CoreBluetoothEvent {
 
 // Aggregate everything that can come in from different sources into a single
 // enum type.
+#[derive(Debug)]
 enum InternalLoopMessage {
     Delegate(CentralDelegateEvent),
     Adapter(CoreBluetoothMessage),

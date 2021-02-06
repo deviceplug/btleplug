@@ -123,12 +123,13 @@ impl Display for Peripheral {
 
 impl Debug for Peripheral {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        // let connected = if self.is_connected() { " connected" } else { "" };
-        // let properties = self.properties.lock().unwrap();
-        // let characteristics = self.characteristics.lock().unwrap();
-        // write!(f, "{} properties: {:?}, characteristics: {:?} {}", self.address, *properties,
-        //        *characteristics, connected)
-        write!(f, "Peripheral")
+        f.debug_struct("Peripheral")
+            .field("uuid", &self.uuid)
+            .field("characteristics", &self.characteristics)
+            .field("properties", &self.properties)
+            .field("event_receiver", &self.event_receiver)
+            .field("message_sender", &self.message_sender)
+            .finish()
     }
 }
 

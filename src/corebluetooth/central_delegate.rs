@@ -229,7 +229,7 @@ pub mod CentralDelegate {
     //
     ////////////////////////////////////////////////////////////////
 
-    extern "C" fn delegate_get_sender_clone(delegate: &mut Object) -> Sender<CentralDelegateEvent> {
+    fn delegate_get_sender_clone(delegate: &mut Object) -> Sender<CentralDelegateEvent> {
         unsafe {
             (*(*(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR)
                 as *mut Sender<CentralDelegateEvent>))
@@ -237,7 +237,7 @@ pub mod CentralDelegate {
         }
     }
 
-    extern "C" fn send_delegate_event(delegate: &mut Object, event: CentralDelegateEvent) {
+    fn send_delegate_event(delegate: &mut Object, event: CentralDelegateEvent) {
         let sender = delegate_get_sender_clone(delegate);
         task::block_on(async {
             if let Err(e) = sender.send(event).await {
@@ -267,7 +267,7 @@ pub mod CentralDelegate {
         delegate
     }
 
-    extern "C" fn get_characteristic_value(characteristic: *mut Object) -> Vec<u8> {
+    fn get_characteristic_value(characteristic: *mut Object) -> Vec<u8> {
         info!("Getting data!");
         let value = cb::characteristic_value(characteristic);
         let length = ns::data_length(value);

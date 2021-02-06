@@ -20,7 +20,14 @@ use async_std::{
     channel::{Receiver, Sender},
     task,
 };
-use std::{collections::HashMap, slice, str::FromStr, sync::Once};
+use std::{
+    collections::HashMap,
+    fmt::{self, Debug, Formatter},
+    ops::Deref,
+    slice,
+    str::FromStr,
+    sync::Once,
+};
 
 use objc::{
     declare::ClassDecl,
@@ -54,6 +61,55 @@ pub enum CentralDelegateEvent {
     CharacteristicWritten(Uuid, Uuid),
     // TODO Deal with descriptors at some point, but not a huge worry at the moment.
     // DiscoveredDescriptors(String, )
+}
+
+impl Debug for CentralDelegateEvent {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            CentralDelegateEvent::DidUpdateState => f.debug_tuple("DidUpdateState").finish(),
+            CentralDelegateEvent::DiscoveredPeripheral(p) => f
+                .debug_tuple("CentralDelegateEvent")
+                .field(p.deref())
+                .finish(),
+            CentralDelegateEvent::DiscoveredServices(uuid, services) => f
+                .debug_tuple("DiscoveredServices")
+                .field(uuid)
+                .field(&services.keys().collect::<Vec<_>>())
+                .finish(),
+            CentralDelegateEvent::DiscoveredCharacteristics(uuid, characteristics) => f
+                .debug_tuple("DiscoveredCharacteristics")
+                .field(uuid)
+                .field(&characteristics.keys().collect::<Vec<_>>())
+                .finish(),
+            CentralDelegateEvent::ConnectedDevice(uuid) => {
+                f.debug_tuple("ConnectedDevice").field(uuid).finish()
+            }
+            CentralDelegateEvent::DisconnectedDevice(uuid) => {
+                f.debug_tuple("DisconnectedDevice").field(uuid).finish()
+            }
+            CentralDelegateEvent::CharacteristicSubscribed(uuid1, uuid2) => f
+                .debug_tuple("CharacteristicSubscribed")
+                .field(uuid1)
+                .field(uuid2)
+                .finish(),
+            CentralDelegateEvent::CharacteristicUnsubscribed(uuid1, uuid2) => f
+                .debug_tuple("CharacteristicUnsubscribed")
+                .field(uuid1)
+                .field(uuid2)
+                .finish(),
+            CentralDelegateEvent::CharacteristicNotified(uuid1, uuid2, vec) => f
+                .debug_tuple("CharacteristicNotified")
+                .field(uuid1)
+                .field(uuid2)
+                .field(vec)
+                .finish(),
+            CentralDelegateEvent::CharacteristicWritten(uuid1, uuid2) => f
+                .debug_tuple("CharacteristicWritten")
+                .field(uuid1)
+                .field(uuid2)
+                .finish(),
+        }
+    }
 }
 
 pub mod CentralDelegate {

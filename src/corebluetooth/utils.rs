@@ -16,16 +16,11 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 
 use objc::runtime::Object;
 
 use super::framework::{cb, nil, ns};
-
-pub const NOT_SUPPORTED_ERROR: &'static str = "Error! Not supported by blurmac!";
-pub const NO_PERIPHERAL_FOUND: &'static str = "Error! No peripheral found!";
-pub const NO_SERVICE_FOUND: &'static str = "Error! No service found!";
-pub const NO_CHARACTERISTIC_FOUND: &'static str = "Error! No characteristic found!";
 
 pub mod NSStringUtils {
     use super::*;
@@ -54,10 +49,6 @@ pub mod NSStringUtils {
                     .unwrap(),
             ))
         }
-    }
-
-    pub fn string_from_str(string: &str) -> *mut Object {
-        ns::string(CString::new(string).unwrap().as_ptr())
     }
 }
 

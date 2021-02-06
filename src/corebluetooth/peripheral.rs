@@ -14,7 +14,7 @@ use super::{
 use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, NotificationHandler,
-        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, WriteKind, UUID,
+        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, WriteType, UUID,
     },
     common::util,
     Error, Result,
@@ -205,7 +205,12 @@ impl ApiPeripheral for Peripheral {
 
     /// Write some data to the characteristic. Returns an error if the write couldn't be send or (in
     /// the case of a write-with-response) if the device returns an error.
-    fn write(&self, characteristic: &Characteristic, data: &[u8], kind: WriteKind) -> Result<()> {
+    fn write(
+        &self,
+        characteristic: &Characteristic,
+        data: &[u8],
+        write_type: WriteType,
+    ) -> Result<()> {
         task::block_on(async {
             let fut = CoreBluetoothReplyFuture::default();
             self.message_sender
@@ -213,7 +218,7 @@ impl ApiPeripheral for Peripheral {
                     self.uuid,
                     get_apple_uuid(characteristic.uuid),
                     Vec::from(data),
-                    kind,
+                    write_type,
                     fut.get_state_clone(),
                 ))
                 .await?;

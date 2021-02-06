@@ -1,7 +1,7 @@
 extern crate btleplug;
 extern crate rand;
 
-use btleplug::api::{Central, Peripheral, WriteKind, UUID};
+use btleplug::api::{Central, Peripheral, WriteType, UUID};
 #[cfg(target_os = "linux")]
 use btleplug::bluez::manager::Manager;
 #[cfg(target_os = "macos")]
@@ -59,7 +59,7 @@ pub fn main() {
     for _ in 0..20 {
         let color_cmd = vec![0x56, rng.gen(), rng.gen(), rng.gen(), 0x00, 0xF0, 0xAA];
         light
-            .write(&cmd_char, &color_cmd, WriteKind::WithoutResponse)
+            .write(&cmd_char, &color_cmd, WriteType::WithoutResponse)
             .unwrap();
         thread::sleep(Duration::from_millis(200));
     }

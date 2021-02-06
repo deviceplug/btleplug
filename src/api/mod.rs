@@ -305,7 +305,7 @@ pub struct PeripheralProperties {
 
 /// The type of write operation to use.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum WriteKind {
+pub enum WriteType {
     /// A write operation where the device is expected to respond with a confirmation or error. Also
     /// known as a request.
     WithResponse,
@@ -344,7 +344,12 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
 
     /// Write some data to the characteristic. Returns an error if the write couldn't be send or (in
     /// the case of a write-with-response) if the device returns an error.
-    fn write(&self, characteristic: &Characteristic, data: &[u8], kind: WriteKind) -> Result<()>;
+    fn write(
+        &self,
+        characteristic: &Characteristic,
+        data: &[u8],
+        write_type: WriteType,
+    ) -> Result<()>;
 
     /// Sends a request (read) to the device. Synchronously returns either an error if the request
     /// was not accepted or the response from the device.

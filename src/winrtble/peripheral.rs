@@ -15,7 +15,7 @@ use super::{bindings, ble::characteristic::BLECharacteristic, ble::device::BLEDe
 use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, NotificationHandler,
-        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, WriteKind, UUID,
+        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, WriteType, UUID,
     },
     common::util,
     Error, Result,
@@ -230,8 +230,13 @@ impl ApiPeripheral for Peripheral {
 
     /// Write some data to the characteristic. Returns an error if the write couldn't be send or (in
     /// the case of a write-with-response) if the device returns an error.
-    fn write(&self, characteristic: &Characteristic, data: &[u8], kind: WriteKind) -> Result<()> {
-        // TODO: Use the WriteKind.
+    fn write(
+        &self,
+        characteristic: &Characteristic,
+        data: &[u8],
+        write_type: WriteType,
+    ) -> Result<()> {
+        // TODO: Use the WriteType.
         if let Some(ble_characteristic) = self.ble_characteristics.get(&characteristic.uuid) {
             ble_characteristic.write_value(data)
         } else {

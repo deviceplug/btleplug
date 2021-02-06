@@ -195,7 +195,7 @@ use std::thread;
 use std::time::Duration;
 use rand::{Rng, thread_rng};
 use rumble::bluez::manager::Manager;
-use rumble::api::{Central, Peripheral, WriteKind, UUID};
+use rumble::api::{Central, Peripheral, WriteType, UUID};
 
 pub fn main() {
     let manager = Manager::new().unwrap();
@@ -236,7 +236,7 @@ pub fn main() {
     let mut rng = thread_rng();
     for _ in 0..20 {
         let color_cmd = vec![0x56, rng.gen(), rng.gen(), rng.gen(), 0x00, 0xF0, 0xAA];
-        light.write(&cmd_char, &color_cmd, WriteKind::WithoutResponse).unwrap();
+        light.write(&cmd_char, &color_cmd, WriteType::WithoutResponse).unwrap();
         thread::sleep(Duration::from_millis(200));
     }
 }

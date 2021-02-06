@@ -23,7 +23,7 @@ use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, CharPropFlags, Characteristic,
         NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification,
-        WriteKind, UUID,
+        WriteType, UUID,
     },
     bluez::{
         bluez_dbus::device::OrgBluezDevice1, bluez_dbus::device::OrgBluezDevice1Properties,
@@ -460,14 +460,19 @@ impl ApiPeripheral for Peripheral {
             .collect())
     }
 
-    fn write(&self, characteristic: &Characteristic, data: &[u8], kind: WriteKind) -> Result<()> {
+    fn write(
+        &self,
+        characteristic: &Characteristic,
+        data: &[u8],
+        write_type: WriteType,
+    ) -> Result<()> {
         let mut options: PropMap = HashMap::new();
         options.insert(
             "type".to_string(),
             Variant(Box::new(
-                match kind {
-                    WriteKind::WithResponse => "request",
-                    WriteKind::WithoutResponse => "command",
+                match write_type {
+                    WriteType::WithResponse => "request",
+                    WriteType::WithoutResponse => "command",
                 }
                 .to_string(),
             )),

@@ -43,6 +43,19 @@ pub mod NSStringUtils {
         }
     }
 
+    pub fn string_to_maybe_string(nsstring: *mut Object) -> Option<String> {
+        if nsstring == nil {
+            return None;
+        }
+        unsafe {
+            Some(String::from(
+                CStr::from_ptr(ns::string_utf8string(nsstring))
+                    .to_str()
+                    .unwrap(),
+            ))
+        }
+    }
+
     pub fn string_from_str(string: &str) -> *mut Object {
         ns::string(CString::new(string).unwrap().as_ptr())
     }

@@ -20,7 +20,7 @@ use crate::{
     Error, Result,
 };
 use async_std::{
-    channel::{self, Receiver, Sender},
+    channel::{Receiver, Sender},
     prelude::StreamExt,
     task,
 };
@@ -49,7 +49,7 @@ pub struct Peripheral {
 impl Peripheral {
     pub fn new(
         uuid: Uuid,
-        local_name: String,
+        local_name: Option<String>,
         manager: AdapterManager<Self>,
         event_receiver: Receiver<CBPeripheralEvent>,
         message_sender: Sender<CoreBluetoothMessage>,
@@ -61,7 +61,7 @@ impl Peripheral {
             // MacOS, so we make it up for now. This sucks.
             address: uuid_to_bdaddr(&uuid.to_string()),
             address_type: AddressType::Random,
-            local_name: Some(local_name),
+            local_name: local_name,
             tx_power_level: None,
             manufacturer_data: HashMap::new(),
             discovery_count: 1,

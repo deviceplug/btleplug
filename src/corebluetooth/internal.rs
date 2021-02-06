@@ -263,7 +263,7 @@ pub enum CoreBluetoothEvent {
     AdapterConnected,
     AdapterError,
     // name, identifier, event receiver, message sender
-    DeviceDiscovered(Uuid, String, Receiver<CBPeripheralEvent>),
+    DeviceDiscovered(Uuid, Option<String>, Receiver<CBPeripheralEvent>),
     DeviceUpdated(Uuid, String),
     // identifier
     DeviceLost(Uuid),
@@ -308,9 +308,9 @@ impl CoreBluetoothInternal {
     fn on_discovered_peripheral(&mut self, peripheral: StrongPtr) {
         let uuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(*peripheral));
         let uuid = Uuid::from_str(&NSStringUtils::string_to_string(uuid_nsstring)).unwrap();
-        let name = NSStringUtils::string_to_string(cb::peripheral_name(*peripheral));
+        let name = NSStringUtils::string_to_maybe_string(cb::peripheral_name(*peripheral));
         if self.peripherals.contains_key(&uuid) {
-            if name != String::from("nil") {
+            if let Some(name) = name {
                 self.dispatch_event(CoreBluetoothEvent::DeviceUpdated(uuid, name));
             }
         } else {

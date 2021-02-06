@@ -14,7 +14,7 @@ use super::{
     future::{BtlePlugFuture, BtlePlugFutureStateShared},
     utils::{CoreBluetoothUtils, NSStringUtils},
 };
-use crate::api::{CharPropFlags, Characteristic, WriteKind, UUID};
+use crate::api::{CharPropFlags, Characteristic, WriteType, UUID};
 use async_std::{
     channel::{self, Receiver, Sender},
     task,
@@ -248,7 +248,7 @@ pub enum CoreBluetoothMessage {
         Uuid,
         Uuid,
         Vec<u8>,
-        WriteKind,
+        WriteType,
         CoreBluetoothReplyStateShared,
     ),
     // device uuid, characteristic uuid, future
@@ -448,7 +448,7 @@ impl CoreBluetoothInternal {
         peripheral_uuid: Uuid,
         characteristic_uuid: Uuid,
         data: Vec<u8>,
-        kind: WriteKind,
+        kind: WriteType,
         fut: CoreBluetoothReplyStateShared,
     ) {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
@@ -459,8 +459,8 @@ impl CoreBluetoothInternal {
                     ns::data(data.as_ptr(), data.len() as c_uint),
                     *c.characteristic,
                     match kind {
-                        WriteKind::WithResponse => 0,
-                        WriteKind::WithoutResponse => 1,
+                        WriteType::WithResponse => 0,
+                        WriteType::WithoutResponse => 1,
                     },
                 );
                 c.write_future_state.push_front(fut);

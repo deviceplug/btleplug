@@ -351,7 +351,7 @@ impl CoreBluetoothInternal {
         }
     }
 
-    fn on_peripheral_connect(&mut self, peripheral_uuid: Uuid) {
+    fn on_peripheral_connect(&mut self, _peripheral_uuid: Uuid) {
         // Don't actually do anything here. The peripheral will fire the future
         // itself when it receives all of its service/characteristic info.
     }
@@ -592,7 +592,7 @@ impl CoreBluetoothInternal {
                         info!("got connectdevice msg!");
                         self.connect_peripheral(peripheral_uuid, fut);
                     }
-                    CoreBluetoothMessage::DisconnectDevice(peripheral_uuid, fut) => {}
+                    CoreBluetoothMessage::DisconnectDevice(_peripheral_uuid, _fut) => {}
                     CoreBluetoothMessage::ReadValue(peripheral_uuid, char_uuid, fut) => {
                         self.read_value(peripheral_uuid, char_uuid, fut)
                     }

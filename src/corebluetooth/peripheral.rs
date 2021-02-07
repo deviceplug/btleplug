@@ -40,7 +40,6 @@ pub struct Peripheral {
     uuid: Uuid,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
     pub(crate) properties: PeripheralProperties,
-    event_receiver: Receiver<CBPeripheralEvent>,
     message_sender: Sender<CoreBluetoothMessage>,
     // We're not actually holding a peripheral object here, that's held out in
     // the objc thread. We'll just communicate with it through our
@@ -69,11 +68,11 @@ impl Peripheral {
             has_scan_response: true,
         };
         let notification_handlers = Arc::new(Mutex::new(Vec::<NotificationHandler>::new()));
-        let mut er_clone = event_receiver.clone();
         let nh_clone = notification_handlers.clone();
         task::spawn(async move {
+            let mut event_receiver = event_receiver;
             loop {
-                let event = er_clone.next().await;
+                let event = event_receiver.next().await;
                 if event.is_none() {
                     error!("Event receiver died, breaking out of corebluetooth device loop.");
                     break;
@@ -98,7 +97,6 @@ impl Peripheral {
             characteristics: Arc::new(Mutex::new(BTreeSet::new())),
             notification_handlers,
             uuid,
-            event_receiver,
             message_sender,
         }
     }
@@ -125,7 +123,6 @@ impl Debug for Peripheral {
             .field("uuid", &self.uuid)
             .field("characteristics", &self.characteristics)
             .field("properties", &self.properties)
-            .field("event_receiver", &self.event_receiver)
             .field("message_sender", &self.message_sender)
             .finish()
     }

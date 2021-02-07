@@ -15,6 +15,12 @@ use crate::api::{BDAddr, CentralEvent, Peripheral};
 use dashmap::DashMap;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
+#[cfg(feature = "async")]
+use {
+    futures::channel::mpsc::{self, UnboundedSender},
+    futures::stream::Stream,
+    std::pin::Pin,
+};
 
 #[derive(Clone, Debug)]
 pub struct AdapterManager<PeripheralType>
@@ -39,6 +45,9 @@ where
     // the receiver side anyways), but means we also don't have to deal with the
     // adapter API yet.
     event_receiver: Arc<Mutex<Option<Receiver<CentralEvent>>>>,
+
+    #[cfg(feature = "async")]
+    async_senders: Arc<Mutex<Vec<UnboundedSender<CentralEvent>>>>,
 }
 
 impl<PeripheralType: Peripheral + 'static> Default for AdapterManager<PeripheralType> {
@@ -49,6 +58,8 @@ impl<PeripheralType: Peripheral + 'static> Default for AdapterManager<Peripheral
             peripherals,
             event_sender: Arc::new(Mutex::new(event_sender)),
             event_receiver: Arc::new(Mutex::new(Some(event_receiver))),
+            #[cfg(feature = "async")]
+            async_senders: Arc::new(Mutex::new(vec![])),
         }
     }
 }
@@ -70,10 +81,24 @@ where
         // Since we hold a receiver, this will never fail unless we fill the
         // channel. Whether that's a good idea is another question entirely.
         self.event_sender.lock().unwrap().send(event).unwrap();
+
+        #[cfg(feature = "async")]
+        // Remove sender from the list if the other end of the channel has been dropped.
+        self.async_senders
+            .lock()
+            .unwrap()
+            .retain(|sender| sender.unbounded_send(event).is_ok());
     }
 
     pub fn event_receiver(&self) -> Option<Receiver<CentralEvent>> {
         self.event_receiver.lock().unwrap().take()
+    }
+
+    #[cfg(feature = "async")]
+    pub fn event_stream(&self) -> Pin<Box<dyn Stream<Item = CentralEvent>>> {
+        let (sender, receiver) = mpsc::unbounded();
+        self.async_senders.lock().unwrap().push(sender);
+        Box::pin(receiver)
     }
 
     pub fn has_peripheral(&self, addr: &BDAddr) -> bool {

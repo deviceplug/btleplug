@@ -2,11 +2,9 @@ use super::internal::{run_corebluetooth_thread, CoreBluetoothEvent, CoreBluetoot
 use super::peripheral::Peripheral;
 use crate::api::{AdapterManager, BDAddr, Central, CentralEvent};
 use crate::Result;
-use async_std::{
-    channel::{self, Sender},
-    prelude::StreamExt,
-    task,
-};
+use async_std::{prelude::StreamExt, task};
+use futures::channel::mpsc::{self, Sender};
+use futures::sink::SinkExt;
 use log::info;
 use std::convert::TryInto;
 use std::sync::mpsc::Receiver;
@@ -25,13 +23,13 @@ pub fn uuid_to_bdaddr(uuid: &String) -> BDAddr {
 
 impl Adapter {
     pub fn new() -> Self {
-        let (sender, mut receiver) = channel::bounded(256);
+        let (sender, mut receiver) = mpsc::channel(256);
         let adapter_sender = run_corebluetooth_thread(sender);
         // Since init currently blocked until the state update, we know the
         // receiver is dropped after that. We can pick it up here and make it
         // part of our event loop to update our peripherals.
         info!("Waiting on adapter connect");
-        task::block_on(async { receiver.recv().await.unwrap() });
+        task::block_on(async { receiver.next().await.unwrap() });
         info!("Waiting on adapter connected");
         let adapter_sender_clone = adapter_sender.clone();
         let manager = AdapterManager::new();
@@ -90,9 +88,8 @@ impl Central<Peripheral> for Adapter {
     fn start_scan(&self) -> Result<()> {
         info!("Starting CoreBluetooth Scan");
         task::block_on(async {
-            self.sender
-                .send(CoreBluetoothMessage::StartScanning)
-                .await?;
+            let mut sender = self.sender.clone();
+            sender.send(CoreBluetoothMessage::StartScanning).await?;
             Ok(())
         })
     }
@@ -100,7 +97,8 @@ impl Central<Peripheral> for Adapter {
     fn stop_scan(&self) -> Result<()> {
         info!("Stopping CoreBluetooth Scan");
         task::block_on(async {
-            self.sender.send(CoreBluetoothMessage::StopScanning).await?;
+            let mut sender = self.sender.clone();
+            sender.send(CoreBluetoothMessage::StopScanning).await?;
             Ok(())
         })
     }

@@ -19,11 +19,10 @@ use crate::{
     common::util,
     Error, Result,
 };
-use async_std::{
-    channel::{Receiver, SendError, Sender},
-    prelude::StreamExt,
-    task,
-};
+use async_std::task;
+use futures::channel::mpsc::{Receiver, SendError, Sender};
+use futures::sink::SinkExt;
+use futures::stream::StreamExt;
 use log::{debug, error, info};
 use std::{
     collections::{BTreeSet, HashMap},
@@ -157,8 +156,9 @@ impl ApiPeripheral for Peripheral {
     fn connect(&self) -> Result<()> {
         info!("Trying device connect!");
         task::block_on(async {
+            let mut message_sender = self.message_sender.clone();
             let fut = CoreBluetoothReplyFuture::default();
-            self.message_sender
+            message_sender
                 .send(CoreBluetoothMessage::ConnectDevice(
                     self.uuid,
                     fut.get_state_clone(),
@@ -197,8 +197,9 @@ impl ApiPeripheral for Peripheral {
         write_type: WriteType,
     ) -> Result<()> {
         task::block_on(async {
+            let mut message_sender = self.message_sender.clone();
             let fut = CoreBluetoothReplyFuture::default();
-            self.message_sender
+            message_sender
                 .send(CoreBluetoothMessage::WriteValue(
                     self.uuid,
                     characteristic.uuid,
@@ -228,8 +229,9 @@ impl ApiPeripheral for Peripheral {
     fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
         info!("Trying to subscribe!");
         task::block_on(async {
+            let mut message_sender = self.message_sender.clone();
             let fut = CoreBluetoothReplyFuture::default();
-            self.message_sender
+            message_sender
                 .send(CoreBluetoothMessage::Subscribe(
                     self.uuid,
                     characteristic.uuid,
@@ -249,8 +251,9 @@ impl ApiPeripheral for Peripheral {
     fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
         info!("Trying to unsubscribe!");
         task::block_on(async {
+            let mut message_sender = self.message_sender.clone();
             let fut = CoreBluetoothReplyFuture::default();
-            self.message_sender
+            message_sender
                 .send(CoreBluetoothMessage::Unsubscribe(
                     self.uuid,
                     characteristic.uuid,
@@ -276,8 +279,9 @@ impl ApiPeripheral for Peripheral {
     fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
         info!("Trying read!");
         task::block_on(async {
+            let mut message_sender = self.message_sender.clone();
             let fut = CoreBluetoothReplyFuture::default();
-            self.message_sender
+            message_sender
                 .send(CoreBluetoothMessage::ReadValue(
                     self.uuid,
                     characteristic.uuid,
@@ -294,8 +298,8 @@ impl ApiPeripheral for Peripheral {
     }
 }
 
-impl<T> From<SendError<T>> for Error {
-    fn from(_: SendError<T>) -> Self {
+impl From<SendError> for Error {
+    fn from(_: SendError) -> Self {
         Error::Other("Channel closed".to_string())
     }
 }

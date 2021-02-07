@@ -20,10 +20,9 @@ use super::{
     framework::{cb, nil, ns},
     utils::{CoreBluetoothUtils, NSStringUtils},
 };
-use async_std::{
-    channel::{Receiver, Sender},
-    task,
-};
+use async_std::task;
+use futures::channel::mpsc::{self, Receiver, Sender};
+use futures::sink::SinkExt;
 use libc::{c_char, c_void};
 use log::{error, info, trace};
 use objc::{
@@ -115,31 +114,22 @@ pub mod CentralDelegate {
 
     use super::*;
 
-    pub fn delegate() -> *mut Object {
-        unsafe {
+    pub fn delegate() -> (*mut Object, Receiver<CentralDelegateEvent>) {
+        let (sender, receiver) = mpsc::channel::<CentralDelegateEvent>(256);
+        let sendbox = Box::new(sender);
+        let delegate = unsafe {
             let mut delegate: *mut Object = msg_send![delegate_class(), alloc];
-            delegate = msg_send![delegate, init];
+            delegate = msg_send![
+                delegate,
+                initWithSender: Box::into_raw(sendbox) as *mut c_void
+            ];
             delegate
-        }
-    }
-
-    pub fn delegate_receiver_clone(delegate: *mut Object) -> Receiver<CentralDelegateEvent> {
-        unsafe {
-            // Just clone here and return, so we don't have to worry about
-            // accidentally screwing up ownership by passing the bare pointer
-            // outside.
-            (*(*(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_RECEIVER_IVAR)
-                as *mut Receiver<CentralDelegateEvent>))
-                .clone()
-        }
+        };
+        (delegate, receiver)
     }
 
     pub fn delegate_drop_channel(delegate: *mut Object) {
         unsafe {
-            let _ = Box::from_raw(
-                *(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_RECEIVER_IVAR)
-                    as *mut Receiver<CentralDelegateEvent>,
-            );
             let _ = Box::from_raw(
                 *(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR)
                     as *mut Sender<CentralDelegateEvent>,
@@ -148,7 +138,6 @@ pub mod CentralDelegate {
     }
 
     const DELEGATE_SENDER_IVAR: &'static str = "_sender";
-    const DELEGATE_RECEIVER_IVAR: &'static str = "_receiver";
 
     fn delegate_class() -> &'static Class {
         trace!("delegate_class");
@@ -163,11 +152,10 @@ pub mod CentralDelegate {
             decl.add_protocol(Protocol::get("CBCentralManagerDelegate").unwrap());
 
             decl.add_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR); /* crossbeam_channel::Sender<DelegateMessage>* */
-            decl.add_ivar::<*mut c_void>(DELEGATE_RECEIVER_IVAR); /* crossbeam_channel::Receiver<DelegateMessage>* */
             unsafe {
                 // Initialization
-                decl.add_method(sel!(init),
-                                delegate_init as extern fn(&mut Object, Sel) -> *mut Object);
+                decl.add_method(sel!(initWithSender:),
+                                delegate_init as extern fn(&mut Object, Sel, *mut c_void) -> *mut Object);
 
                 // CentralManager Events
                 decl.add_method(sel!(centralManagerDidUpdateState:),
@@ -238,7 +226,7 @@ pub mod CentralDelegate {
     }
 
     fn send_delegate_event(delegate: &mut Object, event: CentralDelegateEvent) {
-        let sender = delegate_get_sender_clone(delegate);
+        let mut sender = delegate_get_sender_clone(delegate);
         task::block_on(async {
             if let Err(e) = sender.send(event).await {
                 error!("Error sending delegate event: {}", e);
@@ -246,23 +234,17 @@ pub mod CentralDelegate {
         });
     }
 
-    extern "C" fn delegate_init(delegate: &mut Object, _cmd: Sel) -> *mut Object {
+    extern "C" fn delegate_init(
+        delegate: &mut Object,
+        _cmd: Sel,
+        sender: *mut c_void,
+    ) -> *mut Object {
         trace!("delegate_init");
-        let (sender, recv) = async_std::channel::bounded::<CentralDelegateEvent>(256);
         // TODO Should these maybe be Option<T>, so we can denote when we've
         // dropped? Not quite sure how delegate lifetime works here.
-        let sendbox = Box::new(sender);
-        let recvbox = Box::new(recv);
         unsafe {
             trace!("Storing off ivars!");
-            delegate.set_ivar::<*mut c_void>(
-                DELEGATE_SENDER_IVAR,
-                Box::into_raw(sendbox) as *mut c_void,
-            );
-            delegate.set_ivar::<*mut c_void>(
-                DELEGATE_RECEIVER_IVAR,
-                Box::into_raw(recvbox) as *mut c_void,
-            );
+            delegate.set_ivar(DELEGATE_SENDER_IVAR, sender);
         }
         delegate
     }

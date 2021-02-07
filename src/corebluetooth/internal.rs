@@ -15,11 +15,11 @@ use super::{
     utils::{CoreBluetoothUtils, NSStringUtils},
 };
 use crate::api::{CharPropFlags, Characteristic, WriteType};
-use async_std::{
-    channel::{self, Receiver, Sender},
-    task,
-};
-use futures::{select, FutureExt, StreamExt};
+use async_std::task;
+use futures::channel::mpsc::{self, Receiver, Sender};
+use futures::select;
+use futures::sink::SinkExt;
+use futures::stream::{Fuse, StreamExt};
 use log::{error, info, trace};
 use objc::{
     rc::StrongPtr,
@@ -212,12 +212,11 @@ struct CoreBluetoothInternal {
     delegate: StrongPtr,
     // Map of identifiers to object pointers
     peripherals: HashMap<Uuid, CBPeripheral>,
-    //peripherals: HashMap<String, StrongPtr>,
-    delegate_receiver: Receiver<CentralDelegateEvent>,
+    delegate_receiver: Fuse<Receiver<CentralDelegateEvent>>,
     // Out in the world beyond CoreBluetooth, we'll be async, so just
     // task::block this when sending even though it'll never actually block.
     event_sender: Sender<CoreBluetoothEvent>,
-    message_receiver: Receiver<CoreBluetoothMessage>,
+    message_receiver: Fuse<Receiver<CoreBluetoothMessage>>,
 }
 
 impl Debug for CoreBluetoothInternal {
@@ -280,21 +279,22 @@ impl CoreBluetoothInternal {
     ) -> Self {
         // Pretty sure these come preallocated?
         unsafe {
-            let delegate = StrongPtr::new(CentralDelegate::delegate());
+            let (delegate, delegate_receiver) = CentralDelegate::delegate();
+            let delegate = StrongPtr::new(delegate);
             Self {
                 manager: StrongPtr::new(cb::centralmanager(*delegate)),
                 peripherals: HashMap::new(),
-                delegate_receiver: CentralDelegate::delegate_receiver_clone(*delegate),
+                delegate_receiver: delegate_receiver.fuse(),
                 event_sender,
-                message_receiver,
+                message_receiver: message_receiver.fuse(),
                 delegate,
             }
         }
     }
 
     fn dispatch_event(&self, event: CoreBluetoothEvent) {
-        let s = self.event_sender.clone();
         task::block_on(async {
+            let mut s = self.event_sender.clone();
             if let Err(e) = s.send(event).await {
                 error!("Error dispatching event: {:?}", e);
             }
@@ -314,7 +314,7 @@ impl CoreBluetoothInternal {
             //     self.connect_peripheral(*peripheral);
             // }
             // Create our channels
-            let (event_sender, event_receiver) = channel::bounded(256);
+            let (event_sender, event_receiver) = mpsc::channel(256);
             self.peripherals
                 .insert(uuid, CBPeripheral::new(peripheral, event_sender));
             self.dispatch_event(CoreBluetoothEvent::DeviceDiscovered(
@@ -519,27 +519,15 @@ impl CoreBluetoothInternal {
         }
     }
 
-    pub fn wait_for_message(&mut self) -> bool {
-        let mut delegate_receiver_clone = self.delegate_receiver.clone();
-        /*
-        let delegate_future =
-            async { InternalLoopMessage::Delegate(delegate_receiver_clone.next().await.unwrap()) };
-        */
-        let mut adapter_receiver_clone = self.message_receiver.clone();
-        /*
-                let adapter_future =
-                    async { InternalLoopMessage::Adapter(adapter_receiver_clone.next().await.unwrap()) };
-        */
-        let msg = task::block_on(async {
-            select! {
-                delegate_msg = delegate_receiver_clone.next().fuse() => {
-                    InternalLoopMessage::Delegate(delegate_msg.unwrap())
-                }
-                adapter_msg = adapter_receiver_clone.next().fuse() => {
-                    InternalLoopMessage::Adapter(adapter_msg.unwrap())
-                }
+    async fn wait_for_message(&mut self) -> bool {
+        let msg = select! {
+            delegate_msg = self.delegate_receiver.select_next_some() => {
+                InternalLoopMessage::Delegate(delegate_msg)
             }
-        });
+            adapter_msg = self.message_receiver.select_next_some() => {
+                InternalLoopMessage::Adapter(adapter_msg)
+            }
+        };
 
         match msg {
             InternalLoopMessage::Delegate(delegate_msg) => {
@@ -649,14 +637,16 @@ impl Drop for CoreBluetoothInternal {
 pub fn run_corebluetooth_thread(
     event_sender: Sender<CoreBluetoothEvent>,
 ) -> Sender<CoreBluetoothMessage> {
-    let (sender, receiver) = channel::bounded::<CoreBluetoothMessage>(256);
+    let (sender, receiver) = mpsc::channel::<CoreBluetoothMessage>(256);
     thread::spawn(move || {
-        let mut cbi = CoreBluetoothInternal::new(receiver, event_sender);
-        loop {
-            if !cbi.wait_for_message() {
-                break;
+        task::block_on(async move {
+            let mut cbi = CoreBluetoothInternal::new(receiver, event_sender);
+            loop {
+                if !cbi.wait_for_message().await {
+                    break;
+                }
             }
-        }
+        })
     });
     sender
 }

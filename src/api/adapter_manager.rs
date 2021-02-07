@@ -56,7 +56,6 @@ where
     }
 
     pub fn emit(&self, event: CentralEvent) {
-        //debug!("emitted {:?}", event);
         match event {
             CentralEvent::DeviceDisconnected(addr) => {
                 self.peripherals.remove(&addr);

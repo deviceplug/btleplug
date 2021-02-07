@@ -95,7 +95,6 @@ impl Peripheral {
         });
         Self {
             properties,
-
             manager,
             characteristics: Arc::new(Mutex::new(BTreeSet::new())),
             notification_handlers,

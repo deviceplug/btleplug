@@ -21,12 +21,10 @@ path = "src/lib.rs"
 # crate-type = ["staticlib"]
 
 [features]
-default = ["async"]
-async = ["async-trait"]
 serde = ["uuid/serde", "serde_cr", "serde_bytes"]
 
 [dependencies]
-async-trait = { version = "0.1.42", optional = true }
+async-trait = { version = "0.1.42" }
 log = "0.4.14"
 bitflags = "1.2.1"
 thiserror = "1.0.23"

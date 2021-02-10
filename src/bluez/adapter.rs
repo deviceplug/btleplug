@@ -1,6 +1,5 @@
 use super::peripheral::Peripheral;
-use crate::api::async_api::Central;
-use crate::api::{BDAddr, CentralEvent};
+use crate::api::{BDAddr, Central, CentralEvent};
 use crate::{Error, Result};
 use async_trait::async_trait;
 use bluez_async::{

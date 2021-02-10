@@ -1,19 +1,20 @@
 use super::internal::{run_corebluetooth_thread, CoreBluetoothEvent, CoreBluetoothMessage};
 use super::peripheral::Peripheral;
 use crate::api::{AdapterManager, BDAddr, Central, CentralEvent};
-use crate::Result;
+use crate::{Error, Result};
 use async_std::task;
+use async_trait::async_trait;
 use futures::channel::mpsc::{self, Sender};
 use futures::sink::SinkExt;
-use futures::stream::StreamExt;
+use futures::stream::{Stream, StreamExt};
 use log::info;
 use std::convert::{TryFrom, TryInto};
-use std::sync::mpsc::Receiver;
+use std::pin::Pin;
 
 #[derive(Clone, Debug)]
 pub struct Adapter {
-    pub(crate) manager: AdapterManager<Peripheral>,
-    pub(crate) sender: Sender<CoreBluetoothMessage>,
+    manager: AdapterManager<Peripheral>,
+    sender: Sender<CoreBluetoothMessage>,
 }
 
 pub(crate) fn uuid_to_bdaddr(uuid: &String) -> BDAddr {
@@ -80,40 +81,45 @@ impl Adapter {
     }
 }
 
+#[async_trait]
 impl Central for Adapter {
     type Peripheral = Peripheral;
 
-    fn event_receiver(&self) -> Option<Receiver<CentralEvent>> {
-        self.manager.event_receiver()
+    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent>>>> {
+        Ok(self.manager.event_stream())
     }
 
-    fn start_scan(&self) -> Result<()> {
-        info!("Starting CoreBluetooth Scan");
-        task::block_on(async {
-            let mut sender = self.sender.clone();
-            sender.send(CoreBluetoothMessage::StartScanning).await?;
-            Ok(())
-        })
+    async fn start_scan(&self) -> Result<()> {
+        self.sender
+            .to_owned()
+            .send(CoreBluetoothMessage::StartScanning)
+            .await?;
+        Ok(())
     }
 
-    fn stop_scan(&self) -> Result<()> {
-        info!("Stopping CoreBluetooth Scan");
-        task::block_on(async {
-            let mut sender = self.sender.clone();
-            sender.send(CoreBluetoothMessage::StopScanning).await?;
-            Ok(())
-        })
+    async fn active(&self, _enabled: bool) {
+        todo!()
     }
 
-    fn peripherals(&self) -> Vec<Peripheral> {
-        self.manager.peripherals()
+    async fn filter_duplicates(&self, enabled: bool) {
+        todo!()
     }
 
-    fn peripheral(&self, address: BDAddr) -> Option<Peripheral> {
-        self.manager.peripheral(address)
+    async fn stop_scan(&self) -> Result<()> {
+        self.sender
+            .to_owned()
+            .send(CoreBluetoothMessage::StopScanning)
+            .await?;
+        Ok(())
     }
 
-    fn active(&self, _enabled: bool) {}
+    async fn peripherals(&self) -> Result<Vec<Peripheral>> {
+        Ok(self.manager.peripherals())
+    }
 
-    fn filter_duplicates(&self, _enabled: bool) {}
+    async fn peripheral(&self, address: BDAddr) -> Result<Peripheral> {
+        self.manager
+            .peripheral(address)
+            .ok_or(Error::DeviceNotFound)
+    }
 }

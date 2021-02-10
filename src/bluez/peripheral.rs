@@ -10,7 +10,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
 use crate::api::{
-    async_api, AddressType, BDAddr, CharPropFlags, Characteristic, PeripheralProperties,
+    self, AddressType, BDAddr, CharPropFlags, Characteristic, PeripheralProperties,
     ValueNotification, WriteType,
 };
 use crate::{Error, Result};
@@ -51,7 +51,7 @@ impl Peripheral {
 }
 
 #[async_trait]
-impl async_api::Peripheral for Peripheral {
+impl api::Peripheral for Peripheral {
     fn address(&self) -> BDAddr {
         self.mac_address
     }

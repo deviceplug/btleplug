@@ -3,6 +3,9 @@ use btleplug::platform::{Adapter, Manager};
 use futures::stream::StreamExt;
 use std::error::Error;
 
+#[cfg(target_os = "macos")]
+embed_plist::embed_info_plist!("Info.plist");
+
 async fn get_central(manager: &Manager) -> Adapter {
     let adapters = manager.adapters().await.unwrap();
     adapters.into_iter().nth(0).unwrap()

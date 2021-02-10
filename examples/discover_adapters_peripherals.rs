@@ -5,6 +5,9 @@ use tokio::time;
 use btleplug::api::{Central, Manager as _, Peripheral};
 use btleplug::platform::Manager;
 
+#[cfg(target_os = "macos")]
+embed_plist::embed_info_plist!("Info.plist");
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init();

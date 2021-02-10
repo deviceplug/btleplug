@@ -44,6 +44,9 @@ cocoa = "0.24.0"
 objc = "0.2.7"
 libc = "0.2.85"
 
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dev-dependencies]
+embed_plist = "1.2"
+
 [target.'cfg(target_os = "windows")'.dependencies]
 tokio = { version = "1.2", features = ["rt", "sync"] }
 windows = "0.7.0"

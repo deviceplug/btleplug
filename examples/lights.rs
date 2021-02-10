@@ -8,6 +8,9 @@ use uuid::Uuid;
 const LIGHT_CHARACTERISTIC_UUID: Uuid = uuid_from_u16(0xFFE9);
 use tokio::time;
 
+#[cfg(target_os = "macos")]
+embed_plist::embed_info_plist!("Info.plist");
+
 async fn find_light(central: &Adapter) -> Option<Peripheral> {
     for p in central.peripherals().await.unwrap() {
         if p.properties()

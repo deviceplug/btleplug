@@ -2,9 +2,10 @@ use super::internal::{run_corebluetooth_thread, CoreBluetoothEvent, CoreBluetoot
 use super::peripheral::Peripheral;
 use crate::api::{AdapterManager, BDAddr, Central, CentralEvent};
 use crate::Result;
-use async_std::{prelude::StreamExt, task};
+use async_std::task;
 use futures::channel::mpsc::{self, Sender};
 use futures::sink::SinkExt;
+use futures::stream::StreamExt;
 use log::info;
 use std::convert::TryInto;
 use std::sync::mpsc::Receiver;

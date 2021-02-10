@@ -1,48 +1,56 @@
-use btleplug::{
-    api::{bleuuid::uuid_from_u16, Central, Peripheral, WriteType},
-    platform::Manager,
-};
+use btleplug::api::async_api::{Central, Peripheral as _};
+use btleplug::api::{bleuuid::uuid_from_u16, WriteType};
+use btleplug::platform::{Adapter, Manager, Peripheral};
 use rand::{thread_rng, Rng};
-use std::thread;
+use std::error::Error;
 use std::time::Duration;
 use uuid::Uuid;
 
 const LIGHT_CHARACTERISTIC_UUID: Uuid = uuid_from_u16(0xFFE9);
+use tokio::time;
 
-pub fn main() {
-    let manager = Manager::new().unwrap();
+async fn find_light(central: &Adapter) -> Option<Peripheral> {
+    for p in central.peripherals().await.unwrap() {
+        if p.properties()
+            .await
+            .unwrap()
+            .local_name
+            .iter()
+            .any(|name| name.contains("LEDBlue"))
+        {
+            return Some(p);
+        }
+    }
+    None
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    let manager = Manager::new().await.unwrap();
 
     // get the first bluetooth adapter
     let central = manager
         .adapters()
+        .await
         .expect("Unable to fetch adapter list.")
         .into_iter()
         .nth(0)
         .expect("Unable to find adapters.");
 
     // start scanning for devices
-    central.start_scan().unwrap();
+    central.start_scan().await?;
     // instead of waiting, you can use central.event_receiver() to get a channel
     // to listen for notifications on.
-    thread::sleep(Duration::from_secs(2));
+    time::sleep(Duration::from_secs(2)).await;
 
     // find the device we're interested in
-    let light = central
-        .peripherals()
-        .into_iter()
-        .find(|p| {
-            p.properties()
-                .local_name
-                .iter()
-                .any(|name| name.contains("LEDBlue"))
-        })
-        .expect("No lights found");
+    let light = find_light(&central).await.expect("No lights found");
 
     // connect to the device
-    light.connect().unwrap();
+    light.connect().await?;
 
     // discover characteristics
-    light.discover_characteristics().unwrap();
+    light.discover_characteristics().await?;
 
     // find the characteristic we want
     let chars = light.characteristics();
@@ -57,7 +65,8 @@ pub fn main() {
         let color_cmd = vec![0x56, rng.gen(), rng.gen(), rng.gen(), 0x00, 0xF0, 0xAA];
         light
             .write(&cmd_char, &color_cmd, WriteType::WithoutResponse)
-            .unwrap();
-        thread::sleep(Duration::from_millis(200));
+            .await?;
+        time::sleep(Duration::from_millis(200)).await;
     }
+    Ok(())
 }

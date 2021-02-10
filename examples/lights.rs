@@ -1,5 +1,4 @@
-use btleplug::api::async_api::{Central, Peripheral as _};
-use btleplug::api::{bleuuid::uuid_from_u16, WriteType};
+use btleplug::api::{bleuuid::uuid_from_u16, Central, Peripheral as _, WriteType};
 use btleplug::platform::{Adapter, Manager, Peripheral};
 use rand::{thread_rng, Rng};
 use std::error::Error;

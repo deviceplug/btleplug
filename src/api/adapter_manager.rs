@@ -13,14 +13,11 @@
 // Copyright (c) 2014 The Rust Project Developers
 use crate::api::{BDAddr, CentralEvent, Peripheral};
 use dashmap::{mapref::one::RefMut, DashMap};
+use futures::channel::mpsc::{self, UnboundedSender};
+use futures::stream::Stream;
+use std::pin::Pin;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-#[cfg(feature = "async")]
-use {
-    futures::channel::mpsc::{self, UnboundedSender},
-    futures::stream::Stream,
-    std::pin::Pin,
-};
 
 #[derive(Clone, Debug)]
 pub struct AdapterManager<PeripheralType>
@@ -46,7 +43,6 @@ where
     // adapter API yet.
     event_receiver: Arc<Mutex<Option<Receiver<CentralEvent>>>>,
 
-    #[cfg(feature = "async")]
     async_senders: Arc<Mutex<Vec<UnboundedSender<CentralEvent>>>>,
 }
 
@@ -58,7 +54,6 @@ impl<PeripheralType: Peripheral + 'static> Default for AdapterManager<Peripheral
             peripherals,
             event_sender: Arc::new(Mutex::new(event_sender)),
             event_receiver: Arc::new(Mutex::new(Some(event_receiver))),
-            #[cfg(feature = "async")]
             async_senders: Arc::new(Mutex::new(vec![])),
         }
     }
@@ -86,7 +81,6 @@ where
             .send(event.clone())
             .unwrap();
 
-        #[cfg(feature = "async")]
         // Remove sender from the list if the other end of the channel has been dropped.
         self.async_senders
             .lock()
@@ -98,7 +92,6 @@ where
         self.event_receiver.lock().unwrap().take()
     }
 
-    #[cfg(feature = "async")]
     pub fn event_stream(&self) -> Pin<Box<dyn Stream<Item = CentralEvent>>> {
         let (sender, receiver) = mpsc::unbounded();
         self.async_senders.lock().unwrap().push(sender);

@@ -1,9 +1,7 @@
-use async_std::{
-    future::Future,
-    task::{Context, Poll, Waker},
-};
+use async_std::task::{Context, Poll, Waker};
 use core::pin::Pin;
 use log::debug;
+use std::future::Future;
 use std::sync::{Arc, Mutex};
 
 /// Struct used for waiting on replies from the server.

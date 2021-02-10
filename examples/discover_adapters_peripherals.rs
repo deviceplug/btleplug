@@ -1,25 +1,10 @@
 use simple_logger::SimpleLogger;
-use std::thread;
+use std::error::Error;
 use std::time::Duration;
+use tokio::time;
 
-use btleplug::{
-    api::{Central, Peripheral},
-    platform::{Adapter, Manager},
-};
-
-#[cfg(target_os = "linux")]
-fn print_adapter_info(adapter: &Adapter) {
-    println!(
-        "connected adapter {:?} is powered: {:?}",
-        adapter.name(),
-        adapter.is_powered()
-    );
-}
-
-#[cfg(any(target_os = "windows", target_os = "macos"))]
-fn print_adapter_info(_adapter: &Adapter) {
-    println!("adapter info can't be printed on Windows 10 or mac");
-}
+use btleplug::api::async_api::{Central, Peripheral};
+use btleplug::platform::Manager;
 
 /**
 If you are getting run time error like that :
@@ -27,61 +12,65 @@ If you are getting run time error like that :
  you can try to run app with > sudo ./discover_adapters_peripherals
  on linux
 **/
-fn main() {
-    SimpleLogger::new().init().unwrap();
-    let manager = Manager::new().unwrap();
-    let adapter_list = manager.adapters().unwrap();
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    SimpleLogger::new().init()?;
+    let manager = Manager::new().await?;
+    let adapter_list = manager.adapters().await?;
     if adapter_list.len() <= 0 {
         eprint!("Bluetooth adapter(s) were NOT found, sorry...\n");
     } else {
         for adapter in adapter_list.iter() {
             println!("connecting to BLE adapter: ...");
 
-            print_adapter_info(&adapter);
             adapter
                 .start_scan()
+                .await
                 .expect("Can't scan BLE adapter for connected devices...");
-            thread::sleep(Duration::from_secs(2));
-            if adapter.peripherals().is_empty() {
+            time::sleep(Duration::from_secs(2)).await;
+            let peripherals = adapter.peripherals().await?;
+            if peripherals.is_empty() {
                 eprintln!("->>> BLE peripheral devices were not found, sorry. Exiting...");
             } else {
                 // all peripheral devices in range
-                for peripheral in adapter.peripherals().iter() {
+                for peripheral in peripherals.iter() {
+                    let properties = peripheral.properties().await?;
+                    let is_connected = peripheral.is_connected().await?;
                     println!(
                         "peripheral : {:?} is connected: {:?}",
-                        peripheral.properties().local_name,
-                        peripheral.is_connected()
+                        properties.local_name,
+                        peripheral.is_connected().await?
                     );
-                    if peripheral.properties().local_name.is_some() && !peripheral.is_connected() {
+                    if properties.local_name.is_some() && !is_connected {
                         println!(
                             "start connect to peripheral : {:?}...",
-                            peripheral.properties().local_name
+                            properties.local_name
                         );
                         peripheral
                             .connect()
+                            .await
                             .expect("Can't connect to peripheral...");
+                        let is_connected = peripheral.is_connected().await?;
                         println!(
                             "now connected (\'{:?}\') to peripheral : {:?}...",
-                            peripheral.is_connected(),
-                            peripheral.properties().local_name
+                            is_connected, properties.local_name
                         );
-                        let chars = peripheral.discover_characteristics();
-                        if peripheral.is_connected() {
+                        let chars = peripheral.discover_characteristics().await?;
+                        if is_connected {
                             println!(
                                 "Discover peripheral : \'{:?}\' characteristics...",
-                                peripheral.properties().local_name
+                                properties.local_name
                             );
-                            for chars_vector in chars.into_iter() {
-                                for char_item in chars_vector.iter() {
-                                    println!("{:?}", char_item);
-                                }
+                            for characteristic in chars.into_iter() {
+                                println!("{:?}", characteristic);
                             }
                             println!(
                                 "disconnecting from peripheral : {:?}...",
-                                peripheral.properties().local_name
+                                properties.local_name
                             );
                             peripheral
                                 .disconnect()
+                                .await
                                 .expect("Error on disconnecting from BLE peripheral ");
                         }
                     } else {
@@ -92,4 +81,5 @@ fn main() {
             }
         }
     }
+    Ok(())
 }

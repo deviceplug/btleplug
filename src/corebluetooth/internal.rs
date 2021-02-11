@@ -511,7 +511,7 @@ impl CoreBluetoothInternal {
         }
     }
 
-    async fn wait_for_message(&mut self) -> bool {
+    async fn wait_for_message(&mut self) {
         select! {
             delegate_msg = self.delegate_receiver.select_next_some() => {
                 match delegate_msg {
@@ -557,7 +557,6 @@ impl CoreBluetoothInternal {
                         characteristic_id,
                     ) => self.on_characteristic_written(peripheral_id, characteristic_id),
                 };
-                true
             }
             adapter_msg = self.message_receiver.select_next_some() => {
                 info!("Adapter message!");
@@ -586,7 +585,6 @@ impl CoreBluetoothInternal {
                         self.unsubscribe(peripheral_uuid, char_uuid, fut)
                     }
                 };
-                true
             }
         }
     }
@@ -625,9 +623,7 @@ pub fn run_corebluetooth_thread(
         task::block_on(async move {
             let mut cbi = CoreBluetoothInternal::new(receiver, event_sender);
             loop {
-                if !cbi.wait_for_message().await {
-                    break;
-                }
+                cbi.wait_for_message().await;
             }
         })
     });

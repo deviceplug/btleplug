@@ -264,14 +264,6 @@ pub enum CoreBluetoothEvent {
     DeviceLost(Uuid),
 }
 
-// Aggregate everything that can come in from different sources into a single
-// enum type.
-#[derive(Debug)]
-enum InternalLoopMessage {
-    Delegate(CentralDelegateEvent),
-    Adapter(CoreBluetoothMessage),
-}
-
 impl CoreBluetoothInternal {
     pub fn new(
         message_receiver: Receiver<CoreBluetoothMessage>,
@@ -520,17 +512,8 @@ impl CoreBluetoothInternal {
     }
 
     async fn wait_for_message(&mut self) -> bool {
-        let msg = select! {
+        select! {
             delegate_msg = self.delegate_receiver.select_next_some() => {
-                InternalLoopMessage::Delegate(delegate_msg)
-            }
-            adapter_msg = self.message_receiver.select_next_some() => {
-                InternalLoopMessage::Adapter(adapter_msg)
-            }
-        };
-
-        match msg {
-            InternalLoopMessage::Delegate(delegate_msg) => {
                 match delegate_msg {
                     // TODO DidUpdateState does not imply that the adapter is
                     // on, just that it updated state.
@@ -576,7 +559,7 @@ impl CoreBluetoothInternal {
                 };
                 true
             }
-            InternalLoopMessage::Adapter(adapter_msg) => {
+            adapter_msg = self.message_receiver.select_next_some() => {
                 info!("Adapter message!");
                 match adapter_msg {
                     CoreBluetoothMessage::StartScanning => self.start_discovery(),

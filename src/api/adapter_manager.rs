@@ -12,7 +12,7 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 use crate::api::{BDAddr, CentralEvent, Peripheral};
-use dashmap::DashMap;
+use dashmap::{mapref::one::RefMut, DashMap};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 #[cfg(feature = "async")]
@@ -118,41 +118,15 @@ where
         self.peripherals.insert(addr, peripheral);
     }
 
-    pub fn update_peripheral(&self, addr: BDAddr, peripheral: PeripheralType) {
-        // FIXME: this function is too easy to use incorrectly.
-        // when you get a peripheral from self.peripheral() you can forget to call update_peripheral easily.
-        // and when you do, there is no guarantee that it hasn't been updated by someone else, causing changes
-        // to be lost.
-        // one way to fix it is to make this function work more similarly to (and/or use) DashMap::alter.
-        // also, firing of events (self.emit) should probably be done here, instead of in peripheral impls.
-        assert!(
-            self.peripherals.contains_key(&addr),
-            "Updating a peripheral that's not in the map."
-        );
-        assert_eq!(peripheral.address(), addr, "Device has unexpected address."); // TODO remove addr argument
-                                                                                  // We already have this peripheral in the map, so there's no need to readd it.
-        let current_peripheral = self.peripherals.get_mut(&addr).unwrap();
-        // Update name if it's none.
-        if peripheral.properties().local_name.is_some()
-            && current_peripheral.properties().local_name.is_none()
-        {
-            current_peripheral.properties().local_name = peripheral.properties().local_name;
-        }
-        if !peripheral.properties().manufacturer_data.is_empty()
-            && current_peripheral.properties().manufacturer_data.is_empty()
-        {
-            current_peripheral.properties().manufacturer_data =
-                peripheral.properties().manufacturer_data;
-        }
-        // Update RSSI
-        current_peripheral.properties().tx_power_level = peripheral.properties().tx_power_level;
-    }
-
     pub fn peripherals(&self) -> Vec<PeripheralType> {
         self.peripherals
             .iter()
             .map(|val| val.value().clone())
             .collect()
+    }
+
+    pub fn peripheral_mut(&self, address: BDAddr) -> Option<RefMut<BDAddr, PeripheralType>> {
+        self.peripherals.get_mut(&address)
     }
 
     pub fn peripheral(&self, address: BDAddr) -> Option<PeripheralType> {

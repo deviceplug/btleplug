@@ -301,9 +301,6 @@ impl CoreBluetoothInternal {
                     .await;
             }
         } else {
-            // if name.contains("LVS") {
-            //     self.connect_peripheral(*peripheral);
-            // }
             // Create our channels
             let (event_sender, event_receiver) = mpsc::channel(256);
             self.peripherals

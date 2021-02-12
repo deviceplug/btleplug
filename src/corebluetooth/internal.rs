@@ -284,22 +284,21 @@ impl CoreBluetoothInternal {
         }
     }
 
-    fn dispatch_event(&self, event: CoreBluetoothEvent) {
-        task::block_on(async {
-            let mut s = self.event_sender.clone();
-            if let Err(e) = s.send(event).await {
-                error!("Error dispatching event: {:?}", e);
-            }
-        });
+    async fn dispatch_event(&self, event: CoreBluetoothEvent) {
+        let mut s = self.event_sender.clone();
+        if let Err(e) = s.send(event).await {
+            error!("Error dispatching event: {:?}", e);
+        }
     }
 
-    fn on_discovered_peripheral(&mut self, peripheral: StrongPtr) {
+    async fn on_discovered_peripheral(&mut self, peripheral: StrongPtr) {
         let uuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(*peripheral));
         let uuid = Uuid::from_str(&NSStringUtils::string_to_string(uuid_nsstring)).unwrap();
         let name = NSStringUtils::string_to_maybe_string(cb::peripheral_name(*peripheral));
         if self.peripherals.contains_key(&uuid) {
             if let Some(name) = name {
-                self.dispatch_event(CoreBluetoothEvent::DeviceUpdated(uuid, name));
+                self.dispatch_event(CoreBluetoothEvent::DeviceUpdated(uuid, name))
+                    .await;
             }
         } else {
             // if name.contains("LVS") {
@@ -313,7 +312,8 @@ impl CoreBluetoothInternal {
                 uuid,
                 name,
                 event_receiver,
-            ));
+            ))
+            .await;
         }
     }
 
@@ -350,9 +350,10 @@ impl CoreBluetoothInternal {
         // itself when it receives all of its service/characteristic info.
     }
 
-    fn on_peripheral_disconnect(&mut self, peripheral_uuid: Uuid) {
+    async fn on_peripheral_disconnect(&mut self, peripheral_uuid: Uuid) {
         self.peripherals.remove(&peripheral_uuid);
-        self.dispatch_event(CoreBluetoothEvent::DeviceLost(peripheral_uuid));
+        self.dispatch_event(CoreBluetoothEvent::DeviceLost(peripheral_uuid))
+            .await;
     }
 
     fn on_characteristic_subscribed(&mut self, peripheral_uuid: Uuid, characteristic_uuid: Uuid) {
@@ -375,7 +376,7 @@ impl CoreBluetoothInternal {
         }
     }
 
-    fn on_characteristic_read(
+    async fn on_characteristic_read(
         &mut self,
         peripheral_uuid: Uuid,
         characteristic_uuid: Uuid,
@@ -400,15 +401,13 @@ impl CoreBluetoothInternal {
                         .unwrap()
                         .set_reply(CoreBluetoothReply::ReadResult(data_clone));
                 } else {
-                    task::block_on(async {
-                        if let Err(e) = p
-                            .event_sender
-                            .send(CBPeripheralEvent::Notification(characteristic_uuid, data))
-                            .await
-                        {
-                            error!("Error sending notification event: {}", e);
-                        }
-                    });
+                    if let Err(e) = p
+                        .event_sender
+                        .send(CBPeripheralEvent::Notification(characteristic_uuid, data))
+                        .await
+                    {
+                        error!("Error sending notification event: {}", e);
+                    }
                 }
             }
         }
@@ -522,10 +521,10 @@ impl CoreBluetoothInternal {
                     // "ready" variable in our adapter that will cause scans/etc
                     // to fail if this hasn't updated.
                     CentralDelegateEvent::DidUpdateState => {
-                        self.dispatch_event(CoreBluetoothEvent::AdapterConnected)
+                        self.dispatch_event(CoreBluetoothEvent::AdapterConnected).await
                     }
                     CentralDelegateEvent::DiscoveredPeripheral(peripheral) => {
-                        self.on_discovered_peripheral(peripheral)
+                        self.on_discovered_peripheral(peripheral).await
                     }
                     CentralDelegateEvent::DiscoveredServices(peripheral_id, service_map) => {
                         self.on_discovered_services(peripheral_id, service_map)
@@ -537,7 +536,7 @@ impl CoreBluetoothInternal {
                         self.on_peripheral_connect(peripheral_id)
                     }
                     CentralDelegateEvent::DisconnectedDevice(peripheral_id) => {
-                        self.on_peripheral_disconnect(peripheral_id)
+                        self.on_peripheral_disconnect(peripheral_id).await
                     }
                     CentralDelegateEvent::CharacteristicSubscribed(
                         peripheral_id,
@@ -551,7 +550,7 @@ impl CoreBluetoothInternal {
                         peripheral_id,
                         characteristic_id,
                         data,
-                    ) => self.on_characteristic_read(peripheral_id, characteristic_id, data),
+                    ) => self.on_characteristic_read(peripheral_id, characteristic_id, data).await,
                     CentralDelegateEvent::CharacteristicWritten(
                         peripheral_id,
                         characteristic_id,

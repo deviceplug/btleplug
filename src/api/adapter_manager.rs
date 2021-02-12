@@ -127,6 +127,6 @@ where
     pub fn peripheral(&self, address: BDAddr) -> Option<PeripheralType> {
         self.peripherals
             .get(&address)
-            .and_then(|val| Some(val.value().clone()))
+            .map(|val| val.value().clone())
     }
 }

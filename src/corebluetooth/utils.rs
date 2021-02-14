@@ -23,7 +23,6 @@ use uuid::Uuid;
 use super::framework::{cb, nil, ns};
 
 pub mod NSStringUtils {
-
     use super::*;
 
     pub fn string_to_string(nsstring: *mut Object) -> String {
@@ -115,6 +114,7 @@ pub mod CoreBluetoothUtils {
 #[cfg(test)]
 mod tests {
     use objc::runtime::Class;
+    use objc::{msg_send, sel, sel_impl};
     use CoreBluetoothUtils::cbuuid_to_uuid;
     use NSStringUtils::str_to_nsstring;
 

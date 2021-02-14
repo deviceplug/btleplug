@@ -80,10 +80,6 @@ extern crate libc;
 #[cfg(target_os = "windows")]
 extern crate winrt;
 
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-#[macro_use]
-extern crate objc;
-
 // We won't actually use anything specifically out of this crate. However, if we
 // want the CoreBluetooth code to compile, we need the objc protocols
 // (specifically, the core bluetooth protocols) exposed by it.

@@ -1,7 +1,6 @@
-use bluez_async::BluetoothSession;
-
 use super::adapter::Adapter;
 use crate::Result;
+use bluez_async::BluetoothSession;
 
 #[derive(Clone, Debug)]
 pub struct Manager {

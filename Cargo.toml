@@ -60,10 +60,3 @@ windows = "0.4.0"
 simple_logger = "1.11.0"
 rand = "0.8.4"
 tokio = { version = "1.0.1", features = ["macros", "rt", "rt-multi-thread"] }
-
-# The build script uses `dbus-codegen` to generate BlueZ's DBus traits for use in the linux library.
-# The `build.rs` file does nothing on other platforms.
-[build-dependencies.dbus-codegen]
-version = "0.9.1"
-# Disable the default feature which requires the DBus C API to be installed.
-default-features = false

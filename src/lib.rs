@@ -20,9 +20,6 @@
 //! An example of how to use the library to control some BLE smart lights:
 //!
 //! ```rust,no_run
-//! extern crate btleplug;
-//! extern crate rand;
-//!
 //! use std::thread;
 //! use std::time::Duration;
 //! use rand::{Rng, thread_rng};
@@ -75,8 +72,6 @@
 //! }
 //! ```
 
-extern crate libc;
-
 #[cfg(target_os = "windows")]
 extern crate winrt;
 
@@ -85,14 +80,6 @@ extern crate winrt;
 // (specifically, the core bluetooth protocols) exposed by it.
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 extern crate cocoa;
-
-extern crate bytes;
-
-#[cfg(target_os = "linux")]
-extern crate enum_primitive;
-extern crate num;
-
-extern crate thiserror;
 
 use std::result;
 use std::time::Duration;

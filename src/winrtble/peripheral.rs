@@ -236,9 +236,8 @@ impl ApiPeripheral for Peripheral {
         data: &[u8],
         write_type: WriteType,
     ) -> Result<()> {
-        // TODO: Use the WriteType.
         if let Some(ble_characteristic) = self.ble_characteristics.get(&characteristic.uuid) {
-            ble_characteristic.write_value(data)
+            ble_characteristic.write_value(data, write_type)
         } else {
             Err(Error::NotSupported("write".into()))
         }

@@ -77,9 +77,6 @@
 
 extern crate libc;
 
-#[cfg(target_os = "linux")]
-extern crate nix;
-
 #[cfg(target_os = "windows")]
 extern crate winrt;
 

@@ -39,10 +39,6 @@ static_assertions = "1.1.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 bluez-async = "0.2.1"
-dbus = "0.9.1"
-displaydoc = "0.1.7"
-parking_lot = "0.11.1"
-tokio = { version = "1.0.1", features = ["rt"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 async-std = "1.9.0"
@@ -60,10 +56,3 @@ windows = "0.4.0"
 simple_logger = "1.11.0"
 rand = "0.8.3"
 tokio = { version = "1.0.1", features = ["macros", "rt", "rt-multi-thread"] }
-
-# The build script uses `dbus-codegen` to generate BlueZ's DBus traits for use in the linux library.
-# The `build.rs` file does nothing on other platforms.
-[build-dependencies.dbus-codegen]
-version = "0.9.1"
-# Disable the default feature which requires the DBus C API to be installed.
-default-features = false

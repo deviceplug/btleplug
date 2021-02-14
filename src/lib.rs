@@ -96,10 +96,8 @@ use std::result;
 use std::time::Duration;
 
 pub mod api;
-#[cfg(target_os = "linux")]
-mod bluez;
 #[cfg(all(target_os = "linux", feature = "async"))]
-pub mod bluez_async;
+mod bluez;
 mod common;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod corebluetooth;

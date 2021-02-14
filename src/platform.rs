@@ -1,5 +1,5 @@
 #[cfg(target_os = "linux")]
-pub use crate::bluez_async::{adapter::Adapter, manager::Manager, peripheral::Peripheral};
+pub use crate::bluez::{adapter::Adapter, manager::Manager, peripheral::Peripheral};
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use crate::corebluetooth::{adapter::Adapter, manager::Manager, peripheral::Peripheral};
 #[cfg(target_os = "windows")]

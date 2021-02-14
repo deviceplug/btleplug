@@ -16,9 +16,9 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use std::os::raw::{c_char, c_int, c_uint};
-
 use objc::runtime::{Class, Object, BOOL};
+use objc::{msg_send, sel, sel_impl};
+use std::os::raw::{c_char, c_int, c_uint};
 
 #[allow(non_upper_case_globals)]
 pub const nil: *mut Object = 0 as *mut Object;

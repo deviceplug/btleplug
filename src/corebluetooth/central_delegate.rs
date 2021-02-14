@@ -31,6 +31,7 @@ use objc::{
     rc::StrongPtr,
     runtime::{Class, Object, Protocol, Sel},
 };
+use objc::{msg_send, sel, sel_impl};
 use std::ffi::CStr;
 use std::{
     collections::HashMap,

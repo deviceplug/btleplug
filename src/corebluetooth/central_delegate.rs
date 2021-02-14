@@ -113,6 +113,8 @@ impl Debug for CentralDelegateEvent {
 }
 
 pub mod CentralDelegate {
+    use CoreBluetoothUtils::cbuuid_to_uuid;
+
     use super::*;
 
     pub fn delegate() -> *mut Object {
@@ -390,13 +392,12 @@ pub mod CentralDelegate {
                 cb::peripheral_discoverincludedservicesforservice(peripheral, s);
 
                 // Create the map entry we'll need to export.
-                let uuid = CoreBluetoothUtils::uuid_to_canonical_uuid_string(cb::attribute_uuid(s));
-                let uuid_str = Uuid::from_str(&uuid).unwrap();
+                let uuid = cbuuid_to_uuid(cb::attribute_uuid(s));
                 let held_service;
                 unsafe {
                     held_service = StrongPtr::retain(s);
                 }
-                service_map.insert(uuid_str, held_service);
+                service_map.insert(uuid, held_service);
             }
             let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
             let puuid_str = NSStringUtils::string_to_string(puuid_nsstring);
@@ -453,8 +454,7 @@ pub mod CentralDelegate {
                 // TODO Actually implement characteristic descriptor enumeration
                 // cb::peripheral_discoverdescriptorsforcharacteristic(peripheral, c);
                 // Create the map entry we'll need to export.
-                let uuid = CoreBluetoothUtils::uuid_to_canonical_uuid_string(cb::attribute_uuid(c));
-                let uuid = Uuid::from_str(&uuid).unwrap();
+                let uuid = cbuuid_to_uuid(cb::attribute_uuid(c));
                 let held_char;
                 unsafe {
                     held_char = StrongPtr::retain(c);
@@ -487,11 +487,10 @@ pub mod CentralDelegate {
             let v = get_characteristic_value(characteristic);
             let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
             let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
-            let cuuid_nsstring = cb::uuid_uuidstring(cb::attribute_uuid(characteristic));
-            let cuuid = Uuid::from_str(&NSStringUtils::string_to_string(cuuid_nsstring)).unwrap();
+            let characteristic_uuid = cbuuid_to_uuid(cb::attribute_uuid(characteristic));
             send_delegate_event(
                 delegate,
-                CentralDelegateEvent::CharacteristicNotified(puuid, cuuid, v),
+                CentralDelegateEvent::CharacteristicNotified(puuid, characteristic_uuid, v),
             );
             // Notify BluetoothGATTCharacteristic::read_value that read was successful.
         }
@@ -513,11 +512,10 @@ pub mod CentralDelegate {
         if error == nil {
             let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
             let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
-            let cuuid_nsstring = cb::uuid_uuidstring(cb::attribute_uuid(characteristic));
-            let cuuid = Uuid::from_str(&NSStringUtils::string_to_string(cuuid_nsstring)).unwrap();
+            let characteristic_uuid = cbuuid_to_uuid(cb::attribute_uuid(characteristic));
             send_delegate_event(
                 delegate,
-                CentralDelegateEvent::CharacteristicWritten(puuid, cuuid),
+                CentralDelegateEvent::CharacteristicWritten(puuid, characteristic_uuid),
             );
         }
     }
@@ -533,17 +531,16 @@ pub mod CentralDelegate {
         // TODO check for error here
         let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
         let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
-        let cuuid_nsstring = cb::uuid_uuidstring(cb::attribute_uuid(characteristic));
-        let cuuid = Uuid::from_str(&NSStringUtils::string_to_string(cuuid_nsstring)).unwrap();
+        let characteristic_uuid = cbuuid_to_uuid(cb::attribute_uuid(characteristic));
         if cb::characteristic_isnotifying(characteristic) == objc::runtime::YES {
             send_delegate_event(
                 delegate,
-                CentralDelegateEvent::CharacteristicSubscribed(puuid, cuuid),
+                CentralDelegateEvent::CharacteristicSubscribed(puuid, characteristic_uuid),
             );
         } else {
             send_delegate_event(
                 delegate,
-                CentralDelegateEvent::CharacteristicUnsubscribed(puuid, cuuid),
+                CentralDelegateEvent::CharacteristicUnsubscribed(puuid, characteristic_uuid),
             );
         }
     }

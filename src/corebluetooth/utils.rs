@@ -17,12 +17,13 @@
 // according to those terms.
 
 use objc::runtime::Object;
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 use uuid::Uuid;
 
 use super::framework::{cb, nil, ns};
 
 pub mod NSStringUtils {
+
     use super::*;
 
     pub fn string_to_string(nsstring: *mut Object) -> String {
@@ -49,6 +50,11 @@ pub mod NSStringUtils {
                     .unwrap(),
             ))
         }
+    }
+
+    pub fn str_to_nsstring(string: &str) -> *mut Object {
+        let cstring = CString::new(string).unwrap();
+        ns::string(cstring.as_ptr())
     }
 }
 
@@ -103,5 +109,39 @@ pub mod CoreBluetoothUtils {
             "CBCharacteristic({})",
             NSStringUtils::string_to_string(uuid)
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use objc::runtime::Class;
+    use CoreBluetoothUtils::cbuuid_to_uuid;
+    use NSStringUtils::str_to_nsstring;
+
+    use super::*;
+
+    #[test]
+    fn parse_uuid_short() {
+        let uuid_string = "1234";
+        let uuid_nsstring = str_to_nsstring(uuid_string);
+        let cbuuid: *mut Object =
+            unsafe { msg_send![Class::get("CBUUID").unwrap(), UUIDWithString: uuid_nsstring] };
+        let uuid = cbuuid_to_uuid(cbuuid);
+        assert_eq!(
+            uuid,
+            Uuid::from_u128(0x00001234_0000_1000_8000_00805f9b34fb)
+        );
+    }
+
+    #[test]
+    fn parse_uuid_long() {
+        let uuid_nsstring = str_to_nsstring("12345678-0000-1111-2222-333344445555");
+        let cbuuid: *mut Object =
+            unsafe { msg_send![Class::get("CBUUID").unwrap(), UUIDWithString: uuid_nsstring] };
+        let uuid = cbuuid_to_uuid(cbuuid);
+        assert_eq!(
+            uuid,
+            Uuid::from_u128(0x12345678_0000_1111_2222_333344445555)
+        );
     }
 }

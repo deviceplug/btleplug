@@ -11,14 +11,6 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use dbus::{
-    arg::{cast, PropMap, RefArg, Variant},
-    blocking::{stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged, Proxy, SyncConnection},
-    channel::Token,
-    message::{Message, SignalArgs},
-    Path,
-};
-
 use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, CharPropFlags, Characteristic,
@@ -33,7 +25,15 @@ use crate::{
     common::util::invoke_handlers,
     Error, Result,
 };
-
+use dbus::{
+    arg::{cast, PropMap, RefArg, Variant},
+    blocking::{stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged, Proxy, SyncConnection},
+    channel::Token,
+    message::{Message, SignalArgs},
+    Path,
+};
+use log::{debug, error, trace, warn};
+use static_assertions::assert_impl_all;
 use std::{
     collections::{BTreeSet, HashMap},
     fmt::{self, Debug, Display, Formatter},

@@ -18,6 +18,7 @@ use bindings::windows::devices::bluetooth::generic_attribute_profile::{
 };
 use bindings::windows::devices::bluetooth::{BluetoothConnectionStatus, BluetoothLEDevice};
 use bindings::windows::foundation::{EventRegistrationToken, TypedEventHandler};
+use log::info;
 
 pub type ConnectedEventHandler = Box<dyn Fn(bool) + Send>;
 

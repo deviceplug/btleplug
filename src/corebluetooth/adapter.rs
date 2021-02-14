@@ -7,6 +7,7 @@ use async_std::{
     prelude::StreamExt,
     task,
 };
+use log::info;
 use std::convert::TryInto;
 use std::sync::mpsc::Receiver;
 

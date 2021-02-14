@@ -12,7 +12,7 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use super::super::bindings;
-use crate::{Error, Result, api::WriteType};
+use crate::{api::WriteType, Error, Result};
 
 use bindings::windows::devices::bluetooth::generic_attribute_profile::{
     GattCharacteristic, GattClientCharacteristicConfigurationDescriptorValue,
@@ -20,6 +20,7 @@ use bindings::windows::devices::bluetooth::generic_attribute_profile::{
 };
 use bindings::windows::foundation::{EventRegistrationToken, TypedEventHandler};
 use bindings::windows::storage::streams::{DataReader, DataWriter};
+use log::info;
 
 pub type NotifiyEventHandler = Box<dyn Fn(Vec<u8>) + Send>;
 

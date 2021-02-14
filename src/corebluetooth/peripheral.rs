@@ -24,6 +24,7 @@ use async_std::{
     prelude::StreamExt,
     task,
 };
+use log::{debug, error, info};
 use std::{
     collections::{BTreeSet, HashMap},
     fmt::{self, Debug, Display, Formatter},

@@ -77,13 +77,6 @@
 
 extern crate libc;
 
-#[macro_use]
-extern crate log;
-
-#[cfg(target_os = "linux")]
-#[macro_use]
-extern crate static_assertions;
-
 #[cfg(target_os = "linux")]
 extern crate nix;
 
@@ -105,9 +98,6 @@ extern crate bytes;
 #[cfg(target_os = "linux")]
 extern crate enum_primitive;
 extern crate num;
-
-#[macro_use]
-extern crate bitflags;
 
 extern crate thiserror;
 

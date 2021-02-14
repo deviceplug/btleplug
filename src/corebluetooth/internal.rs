@@ -20,6 +20,7 @@ use async_std::{
     task,
 };
 use futures::{select, FutureExt, StreamExt};
+use log::{error, info, trace};
 use objc::{
     rc::StrongPtr,
     runtime::{Object, YES},

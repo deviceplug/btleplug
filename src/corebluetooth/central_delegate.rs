@@ -16,10 +16,22 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
+use super::{
+    framework::{cb, nil, ns},
+    utils::{CoreBluetoothUtils, NSStringUtils},
+};
 use async_std::{
     channel::{Receiver, Sender},
     task,
 };
+use libc::{c_char, c_void};
+use log::{error, info, trace};
+use objc::{
+    declare::ClassDecl,
+    rc::StrongPtr,
+    runtime::{Class, Object, Protocol, Sel},
+};
+use std::ffi::CStr;
 use std::{
     collections::HashMap,
     fmt::{self, Debug, Formatter},
@@ -28,22 +40,7 @@ use std::{
     str::FromStr,
     sync::Once,
 };
-
-use objc::{
-    declare::ClassDecl,
-    rc::StrongPtr,
-    runtime::{Class, Object, Protocol, Sel},
-};
-
-use super::{
-    framework::{cb, nil, ns},
-    utils::{CoreBluetoothUtils, NSStringUtils},
-};
-
 use uuid::Uuid;
-
-use libc::{c_char, c_void};
-use std::ffi::CStr;
 
 pub enum CentralDelegateEvent {
     DidUpdateState,

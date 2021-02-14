@@ -19,6 +19,7 @@ use crate::{
     api::UUID::{B128, B16},
     Error, Result,
 };
+use bitflags::bitflags;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::Receiver;

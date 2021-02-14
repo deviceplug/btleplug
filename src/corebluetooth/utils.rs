@@ -16,9 +16,9 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use std::ffi::CStr;
-
 use objc::runtime::Object;
+use std::ffi::CStr;
+use uuid::Uuid;
 
 use super::framework::{cb, nil, ns};
 
@@ -55,17 +55,18 @@ pub mod NSStringUtils {
 pub mod CoreBluetoothUtils {
     use super::*;
 
-    pub fn uuid_to_canonical_uuid_string(cbuuid: *mut Object) -> String {
-        // NOTE: CoreBluetooth tends to return uppercase UUID strings, and only 4 character long if the
-        // UUID is short (16 bits). However, WebBluetooth mandates lowercase UUID strings. And Servo
-        // seems to compare strings, not the binary representation.
+    /// Convert a CBUUID object to the standard Uuid type.
+    pub fn cbuuid_to_uuid(cbuuid: *mut Object) -> Uuid {
+        // NOTE: CoreBluetooth tends to return uppercase UUID strings, and only 4 character long if
+        // the UUID is short (16 bits).
         let uuid = NSStringUtils::string_to_string(cb::uuid_uuidstring(cbuuid));
         let long = if uuid.len() == 4 {
             format!("0000{}-0000-1000-8000-00805f9b34fb", uuid)
         } else {
             uuid
         };
-        long.to_lowercase()
+        let uuid_string = long.to_lowercase();
+        uuid_string.parse().unwrap()
     }
 
     pub fn peripheral_debug(peripheral: *mut Object) -> String {

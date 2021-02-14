@@ -33,6 +33,7 @@ use std::{
     thread,
 };
 use uuid::Uuid;
+use CoreBluetoothUtils::cbuuid_to_uuid;
 
 struct CBCharacteristic {
     pub characteristic: StrongPtr,
@@ -61,9 +62,7 @@ impl Debug for CBCharacteristic {
 impl CBCharacteristic {
     pub fn new(characteristic: StrongPtr) -> Self {
         let properties = CBCharacteristic::form_flags(*characteristic);
-        let uuid =
-            CoreBluetoothUtils::uuid_to_canonical_uuid_string(cb::attribute_uuid(*characteristic));
-        let uuid = Uuid::from_str(&uuid).unwrap();
+        let uuid = cbuuid_to_uuid(cb::attribute_uuid(*characteristic));
         Self {
             characteristic,
             uuid,

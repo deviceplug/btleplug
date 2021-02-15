@@ -8,6 +8,7 @@
 use super::adapter::Adapter;
 use crate::Result;
 
+#[derive(Clone, Debug)]
 pub struct Manager {}
 
 impl Manager {

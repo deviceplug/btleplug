@@ -15,7 +15,7 @@ use super::{bindings, ble::characteristic::BLECharacteristic, ble::device::BLEDe
 use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, NotificationHandler,
-        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, UUID,
+        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, WriteType, UUID,
     },
     common::util,
     Error, Result,
@@ -155,7 +155,7 @@ impl ApiPeripheral for Peripheral {
     }
 
     /// The set of characteristics we've discovered for this device. This will be empty until
-    /// `discover_characteristics` or `discover_characteristics_in_range` is called.
+    /// `discover_characteristics` is called.
     fn characteristics(&self) -> BTreeSet<Characteristic> {
         let l = self.characteristics.lock().unwrap();
         l.clone()
@@ -228,30 +228,19 @@ impl ApiPeripheral for Peripheral {
         Err(Error::NotConnected)
     }
 
-    /// Discovers characteristics within the specified range of handles. This is a synchronous
-    /// operation.
-    fn discover_characteristics_in_range(
+    /// Write some data to the characteristic. Returns an error if the write couldn't be send or (in
+    /// the case of a write-with-response) if the device returns an error.
+    fn write(
         &self,
-        _start: u16,
-        _end: u16,
-    ) -> Result<Vec<Characteristic>> {
-        Ok(Vec::new())
-    }
-
-    /// Sends a command (write without response) to the characteristic. Synchronously returns a
-    /// `Result` with an error set if the command was not accepted by the device.
-    fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
+        characteristic: &Characteristic,
+        data: &[u8],
+        write_type: WriteType,
+    ) -> Result<()> {
         if let Some(ble_characteristic) = self.ble_characteristics.get(&characteristic.uuid) {
-            ble_characteristic.write_value(data)
+            ble_characteristic.write_value(data, write_type)
         } else {
-            Err(Error::NotSupported("command".into()))
+            Err(Error::NotSupported("write".into()))
         }
-    }
-
-    /// Sends a request (write) to the device.  Synchronously returns a `Result` with an error set
-    /// if the request was not accepted by the device.
-    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
-        self.command(characteristic, data)
     }
 
     /// Sends a read-by-type request to device for the range of handles covered by the

@@ -10,7 +10,7 @@ use async_std::{
 use std::convert::TryInto;
 use std::sync::mpsc::Receiver;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Adapter {
     manager: AdapterManager<Peripheral>,
     sender: Sender<CoreBluetoothMessage>,
@@ -89,17 +89,19 @@ impl Central<Peripheral> for Adapter {
     fn start_scan(&self) -> Result<()> {
         info!("Starting CoreBluetooth Scan");
         task::block_on(async {
-            self.sender.send(CoreBluetoothMessage::StartScanning).await;
-        });
-        Ok(())
+            self.sender
+                .send(CoreBluetoothMessage::StartScanning)
+                .await?;
+            Ok(())
+        })
     }
 
     fn stop_scan(&self) -> Result<()> {
         info!("Stopping CoreBluetooth Scan");
         task::block_on(async {
-            self.sender.send(CoreBluetoothMessage::StopScanning).await;
-        });
-        Ok(())
+            self.sender.send(CoreBluetoothMessage::StopScanning).await?;
+            Ok(())
+        })
     }
 
     fn peripherals(&self) -> Vec<Peripheral> {

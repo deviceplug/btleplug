@@ -1,9 +1,5 @@
 use std::thread;
 use std::time::Duration;
-use async_std::{
-    prelude::{FutureExt, StreamExt},
-    task,
-};
 
 #[allow(unused_imports)]
 #[cfg(target_os = "linux")]
@@ -101,10 +97,10 @@ fn main() {
                                         println!("Is subscribed? = {}", is_subscribed);
                                         if is_subscribed {
                                             // send command to device
-                                            let DEVICE_COMMAND = vec![0x46];
-                                            let connect_result = peripheral.command(&char_item, &DEVICE_COMMAND);
-                                            println!("Sent command OK? = {:?}", connect_result.is_ok());
-                                            while connect_result.is_ok() {
+                                            // let DEVICE_COMMAND = vec![0x46];
+                                            // let connect_result = peripheral.command(&char_item, &DEVICE_COMMAND);
+                                            // println!("Sent command OK? = {:?}", connect_result.is_ok());
+                                            loop {
                                                 print!(".");
                                                 thread::sleep(Duration::from_millis(10));
                                             }

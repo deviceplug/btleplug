@@ -23,19 +23,24 @@ pub(crate) fn uuid_to_bdaddr(uuid: &String) -> BDAddr {
 }
 
 impl Adapter {
-    pub(crate) fn new() -> Self {
+    pub(crate) async fn new() -> Result<Self> {
         let (sender, mut receiver) = mpsc::channel(256);
         let adapter_sender = run_corebluetooth_thread(sender);
         // Since init currently blocked until the state update, we know the
         // receiver is dropped after that. We can pick it up here and make it
         // part of our event loop to update our peripherals.
         info!("Waiting on adapter connect");
-        task::block_on(async { receiver.next().await.unwrap() });
-        info!("Waiting on adapter connected");
-        let adapter_sender_clone = adapter_sender.clone();
+        if !matches!(
+            receiver.next().await,
+            Some(CoreBluetoothEvent::AdapterConnected)
+        ) {
+            return Err(Error::Other("Adapter failed to connect.".to_string()));
+        }
+        info!("Adapter connected");
         let manager = AdapterManager::default();
 
         let manager_clone = manager.clone();
+        let adapter_sender_clone = adapter_sender.clone();
         task::spawn(async move {
             while let Some(msg) = receiver.next().await {
                 match msg {
@@ -74,10 +79,10 @@ impl Adapter {
             }
         });
 
-        Adapter {
+        Ok(Adapter {
             manager,
             sender: adapter_sender,
-        }
+        })
     }
 
     pub fn emit(&self, event: CentralEvent) {

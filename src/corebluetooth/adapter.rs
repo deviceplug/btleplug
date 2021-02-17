@@ -2,7 +2,6 @@ use super::internal::{run_corebluetooth_thread, CoreBluetoothEvent, CoreBluetoot
 use super::peripheral::Peripheral;
 use crate::api::{AdapterManager, BDAddr, Central, CentralEvent};
 use crate::{Error, Result};
-use async_std::task;
 use async_trait::async_trait;
 use futures::channel::mpsc::{self, Sender};
 use futures::sink::SinkExt;
@@ -10,6 +9,7 @@ use futures::stream::{Stream, StreamExt};
 use log::info;
 use std::convert::{TryFrom, TryInto};
 use std::pin::Pin;
+use tokio::task;
 
 #[derive(Clone, Debug)]
 pub struct Adapter {

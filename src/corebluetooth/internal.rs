@@ -15,7 +15,6 @@ use super::{
     utils::{core_bluetooth::cbuuid_to_uuid, nsstring::nsstring_to_string, nsuuid_to_uuid},
 };
 use crate::api::{CharPropFlags, Characteristic, WriteType};
-use async_std::task;
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::select;
 use futures::sink::SinkExt;
@@ -32,6 +31,7 @@ use std::{
     os::raw::c_uint,
     thread,
 };
+use tokio::runtime;
 use uuid::Uuid;
 
 struct CBCharacteristic {
@@ -678,8 +678,10 @@ pub fn run_corebluetooth_thread(
     event_sender: Sender<CoreBluetoothEvent>,
 ) -> Sender<CoreBluetoothMessage> {
     let (sender, receiver) = mpsc::channel::<CoreBluetoothMessage>(256);
+    // CoreBluetoothInternal is !Send, so we need to keep it on a single thread.
     thread::spawn(move || {
-        task::block_on(async move {
+        let runtime = runtime::Builder::new_current_thread().build().unwrap();
+        runtime.block_on(async move {
             let mut cbi = CoreBluetoothInternal::new(receiver, event_sender);
             loop {
                 cbi.wait_for_message().await;

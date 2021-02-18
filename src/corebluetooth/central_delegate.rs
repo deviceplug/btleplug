@@ -20,7 +20,6 @@ use super::{
     framework::{cb, nil, ns},
     utils::{CoreBluetoothUtils, NSStringUtils},
 };
-use async_std::task;
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::sink::SinkExt;
 use libc::{c_char, c_void};
@@ -227,7 +226,7 @@ pub mod CentralDelegate {
 
     fn send_delegate_event(delegate: &mut Object, event: CentralDelegateEvent) {
         let mut sender = delegate_get_sender_clone(delegate);
-        task::block_on(async {
+        futures::executor::block_on(async {
             if let Err(e) = sender.send(event).await {
                 error!("Error sending delegate event: {}", e);
             }

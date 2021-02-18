@@ -19,7 +19,6 @@ use crate::{
     common::util,
     Error, Result,
 };
-use async_std::task;
 use async_trait::async_trait;
 use futures::channel::mpsc::{self, Receiver, SendError, Sender, UnboundedSender};
 use futures::sink::SinkExt;
@@ -31,6 +30,7 @@ use std::{
     pin::Pin,
     sync::{Arc, Mutex},
 };
+use tokio::task;
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -47,6 +47,7 @@ pub struct Peripheral {
 }
 
 impl Peripheral {
+    // This calls tokio::task::spawn, so it must be called from the context of a Tokio Runtime.
     pub(crate) fn new(
         uuid: Uuid,
         local_name: Option<String>,

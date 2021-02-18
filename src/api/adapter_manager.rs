@@ -11,7 +11,10 @@
 // following copyright:
 //
 // Copyright (c) 2014 The Rust Project Developers
-use crate::api::{BDAddr, CentralEvent, Peripheral};
+use crate::{
+    api::{BDAddr, CentralEvent, Peripheral},
+    common::util::send_notification,
+};
 use dashmap::{mapref::one::RefMut, DashMap};
 use futures::channel::mpsc::{self, UnboundedSender};
 use futures::stream::Stream;
@@ -52,11 +55,7 @@ where
             _ => {}
         }
 
-        // Remove sender from the list if the other end of the channel has been dropped.
-        self.async_senders
-            .lock()
-            .unwrap()
-            .retain(|sender| sender.unbounded_send(event.clone()).is_ok());
+        send_notification(&self.async_senders, &event);
     }
 
     pub fn event_stream(&self) -> Pin<Box<dyn Stream<Item = CentralEvent>>> {

@@ -7,12 +7,11 @@
 
 use futures::channel::mpsc::UnboundedSender;
 
-use crate::api::ValueNotification;
 use std::sync::{Arc, Mutex};
 
-pub fn send_notification(
-    notification_senders: &Arc<Mutex<Vec<UnboundedSender<ValueNotification>>>>,
-    n: &ValueNotification,
+pub fn send_notification<T: Clone>(
+    notification_senders: &Arc<Mutex<Vec<UnboundedSender<T>>>>,
+    n: &T,
 ) {
     let mut senders = notification_senders.lock().unwrap();
     // Remove sender from the list if the other end of the channel has been dropped.

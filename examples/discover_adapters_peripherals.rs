@@ -7,7 +7,7 @@ use std::thread;
 use std::time::Duration;
 
 #[allow(unused_imports)]
-use btleplug::api::{Central, Characteristic, Peripheral, UUID};
+use btleplug::api::{Central, Characteristic, Peripheral};
 #[allow(unused_imports)]
 #[cfg(target_os = "linux")]
 use btleplug::bluez::{adapter::Adapter, manager::Manager};

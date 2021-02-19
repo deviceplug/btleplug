@@ -29,7 +29,10 @@
 //! use btleplug::winrtble::{adapter::Adapter, manager::Manager};
 //! #[cfg(target_os = "macos")]
 //! use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
-//! use btleplug::api::{Central, Peripheral, WriteType, UUID};
+//! use btleplug::api::{uuid::uuid_from_u16, Central, Peripheral, WriteType};
+//! use uuid::Uuid;
+//!
+//! const LIGHT_CHARACTERISTIC_UUID: Uuid = uuid_from_u16(0xFFE9);
 //!
 //! // adapter retreival works differently depending on your platform right now.
 //! // API needs to be aligned.
@@ -60,7 +63,7 @@
 //!
 //!     // find the characteristic we want
 //!     let chars = light.characteristics();
-//!     let cmd_char = chars.iter().find(|c| c.uuid == UUID::B16(0xFFE9)).unwrap();
+//!     let cmd_char = chars.iter().find(|c| c.uuid == LIGHT_CHARACTERISTIC_UUID).unwrap();
 //!
 //!     // dance party
 //!     let mut rng = thread_rng();

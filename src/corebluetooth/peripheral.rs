@@ -14,7 +14,7 @@ use super::{
 use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, NotificationHandler,
-        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, WriteType, UUID,
+        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, WriteType,
     },
     common::util,
     Error, Result,
@@ -79,12 +79,10 @@ impl Peripheral {
                     break;
                 }
                 if let Some(CBPeripheralEvent::Notification(uuid, data)) = event {
-                    let mut id = *uuid.as_bytes();
-                    id.reverse();
                     util::invoke_handlers(
                         &nh_clone,
                         &ValueNotification {
-                            uuid: UUID::B128(id),
+                            uuid,
                             handle: None,
                             value: data,
                         },
@@ -131,17 +129,6 @@ impl Debug for Peripheral {
             .field("message_sender", &self.message_sender)
             .finish()
     }
-}
-
-fn get_apple_uuid(uuid: UUID) -> Uuid {
-    let mut u;
-    if let UUID::B128(big_u) = uuid {
-        u = big_u;
-    } else {
-        panic!("Wrong UUID type!");
-    }
-    u.reverse();
-    Uuid::from_bytes(u)
 }
 
 impl ApiPeripheral for Peripheral {
@@ -217,7 +204,7 @@ impl ApiPeripheral for Peripheral {
             self.message_sender
                 .send(CoreBluetoothMessage::WriteValue(
                     self.uuid,
-                    get_apple_uuid(characteristic.uuid),
+                    characteristic.uuid,
                     Vec::from(data),
                     write_type,
                     fut.get_state_clone(),
@@ -235,7 +222,7 @@ impl ApiPeripheral for Peripheral {
     /// characteristic and for the specified declaration UUID. See
     /// [here](https://www.bluetooth.com/specifications/gatt/declarations) for valid UUIDs.
     /// Synchronously returns either an error or the device response.
-    fn read_by_type(&self, _characteristic: &Characteristic, _uuid: UUID) -> Result<Vec<u8>> {
+    fn read_by_type(&self, _characteristic: &Characteristic, _uuid: Uuid) -> Result<Vec<u8>> {
         Err(Error::NotSupported("read_by_type".into()))
     }
 
@@ -248,7 +235,7 @@ impl ApiPeripheral for Peripheral {
             self.message_sender
                 .send(CoreBluetoothMessage::Subscribe(
                     self.uuid,
-                    get_apple_uuid(characteristic.uuid),
+                    characteristic.uuid,
                     fut.get_state_clone(),
                 ))
                 .await?;
@@ -269,7 +256,7 @@ impl ApiPeripheral for Peripheral {
             self.message_sender
                 .send(CoreBluetoothMessage::Unsubscribe(
                     self.uuid,
-                    get_apple_uuid(characteristic.uuid),
+                    characteristic.uuid,
                     fut.get_state_clone(),
                 ))
                 .await?;
@@ -296,7 +283,7 @@ impl ApiPeripheral for Peripheral {
             self.message_sender
                 .send(CoreBluetoothMessage::ReadValue(
                     self.uuid,
-                    get_apple_uuid(characteristic.uuid),
+                    characteristic.uuid,
                     fut.get_state_clone(),
                 ))
                 .await?;

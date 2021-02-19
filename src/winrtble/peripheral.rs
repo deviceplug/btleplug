@@ -15,7 +15,7 @@ use super::{bindings, ble::characteristic::BLECharacteristic, ble::device::BLEDe
 use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, NotificationHandler,
-        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, WriteType, UUID,
+        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, WriteType,
     },
     common::util,
     Error, Result,
@@ -27,6 +27,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
     sync::{Arc, Mutex},
 };
+use uuid::Uuid;
 
 use bindings::windows::{devices::bluetooth::advertisement::*, storage::streams::DataReader};
 
@@ -38,7 +39,7 @@ pub struct Peripheral {
     properties: Arc<Mutex<PeripheralProperties>>,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
     connected: Arc<AtomicBool>,
-    ble_characteristics: Arc<DashMap<UUID, BLECharacteristic>>,
+    ble_characteristics: Arc<DashMap<Uuid, BLECharacteristic>>,
     notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
 }
 
@@ -247,7 +248,7 @@ impl ApiPeripheral for Peripheral {
     /// characteristic and for the specified declaration UUID. See
     /// [here](https://www.bluetooth.com/specifications/gatt/declarations) for valid UUIDs.
     /// Synchronously returns either an error or the device response.
-    fn read_by_type(&self, characteristic: &Characteristic, _uuid: UUID) -> Result<Vec<u8>> {
+    fn read_by_type(&self, characteristic: &Characteristic, _uuid: Uuid) -> Result<Vec<u8>> {
         if let Some(ble_characteristic) = self.ble_characteristics.get(&characteristic.uuid) {
             return ble_characteristic.read_value();
         } else {

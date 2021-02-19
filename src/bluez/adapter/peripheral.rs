@@ -15,7 +15,7 @@ use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, CharPropFlags, Characteristic,
         NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification,
-        WriteType, UUID,
+        WriteType,
     },
     bluez::{
         bluez_dbus::device::OrgBluezDevice1, bluez_dbus::device::OrgBluezDevice1Properties,
@@ -40,6 +40,7 @@ use std::{
     sync::{Arc, Condvar, Mutex},
     time::Instant,
 };
+use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 enum PeripheralState {
@@ -167,7 +168,7 @@ impl Peripheral {
         Ok(())
     }
 
-    pub fn add_attribute(&self, path: &str, uuid: UUID, properties: CharPropFlags) -> Result<()> {
+    pub fn add_attribute(&self, path: &str, uuid: Uuid, properties: CharPropFlags) -> Result<()> {
         trace!(
             "Adding attribute {} ({:?}) under {}",
             uuid,
@@ -178,9 +179,9 @@ impl Peripheral {
         let handle: Handle = path.parse()?;
         // Create a placeholder attribute to store properties and uuid
         let attribute = Characteristic {
-            uuid: uuid,
+            uuid,
             value_handle: handle.handle,
-            properties: properties,
+            properties,
             end_handle: 0,
             start_handle: 0,
         };
@@ -491,7 +492,7 @@ impl ApiPeripheral for Peripheral {
     }
 
     // Is this looking for a characteristic with a descriptor? or a service with a characteristic?
-    fn read_by_type(&self, characteristic: &Characteristic, uuid: UUID) -> Result<Vec<u8>> {
+    fn read_by_type(&self, characteristic: &Characteristic, uuid: Uuid) -> Result<Vec<u8>> {
         if let Some(characteristic) =
             self.attributes_map
                 .lock()

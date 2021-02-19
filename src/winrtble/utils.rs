@@ -13,13 +13,14 @@
 
 use super::bindings;
 use crate::{
-    api::{BDAddr, CharPropFlags, UUID},
+    api::{BDAddr, CharPropFlags},
     Error, Result,
 };
 use bindings::windows::devices::bluetooth::generic_attribute_profile::{
     GattCharacteristicProperties, GattCommunicationStatus,
 };
 use std::str::FromStr;
+use uuid::Uuid;
 use winrt::Guid;
 
 pub fn to_error(status: GattCommunicationStatus) -> Result<()> {
@@ -50,36 +51,14 @@ pub fn to_address(addr: BDAddr) -> u64 {
     address
 }
 
-// If we want to get this into Bluez format, we've got to flip everything into a U128.
-pub fn to_uuid(uuid: &Guid) -> UUID {
+pub fn to_uuid(uuid: &Guid) -> Uuid {
     let guid_s = format!("{:?}", uuid);
-    UUID::from_str(&guid_s).unwrap()
+    Uuid::from_str(&guid_s).unwrap()
 }
 
-pub fn to_guid(uuid: &UUID) -> Guid {
-    let uuid_s = format!("{:?}", uuid);
-    println!("{}", uuid_s);
-    match uuid {
-        UUID::B128(a) => {
-            let mut data4: [u8; 8] = [0; 8];
-            for i in 0..8 {
-                data4[7 - i] = a[i];
-            }
-            let mut data3: u16 = u16::from(a[9]) << 8;
-            data3 |= u16::from(a[8]);
-
-            let mut data2: u16 = u16::from(a[11]) << 8;
-            data2 |= u16::from(a[10]);
-
-            let mut data1: u32 = u32::from(a[15]) << 24;
-            data1 |= u32::from(a[14]) << 16;
-            data1 |= u32::from(a[13]) << 8;
-            data1 |= u32::from(a[12]);
-
-            Guid::from_values(data1, data2, data3, data4)
-        }
-        UUID::B16(_) => Guid::zeroed(),
-    }
+pub fn to_guid(uuid: &Uuid) -> Guid {
+    let (data1, data2, data3, data4) = uuid.as_fields();
+    Guid::from_values(data1, data2, data3, data4.to_owned())
 }
 
 pub fn to_char_props(_: &GattCharacteristicProperties) -> CharPropFlags {
@@ -99,14 +78,24 @@ mod tests {
     }
 
     #[test]
-    fn check_uuid_guid_conversion() {
-        let uuid_str = "10:B2:01:FF:5B:3B:45:A1:95:08:CF:3E:FC:D7:BB:AF";
-        let guid_str = "10B201FF-5B3B-45A1-9508-CF3EFCD7BBAF";
-        let uuid = UUID::from_str(uuid_str).unwrap();
+    fn check_uuid_to_guid_conversion() {
+        let uuid_str = "10B201FF-5B3B-45A1-9508-CF3EFCD7BBAF";
+        let uuid = Uuid::from_str(uuid_str).unwrap();
+
         let guid_converted = to_guid(&uuid);
-        let uuid_converted = to_uuid(&guid_converted);
-        assert_eq!(uuid, uuid_converted);
-        let guid_converted_str = format!("{:?}", guid_converted);
-        assert_eq!(guid_str, guid_converted_str);
+
+        let guid_expected = Guid::from(uuid_str);
+        assert_eq!(guid_converted, guid_expected);
+    }
+
+    #[test]
+    fn check_guid_to_uuid_conversion() {
+        let uuid_str = "10B201FF-5B3B-45A1-9508-CF3EFCD7BBAF";
+        let guid = Guid::from(uuid_str);
+
+        let uuid_converted = to_uuid(&guid);
+
+        let uuid_expected = Uuid::from_str(uuid_str).unwrap();
+        assert_eq!(uuid_converted, uuid_expected);
     }
 }

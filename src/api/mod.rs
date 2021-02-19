@@ -12,13 +12,12 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 mod adapter_manager;
+pub mod uuid;
 
+use ::uuid::Uuid;
 pub use adapter_manager::AdapterManager;
 
-use crate::{
-    api::UUID::{B128, B16},
-    Error, Result,
-};
+use crate::{Error, Result};
 use bitflags::bitflags;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -110,6 +109,12 @@ impl From<ParseBDAddrError> for Error {
     }
 }
 
+impl From<::uuid::Error> for Error {
+    fn from(error: ::uuid::Error) -> Self {
+        Error::Other(format!("Error parsing UUID: {}", error))
+    }
+}
+
 impl FromStr for BDAddr {
     type Err = ParseBDAddrError;
 
@@ -134,7 +139,7 @@ impl FromStr for BDAddr {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ValueNotification {
     /// UUID of the characteristic that fired the notification.
-    pub uuid: UUID,
+    pub uuid: Uuid,
     /// The handle that has changed. Only valid on Linux, will be None on all
     /// other platforms.
     pub handle: Option<u16>,
@@ -145,86 +150,6 @@ pub struct ValueNotification {
 pub type Callback<T> = Box<dyn Fn(Result<T>) + Send>;
 
 pub type NotificationHandler = Box<dyn FnMut(ValueNotification) + Send>;
-
-/// A Bluetooth UUID. These can either be 2 bytes or 16 bytes long. UUIDs uniquely identify various
-/// objects in the Bluetooth universe.
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash)]
-pub enum UUID {
-    B16(u16),
-    B128([u8; 16]),
-}
-
-impl UUID {
-    pub fn size(&self) -> usize {
-        match *self {
-            B16(_) => 2,
-            B128(_) => 16,
-        }
-    }
-}
-
-impl Display for UUID {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match *self {
-            B16(u) => write!(f, "{:02X}:{:02X}", u >> 8, u & 0xFF),
-            B128(a) => {
-                for i in (1..a.len()).rev() {
-                    write!(f, "{:02X}:", a[i])?;
-                }
-                write!(f, "{:02X}", a[0])
-            }
-        }
-    }
-}
-
-impl Debug for UUID {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        (self as &dyn Display).fmt(f)
-    }
-}
-
-type ParseUUIDResult<T> = std::result::Result<T, ParseUUIDError>;
-
-impl From<ParseUUIDError> for Error {
-    fn from(e: ParseUUIDError) -> Self {
-        Error::Other(format!("ParseUUIDError: {:?}", e))
-    }
-}
-
-#[derive(Debug, Error, Clone, PartialEq)]
-pub enum ParseUUIDError {
-    #[error("UUID has to be either 2 or 16 bytes long")]
-    IncorrectByteCount,
-    #[error("Malformed integer in UUID")]
-    InvalidInt,
-}
-
-impl FromStr for UUID {
-    type Err = ParseUUIDError;
-
-    fn from_str(s: &str) -> ParseUUIDResult<Self> {
-        let bytes = s
-            .chars()
-            .filter(|ch| ch.is_ascii_alphanumeric())
-            .collect::<Vec<char>>()
-            .chunks(2)
-            .map(|chunk| {
-                u8::from_str_radix(chunk.iter().collect::<String>().as_str(), 16)
-                    .map_err(|_| ParseUUIDError::InvalidInt)
-            })
-            .collect::<ParseUUIDResult<Vec<u8>>>()?;
-
-        if let Ok(bytes) = <[u8; 2]>::try_from(bytes.as_slice()) {
-            Ok(UUID::B16(u16::from_be_bytes(bytes)))
-        } else if let Ok(mut bytes) = <[u8; 16]>::try_from(bytes.as_slice()) {
-            bytes.reverse();
-            Ok(UUID::B128(bytes))
-        } else {
-            Err(ParseUUIDError::IncorrectByteCount)
-        }
-    }
-}
 
 bitflags! {
     /// A set of properties that indicate what operations are supported by a Characteristic.
@@ -266,7 +191,7 @@ pub struct Characteristic {
     /// valid on Linux, will be 0 on all other platforms.
     pub value_handle: u16,
     /// The UUID for this characteristic. This uniquely identifies its behavior.
-    pub uuid: UUID,
+    pub uuid: Uuid,
     /// The set of properties for this characteristic, which indicate what functionality it
     /// supports. If you attempt an operation that is not supported by the characteristics (for
     /// example setting notify on one without the NOTIFY flag), that operation will fail.
@@ -360,7 +285,7 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     /// characteristic and for the specified declaration UUID. See
     /// [here](https://www.bluetooth.com/specifications/gatt/declarations) for valid UUIDs.
     /// Synchronously returns either an error or the device response.
-    fn read_by_type(&self, characteristic: &Characteristic, uuid: UUID) -> Result<Vec<u8>>;
+    fn read_by_type(&self, characteristic: &Characteristic, uuid: Uuid) -> Result<Vec<u8>>;
 
     /// Enables either notify or indicate (depending on support) for the specified characteristic.
     /// This is a synchronous call.
@@ -426,46 +351,6 @@ pub trait Central<P: Peripheral>: Send + Sync + Clone {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn parse_uuid() {
-        let values = vec![
-            ("2A:00", Ok(UUID::B16(0x2A00))),
-            (
-                "00:00:15:32:12:12:EF:DE:15:23:78:5F:EA:BC:D1:23",
-                Ok(UUID::B128([
-                    0x23, 0xD1, 0xBC, 0xEA, 0x5F, 0x78, 0x23, 0x15, 0xDE, 0xEF, 0x12, 0x12, 0x32,
-                    0x15, 0x00, 0x00,
-                ])),
-            ),
-            ("2A:00:00", Err(ParseUUIDError::IncorrectByteCount)),
-            ("2A:100", Err(ParseUUIDError::IncorrectByteCount)),
-            ("ZZ:00", Err(ParseUUIDError::InvalidInt)),
-        ];
-
-        for (input, expected) in values {
-            let result: ParseUUIDResult<UUID> = input.parse();
-            assert_eq!(result, expected);
-
-            if let Ok(uuid) = result {
-                assert_eq!(input, uuid.to_string());
-            }
-        }
-
-        let expected_uuid = Ok(UUID::B128([
-            0x8a, 0xf7, 0x15, 0x02, 0x9c, 0x00, 0x49, 0x8a, 0x24, 0x10, 0x8a, 0x33, 0x02, 0x00,
-            0xfa, 0x99,
-        ]));
-        let result: ParseUUIDResult<UUID> =
-            "99:fa:00:02:33:8a:10:24:8a:49:00:9c:02:15:f7:8a".parse();
-        assert_eq!(result, expected_uuid);
-
-        let result: ParseUUIDResult<UUID> = "99fa0002-338a-1024-8a49-009c0215f78a".parse();
-        assert_eq!(result, expected_uuid);
-
-        let result: ParseUUIDResult<UUID> = "99fa0002338a10248a49009c0215f78a".parse();
-        assert_eq!(result, expected_uuid);
-    }
 
     #[test]
     fn parse_addr() {

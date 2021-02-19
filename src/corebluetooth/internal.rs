@@ -14,7 +14,7 @@ use super::{
     future::{BtlePlugFuture, BtlePlugFutureStateShared},
     utils::{CoreBluetoothUtils, NSStringUtils},
 };
-use crate::api::{CharPropFlags, Characteristic, WriteType, UUID};
+use crate::api::{CharPropFlags, Characteristic, WriteType};
 use async_std::{
     channel::{self, Receiver, Sender},
     task,
@@ -181,15 +181,13 @@ impl CBPeripheral {
                 panic!("We should still have a future at this point!");
             }
             let mut char_set = BTreeSet::new();
-            for (uuid, c) in &self.characteristics {
-                let mut id = *uuid.as_bytes();
-                id.reverse();
+            for (&uuid, c) in &self.characteristics {
                 let char = Characteristic {
                     // We can't get handles on macOS, just set them to 0.
                     start_handle: 0,
                     end_handle: 0,
                     value_handle: 0,
-                    uuid: UUID::B128(id),
+                    uuid,
                     properties: c.properties,
                 };
                 info!("{:?}", char.uuid);

@@ -42,7 +42,7 @@ objc = "0.2.7"
 libc = "0.2.85"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winrt = "0.7.2"
+winrt = "=0.7.2"
 
 [dev-dependencies]
 simple_logger = "1.11.0"

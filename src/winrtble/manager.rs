@@ -20,11 +20,11 @@ use bindings::windows::devices::radios::{Radio, RadioKind};
 pub struct Manager {}
 
 impl Manager {
-    pub fn new() -> Result<Self> {
+    pub async fn new() -> Result<Self> {
         Ok(Self {})
     }
 
-    pub fn adapters(&self) -> Result<Vec<Adapter>> {
+    pub async fn adapters(&self) -> Result<Vec<Adapter>> {
         let mut result: Vec<Adapter> = vec![];
         let radios = Radio::get_radios_async().unwrap().get().unwrap();
 

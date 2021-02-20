@@ -18,17 +18,21 @@ use super::{
 use crate::{
     api::{
         bleuuid::{uuid_from_u16, uuid_from_u32},
-        AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, NotificationHandler,
+        AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic,
         Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, WriteType,
     },
     common::util,
     Error, Result,
 };
+use async_trait::async_trait;
 use dashmap::DashMap;
+use futures::channel::mpsc::{self, UnboundedSender};
+use futures::stream::Stream;
 use std::{
     collections::BTreeSet,
     convert::TryInto,
     fmt::{self, Debug, Display, Formatter},
+    pin::Pin,
     sync::atomic::{AtomicBool, Ordering},
     sync::{Arc, Mutex},
 };
@@ -45,7 +49,7 @@ pub struct Peripheral {
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
     connected: Arc<AtomicBool>,
     ble_characteristics: Arc<DashMap<Uuid, BLECharacteristic>>,
-    notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
+    notification_senders: Arc<Mutex<Vec<UnboundedSender<ValueNotification>>>>,
 }
 
 impl Peripheral {
@@ -57,7 +61,7 @@ impl Peripheral {
         let characteristics = Arc::new(Mutex::new(BTreeSet::new()));
         let connected = Arc::new(AtomicBool::new(false));
         let ble_characteristics = Arc::new(DashMap::new());
-        let notification_handlers = Arc::new(Mutex::new(Vec::new()));
+        let notification_senders = Arc::new(Mutex::new(Vec::new()));
         Peripheral {
             device,
             adapter,
@@ -66,7 +70,7 @@ impl Peripheral {
             characteristics,
             connected,
             ble_characteristics,
-            notification_handlers,
+            notification_senders,
         }
     }
 
@@ -163,7 +167,7 @@ impl Peripheral {
 
 impl Display for Peripheral {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let connected = if self.is_connected() {
+        let connected = if self.connected.load(Ordering::Relaxed) {
             " connected"
         } else {
             ""
@@ -184,7 +188,7 @@ impl Display for Peripheral {
 
 impl Debug for Peripheral {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let connected = if self.is_connected() {
+        let connected = if self.connected.load(Ordering::Relaxed) {
             " connected"
         } else {
             ""
@@ -199,6 +203,7 @@ impl Debug for Peripheral {
     }
 }
 
+#[async_trait]
 impl ApiPeripheral for Peripheral {
     /// Returns the address of the peripheral.
     fn address(&self) -> BDAddr {
@@ -207,9 +212,9 @@ impl ApiPeripheral for Peripheral {
 
     /// Returns the set of properties associated with the peripheral. These may be updated over time
     /// as additional advertising reports are received.
-    fn properties(&self) -> PeripheralProperties {
+    async fn properties(&self) -> Result<PeripheralProperties> {
         let l = self.properties.lock().unwrap();
-        l.clone()
+        Ok(l.clone())
     }
 
     /// The set of characteristics we've discovered for this device. This will be empty until
@@ -220,14 +225,14 @@ impl ApiPeripheral for Peripheral {
     }
 
     /// Returns true iff we are currently connected to the device.
-    fn is_connected(&self) -> bool {
-        self.connected.load(Ordering::Relaxed)
+    async fn is_connected(&self) -> Result<bool> {
+        Ok(self.connected.load(Ordering::Relaxed))
     }
 
     /// Creates a connection to the device. This is a synchronous operation; if this method returns
     /// Ok there has been successful connection. Note that peripherals allow only one connection at
     /// a time. Operations that attempt to communicate with a device will fail until it is connected.
-    fn connect(&self) -> Result<()> {
+    async fn connect(&self) -> Result<()> {
         let connected = self.connected.clone();
         let adapter_clone = self.adapter.clone();
         let address = self.address;
@@ -250,7 +255,7 @@ impl ApiPeripheral for Peripheral {
     }
 
     /// Terminates a connection to the device. This is a synchronous operation.
-    fn disconnect(&self) -> Result<()> {
+    async fn disconnect(&self) -> Result<()> {
         let winrt_error = |e| Error::Other(format!("{:?}", e));
         let mut device = self.device.lock().map_err(winrt_error)?;
         *device = None;
@@ -260,7 +265,7 @@ impl ApiPeripheral for Peripheral {
     }
 
     /// Discovers all characteristics for the device. This is a synchronous operation.
-    fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
+    async fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
         let device = self.device.lock().unwrap();
         if let Some(ref device) = *device {
             let mut characteristics_result = vec![];
@@ -288,7 +293,7 @@ impl ApiPeripheral for Peripheral {
 
     /// Write some data to the characteristic. Returns an error if the write couldn't be send or (in
     /// the case of a write-with-response) if the device returns an error.
-    fn write(
+    async fn write(
         &self,
         characteristic: &Characteristic,
         data: &[u8],
@@ -301,24 +306,12 @@ impl ApiPeripheral for Peripheral {
         }
     }
 
-    /// Sends a read-by-type request to device for the range of handles covered by the
-    /// characteristic and for the specified declaration UUID. See
-    /// [here](https://www.bluetooth.com/specifications/gatt/declarations) for valid UUIDs.
-    /// Synchronously returns either an error or the device response.
-    fn read_by_type(&self, characteristic: &Characteristic, _uuid: Uuid) -> Result<Vec<u8>> {
-        if let Some(ble_characteristic) = self.ble_characteristics.get(&characteristic.uuid) {
-            return ble_characteristic.read_value();
-        } else {
-            Err(Error::NotSupported("read_by_type".into()))
-        }
-    }
-
     /// Enables either notify or indicate (depending on support) for the specified characteristic.
     /// This is a synchronous call.
-    fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
+    async fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
         if let Some(mut ble_characteristic) = self.ble_characteristics.get_mut(&characteristic.uuid)
         {
-            let notification_handlers = self.notification_handlers.clone();
+            let notification_senders = self.notification_senders.clone();
             let uuid = characteristic.uuid;
             ble_characteristic.subscribe(Box::new(move |value| {
                 let notification = ValueNotification {
@@ -326,7 +319,7 @@ impl ApiPeripheral for Peripheral {
                     handle: None,
                     value,
                 };
-                util::invoke_handlers(&notification_handlers, &notification);
+                util::send_notification(&notification_senders, &notification);
             }))
         } else {
             Err(Error::NotSupported("subscribe".into()))
@@ -335,7 +328,7 @@ impl ApiPeripheral for Peripheral {
 
     /// Disables either notify or indicate (depending on support) for the specified characteristic.
     /// This is a synchronous call.
-    fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
+    async fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
         if let Some(mut ble_characteristic) = self.ble_characteristics.get_mut(&characteristic.uuid)
         {
             ble_characteristic.unsubscribe()
@@ -344,19 +337,18 @@ impl ApiPeripheral for Peripheral {
         }
     }
 
-    /// Registers a handler that will be called when value notification messages are received from
-    /// the device. This method should only be used after a connection has been established. Note
-    /// that the handler will be called in a common thread, so it should not block.
-    fn on_notification(&self, handler: NotificationHandler) {
-        let mut list = self.notification_handlers.lock().unwrap();
-        list.push(handler);
-    }
-
-    fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
+    async fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
         if let Some(ble_characteristic) = self.ble_characteristics.get(&characteristic.uuid) {
             return ble_characteristic.read_value();
         } else {
             Err(Error::NotSupported("read".into()))
         }
+    }
+
+    async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification>>>> {
+        let (sender, receiver) = mpsc::unbounded();
+        let mut senders = self.notification_senders.lock().unwrap();
+        senders.push(sender);
+        Ok(Box::pin(receiver))
     }
 }

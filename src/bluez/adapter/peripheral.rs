@@ -11,28 +11,29 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
+use crate::{
+    api::{
+        AdapterManager, AddressType, BDAddr, CentralEvent, CharPropFlags, Characteristic,
+        NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification,
+        WriteType, UUID,
+    },
+    bluez::{
+        bluez_dbus::device::OrgBluezDevice1, bluez_dbus::device::OrgBluezDevice1Properties,
+        bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1, AttributeType, Handle,
+        BLUEZ_DEST, DEFAULT_TIMEOUT,
+    },
+    common::util::invoke_handlers,
+    Error, Result,
+};
 use dbus::{
-    arg::{cast, RefArg},
+    arg::{cast, PropMap, RefArg, Variant},
     blocking::{stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged, Proxy, SyncConnection},
     channel::Token,
     message::{Message, SignalArgs},
     Path,
 };
-
-use crate::{
-    api::{
-        AdapterManager, AddressType, BDAddr, CentralEvent, CharPropFlags, Characteristic,
-        NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification,
-        UUID,
-    },
-    bluez::{
-        bluez_dbus::device::OrgBluezDevice1, bluez_dbus::device::OrgBluezDevice1Properties,
-        AttributeType, Handle, BLUEZ_DEST, DEFAULT_TIMEOUT,
-    },
-    common::util::invoke_handlers,
-    Error, Result,
-};
-
+use log::{debug, error, trace, warn};
+use static_assertions::assert_impl_all;
 use std::{
     collections::{BTreeSet, HashMap},
     fmt::{self, Debug, Display, Formatter},
@@ -438,14 +439,6 @@ impl ApiPeripheral for Peripheral {
     }
 
     fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
-        self.discover_characteristics_in_range(0x0001, 0xFFFF)
-    }
-
-    fn discover_characteristics_in_range(
-        &self,
-        _start: u16,
-        _end: u16,
-    ) -> Result<Vec<Characteristic>> {
         let (ref lock, ref cvar) = *self.state;
         trace!("Waiting for all services to be resolved");
         let _guard = cvar
@@ -464,24 +457,33 @@ impl ApiPeripheral for Peripheral {
             .unwrap()
             .clone()
             .into_iter()
-            .filter(|c| c.value_handle >= _start && c.value_handle <= _end)
             .collect())
     }
 
-    fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
-        use crate::bluez::bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1;
+    fn write(
+        &self,
+        characteristic: &Characteristic,
+        data: &[u8],
+        write_type: WriteType,
+    ) -> Result<()> {
+        let mut options: PropMap = HashMap::new();
+        options.insert(
+            "type".to_string(),
+            Variant(Box::new(
+                match write_type {
+                    WriteType::WithResponse => "request",
+                    WriteType::WithoutResponse => "command",
+                }
+                .to_string(),
+            )),
+        );
         Ok(self
             .proxy_for(&characteristic)
-            .map(|p| p.write_value(Vec::from(data), HashMap::new()))
-            .ok_or(Error::NotSupported("write_without_response".to_string()))??)
-    }
-
-    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()> {
-        self.command(characteristic, data)
+            .map(|p| p.write_value(Vec::from(data), options))
+            .ok_or(Error::NotSupported("write".to_string()))??)
     }
 
     fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
-        use crate::bluez::bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1;
         Ok(self
             .proxy_for(&characteristic)
             .map(|p| p.read_value(HashMap::new()))
@@ -513,7 +515,6 @@ impl ApiPeripheral for Peripheral {
     }
 
     fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
-        use crate::bluez::bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1;
         Ok(self
             .proxy_for(characteristic)
             .ok_or(Error::NotSupported("subscribe".to_string()))?
@@ -521,7 +522,6 @@ impl ApiPeripheral for Peripheral {
     }
 
     fn unsubscribe(&self, _characteristic: &Characteristic) -> Result<()> {
-        use crate::bluez::bluez_dbus::gatt_characteristic::OrgBluezGattCharacteristic1;
         Ok(self
             .proxy_for(_characteristic)
             .ok_or(Error::NotSupported("unsubscribe".to_string()))?

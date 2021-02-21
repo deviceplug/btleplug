@@ -19,6 +19,7 @@ use crate::{
     api::UUID::{B128, B16},
     Error, Result,
 };
+use bitflags::bitflags;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::Receiver;
@@ -303,6 +304,16 @@ pub struct PeripheralProperties {
     pub has_scan_response: bool,
 }
 
+/// The type of write operation to use.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WriteType {
+    /// A write operation where the device is expected to respond with a confirmation or error. Also
+    /// known as a request.
+    WithResponse,
+    /// A write-without-response, also known as a command.
+    WithoutResponse,
+}
+
 /// Peripheral is the device that you would like to communicate with (the "server" of BLE). This
 /// struct contains both the current state of the device (its properties, characteristics, etc.)
 /// as well as functions for communication.
@@ -315,7 +326,7 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     fn properties(&self) -> PeripheralProperties;
 
     /// The set of characteristics we've discovered for this device. This will be empty until
-    /// `discover_characteristics` or `discover_characteristics_in_range` is called.
+    /// `discover_characteristics` is called.
     fn characteristics(&self) -> BTreeSet<Characteristic>;
 
     /// Returns true iff we are currently connected to the device.
@@ -332,21 +343,14 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     /// Discovers all characteristics for the device. This is a synchronous operation.
     fn discover_characteristics(&self) -> Result<Vec<Characteristic>>;
 
-    /// Discovers characteristics within the specified range of handles. This is a synchronous
-    /// operation.
-    fn discover_characteristics_in_range(
+    /// Write some data to the characteristic. Returns an error if the write couldn't be send or (in
+    /// the case of a write-with-response) if the device returns an error.
+    fn write(
         &self,
-        start: u16,
-        end: u16,
-    ) -> Result<Vec<Characteristic>>;
-
-    /// Sends a command (write without response) to the characteristic. Synchronously returns a
-    /// `Result` with an error set if the command was not accepted by the device.
-    fn command(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()>;
-
-    /// Sends a request (write) to the characteristic. Synchronously returns a `Result` with an
-    /// error set if the request was not accepted by the device.
-    fn request(&self, characteristic: &Characteristic, data: &[u8]) -> Result<()>;
+        characteristic: &Characteristic,
+        data: &[u8],
+        write_type: WriteType,
+    ) -> Result<()>;
 
     /// Sends a request (read) to the device. Synchronously returns either an error if the request
     /// was not accepted or the response from the device.

@@ -11,13 +11,11 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use std::sync::Arc;
-
-use dbus::blocking::{stdintf::org_freedesktop_dbus::ObjectManager, SyncConnection};
-
-use crate::{bluez::adapter::Adapter, Result};
-
 use super::{bluez_dbus::adapter::ORG_BLUEZ_ADAPTER1_NAME, BLUEZ_DEST, DEFAULT_TIMEOUT};
+use crate::{bluez::adapter::Adapter, Result};
+use dbus::blocking::{stdintf::org_freedesktop_dbus::ObjectManager, SyncConnection};
+use static_assertions::assert_impl_all;
+use std::sync::Arc;
 
 /// This struct is the interface into BlueZ. It can be used to list, manage, and connect to bluetooth
 /// adapters.

@@ -12,16 +12,26 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use super::super::bindings;
-use crate::{Error, Result};
+use crate::{api::WriteType, Error, Result};
 
 use bindings::windows::devices::bluetooth::generic_attribute_profile::{
     GattCharacteristic, GattClientCharacteristicConfigurationDescriptorValue,
-    GattCommunicationStatus, GattValueChangedEventArgs,
+    GattCommunicationStatus, GattValueChangedEventArgs, GattWriteOption,
 };
 use bindings::windows::foundation::{EventRegistrationToken, TypedEventHandler};
 use bindings::windows::storage::streams::{DataReader, DataWriter};
+use log::info;
 
 pub type NotifiyEventHandler = Box<dyn Fn(Vec<u8>) + Send>;
+
+impl Into<GattWriteOption> for WriteType {
+    fn into(self) -> GattWriteOption {
+        match self {
+            WriteType::WithoutResponse => GattWriteOption::WriteWithoutResponse,
+            WriteType::WithResponse => GattWriteOption::WriteWithResponse,
+        }
+    }
+}
 
 pub struct BLECharacteristic {
     characteristic: GattCharacteristic,
@@ -39,13 +49,13 @@ impl BLECharacteristic {
         }
     }
 
-    pub fn write_value(&self, data: &[u8]) -> Result<()> {
+    pub fn write_value(&self, data: &[u8], write_type: WriteType) -> Result<()> {
         let writer = DataWriter::new().unwrap();
         writer.write_bytes(data).unwrap();
         let buffer = writer.detach_buffer().unwrap();
         let result = self
             .characteristic
-            .write_value_async(&buffer)
+            .write_value_with_option_async(&buffer, write_type.into())
             .unwrap()
             .get()
             .unwrap();

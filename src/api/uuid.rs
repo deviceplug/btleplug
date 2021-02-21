@@ -4,6 +4,7 @@ const BLUETOOTH_BASE_UUID: u128 = 0x00000000_0000_1000_8000_00805f9b34fb;
 const BLUETOOTH_BASE_MASK: u128 = 0x00000000_ffff_ffff_ffff_ffffffffffff;
 const BLUETOOTH_BASE_MASK_16: u128 = 0xffff0000_ffff_ffff_ffff_ffffffffffff;
 
+// TODO: Make these functions part of the `BleUuid` trait once const fn is allowed there.
 /// Convert a 32-bit BLE short UUID to a full 128-bit UUID by filling in the standard Bluetooth Base
 /// UUID.
 pub const fn uuid_from_u32(short: u32) -> Uuid {

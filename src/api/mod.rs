@@ -277,7 +277,7 @@ impl Display for Characteristic {
         write!(
             f,
             "uuid: {:?}, char properties: {:?}",
-            self.properties, self.uuid
+            self.uuid, self.properties
         )
     }
 }

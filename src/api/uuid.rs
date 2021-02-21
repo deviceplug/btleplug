@@ -118,4 +118,23 @@ mod tests {
         );
         assert_eq!(Uuid::nil().to_ble_u32(), None);
     }
+
+    #[test]
+    fn succinctly_u16() {
+        let uuid = uuid_from_u16(0x1122);
+        assert_eq!(uuid.succinctly(), "0x1122");
+    }
+
+    #[test]
+    fn succinctly_u32() {
+        let uuid = uuid_from_u32(0x11223344);
+        assert_eq!(uuid.succinctly(), "0x11223344");
+    }
+
+    #[test]
+    fn succinctly_long() {
+        let uuid_str = "12345678-9000-1000-8000-00805f9b34fb";
+        let uuid = Uuid::parse_str(uuid_str).unwrap();
+        assert_eq!(uuid.succinctly(), uuid_str);
+    }
 }

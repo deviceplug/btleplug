@@ -21,17 +21,19 @@ use bindings::windows::devices::bluetooth::generic_attribute_profile::{
 };
 use std::str::FromStr;
 use uuid::Uuid;
-use winrt::Guid;
+use windows::Guid;
 
 pub fn to_error(status: GattCommunicationStatus) -> Result<()> {
-    match status {
-        GattCommunicationStatus::AccessDenied => Err(Error::PermissionDenied),
-        GattCommunicationStatus::Unreachable => Err(Error::NotConnected),
-        GattCommunicationStatus::Success => Ok(()),
-        GattCommunicationStatus::ProtocolError => {
-            Err(Error::NotSupported("ProtocolError".to_string()))
-        }
-        _ => Err(Error::Other(format!("Communication Error:"))),
+    if status == GattCommunicationStatus::AccessDenied {
+        Err(Error::PermissionDenied)
+    } else if status == GattCommunicationStatus::Unreachable {
+        Err(Error::NotConnected)
+    } else if status == GattCommunicationStatus::Success {
+        Ok(())
+    } else if status == GattCommunicationStatus::ProtocolError {
+        Err(Error::NotSupported("ProtocolError".to_string()))
+    } else {
+        Err(Error::Other(format!("Communication Error:")))
     }
 }
 

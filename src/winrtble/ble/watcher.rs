@@ -25,8 +25,8 @@ pub struct BLEWatcher {
 unsafe impl Send for BLEWatcher {}
 unsafe impl Sync for BLEWatcher {}
 
-impl From<winrt::Error> for Error {
-    fn from(err: winrt::Error) -> Error {
+impl From<windows::Error> for Error {
+    fn from(err: windows::Error) -> Error {
         Error::Other(format!("{:?}", err))
     }
 }
@@ -42,10 +42,14 @@ impl BLEWatcher {
         self.watcher
             .set_scanning_mode(BluetoothLEScanningMode::Active)
             .unwrap();
-        let handler = TypedEventHandler::new(
-            move |_sender, args: &BluetoothLEAdvertisementReceivedEventArgs| {
-                let args = &args;
-                on_received(args);
+        let handler: TypedEventHandler<
+            BluetoothLEAdvertisementWatcher,
+            BluetoothLEAdvertisementReceivedEventArgs,
+        > = TypedEventHandler::new(
+            move |_sender, args: &Option<BluetoothLEAdvertisementReceivedEventArgs>| {
+                if let Some(args) = args {
+                    on_received(args);
+                }
                 Ok(())
             },
         );

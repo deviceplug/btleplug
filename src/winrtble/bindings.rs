@@ -11,36 +11,6 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use winrt::*;
+use ::windows::include_bindings;
 
-import!(
-    dependencies
-      os
-    types
-    windows::devices::bluetooth::generic_attribute_profile::{
-        GattCharacteristic,
-        GattCharacteristicProperties,
-        GattClientCharacteristicConfigurationDescriptorValue,
-        GattCommunicationStatus,
-        GattDeviceService,
-        GattDeviceServicesResult,
-        GattValueChangedEventArgs,
-    }
-    windows::devices::bluetooth::advertisement::*
-    windows::devices::bluetooth::{
-        BluetoothConnectionStatus,
-        BluetoothLEDevice,
-    }
-    windows::devices::radios::{
-        Radio,
-        RadioKind
-    }
-    windows::foundation::{
-        EventRegistrationToken,
-        TypedEventHandler,
-    }
-    windows::storage::streams::{
-        DataReader,
-        DataWriter,
-    }
-);
+include_bindings!();

@@ -75,9 +75,6 @@
 //! }
 //! ```
 
-#[cfg(target_os = "windows")]
-extern crate winrt;
-
 // We won't actually use anything specifically out of this crate. However, if we
 // want the CoreBluetooth code to compile, we need the objc protocols
 // (specifically, the core bluetooth protocols) exposed by it.

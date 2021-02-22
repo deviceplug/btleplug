@@ -87,15 +87,16 @@ impl BLECharacteristic {
 
     pub fn subscribe(&mut self, on_value_changed: NotifiyEventHandler) -> Result<()> {
         let value_handler = TypedEventHandler::new(
-            move |_: &GattCharacteristic, args: &GattValueChangedEventArgs| {
-                let args = &*args;
-                let value = args.characteristic_value().unwrap();
-                let reader = DataReader::from_buffer(&value).unwrap();
-                let len = reader.unconsumed_buffer_length().unwrap() as usize;
-                let mut input: Vec<u8> = vec![0u8; len];
-                reader.read_bytes(&mut input[0..len]).unwrap();
-                info!("changed {:?}", input);
-                on_value_changed(input);
+            move |_: &Option<GattCharacteristic>, args: &Option<GattValueChangedEventArgs>| {
+                if let Some(args) = &*args {
+                    let value = args.characteristic_value().unwrap();
+                    let reader = DataReader::from_buffer(&value).unwrap();
+                    let len = reader.unconsumed_buffer_length().unwrap() as usize;
+                    let mut input: Vec<u8> = vec![0u8; len];
+                    reader.read_bytes(&mut input[0..len]).unwrap();
+                    info!("changed {:?}", input);
+                    on_value_changed(input);
+                }
                 Ok(())
             },
         );

@@ -27,7 +27,7 @@ pub trait BleUuid {
     fn to_ble_u16(&self) -> Option<u16>;
 
     /// Convert the UUID to a string, using short format if applicable.
-    fn succinctly(&self) -> String;
+    fn to_short_string(&self) -> String;
 }
 
 impl BleUuid for Uuid {
@@ -49,7 +49,7 @@ impl BleUuid for Uuid {
         }
     }
 
-    fn succinctly(&self) -> String {
+    fn to_short_string(&self) -> String {
         if let Some(uuid16) = self.to_ble_u16() {
             format!("{:#04x}", uuid16)
         } else if let Some(uuid32) = self.to_ble_u32() {
@@ -121,21 +121,21 @@ mod tests {
     }
 
     #[test]
-    fn succinctly_u16() {
+    fn to_short_string_u16() {
         let uuid = uuid_from_u16(0x1122);
-        assert_eq!(uuid.succinctly(), "0x1122");
+        assert_eq!(uuid.to_short_string(), "0x1122");
     }
 
     #[test]
-    fn succinctly_u32() {
+    fn to_short_string_u32() {
         let uuid = uuid_from_u32(0x11223344);
-        assert_eq!(uuid.succinctly(), "0x11223344");
+        assert_eq!(uuid.to_short_string(), "0x11223344");
     }
 
     #[test]
-    fn succinctly_long() {
+    fn to_short_string_long() {
         let uuid_str = "12345678-9000-1000-8000-00805f9b34fb";
         let uuid = Uuid::parse_str(uuid_str).unwrap();
-        assert_eq!(uuid.succinctly(), uuid_str);
+        assert_eq!(uuid.to_short_string(), uuid_str);
     }
 }

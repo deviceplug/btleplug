@@ -29,7 +29,7 @@
 //! use btleplug::winrtble::{adapter::Adapter, manager::Manager};
 //! #[cfg(target_os = "macos")]
 //! use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
-//! use btleplug::api::{uuid::uuid_from_u16, Central, Peripheral, WriteType};
+//! use btleplug::api::{bleuuid::uuid_from_u16, Central, Peripheral, WriteType};
 //! use uuid::Uuid;
 //!
 //! const LIGHT_CHARACTERISTIC_UUID: Uuid = uuid_from_u16(0xFFE9);

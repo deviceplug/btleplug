@@ -1,7 +1,7 @@
 extern crate btleplug;
 extern crate rand;
 
-use btleplug::api::{uuid::uuid_from_u16, Central, Peripheral, WriteType};
+use btleplug::api::{bleuuid::uuid_from_u16, Central, Peripheral, WriteType};
 #[cfg(target_os = "linux")]
 use btleplug::bluez::manager::Manager;
 #[cfg(target_os = "macos")]

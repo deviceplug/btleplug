@@ -12,12 +12,10 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 mod adapter_manager;
-pub mod uuid;
-
-use ::uuid::Uuid;
-pub use adapter_manager::AdapterManager;
+pub mod bleuuid;
 
 use crate::{Error, Result};
+pub use adapter_manager::AdapterManager;
 use bitflags::bitflags;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -29,6 +27,7 @@ use std::{
     str::FromStr,
 };
 use thiserror::Error;
+use uuid::Uuid;
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq)]

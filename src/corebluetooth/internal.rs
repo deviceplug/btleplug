@@ -116,6 +116,9 @@ pub enum CoreBluetoothReply {
 pub enum CBPeripheralEvent {
     Disconnected,
     Notification(Uuid, Vec<u8>),
+    ManufacturerData(u16, Vec<u8>),
+    ServiceData(HashMap<Uuid, Vec<u8>>),
+    Services(Vec<Uuid>),
 }
 
 pub type CoreBluetoothReplyStateShared = BtlePlugFutureStateShared<CoreBluetoothReply>;
@@ -288,6 +291,60 @@ impl CoreBluetoothInternal {
         let mut s = self.event_sender.clone();
         if let Err(e) = s.send(event).await {
             error!("Error dispatching event: {:?}", e);
+        }
+    }
+
+    async fn on_manufacturer_data(
+        &mut self,
+        peripheral_uuid: Uuid,
+        manufacturer_id: u16,
+        manufacturer_data: Vec<u8>,
+    ) {
+        info!(
+            "Got manufacturer data advertisement! {}: {:?}",
+            manufacturer_id, manufacturer_data
+        );
+        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
+            if let Err(e) = p
+                .event_sender
+                .send(CBPeripheralEvent::ManufacturerData(
+                    manufacturer_id,
+                    manufacturer_data,
+                ))
+                .await
+            {
+                error!("Error sending notification event: {}", e);
+            }
+        }
+    }
+
+    async fn on_service_data(
+        &mut self,
+        peripheral_uuid: Uuid,
+        service_data: HashMap<Uuid, Vec<u8>>,
+    ) {
+        info!("Got service data advertisement! {:?}", service_data);
+        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
+            if let Err(e) = p
+                .event_sender
+                .send(CBPeripheralEvent::ServiceData(service_data))
+                .await
+            {
+                error!("Error sending notification event: {}", e);
+            }
+        }
+    }
+
+    async fn on_services(&mut self, peripheral_uuid: Uuid, services: Vec<Uuid>) {
+        info!("Got service advertisement! {:?}", services);
+        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
+            if let Err(e) = p
+                .event_sender
+                .send(CBPeripheralEvent::Services(services))
+                .await
+            {
+                error!("Error sending notification event: {}", e);
+            }
         }
     }
 
@@ -552,6 +609,15 @@ impl CoreBluetoothInternal {
                         peripheral_id,
                         characteristic_id,
                     ) => self.on_characteristic_written(peripheral_id, characteristic_id),
+                    CentralDelegateEvent::ManufacturerData(peripheral_id, manufacturer_id, manufacturer_data) => {
+                        self.on_manufacturer_data(peripheral_id, manufacturer_id, manufacturer_data).await
+                    },
+                    CentralDelegateEvent::ServiceData(peripheral_id, service_data) => {
+                        self.on_service_data(peripheral_id, service_data).await
+                    },
+                    CentralDelegateEvent::Services(peripheral_id, services) => {
+                        self.on_services(peripheral_id, services).await
+                    },
                 };
             }
             adapter_msg = self.message_receiver.select_next_some() => {

@@ -46,6 +46,9 @@ pub enum CentralDelegateEvent {
     DiscoveredPeripheral(StrongPtr),
     // Peripheral UUID, HashMap Service Uuid to StrongPtr
     DiscoveredServices(Uuid, HashMap<Uuid, StrongPtr>),
+    ManufacturerData(Uuid, u16, Vec<u8>),
+    ServiceData(Uuid, HashMap<Uuid, Vec<u8>>),
+    Services(Uuid, Vec<Uuid>),
     // DiscoveredIncludedServices(Uuid, HashMap<Uuid, StrongPtr>),
     // Peripheral UUID, HashMap Characteristic Uuid to StrongPtr
     DiscoveredCharacteristics(Uuid, HashMap<Uuid, StrongPtr>),
@@ -104,11 +107,28 @@ impl Debug for CentralDelegateEvent {
                 .field(uuid1)
                 .field(uuid2)
                 .finish(),
+            CentralDelegateEvent::ManufacturerData(uuid, manufacturer_id, manufacturer_data) => f
+                .debug_tuple("ManufacturerData")
+                .field(uuid)
+                .field(manufacturer_id)
+                .field(manufacturer_data)
+                .finish(),
+            CentralDelegateEvent::ServiceData(uuid, service_data) => f
+                .debug_tuple("ServiceData")
+                .field(uuid)
+                .field(service_data)
+                .finish(),
+            CentralDelegateEvent::Services(uuid, services) => f
+                .debug_tuple("Services")
+                .field(uuid)
+                .field(services)
+                .finish(),
         }
     }
 }
 
 pub mod CentralDelegate {
+    use std::convert::TryInto;
     use CoreBluetoothUtils::cbuuid_to_uuid;
 
     use super::*;
@@ -324,7 +344,7 @@ pub mod CentralDelegate {
         _cmd: Sel,
         _central: *mut Object,
         peripheral: *mut Object,
-        _adv_data: *mut Object,
+        adv_data: *mut Object,
         _rssi: *mut Object,
     ) {
         trace!(
@@ -340,6 +360,66 @@ pub mod CentralDelegate {
             delegate,
             CentralDelegateEvent::DiscoveredPeripheral(held_peripheral),
         );
+
+        let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
+        let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
+
+        let manufacturer_data = ns::dictionary_objectforkey(adv_data, unsafe {
+            cb::ADVERTISEMENT_DATA_MANUFACTURER_DATA_KEY
+        });
+        if manufacturer_data != nil {
+            // manufacturer_data: NSData
+            let length = ns::data_length(manufacturer_data);
+            if length >= 2 {
+                let bytes = ns::data_bytes(manufacturer_data);
+                let v = unsafe { slice::from_raw_parts(bytes, length as usize) };
+                let (manufacturer_id, manufacturer_data) = v.split_at(2);
+
+                send_delegate_event(
+                    delegate,
+                    CentralDelegateEvent::ManufacturerData(
+                        puuid,
+                        u16::from_le_bytes(manufacturer_id.try_into().unwrap()),
+                        Vec::from(manufacturer_data),
+                    ),
+                );
+            }
+        }
+        let service_data = ns::dictionary_objectforkey(adv_data, unsafe {
+            cb::ADVERTISEMENT_DATA_SERVICE_DATA_KEY
+        });
+        if service_data != nil {
+            // service_data: [CBUUID, NSData]
+            let uuids = ns::dictionary_allkeys(service_data);
+            let mut result = HashMap::new();
+            for i in 0..ns::array_count(uuids) {
+                let uuid = ns::array_objectatindex(uuids, i);
+                let data = ns::dictionary_objectforkey(service_data, uuid);
+                let data_length = ns::data_length(data);
+                let data = unsafe {
+                    slice::from_raw_parts(ns::data_bytes(data), data_length as usize).to_vec()
+                };
+
+                result.insert(cbuuid_to_uuid(uuid), data);
+            }
+
+            send_delegate_event(delegate, CentralDelegateEvent::ServiceData(puuid, result));
+        }
+
+        let services = ns::dictionary_objectforkey(adv_data, unsafe {
+            cb::ADVERTISEMENT_DATA_SERVICE_UUIDS_KEY
+        });
+        if services != nil {
+            // service_data: [CBUUID, NSData]
+            let mut result = Vec::new();
+            for i in 0..ns::array_count(services) {
+                let uuid = ns::array_objectatindex(services, i);
+
+                result.push(cbuuid_to_uuid(uuid));
+            }
+
+            send_delegate_event(delegate, CentralDelegateEvent::Services(puuid, result));
+        }
     }
 
     ////////////////////////////////////////////////////////////////

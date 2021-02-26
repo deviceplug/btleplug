@@ -20,12 +20,15 @@ name = "btleplug"
 path = "src/lib.rs"
 # crate-type = ["staticlib"]
 
+[features]
+serde = ["uuid/serde", "serde_cr"]
+
 [dependencies]
 log = "0.4.14"
 bitflags = "1.2.1"
 thiserror = "1.0.23"
 uuid = "0.8.2"
-serde = { version = "1.0.123", features = ["derive"], default-features = false, optional = true }
+serde_cr = { package = "serde", version = "1.0.123", features = ["derive"], default-features = false, optional = true }
 dashmap = "4.0.2"
 futures = "0.3.12"
 

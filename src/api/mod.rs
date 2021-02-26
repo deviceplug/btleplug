@@ -18,6 +18,8 @@ use crate::{Error, Result};
 pub use adapter_manager::AdapterManager;
 use bitflags::bitflags;
 #[cfg(feature = "serde")]
+extern crate serde_cr as serde;
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::Receiver;
 use std::{
@@ -29,7 +31,11 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(crate = "serde_cr")
+)]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum AddressType {
     Random,
@@ -68,7 +74,11 @@ impl AddressType {
 }
 
 /// Stores the 6 byte address used to identify Bluetooth devices.
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(crate = "serde_cr")
+)]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Default)]
 #[repr(C)]
 pub struct BDAddr {
@@ -305,7 +315,11 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     fn on_notification(&self, handler: NotificationHandler);
 }
 
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(crate = "serde_cr")
+)]
 #[derive(Debug, Clone)]
 pub enum CentralEvent {
     DeviceDiscovered(BDAddr),

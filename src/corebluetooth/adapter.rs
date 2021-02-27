@@ -106,14 +106,6 @@ impl Central for Adapter {
         Ok(())
     }
 
-    async fn active(&self, _enabled: bool) {
-        todo!()
-    }
-
-    async fn filter_duplicates(&self, enabled: bool) {
-        todo!()
-    }
-
     async fn stop_scan(&self) -> Result<()> {
         self.sender
             .to_owned()

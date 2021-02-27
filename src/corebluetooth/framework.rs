@@ -230,7 +230,7 @@ pub mod cb {
     {
         let label = CString::new("CBqueue").unwrap();
         unsafe {
-            let mut cbcentralmanager: *mut Object =
+            let cbcentralmanager: *mut Object =
                 msg_send![Class::get("CBCentralManager").unwrap(), alloc];
             let queue = dispatch_queue_create(label.as_ptr(), DISPATCH_QUEUE_SERIAL);
 

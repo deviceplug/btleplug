@@ -125,6 +125,17 @@ pub mod nsdata_utils {
     }
 }
 
+pub mod nsuuid_utils {
+    use super::*;
+
+    pub fn nsuuid_to_uuid(uuid: *mut Object) -> Uuid {
+        let uuid_nsstring = ns::uuid_uuidstring(uuid);
+        NSStringUtils::string_to_string(uuid_nsstring)
+            .parse()
+            .unwrap()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use objc::runtime::Class;

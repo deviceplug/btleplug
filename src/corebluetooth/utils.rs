@@ -18,6 +18,7 @@
 
 use objc::runtime::Object;
 use std::ffi::{CStr, CString};
+use std::slice;
 use uuid::Uuid;
 
 use super::framework::{cb, nil, ns};
@@ -108,6 +109,19 @@ pub mod CoreBluetoothUtils {
             "CBCharacteristic({})",
             NSStringUtils::string_to_string(uuid)
         )
+    }
+}
+
+pub mod nsdata_utils {
+    use super::*;
+
+    pub fn nsdata_to_vec(data: *mut Object) -> Vec<u8> {
+        let length = ns::data_length(data);
+        if length == 0 {
+            return vec![];
+        }
+        let bytes = ns::data_bytes(data);
+        unsafe { slice::from_raw_parts(bytes, length as usize).to_vec() }
     }
 }
 

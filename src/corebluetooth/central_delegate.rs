@@ -18,7 +18,10 @@
 
 use super::{
     framework::{cb, nil, ns},
-    utils::{nsdata_utils::nsdata_to_vec, CoreBluetoothUtils, NSStringUtils},
+    utils::{
+        nsdata_utils::nsdata_to_vec, nsuuid_utils::nsuuid_to_uuid, CoreBluetoothUtils,
+        NSStringUtils,
+    },
 };
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::sink::SinkExt;
@@ -36,7 +39,6 @@ use std::{
     fmt::{self, Debug, Formatter},
     ops::Deref,
     slice,
-    str::FromStr,
     sync::Once,
 };
 use uuid::Uuid;
@@ -307,8 +309,7 @@ pub mod CentralDelegate {
         );
         cb::peripheral_setdelegate(peripheral, delegate);
         cb::peripheral_discoverservices(peripheral);
-        let uuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-        let uuid = Uuid::from_str(&NSStringUtils::string_to_string(uuid_nsstring)).unwrap();
+        let uuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
         send_delegate_event(delegate, CentralDelegateEvent::ConnectedDevice(uuid));
     }
 
@@ -323,8 +324,7 @@ pub mod CentralDelegate {
             "delegate_centralmanager_diddisconnectperipheral_error {}",
             CoreBluetoothUtils::peripheral_debug(peripheral)
         );
-        let uuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-        let uuid = Uuid::from_str(&NSStringUtils::string_to_string(uuid_nsstring)).unwrap();
+        let uuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
         send_delegate_event(delegate, CentralDelegateEvent::DisconnectedDevice(uuid));
     }
 
@@ -354,8 +354,7 @@ pub mod CentralDelegate {
             CentralDelegateEvent::DiscoveredPeripheral(held_peripheral),
         );
 
-        let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-        let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
+        let puuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
 
         let manufacturer_data = ns::dictionary_objectforkey(adv_data, unsafe {
             cb::ADVERTISEMENT_DATA_MANUFACTURER_DATA_KEY
@@ -447,14 +446,10 @@ pub mod CentralDelegate {
                 }
                 service_map.insert(uuid, held_service);
             }
-            let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-            let puuid_str = NSStringUtils::string_to_string(puuid_nsstring);
+            let puuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
             send_delegate_event(
                 delegate,
-                CentralDelegateEvent::DiscoveredServices(
-                    Uuid::from_str(&puuid_str).unwrap(),
-                    service_map,
-                ),
+                CentralDelegateEvent::DiscoveredServices(puuid, service_map),
             );
         }
     }
@@ -509,8 +504,7 @@ pub mod CentralDelegate {
                 }
                 char_map.insert(uuid, held_char);
             }
-            let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-            let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
+            let puuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
             send_delegate_event(
                 delegate,
                 CentralDelegateEvent::DiscoveredCharacteristics(puuid, char_map),
@@ -533,8 +527,7 @@ pub mod CentralDelegate {
         );
         if error == nil {
             let v = get_characteristic_value(characteristic);
-            let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-            let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
+            let puuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
             let characteristic_uuid = cbuuid_to_uuid(cb::attribute_uuid(characteristic));
             send_delegate_event(
                 delegate,
@@ -558,8 +551,7 @@ pub mod CentralDelegate {
             localized_description(error)
         );
         if error == nil {
-            let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-            let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
+            let puuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
             let characteristic_uuid = cbuuid_to_uuid(cb::attribute_uuid(characteristic));
             send_delegate_event(
                 delegate,
@@ -577,8 +569,7 @@ pub mod CentralDelegate {
     ) {
         trace!("delegate_peripheral_didupdatenotificationstateforcharacteristic_error");
         // TODO check for error here
-        let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-        let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
+        let puuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
         let characteristic_uuid = cbuuid_to_uuid(cb::attribute_uuid(characteristic));
         if cb::characteristic_isnotifying(characteristic) == objc::runtime::YES {
             send_delegate_event(

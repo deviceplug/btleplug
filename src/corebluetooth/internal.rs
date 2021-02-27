@@ -12,7 +12,7 @@ use super::{
     central_delegate::{CentralDelegate, CentralDelegateEvent},
     framework::{cb, ns},
     future::{BtlePlugFuture, BtlePlugFutureStateShared},
-    utils::{core_bluetooth::cbuuid_to_uuid, nsstring, nsuuid_to_uuid},
+    utils::{core_bluetooth::cbuuid_to_uuid, nsstring::nsstring_to_string, nsuuid_to_uuid},
 };
 use crate::api::{CharPropFlags, Characteristic, WriteType};
 use async_std::task;
@@ -348,7 +348,7 @@ impl CoreBluetoothInternal {
 
     async fn on_discovered_peripheral(&mut self, peripheral: StrongPtr) {
         let uuid = nsuuid_to_uuid(cb::peer_identifier(*peripheral));
-        let name = nsstring::string_to_maybe_string(cb::peripheral_name(*peripheral));
+        let name = nsstring_to_string(cb::peripheral_name(*peripheral));
         if self.peripherals.contains_key(&uuid) {
             if let Some(name) = name {
                 self.dispatch_event(CoreBluetoothEvent::DeviceUpdated(uuid, name))

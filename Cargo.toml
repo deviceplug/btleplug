@@ -37,7 +37,7 @@ static_assertions = "1.1.0"
 tokio = { version = "1.2", features = ["rt"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-bluez-async = "0.2.1"
+bluez-async = "0.3.0"
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 cocoa = "0.24.0"

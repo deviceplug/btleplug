@@ -21,20 +21,8 @@ use std::ffi::{CStr, CString};
 
 use super::super::framework::{nil, ns};
 
-pub fn string_to_string(nsstring: *mut Object) -> String {
-    if nsstring == nil {
-        return String::from("nil");
-    }
-    unsafe {
-        String::from(
-            CStr::from_ptr(ns::string_utf8string(nsstring))
-                .to_str()
-                .unwrap(),
-        )
-    }
-}
-
-pub fn string_to_maybe_string(nsstring: *mut Object) -> Option<String> {
+/// Convert the given `NSString` to a Rust `String`, or `None` if it is `nil`.
+pub fn nsstring_to_string(nsstring: *mut Object) -> Option<String> {
     if nsstring == nil {
         return None;
     }
@@ -47,6 +35,7 @@ pub fn string_to_maybe_string(nsstring: *mut Object) -> Option<String> {
     }
 }
 
+#[allow(dead_code)]
 pub fn str_to_nsstring(string: &str) -> *mut Object {
     let cstring = CString::new(string).unwrap();
     ns::string(cstring.as_ptr())

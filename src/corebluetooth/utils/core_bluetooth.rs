@@ -20,13 +20,13 @@ use objc::runtime::Object;
 use uuid::Uuid;
 
 use super::super::framework::{cb, nil, ns};
-use super::nsstring;
+use super::nsstring::nsstring_to_string;
 
 /// Convert a CBUUID object to the standard Uuid type.
 pub fn cbuuid_to_uuid(cbuuid: *mut Object) -> Uuid {
     // NOTE: CoreBluetooth tends to return uppercase UUID strings, and only 4 character long if
     // the UUID is short (16 bits).
-    let uuid = nsstring::string_to_string(cb::uuid_uuidstring(cbuuid));
+    let uuid = nsstring_to_string(cb::uuid_uuidstring(cbuuid)).unwrap();
     let long = if uuid.len() == 4 {
         format!("0000{}-0000-1000-8000-00805f9b34fb", uuid)
     } else {
@@ -40,16 +40,12 @@ pub fn peripheral_debug(peripheral: *mut Object) -> String {
     if peripheral == nil {
         return String::from("nil");
     }
-    let name = cb::peripheral_name(peripheral);
-    let uuid = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-    if name != nil {
-        format!(
-            "CBPeripheral({}, {})",
-            nsstring::string_to_string(name),
-            nsstring::string_to_string(uuid)
-        )
+    let name = nsstring_to_string(cb::peripheral_name(peripheral));
+    let uuid = nsstring_to_string(ns::uuid_uuidstring(cb::peer_identifier(peripheral))).unwrap();
+    if let Some(name) = name {
+        format!("CBPeripheral({}, {})", name, uuid)
     } else {
-        format!("CBPeripheral({})", nsstring::string_to_string(uuid))
+        format!("CBPeripheral({})", uuid)
     }
 }
 
@@ -58,7 +54,7 @@ pub fn service_debug(service: *mut Object) -> String {
         return String::from("nil");
     }
     let uuid = cb::uuid_uuidstring(cb::attribute_uuid(service));
-    format!("CBService({})", nsstring::string_to_string(uuid))
+    format!("CBService({})", nsstring_to_string(uuid).unwrap())
 }
 
 pub fn characteristic_debug(characteristic: *mut Object) -> String {
@@ -66,7 +62,7 @@ pub fn characteristic_debug(characteristic: *mut Object) -> String {
         return String::from("nil");
     }
     let uuid = cb::uuid_uuidstring(cb::attribute_uuid(characteristic));
-    format!("CBCharacteristic({})", nsstring::string_to_string(uuid))
+    format!("CBCharacteristic({})", nsstring_to_string(uuid).unwrap())
 }
 
 #[cfg(test)]

@@ -18,12 +18,12 @@
 
 use super::{
     framework::{cb, nil, ns},
-    utils::{CoreBluetoothUtils, NSStringUtils},
+    utils::{nsdata_utils::nsdata_to_vec, CoreBluetoothUtils, NSStringUtils},
 };
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::sink::SinkExt;
 use libc::{c_char, c_void};
-use log::{error, trace, debug};
+use log::{error, trace};
 use objc::{
     declare::ClassDecl,
     rc::StrongPtr,
@@ -271,14 +271,7 @@ pub mod CentralDelegate {
     fn get_characteristic_value(characteristic: *mut Object) -> Vec<u8> {
         trace!("Getting data!");
         let value = cb::characteristic_value(characteristic);
-        let length = ns::data_length(value);
-        if length == 0 {
-            debug!("data is 0?");
-            return vec![];
-        }
-
-        let bytes = ns::data_bytes(value);
-        let v = unsafe { slice::from_raw_parts(bytes, length as usize).to_vec() };
+        let v = nsdata_to_vec(value);
         trace!("BluetoothGATTCharacteristic::get_value -> {:?}", v);
         v
     }
@@ -395,11 +388,7 @@ pub mod CentralDelegate {
             for i in 0..ns::array_count(uuids) {
                 let uuid = ns::array_objectatindex(uuids, i);
                 let data = ns::dictionary_objectforkey(service_data, uuid);
-                let data_length = ns::data_length(data);
-                let data = unsafe {
-                    slice::from_raw_parts(ns::data_bytes(data), data_length as usize).to_vec()
-                };
-
+                let data = nsdata_to_vec(data);
                 result.insert(cbuuid_to_uuid(uuid), data);
             }
 

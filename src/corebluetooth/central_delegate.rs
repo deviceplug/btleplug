@@ -18,7 +18,10 @@
 
 use super::{
     framework::{cb, nil, ns},
-    utils::{core_bluetooth, nsdata_to_vec, nsuuid_to_uuid},
+    utils::{
+        core_bluetooth::{cbuuid_to_uuid, characteristic_debug, peripheral_debug, service_debug},
+        nsdata_to_vec, nsuuid_to_uuid,
+    },
 };
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::sink::SinkExt;
@@ -127,7 +130,6 @@ impl Debug for CentralDelegateEvent {
 }
 
 pub mod CentralDelegate {
-    use core_bluetooth::cbuuid_to_uuid;
     use std::convert::TryInto;
 
     use super::*;
@@ -302,7 +304,7 @@ pub mod CentralDelegate {
     ) {
         trace!(
             "delegate_centralmanager_didconnectperipheral {}",
-            core_bluetooth::peripheral_debug(peripheral)
+            peripheral_debug(peripheral)
         );
         cb::peripheral_setdelegate(peripheral, delegate);
         cb::peripheral_discoverservices(peripheral);
@@ -319,7 +321,7 @@ pub mod CentralDelegate {
     ) {
         trace!(
             "delegate_centralmanager_diddisconnectperipheral_error {}",
-            core_bluetooth::peripheral_debug(peripheral)
+            peripheral_debug(peripheral)
         );
         let uuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
         send_delegate_event(delegate, CentralDelegateEvent::DisconnectedDevice(uuid));
@@ -339,7 +341,7 @@ pub mod CentralDelegate {
     ) {
         trace!(
             "delegate_centralmanager_diddiscoverperipheral_advertisementdata_rssi {}",
-            core_bluetooth::peripheral_debug(peripheral)
+            peripheral_debug(peripheral)
         );
 
         let held_peripheral;
@@ -421,7 +423,7 @@ pub mod CentralDelegate {
     ) {
         trace!(
             "delegate_peripheral_diddiscoverservices {} {}",
-            core_bluetooth::peripheral_debug(peripheral),
+            peripheral_debug(peripheral),
             localized_description(error)
         );
         if error == nil {
@@ -460,8 +462,8 @@ pub mod CentralDelegate {
     ) {
         trace!(
             "delegate_peripheral_diddiscoverincludedservicesforservice_error {} {} {}",
-            core_bluetooth::peripheral_debug(peripheral),
-            core_bluetooth::service_debug(service),
+            peripheral_debug(peripheral),
+            service_debug(service),
             localized_description(error)
         );
         if error == nil {
@@ -482,8 +484,8 @@ pub mod CentralDelegate {
     ) {
         trace!(
             "delegate_peripheral_diddiscovercharacteristicsforservice_error {} {} {}",
-            core_bluetooth::peripheral_debug(peripheral),
-            core_bluetooth::service_debug(service),
+            peripheral_debug(peripheral),
+            service_debug(service),
             localized_description(error)
         );
         if error == nil {
@@ -518,8 +520,8 @@ pub mod CentralDelegate {
     ) {
         trace!(
             "delegate_peripheral_didupdatevalueforcharacteristic_error {} {} {}",
-            core_bluetooth::peripheral_debug(peripheral),
-            core_bluetooth::characteristic_debug(characteristic),
+            peripheral_debug(peripheral),
+            characteristic_debug(characteristic),
             localized_description(error)
         );
         if error == nil {
@@ -543,8 +545,8 @@ pub mod CentralDelegate {
     ) {
         trace!(
             "delegate_peripheral_didwritevalueforcharacteristic_error {} {} {}",
-            core_bluetooth::peripheral_debug(peripheral),
-            core_bluetooth::characteristic_debug(characteristic),
+            peripheral_debug(peripheral),
+            characteristic_debug(characteristic),
             localized_description(error)
         );
         if error == nil {
@@ -602,7 +604,7 @@ pub mod CentralDelegate {
     ) {
         trace!(
             "delegate_peripheral_didreadrssi_error {}",
-            core_bluetooth::peripheral_debug(peripheral)
+            peripheral_debug(peripheral)
         );
         if error == nil {}
     }

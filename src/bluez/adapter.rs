@@ -2,9 +2,7 @@ use super::peripheral::Peripheral;
 use crate::api::{BDAddr, Central, CentralEvent};
 use crate::{Error, Result};
 use async_trait::async_trait;
-use bluez_async::{
-    AdapterId, BluetoothError, BluetoothEvent, BluetoothSession, DeviceEvent, DiscoveryFilter,
-};
+use bluez_async::{AdapterId, BluetoothError, BluetoothEvent, BluetoothSession, DeviceEvent};
 use futures::stream::{Stream, StreamExt};
 use std::pin::Pin;
 
@@ -35,18 +33,6 @@ impl Central for Adapter {
     async fn start_scan(&self) -> Result<()> {
         self.session.start_discovery().await?;
         Ok(())
-    }
-
-    async fn active(&self, _enabled: bool) {
-        todo!()
-    }
-
-    async fn filter_duplicates(&self, enabled: bool) {
-        let _discovery_filter = DiscoveryFilter {
-            duplicate_data: Some(!enabled),
-            ..Default::default()
-        };
-        todo!()
     }
 
     async fn stop_scan(&self) -> Result<()> {

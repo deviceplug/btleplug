@@ -17,7 +17,7 @@ impl Manager {
         let adapters = self.session.get_adapters().await?;
         Ok(adapters
             .into_iter()
-            .map(|adapter| Adapter::new(self.session.clone(), adapter))
+            .map(|adapter| Adapter::new(self.session.clone(), adapter.id))
             .collect())
     }
 }

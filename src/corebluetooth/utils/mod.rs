@@ -20,6 +20,7 @@ use objc::runtime::Object;
 use std::slice;
 use uuid::Uuid;
 
+use self::nsstring::nsstring_to_string;
 use super::framework::ns;
 
 pub mod core_bluetooth;
@@ -36,5 +37,5 @@ pub fn nsdata_to_vec(data: *mut Object) -> Vec<u8> {
 
 pub fn nsuuid_to_uuid(uuid: *mut Object) -> Uuid {
     let uuid_nsstring = ns::uuid_uuidstring(uuid);
-    nsstring::string_to_string(uuid_nsstring).parse().unwrap()
+    nsstring_to_string(uuid_nsstring).unwrap().parse().unwrap()
 }

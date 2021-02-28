@@ -75,55 +75,54 @@ impl Peripheral {
         task::spawn(async move {
             let mut event_receiver = event_receiver;
             loop {
-                if let Some(event) = event_receiver.next().await {
-                    match event {
-                        CBPeripheralEvent::Notification(uuid, data) => {
-                            util::invoke_handlers(
-                                &nh_clone,
-                                &ValueNotification {
-                                    uuid,
-                                    handle: None,
-                                    value: data,
-                                },
-                            );
-                        }
-                        CBPeripheralEvent::ManufacturerData(manufacturer_id, data) => {
-                            let mut properties = p_clone.lock().unwrap();
-                            properties
-                                .manufacturer_data
-                                .insert(manufacturer_id, data.clone());
-                            m_clone.emit(CentralEvent::ManufacturerDataAdvertisement {
+                match event_receiver.next().await {
+                    Some(CBPeripheralEvent::Notification(uuid, data)) => {
+                        util::invoke_handlers(
+                            &nh_clone,
+                            &ValueNotification {
+                                uuid,
+                                handle: None,
+                                value: data,
+                            },
+                        );
+                    }
+                    Some(CBPeripheralEvent::ManufacturerData(manufacturer_id, data)) => {
+                        let mut properties = p_clone.lock().unwrap();
+                        properties
+                            .manufacturer_data
+                            .insert(manufacturer_id, data.clone());
+                        m_clone.emit(CentralEvent::ManufacturerDataAdvertisement {
+                            address: properties.address,
+                            manufacturer_id,
+                            data,
+                        });
+                    }
+                    Some(CBPeripheralEvent::ServiceData(service_data)) => {
+                        let mut properties = p_clone.lock().unwrap();
+                        properties.service_data.extend(service_data.clone());
+
+                        for (service, data) in service_data.into_iter() {
+                            m_clone.emit(CentralEvent::ServiceDataAdvertisement {
                                 address: properties.address,
-                                manufacturer_id,
+                                service,
                                 data,
                             });
                         }
-                        CBPeripheralEvent::ServiceData(service_data) => {
-                            let mut properties = p_clone.lock().unwrap();
-                            properties.service_data.extend(service_data.clone());
-
-                            for (service, data) in service_data.into_iter() {
-                                m_clone.emit(CentralEvent::ServiceDataAdvertisement {
-                                    address: properties.address,
-                                    service,
-                                    data,
-                                });
-                            }
-                        }
-                        CBPeripheralEvent::Services(services) => {
-                            let mut properties = p_clone.lock().unwrap();
-                            properties.services = services.clone();
-
-                            m_clone.emit(CentralEvent::ServicesAdvertisement {
-                                address: properties.address,
-                                services,
-                            });
-                        }
-                        CBPeripheralEvent::Disconnected => (),
                     }
-                } else {
-                    error!("Event receiver died, breaking out of corebluetooth device loop.");
-                    break;
+                    Some(CBPeripheralEvent::Services(services)) => {
+                        let mut properties = p_clone.lock().unwrap();
+                        properties.services = services.clone();
+
+                        m_clone.emit(CentralEvent::ServicesAdvertisement {
+                            address: properties.address,
+                            services,
+                        });
+                    }
+                    Some(CBPeripheralEvent::Disconnected) => (),
+                    None => {
+                        error!("Event receiver died, breaking out of corebluetooth device loop.");
+                        break;
+                    }
                 }
             }
         });

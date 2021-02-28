@@ -410,7 +410,7 @@ pub mod CentralDelegate {
             cb::ADVERTISEMENT_DATA_SERVICE_UUIDS_KEY
         });
         if services != nil {
-            // service_data: [CBUUID, NSData]
+            // services: [CBUUID]
             let mut result = Vec::new();
             for i in 0..ns::array_count(services) {
                 let uuid = ns::array_objectatindex(services, i);

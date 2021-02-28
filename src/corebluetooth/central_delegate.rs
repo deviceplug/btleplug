@@ -249,17 +249,17 @@ pub mod CentralDelegate {
     }
 
     fn get_characteristic_value(characteristic: *mut Object) -> Vec<u8> {
-        info!("Getting data!");
+        trace!("Getting data!");
         let value = cb::characteristic_value(characteristic);
         let length = ns::data_length(value);
         if length == 0 {
-            info!("data is 0?");
+            debug!("data is 0?");
             return vec![];
         }
 
         let bytes = ns::data_bytes(value);
         let v = unsafe { slice::from_raw_parts(bytes, length as usize).to_vec() };
-        info!("BluetoothGATTCharacteristic::get_value -> {:?}", v);
+        trace!("BluetoothGATTCharacteristic::get_value -> {:?}", v);
         v
     }
 

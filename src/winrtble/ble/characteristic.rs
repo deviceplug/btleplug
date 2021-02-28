@@ -20,7 +20,7 @@ use bindings::windows::devices::bluetooth::generic_attribute_profile::{
 };
 use bindings::windows::foundation::{EventRegistrationToken, TypedEventHandler};
 use bindings::windows::storage::streams::{DataReader, DataWriter};
-use log::info;
+use log::{debug, trace};
 
 pub type NotifiyEventHandler = Box<dyn Fn(Vec<u8>) + Send>;
 
@@ -94,7 +94,7 @@ impl BLECharacteristic {
                     let len = reader.unconsumed_buffer_length().unwrap() as usize;
                     let mut input: Vec<u8> = vec![0u8; len];
                     reader.read_bytes(&mut input[0..len]).unwrap();
-                    info!("changed {:?}", input);
+                    trace!("changed {:?}", input);
                     on_value_changed(input);
                 }
                 Ok(())
@@ -109,7 +109,7 @@ impl BLECharacteristic {
             .unwrap()
             .get()
             .unwrap();
-        info!("subscribe {:?}", status);
+        trace!("subscribe {:?}", status);
         Ok(())
     }
 
@@ -125,7 +125,7 @@ impl BLECharacteristic {
             .unwrap()
             .get()
             .unwrap();
-        info!("unsubscribe {:?}", status);
+        trace!("unsubscribe {:?}", status);
         Ok(())
     }
 }
@@ -135,7 +135,7 @@ impl Drop for BLECharacteristic {
         if let Some(token) = &self.notify_token {
             let result = self.characteristic.remove_value_changed(token);
             if let Err(err) = result {
-                info!("Drop:remove_connection_status_changed {:?}", err);
+                debug!("Drop:remove_connection_status_changed {:?}", err);
             }
         }
     }

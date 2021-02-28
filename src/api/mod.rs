@@ -18,9 +18,9 @@ use crate::{Error, Result};
 pub use adapter_manager::AdapterManager;
 use bitflags::bitflags;
 #[cfg(feature = "serde")]
-extern crate serde_cr as serde;
-#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "serde")]
+use serde_cr as serde;
 use std::sync::mpsc::Receiver;
 use std::{
     collections::{BTreeSet, HashMap},

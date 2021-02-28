@@ -6,6 +6,8 @@
 // for full license information.
 
 pub mod adapter;
+#[cfg(feature = "async")]
+pub mod async_api;
 mod central_delegate;
 mod framework;
 mod future;

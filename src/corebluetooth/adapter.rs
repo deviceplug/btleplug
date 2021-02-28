@@ -12,8 +12,8 @@ use std::sync::mpsc::Receiver;
 
 #[derive(Clone, Debug)]
 pub struct Adapter {
-    manager: AdapterManager<Peripheral>,
-    sender: Sender<CoreBluetoothMessage>,
+    pub(crate) manager: AdapterManager<Peripheral>,
+    pub(crate) sender: Sender<CoreBluetoothMessage>,
 }
 
 pub(crate) fn uuid_to_bdaddr(uuid: &String) -> BDAddr {

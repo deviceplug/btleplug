@@ -36,10 +36,10 @@ use uuid::Uuid;
 pub struct Peripheral {
     notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
     manager: AdapterManager<Self>,
-    uuid: Uuid,
-    characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
+    pub(crate) uuid: Uuid,
+    pub(crate) characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
     pub(crate) properties: Arc<Mutex<PeripheralProperties>>,
-    message_sender: Sender<CoreBluetoothMessage>,
+    pub(crate) message_sender: Sender<CoreBluetoothMessage>,
     // We're not actually holding a peripheral object here, that's held out in
     // the objc thread. We'll just communicate with it through our
     // receiver/sender pair.
@@ -132,7 +132,7 @@ impl Peripheral {
         }
     }
 
-    fn emit(&self, event: CentralEvent) {
+    pub(crate) fn emit(&self, event: CentralEvent) {
         debug!("emitted {:?}", event);
         self.manager.emit(event)
     }

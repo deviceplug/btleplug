@@ -19,6 +19,8 @@ pub use adapter_manager::AdapterManager;
 use bitflags::bitflags;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "serde")]
+use serde_cr as serde;
 use std::sync::mpsc::Receiver;
 use std::{
     collections::{BTreeSet, HashMap},
@@ -29,7 +31,11 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(crate = "serde_cr")
+)]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum AddressType {
     Random,
@@ -68,7 +74,11 @@ impl AddressType {
 }
 
 /// Stores the 6 byte address used to identify Bluetooth devices.
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(crate = "serde_cr")
+)]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Default)]
 #[repr(C)]
 pub struct BDAddr {
@@ -222,6 +232,11 @@ pub struct PeripheralProperties {
     /// Advertisement data specific to the device manufacturer. The keys of this map are
     /// 'manufacturer IDs', while the values are arbitrary data.
     pub manufacturer_data: HashMap<u16, Vec<u8>>,
+    /// Advertisement data specific to a service. The keys of this map are
+    /// 'Service UUIDs', while the values are arbitrary data.
+    pub service_data: HashMap<Uuid, Vec<u8>>,
+    /// Advertised services for this device
+    pub services: Vec<Uuid>,
     /// Number of times we've seen advertising reports for this device
     pub discovery_count: u32,
     /// True if we've discovered the device before
@@ -300,14 +315,35 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     fn on_notification(&self, handler: NotificationHandler);
 }
 
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Debug, Copy, Clone)]
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(crate = "serde_cr")
+)]
+#[derive(Debug, Clone)]
 pub enum CentralEvent {
     DeviceDiscovered(BDAddr),
     DeviceLost(BDAddr),
     DeviceUpdated(BDAddr),
     DeviceConnected(BDAddr),
     DeviceDisconnected(BDAddr),
+    /// Emitted when a Manufacturer Data advertisement has been received from a device
+    ManufacturerDataAdvertisement {
+        address: BDAddr,
+        manufacturer_id: u16,
+        data: Vec<u8>,
+    },
+    /// Emitted when a Service Data advertisement has been received from a device
+    ServiceDataAdvertisement {
+        address: BDAddr,
+        service: Uuid,
+        data: Vec<u8>,
+    },
+    /// Emitted when the advertised services for a device has been updated
+    ServicesAdvertisement {
+        address: BDAddr,
+        services: Vec<Uuid>,
+    },
 }
 
 /// Central is the "client" of BLE. It's able to scan for and establish connections to peripherals.

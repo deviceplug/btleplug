@@ -17,3 +17,10 @@ mod ble;
 pub mod manager;
 pub mod peripheral;
 pub mod utils;
+
+/// Only some of the assigned numbers are populated here as needed from https://www.bluetooth.com/specifications/assigned-numbers/generic-access-profile/
+mod advertisement_data_type {
+    pub const SERVICE_DATA_16_BIT_UUID: u8 = 0x16;
+    pub const SERVICE_DATA_32_BIT_UUID: u8 = 0x20;
+    pub const SERVICE_DATA_128_BIT_UUID: u8 = 0x21;
+}

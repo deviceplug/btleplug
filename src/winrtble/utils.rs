@@ -16,8 +16,11 @@ use crate::{
     api::{BDAddr, CharPropFlags},
     Error, Result,
 };
-use bindings::windows::devices::bluetooth::generic_attribute_profile::{
-    GattCharacteristicProperties, GattCommunicationStatus,
+use bindings::windows::{
+    devices::bluetooth::generic_attribute_profile::{
+        GattCharacteristicProperties, GattCommunicationStatus,
+    },
+    storage::streams::{DataReader, IBuffer},
 };
 use std::str::FromStr;
 use uuid::Uuid;
@@ -56,6 +59,14 @@ pub fn to_address(addr: BDAddr) -> u64 {
 pub fn to_uuid(uuid: &Guid) -> Uuid {
     let guid_s = format!("{:?}", uuid);
     Uuid::from_str(&guid_s).unwrap()
+}
+
+pub fn to_vec(buffer: &IBuffer) -> Vec<u8> {
+    let reader = DataReader::from_buffer(buffer).unwrap();
+    let len = reader.unconsumed_buffer_length().unwrap() as usize;
+    let mut data = vec![0u8; len];
+    reader.read_bytes(&mut data).unwrap();
+    data
 }
 
 pub fn to_guid(uuid: &Uuid) -> Guid {

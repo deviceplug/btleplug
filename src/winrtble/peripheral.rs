@@ -11,9 +11,13 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use super::{bindings, ble::characteristic::BLECharacteristic, ble::device::BLEDevice, utils};
+use super::{
+    advertisement_data_type, bindings, ble::characteristic::BLECharacteristic,
+    ble::device::BLEDevice, utils,
+};
 use crate::{
     api::{
+        bleuuid::{uuid_from_u16, uuid_from_u32},
         AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, NotificationHandler,
         Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, WriteType,
     },
@@ -23,13 +27,14 @@ use crate::{
 use dashmap::DashMap;
 use std::{
     collections::BTreeSet,
+    convert::TryInto,
     fmt::{self, Debug, Display, Formatter},
     sync::atomic::{AtomicBool, Ordering},
     sync::{Arc, Mutex},
 };
 use uuid::Uuid;
 
-use bindings::windows::{devices::bluetooth::advertisement::*, storage::streams::DataReader};
+use bindings::windows::devices::bluetooth::advertisement::*;
 
 #[derive(Clone)]
 pub struct Peripheral {
@@ -81,15 +86,72 @@ impl Peripheral {
             properties.manufacturer_data = manufacturer_data
                 .into_iter()
                 .map(|d| {
-                    let company_id = d.company_id().unwrap();
-                    let buffer = d.data().unwrap();
-                    let reader = DataReader::from_buffer(&buffer).unwrap();
-                    let len = reader.unconsumed_buffer_length().unwrap() as usize;
-                    let mut data = vec![0u8; len];
-                    reader.read_bytes(&mut data).unwrap();
-                    (company_id, data)
+                    let manufacturer_id = d.company_id().unwrap();
+                    let data = utils::to_vec(&d.data().unwrap());
+
+                    // Emit event of newly received advertisement
+                    self.adapter
+                        .emit(CentralEvent::ManufacturerDataAdvertisement {
+                            address: self.address,
+                            manufacturer_id,
+                            data: data.clone(),
+                        });
+
+                    (manufacturer_id, data)
                 })
                 .collect();
+        }
+
+        // The Windows Runtime API (as of 19041) does not directly expose Service Data as a friendly API (like Manufacturer Data above)
+        // Instead they provide data sections for access to raw advertising data. That is processed here.
+        if let Ok(data_sections) = advertisement.data_sections() {
+            properties.service_data = data_sections
+                .into_iter()
+                .filter_map(|d| {
+                    let data = utils::to_vec(&d.data().unwrap());
+
+                    let service_data = match d.data_type().unwrap() {
+                        advertisement_data_type::SERVICE_DATA_16_BIT_UUID => {
+                            let (uuid, data) = data.split_at(2);
+                            let uuid = uuid_from_u16(u16::from_le_bytes(uuid.try_into().unwrap()));
+                            (uuid, data.to_owned())
+                        }
+                        advertisement_data_type::SERVICE_DATA_32_BIT_UUID => {
+                            let (uuid, data) = data.split_at(4);
+                            let uuid = uuid_from_u32(u32::from_le_bytes(uuid.try_into().unwrap()));
+                            (uuid, data.to_owned())
+                        }
+                        advertisement_data_type::SERVICE_DATA_128_BIT_UUID => {
+                            let (uuid, data) = data.split_at(16);
+                            let uuid = Uuid::from_slice(uuid).unwrap();
+                            (uuid, data.to_owned())
+                        }
+                        _ => return None,
+                    };
+
+                    // Emit event of newly received advertisement
+                    let (uuid, data) = service_data;
+                    self.adapter.emit(CentralEvent::ServiceDataAdvertisement {
+                        address: self.address,
+                        service: uuid,
+                        data: data.clone(),
+                    });
+
+                    Some((uuid, data))
+                })
+                .collect();
+        }
+
+        if let Ok(services) = advertisement.service_uuids() {
+            properties.services = services
+                .into_iter()
+                .map(|uuid| utils::to_uuid(&uuid))
+                .collect();
+
+            self.adapter.emit(CentralEvent::ServicesAdvertisement {
+                address: self.address,
+                services: properties.services.clone(),
+            });
         }
 
         // windows does not provide the address type in the advertisement event args but only in the device object

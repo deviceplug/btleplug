@@ -1,7 +1,7 @@
 extern crate btleplug;
 extern crate rand;
 
-use btleplug::api::{Central, CentralEvent};
+use btleplug::api::{bleuuid::BleUuid, Central, CentralEvent};
 #[cfg(target_os = "linux")]
 use btleplug::bluez::{adapter::Adapter, manager::Manager};
 #[cfg(target_os = "macos")]
@@ -51,6 +51,33 @@ pub fn main() {
             }
             CentralEvent::DeviceDisconnected(bd_addr) => {
                 println!("DeviceDisconnected: {:?}", bd_addr);
+            }
+            CentralEvent::ManufacturerDataAdvertisement {
+                address,
+                manufacturer_id,
+                data,
+            } => {
+                println!(
+                    "ManufacturerDataAdvertisement: {:?}, {}, {:?}",
+                    address, manufacturer_id, data
+                );
+            }
+            CentralEvent::ServiceDataAdvertisement {
+                address,
+                service,
+                data,
+            } => {
+                println!(
+                    "ServiceDataAdvertisement: {:?}, {}, {:?}",
+                    address,
+                    service.to_short_string(),
+                    data
+                );
+            }
+            CentralEvent::ServicesAdvertisement { address, services } => {
+                let services: Vec<String> =
+                    services.into_iter().map(|s| s.to_short_string()).collect();
+                println!("ServicesAdvertisement: {:?}, {:?}", address, services);
             }
             _ => {}
         }

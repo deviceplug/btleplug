@@ -38,7 +38,7 @@ pub struct Peripheral {
     manager: AdapterManager<Self>,
     uuid: Uuid,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
-    pub(crate) properties: PeripheralProperties,
+    pub(crate) properties: Arc<Mutex<PeripheralProperties>>,
     message_sender: Sender<CoreBluetoothMessage>,
     // We're not actually holding a peripheral object here, that's held out in
     // the objc thread. We'll just communicate with it through our
@@ -55,7 +55,7 @@ impl Peripheral {
     ) -> Self {
         // Since we're building the object, we have an active advertisement.
         // Build properties now.
-        let properties = PeripheralProperties {
+        let properties = Arc::new(Mutex::from(PeripheralProperties {
             // Rumble required ONLY a BDAddr, not something you can get from
             // MacOS, so we make it up for now. This sucks.
             address: uuid_to_bdaddr(&uuid.to_string()),
@@ -63,30 +63,66 @@ impl Peripheral {
             local_name: local_name,
             tx_power_level: None,
             manufacturer_data: HashMap::new(),
+            service_data: HashMap::new(),
+            services: Vec::new(),
             discovery_count: 1,
             has_scan_response: true,
-        };
+        }));
         let notification_handlers = Arc::new(Mutex::new(Vec::<NotificationHandler>::new()));
         let nh_clone = notification_handlers.clone();
+        let p_clone = properties.clone();
+        let m_clone = manager.clone();
         task::spawn(async move {
             let mut event_receiver = event_receiver;
             loop {
-                let event = event_receiver.next().await;
-                if event.is_none() {
-                    error!("Event receiver died, breaking out of corebluetooth device loop.");
-                    break;
-                }
-                if let Some(CBPeripheralEvent::Notification(uuid, data)) = event {
-                    util::invoke_handlers(
-                        &nh_clone,
-                        &ValueNotification {
-                            uuid,
-                            handle: None,
-                            value: data,
-                        },
-                    );
-                } else {
-                    error!("Unhandled CBPeripheralEvent");
+                match event_receiver.next().await {
+                    Some(CBPeripheralEvent::Notification(uuid, data)) => {
+                        util::invoke_handlers(
+                            &nh_clone,
+                            &ValueNotification {
+                                uuid,
+                                handle: None,
+                                value: data,
+                            },
+                        );
+                    }
+                    Some(CBPeripheralEvent::ManufacturerData(manufacturer_id, data)) => {
+                        let mut properties = p_clone.lock().unwrap();
+                        properties
+                            .manufacturer_data
+                            .insert(manufacturer_id, data.clone());
+                        m_clone.emit(CentralEvent::ManufacturerDataAdvertisement {
+                            address: properties.address,
+                            manufacturer_id,
+                            data,
+                        });
+                    }
+                    Some(CBPeripheralEvent::ServiceData(service_data)) => {
+                        let mut properties = p_clone.lock().unwrap();
+                        properties.service_data.extend(service_data.clone());
+
+                        for (service, data) in service_data.into_iter() {
+                            m_clone.emit(CentralEvent::ServiceDataAdvertisement {
+                                address: properties.address,
+                                service,
+                                data,
+                            });
+                        }
+                    }
+                    Some(CBPeripheralEvent::Services(services)) => {
+                        let mut properties = p_clone.lock().unwrap();
+                        properties.services = services.clone();
+
+                        m_clone.emit(CentralEvent::ServicesAdvertisement {
+                            address: properties.address,
+                            services,
+                        });
+                    }
+                    Some(CBPeripheralEvent::Disconnected) => (),
+                    None => {
+                        error!("Event receiver died, breaking out of corebluetooth device loop.");
+                        break;
+                    }
                 }
             }
         });
@@ -130,13 +166,13 @@ impl Debug for Peripheral {
 impl ApiPeripheral for Peripheral {
     /// Returns the address of the peripheral.
     fn address(&self) -> BDAddr {
-        self.properties.address
+        self.properties.lock().unwrap().address
     }
 
     /// Returns the set of properties associated with the peripheral. These may be updated over time
     /// as additional advertising reports are received.
     fn properties(&self) -> PeripheralProperties {
-        self.properties.clone()
+        self.properties.lock().unwrap().clone()
     }
 
     /// The set of characteristics we've discovered for this device. This will be empty until
@@ -167,7 +203,9 @@ impl ApiPeripheral for Peripheral {
             match fut.await {
                 CoreBluetoothReply::Connected(chars) => {
                     *(self.characteristics.lock().unwrap()) = chars;
-                    self.emit(CentralEvent::DeviceConnected(self.properties.address));
+                    self.emit(CentralEvent::DeviceConnected(
+                        self.properties.lock().unwrap().address,
+                    ));
                 }
                 _ => panic!("Shouldn't get anything but connected!"),
             }

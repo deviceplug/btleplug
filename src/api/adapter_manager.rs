@@ -80,14 +80,18 @@ where
         }
         // Since we hold a receiver, this will never fail unless we fill the
         // channel. Whether that's a good idea is another question entirely.
-        self.event_sender.lock().unwrap().send(event).unwrap();
+        self.event_sender
+            .lock()
+            .unwrap()
+            .send(event.clone())
+            .unwrap();
 
         #[cfg(feature = "async")]
         // Remove sender from the list if the other end of the channel has been dropped.
         self.async_senders
             .lock()
             .unwrap()
-            .retain(|sender| sender.unbounded_send(event).is_ok());
+            .retain(|sender| sender.unbounded_send(event.clone()).is_ok());
     }
 
     pub fn event_receiver(&self) -> Option<Receiver<CentralEvent>> {

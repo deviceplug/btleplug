@@ -5,6 +5,7 @@
 - Move to using Uuid crate instead of having an internal type.
 - Remove discover_characteristics_in_range (unused or duplicated elsewhere)
 - write() commands are now passed a WriteType for specifying WriteWith/WithoutResponse
+- Variants added to CentralEvent enum, may break exhaustive checks
 
 ## Features
 

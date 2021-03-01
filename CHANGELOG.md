@@ -1,4 +1,10 @@
-# 0.7.0 (2021-02-28)
+# 0.7.1 (2021-03-01)
+
+## Bugfixes
+
+- Fixed commit/merge issues with 0.7.0 that ended up with incorrect dependencies being brought in.
+
+# 0.7.0 (2021-02-28) (Yanked)
 
 ## Breaking API Changes
 

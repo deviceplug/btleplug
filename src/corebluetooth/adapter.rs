@@ -33,7 +33,7 @@ impl Adapter {
         task::block_on(async { receiver.next().await.unwrap() });
         info!("Waiting on adapter connected");
         let adapter_sender_clone = adapter_sender.clone();
-        let manager = AdapterManager::new();
+        let manager = AdapterManager::default();
 
         let manager_clone = manager.clone();
         task::spawn(async move {

@@ -125,7 +125,7 @@ impl Adapter {
             connection: conn,
             listener: Arc::new(ReentrantMutex::new(SyncConnection::new_system()?)),
             path: path.to_string(),
-            manager: AdapterManager::new(),
+            manager: AdapterManager::default(),
             match_tokens: Arc::new(DashMap::new()),
             should_stop: Arc::new((Condvar::new(), Mutex::new(false))),
             thread_handle: Arc::new(Mutex::new(None)),
@@ -180,7 +180,8 @@ impl Adapter {
 
                     if args.interfaces.iter().any(|s| s == ORG_BLUEZ_DEVICE1_NAME) {
                         adapter.remove_device(&path).unwrap();
-                    } else if args
+                    }
+                    /*else if args
                         .interfaces
                         .iter()
                         .any(|s| s == ORG_BLUEZ_GATT_SERVICE1_NAME)
@@ -192,9 +193,9 @@ impl Adapter {
                         .any(|s| s == ORG_BLUEZ_GATT_CHARACTERISTIC1_NAME)
                     {
                         // Ignore Characteristics that get removed, the BTLEPlug API doesn't support that
-                    }
+                    }*/
 
-                    return true;
+                    true
                 })
                 .unwrap(),
         );
@@ -367,7 +368,7 @@ impl Adapter {
                 let uuid: Uuid = characteristic.uuid().unwrap().parse()?;
                 let flags = if let Some(flags) = characteristic.flags() {
                     flags.iter().map(|s| s.parse::<CharPropFlags>()).fold(
-                        Ok(CharPropFlags::new()),
+                        Ok(CharPropFlags::default()),
                         |a, f| {
                             if f.is_ok() {
                                 Ok(f.unwrap() | a.unwrap())
@@ -377,7 +378,7 @@ impl Adapter {
                         },
                     )?
                 } else {
-                    CharPropFlags::new()
+                    CharPropFlags::default()
                 };
 
                 device.add_attribute(path, uuid, flags)?;
@@ -465,7 +466,7 @@ impl Central<Peripheral> for Adapter {
                             adapter.add_attribute(&path, characteristic).unwrap();
                         }
 
-                        return true;
+                        true
                     },
                 )?,
             );

@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 pub fn invoke_handlers<F: FnMut(ValueNotification) + ?Sized>(
     notification_handlers: &Arc<Mutex<Vec<Box<F>>>>,
     n: &ValueNotification,
-) -> () {
+) {
     // The handlers inside our vector in a mutex are MutFn,
     // which means calling them will mutate their environment.
     // To do this, we'll take ownership of the handler vector

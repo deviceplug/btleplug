@@ -17,7 +17,7 @@ pub struct Adapter {
     sender: Sender<CoreBluetoothMessage>,
 }
 
-pub(crate) fn uuid_to_bdaddr(uuid: &String) -> BDAddr {
+pub(crate) fn uuid_to_bdaddr(uuid: &str) -> BDAddr {
     let b: [u8; 6] = uuid.as_bytes()[0..6].try_into().unwrap();
     BDAddr::try_from(b).unwrap()
 }

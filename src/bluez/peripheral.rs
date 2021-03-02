@@ -204,9 +204,6 @@ impl From<bluez_async::AddressType> for AddressType {
 impl From<&CharacteristicInfo> for Characteristic {
     fn from(characteristic: &CharacteristicInfo) -> Self {
         Characteristic {
-            start_handle: 0,
-            end_handle: 0,
-            value_handle: 0,
             uuid: characteristic.uuid.into(),
             properties: characteristic.flags.into(),
         }

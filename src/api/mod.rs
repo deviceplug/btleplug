@@ -118,15 +118,6 @@ impl Default for CharPropFlags {
 /// able to write to it, read from it, set its notify or indicate status, or send a command to it.
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
 pub struct Characteristic {
-    /// The start of the handle range that contains this characteristic. Only
-    /// valid on Linux, will be 0 on all other platforms.
-    pub start_handle: u16,
-    /// The end of the handle range that contains this characteristic. Only
-    /// valid on Linux, will be 0 on all other platforms.
-    pub end_handle: u16,
-    /// The value handle of the characteristic. Only
-    /// valid on Linux, will be 0 on all other platforms.
-    pub value_handle: u16,
     /// The UUID for this characteristic. This uniquely identifies its behavior.
     pub uuid: Uuid,
     /// The set of properties for this characteristic, which indicate what functionality it

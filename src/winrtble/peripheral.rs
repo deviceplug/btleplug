@@ -274,13 +274,7 @@ impl ApiPeripheral for Peripheral {
                 let uuid = utils::to_uuid(&characteristic.uuid().unwrap());
                 let properties =
                     utils::to_char_props(&characteristic.characteristic_properties().unwrap());
-                let chara = Characteristic {
-                    uuid,
-                    start_handle: 0,
-                    end_handle: 0,
-                    value_handle: 0,
-                    properties,
-                };
+                let chara = Characteristic { uuid, properties };
                 characteristics_result.push(chara);
                 self.ble_characteristics
                     .entry(uuid)

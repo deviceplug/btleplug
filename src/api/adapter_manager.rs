@@ -41,11 +41,8 @@ where
     event_receiver: Arc<Mutex<Option<Receiver<CentralEvent>>>>,
 }
 
-impl<PeripheralType> AdapterManager<PeripheralType>
-where
-    PeripheralType: Peripheral + 'static,
-{
-    pub fn new() -> Self {
+impl<PeripheralType: Peripheral + 'static> Default for AdapterManager<PeripheralType> {
+    fn default() -> Self {
         let peripherals = Arc::new(DashMap::new());
         let (event_sender, event_receiver) = channel();
         AdapterManager {
@@ -54,7 +51,12 @@ where
             event_receiver: Arc::new(Mutex::new(Some(event_receiver))),
         }
     }
+}
 
+impl<PeripheralType> AdapterManager<PeripheralType>
+where
+    PeripheralType: Peripheral + 'static,
+{
     pub fn emit(&self, event: CentralEvent) {
         match event {
             CentralEvent::DeviceDisconnected(addr) => {

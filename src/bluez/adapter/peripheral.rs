@@ -70,22 +70,24 @@ impl Peripheral {
         path: &str,
         address: BDAddr,
     ) -> Self {
-        let mut properties = PeripheralProperties::default();
-        properties.address = address;
+        let properties = PeripheralProperties {
+            address,
+            ..Default::default()
+        };
         let properties = Arc::new(Mutex::new(properties));
         let characteristics = Arc::new(Mutex::new(BTreeSet::new()));
         let notification_handlers = Arc::new(Mutex::new(Vec::new()));
 
         Peripheral {
-            adapter: adapter,
-            connection: connection,
+            adapter,
+            connection,
             path: path.to_string(),
-            address: address,
+            address,
             state: Arc::new((Mutex::new(PeripheralState::NotConnected), Condvar::new())),
-            properties: properties,
+            properties,
             attributes_map: Arc::new(Mutex::new(HashMap::new())),
-            characteristics: characteristics,
-            notification_handlers: notification_handlers,
+            characteristics,
+            notification_handlers,
             listen_token: Arc::new(Mutex::new(None)),
         }
     }
@@ -210,7 +212,7 @@ impl Peripheral {
                 end_handle: next.map_or(u16::MAX, |n| n.0.handle - 1),
                 value_handle: handle.handle,
                 properties: attribute.properties,
-                uuid: attribute.uuid.clone(),
+                uuid: attribute.uuid,
             });
         }
 
@@ -227,7 +229,7 @@ impl Peripheral {
                 end_handle: next.map_or(u16::MAX, |n| n.0.handle - 1),
                 value_handle: handle.handle,
                 properties: attribute.properties,
-                uuid: attribute.uuid.clone(),
+                uuid: attribute.uuid,
             });
         }
 
@@ -289,7 +291,7 @@ impl Peripheral {
                 self.address, manufacturer_data
             );
             properties.manufacturer_data = manufacturer_data
-                .into_iter()
+                .iter()
                 .filter_map(|(&k, v)| {
                     if let Some(v) = cast::<Vec<u8>>(&v.0) {
                         self.adapter
@@ -309,7 +311,7 @@ impl Peripheral {
 
         if let Some(service_data) = args.service_data() {
             properties.service_data = service_data
-                .into_iter()
+                .iter()
                 .filter_map(|(service, data)| {
                     let service: Uuid = service.parse().unwrap();
                     if let Some(data) = cast::<Vec<u8>>(&data.0) {
@@ -329,12 +331,12 @@ impl Peripheral {
 
         if let Some(services) = args.uuids() {
             properties.services = services
-                .into_iter()
+                .iter()
                 .filter_map(|uuid| uuid.parse().ok())
                 .collect();
 
             self.adapter.emit(CentralEvent::ServicesAdvertisement {
-                address: self.address.clone(),
+                address: self.address,
                 services: properties.services.clone(),
             });
         }
@@ -394,7 +396,7 @@ impl Display for Peripheral {
             properties
                 .local_name
                 .clone()
-                .unwrap_or("(unknown)".to_string()),
+                .unwrap_or_else(|| "(unknown)".to_string()),
             connected
         )
     }
@@ -419,7 +421,7 @@ impl Debug for Peripheral {
 
 impl ApiPeripheral for Peripheral {
     fn address(&self) -> BDAddr {
-        self.address.clone()
+        self.address
     }
 
     fn properties(&self) -> PeripheralProperties {
@@ -513,14 +515,14 @@ impl ApiPeripheral for Peripheral {
         Ok(self
             .proxy_for(&characteristic)
             .map(|p| p.write_value(Vec::from(data), options))
-            .ok_or(Error::NotSupported("write".to_string()))??)
+            .ok_or_else(|| Error::NotSupported("write".to_string()))??)
     }
 
     fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
         Ok(self
             .proxy_for(&characteristic)
             .map(|p| p.read_value(HashMap::new()))
-            .ok_or(Error::NotSupported("read".to_string()))??)
+            .ok_or_else(|| Error::NotSupported("read".to_string()))??)
     }
 
     // Is this looking for a characteristic with a descriptor? or a service with a characteristic?
@@ -550,14 +552,14 @@ impl ApiPeripheral for Peripheral {
     fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
         Ok(self
             .proxy_for(characteristic)
-            .ok_or(Error::NotSupported("subscribe".to_string()))?
+            .ok_or_else(|| Error::NotSupported("subscribe".to_string()))?
             .start_notify()?)
     }
 
     fn unsubscribe(&self, _characteristic: &Characteristic) -> Result<()> {
         Ok(self
             .proxy_for(_characteristic)
-            .ok_or(Error::NotSupported("unsubscribe".to_string()))?
+            .ok_or_else(|| Error::NotSupported("unsubscribe".to_string()))?
             .stop_notify()?)
     }
 

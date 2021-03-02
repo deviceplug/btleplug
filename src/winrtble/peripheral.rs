@@ -207,7 +207,7 @@ impl Debug for Peripheral {
 impl ApiPeripheral for Peripheral {
     /// Returns the address of the peripheral.
     fn address(&self) -> BDAddr {
-        self.address.clone()
+        self.address
     }
 
     /// Returns the set of properties associated with the peripheral. These may be updated over time
@@ -235,13 +235,13 @@ impl ApiPeripheral for Peripheral {
     fn connect(&self) -> Result<()> {
         let connected = self.connected.clone();
         let adapter_clone = self.adapter.clone();
-        let address_clone = self.address.clone();
+        let address = self.address;
         let device = BLEDevice::new(
             self.address,
             Box::new(move |is_connected| {
                 connected.store(is_connected, Ordering::Relaxed);
                 if !is_connected {
-                    adapter_clone.emit(CentralEvent::DeviceDisconnected(address_clone));
+                    adapter_clone.emit(CentralEvent::DeviceDisconnected(address));
                 }
             }),
         )?;

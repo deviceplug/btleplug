@@ -47,7 +47,7 @@ impl PartialOrd for Handle {
         if self.handle > other.handle {
             return Some(std::cmp::Ordering::Greater);
         }
-        return None;
+        None
     }
 }
 impl Ord for Handle {

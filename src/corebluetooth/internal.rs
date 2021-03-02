@@ -75,7 +75,7 @@ impl CBCharacteristic {
 
     fn form_flags(characteristic: *mut Object) -> CharPropFlags {
         let flags = cb::characteristic_properties(characteristic);
-        let mut v = CharPropFlags::new();
+        let mut v = CharPropFlags::default();
         if (flags & cb::CHARACTERISTICPROPERTY_BROADCAST) != 0 {
             v |= CharPropFlags::BROADCAST;
         }

@@ -274,13 +274,7 @@ impl ApiPeripheral for Peripheral {
                 let uuid = utils::to_uuid(&characteristic.uuid().unwrap());
                 let properties =
                     utils::to_char_props(&characteristic.characteristic_properties().unwrap());
-                let chara = Characteristic {
-                    uuid,
-                    start_handle: 0,
-                    end_handle: 0,
-                    value_handle: 0,
-                    properties,
-                };
+                let chara = Characteristic { uuid, properties };
                 let charas_mtx = Arc::clone(&self.characteristics);
                 let mut charas = charas_mtx.lock().unwrap();
                 charas.insert(chara.clone());

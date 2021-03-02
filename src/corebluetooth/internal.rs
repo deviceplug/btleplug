@@ -184,10 +184,6 @@ impl CBPeripheral {
             let mut char_set = BTreeSet::new();
             for (&uuid, c) in &self.characteristics {
                 let char = Characteristic {
-                    // We can't get handles on macOS, just set them to 0.
-                    start_handle: 0,
-                    end_handle: 0,
-                    value_handle: 0,
                     uuid,
                     properties: c.properties,
                 };

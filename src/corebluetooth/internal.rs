@@ -441,20 +441,18 @@ impl CoreBluetoothInternal {
                 // we're trying to do a read, we'll have a future we can
                 // fulfill. Otherwise, just treat the returned value as a
                 // notification and use the event system.
-                if c.read_future_state.len() > 0 {
+                if !c.read_future_state.is_empty() {
                     let state = c.read_future_state.pop_back().unwrap();
                     state
                         .lock()
                         .unwrap()
                         .set_reply(CoreBluetoothReply::ReadResult(data_clone));
-                } else {
-                    if let Err(e) = p
-                        .event_sender
-                        .send(CBPeripheralEvent::Notification(characteristic_uuid, data))
-                        .await
-                    {
-                        error!("Error sending notification event: {}", e);
-                    }
+                } else if let Err(e) = p
+                    .event_sender
+                    .send(CBPeripheralEvent::Notification(characteristic_uuid, data))
+                    .await
+                {
+                    error!("Error sending notification event: {}", e);
                 }
             }
         }

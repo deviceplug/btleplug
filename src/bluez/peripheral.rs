@@ -39,10 +39,12 @@ impl Peripheral {
             .iter()
             .find(|info| info.uuid == characteristic.uuid)
             .cloned()
-            .ok_or(Error::Other(format!(
-                "Characteristic with UUID {} not found.",
-                characteristic.uuid
-            )))
+            .ok_or_else(|| {
+                Error::Other(format!(
+                    "Characteristic with UUID {} not found.",
+                    characteristic.uuid
+                ))
+            })
     }
 
     async fn device_info(&self) -> Result<DeviceInfo> {
@@ -165,8 +167,7 @@ fn value_notification(
             let uuid = characteristics
                 .iter()
                 .find(|characteristic| characteristic.id == id)?
-                .uuid
-                .into();
+                .uuid;
             Some(ValueNotification {
                 uuid,
                 handle: None,
@@ -204,7 +205,7 @@ impl From<bluez_async::AddressType> for AddressType {
 impl From<&CharacteristicInfo> for Characteristic {
     fn from(characteristic: &CharacteristicInfo) -> Self {
         Characteristic {
-            uuid: characteristic.uuid.into(),
+            uuid: characteristic.uuid,
             properties: characteristic.flags.into(),
         }
     }

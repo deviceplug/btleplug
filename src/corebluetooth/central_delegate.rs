@@ -150,14 +150,12 @@ pub mod CentralDelegate {
 
     pub fn delegate_drop_channel(delegate: *mut Object) {
         unsafe {
-            let _ = Box::from_raw(
-                *(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR)
-                    as *mut Sender<CentralDelegateEvent>,
-            );
+            let _ = Box::from_raw(*(&*delegate).get_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR)
+                as *mut Sender<CentralDelegateEvent>);
         }
     }
 
-    const DELEGATE_SENDER_IVAR: &'static str = "_sender";
+    const DELEGATE_SENDER_IVAR: &str = "_sender";
 
     fn delegate_class() -> &'static Class {
         trace!("delegate_class");
@@ -239,7 +237,7 @@ pub mod CentralDelegate {
 
     fn delegate_get_sender_clone(delegate: &mut Object) -> Sender<CentralDelegateEvent> {
         unsafe {
-            (*(*(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR)
+            (*(*(&*delegate).get_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR)
                 as *mut Sender<CentralDelegateEvent>))
                 .clone()
         }

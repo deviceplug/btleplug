@@ -62,7 +62,7 @@ impl Peripheral {
             // MacOS, so we make it up for now. This sucks.
             address: uuid_to_bdaddr(&uuid.to_string()),
             address_type: AddressType::Random,
-            local_name: local_name,
+            local_name,
             tx_power_level: None,
             manufacturer_data: HashMap::new(),
             service_data: HashMap::new(),

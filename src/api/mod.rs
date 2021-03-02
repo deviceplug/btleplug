@@ -174,8 +174,8 @@ bitflags! {
     }
 }
 
-impl CharPropFlags {
-    pub fn new() -> Self {
+impl Default for CharPropFlags {
+    fn default() -> Self {
         Self { bits: 0 }
     }
 }

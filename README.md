@@ -1,6 +1,7 @@
 # btleplug
 
 [![Crates.io Version](https://img.shields.io/crates/v/btleplug)](https://crates.io/crates/btleplug)
+[![docs.rs page](https://docs.rs/btleplug/badge.svg)](https://docs.rs/btleplug)
 [![Crates.io Downloads](https://img.shields.io/crates/d/btleplug)](https://crates.io/crates/btleplug)
 [![Crates.io License](https://img.shields.io/crates/l/btleplug)](https://crates.io/crates/btleplug)
 

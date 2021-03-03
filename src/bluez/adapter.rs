@@ -3,7 +3,7 @@ use crate::api::{BDAddr, Central, CentralEvent};
 use crate::{Error, Result};
 use async_trait::async_trait;
 use bluez_async::{AdapterId, BluetoothError, BluetoothEvent, BluetoothSession, DeviceEvent};
-use futures::stream::{Stream, StreamExt};
+use futures::stream::{self, Stream, StreamExt};
 use std::pin::Pin;
 
 #[derive(Clone, Debug)]
@@ -23,11 +23,23 @@ impl Central for Adapter {
     type Peripheral = Peripheral;
 
     async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent>>>> {
+        // There's a race between getting this event stream and getting the current set of devices.
+        // Get the stream first, on the basis that it's better to have a duplicate DeviceDiscovered
+        // event than to miss one. It's unlikely to happen in any case.
         let events = self.session.event_stream().await?;
+
+        // Synthesise `DeviceDiscovered' events for existing peripherals.
+        let devices = self.session.get_devices().await?;
+        let initial_events = stream::iter(
+            devices
+                .into_iter()
+                .map(|device| CentralEvent::DeviceDiscovered(BDAddr::from(&device.mac_address))),
+        );
+
         let session = self.session.clone();
-        Ok(Box::pin(events.filter_map(move |event| {
-            central_event(event, session.clone())
-        })))
+        let events = events.filter_map(move |event| central_event(event, session.clone()));
+
+        Ok(Box::pin(initial_events.chain(events)))
     }
 
     async fn start_scan(&self) -> Result<()> {

@@ -84,10 +84,6 @@ impl Adapter {
             sender: adapter_sender,
         })
     }
-
-    pub fn emit(&self, event: CentralEvent) {
-        self.manager.emit(event)
-    }
 }
 
 #[async_trait]

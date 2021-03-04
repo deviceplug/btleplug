@@ -258,7 +258,7 @@ pub enum CentralEvent {
 pub trait Central: Send + Sync + Clone {
     type Peripheral: Peripheral;
 
-    /// Retreive a stream of `CentralEvent`s. This stream will receive notifications when events
+    /// Retrieve a stream of `CentralEvent`s. This stream will receive notifications when events
     /// occur for this Central module. See [`CentralEvent`](enum.CentralEvent.html) for the full set
     /// of possible events.
     async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent>>>>;
@@ -278,4 +278,11 @@ pub trait Central: Send + Sync + Clone {
     /// Returns a particular [`Peripheral`](trait.Peripheral.html) by its address if it has been
     /// discovered.
     async fn peripheral(&self, address: BDAddr) -> Result<Self::Peripheral>;
+}
+
+#[async_trait]
+pub trait Manager {
+    type Adapter: Central;
+
+    async fn adapters(&self) -> Result<Vec<Self::Adapter>>;
 }

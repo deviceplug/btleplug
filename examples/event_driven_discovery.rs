@@ -1,4 +1,4 @@
-use btleplug::api::{bleuuid::BleUuid, Central, CentralEvent};
+use btleplug::api::{bleuuid::BleUuid, Central, CentralEvent, Manager as _};
 use btleplug::platform::{Adapter, Manager};
 use futures::stream::StreamExt;
 use std::error::Error;

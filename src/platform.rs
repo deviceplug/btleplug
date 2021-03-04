@@ -11,5 +11,5 @@ use static_assertions::assert_impl_all;
 // Ensure that the exported types implement all the expected traits.
 // TODO: Add `Debug`.
 assert_impl_all!(Adapter: Central, Clone, Send, Sized, Sync);
-assert_impl_all!(Manager: Clone, Send, Sized, Sync);
+assert_impl_all!(Manager: api::Manager, Clone, Send, Sized, Sync);
 assert_impl_all!(Peripheral: api::Peripheral, Clone, Send, Sized, Sync);

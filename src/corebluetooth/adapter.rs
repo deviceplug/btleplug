@@ -16,14 +16,14 @@ pub struct Adapter {
     sender: Sender<CoreBluetoothMessage>,
 }
 
-pub fn uuid_to_bdaddr(uuid: &String) -> BDAddr {
+pub(crate) fn uuid_to_bdaddr(uuid: &String) -> BDAddr {
     BDAddr {
         address: uuid.as_bytes()[0..6].try_into().unwrap(),
     }
 }
 
 impl Adapter {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let (sender, mut receiver) = mpsc::channel(256);
         let adapter_sender = run_corebluetooth_thread(sender);
         // Since init currently blocked until the state update, we know the

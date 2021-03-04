@@ -49,7 +49,7 @@ pub struct Peripheral {
 }
 
 impl Peripheral {
-    pub fn new(adapter: AdapterManager<Self>, address: BDAddr) -> Self {
+    pub(crate) fn new(adapter: AdapterManager<Self>, address: BDAddr) -> Self {
         let device = Arc::new(Mutex::new(None));
         let mut properties = PeripheralProperties::default();
         properties.address = address;
@@ -70,7 +70,7 @@ impl Peripheral {
         }
     }
 
-    pub fn update_properties(&self, args: &BluetoothLEAdvertisementReceivedEventArgs) {
+    pub(crate) fn update_properties(&self, args: &BluetoothLEAdvertisementReceivedEventArgs) {
         let mut properties = self.properties.lock().unwrap();
         let advertisement = args.advertisement().unwrap();
 

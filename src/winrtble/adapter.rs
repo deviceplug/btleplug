@@ -25,7 +25,7 @@ pub struct Adapter {
 }
 
 impl Adapter {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let watcher = Arc::new(Mutex::new(BLEWatcher::new()));
         let manager = AdapterManager::default();
         Adapter { watcher, manager }

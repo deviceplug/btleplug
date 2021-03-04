@@ -20,7 +20,7 @@
 //! An example of how to use the library to control some BLE smart lights:
 //!
 //! ```rust,no_run
-//! use btleplug::api::{bleuuid::uuid_from_u16, Central, Peripheral as _, WriteType};
+//! use btleplug::api::{bleuuid::uuid_from_u16, Central, Manager as _, Peripheral as _, WriteType};
 //! use btleplug::platform::{Adapter, Manager, Peripheral};
 //! use rand::{Rng, thread_rng};
 //! use std::error::Error;

@@ -46,7 +46,7 @@ pub struct Peripheral {
 }
 
 impl Peripheral {
-    pub fn new(
+    pub(crate) fn new(
         uuid: Uuid,
         local_name: Option<String>,
         manager: AdapterManager<Self>,

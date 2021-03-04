@@ -1,5 +1,6 @@
 use super::adapter::Adapter;
-use crate::Result;
+use crate::{api, Result};
+use async_trait::async_trait;
 use bluez_async::BluetoothSession;
 
 #[derive(Clone, Debug)]
@@ -12,8 +13,13 @@ impl Manager {
         let (_, session) = BluetoothSession::new().await?;
         Ok(Self { session })
     }
+}
 
-    pub async fn adapters(&self) -> Result<Vec<Adapter>> {
+#[async_trait]
+impl api::Manager for Manager {
+    type Adapter = Adapter;
+
+    async fn adapters(&self) -> Result<Vec<Adapter>> {
         let adapters = self.session.get_adapters().await?;
         Ok(adapters
             .into_iter()

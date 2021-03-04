@@ -12,8 +12,8 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use super::{adapter::Adapter, bindings};
-use crate::Result;
-
+use crate::{api, Result};
+use async_trait::async_trait;
 use bindings::windows::devices::radios::{Radio, RadioKind};
 
 #[derive(Clone, Debug)]
@@ -23,10 +23,16 @@ impl Manager {
     pub async fn new() -> Result<Self> {
         Ok(Self {})
     }
+}
 
-    pub async fn adapters(&self) -> Result<Vec<Adapter>> {
+#[async_trait]
+impl api::Manager for Manager {
+    type Adapter = Adapter;
+
+    async fn adapters(&self) -> Result<Vec<Adapter>> {
         let mut result: Vec<Adapter> = vec![];
-        let radios = Radio::get_radios_async().unwrap().await.unwrap();
+        let operation = Radio::get_radios_async().unwrap();
+        let radios = operation.await.unwrap();
 
         for radio in &radios {
             let kind = radio.kind().unwrap();

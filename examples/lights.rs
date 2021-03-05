@@ -1,6 +1,3 @@
-extern crate btleplug;
-extern crate rand;
-
 use btleplug::{
     api::{bleuuid::uuid_from_u16, Central, Peripheral, WriteType},
     Manager,

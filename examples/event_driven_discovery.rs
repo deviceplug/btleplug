@@ -1,6 +1,3 @@
-extern crate btleplug;
-extern crate rand;
-
 use btleplug::api::{bleuuid::BleUuid, Central, CentralEvent};
 use btleplug::{Adapter, Manager};
 

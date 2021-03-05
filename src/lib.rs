@@ -78,13 +78,13 @@ use std::time::Duration;
 
 pub mod api;
 #[cfg(target_os = "linux")]
-pub mod bluez;
+mod bluez;
 mod common;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-pub mod corebluetooth;
+mod corebluetooth;
 pub mod platform;
 #[cfg(target_os = "windows")]
-pub mod winrtble;
+mod winrtble;
 
 #[derive(Debug, thiserror::Error, Clone)]
 pub enum Error {

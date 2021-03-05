@@ -1,5 +1,5 @@
 use btleplug::api::{bleuuid::BleUuid, Central, CentralEvent};
-use btleplug::{Adapter, Manager};
+use btleplug::platform::{Adapter, Manager};
 
 fn get_central(manager: &Manager) -> Adapter {
     let adapters = manager.adapters().unwrap();

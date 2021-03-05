@@ -23,19 +23,11 @@
 //! use std::thread;
 //! use std::time::Duration;
 //! use rand::{Rng, thread_rng};
-//! #[cfg(target_os = "linux")]
-//! use btleplug::bluez::{adapter::Adapter, manager::Manager};
-//! #[cfg(target_os = "windows")]
-//! use btleplug::winrtble::{adapter::Adapter, manager::Manager};
-//! #[cfg(target_os = "macos")]
-//! use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
 //! use btleplug::api::{bleuuid::uuid_from_u16, Central, Peripheral, WriteType};
+//! use btleplug::platform::{Adapter, Manager};
 //! use uuid::Uuid;
 //!
 //! const LIGHT_CHARACTERISTIC_UUID: Uuid = uuid_from_u16(0xFFE9);
-//!
-//! // adapter retreival works differently depending on your platform right now.
-//! // API needs to be aligned.
 //!
 //! pub fn main() {
 //!     let manager = Manager::new().unwrap();
@@ -90,15 +82,9 @@ pub mod bluez;
 mod common;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod corebluetooth;
+pub mod platform;
 #[cfg(target_os = "windows")]
 pub mod winrtble;
-
-#[cfg(target_os = "linux")]
-pub use crate::bluez::{adapter::Adapter, manager::Manager};
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-pub use crate::corebluetooth::{adapter::Adapter, manager::Manager};
-#[cfg(target_os = "windows")]
-pub use crate::winrtble::{adapter::Adapter, manager::Manager};
 
 #[derive(Debug, thiserror::Error, Clone)]
 pub enum Error {

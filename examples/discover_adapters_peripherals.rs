@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use btleplug::{
     api::{Central, Peripheral},
-    Adapter, Manager,
+    platform::{Adapter, Manager},
 };
 
 #[cfg(target_os = "linux")]

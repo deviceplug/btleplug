@@ -12,8 +12,7 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use super::{adapter::Adapter, bindings};
-#[allow(unused_imports)]
-use crate::{Error, Result};
+use crate::Result;
 
 use bindings::windows::devices::radios::{Radio, RadioKind};
 

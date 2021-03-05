@@ -13,7 +13,7 @@
 
 // mod acl_stream;
 // mod dbus;
-mod peripheral;
+pub mod peripheral;
 
 use super::{
     bluez_dbus::adapter::OrgBluezAdapter1, bluez_dbus::device::OrgBluezDevice1Properties,

@@ -64,7 +64,7 @@ pub struct Peripheral {
 }
 
 impl Peripheral {
-    pub fn new(
+    pub(crate) fn new(
         adapter: AdapterManager<Self>,
         connection: Arc<SyncConnection>,
         path: &str,
@@ -92,7 +92,7 @@ impl Peripheral {
         }
     }
 
-    pub fn properties_changed(
+    pub(crate) fn properties_changed(
         &self,
         args: PropertiesPropertiesChanged,
         _connection: &SyncConnection,
@@ -145,7 +145,7 @@ impl Peripheral {
         true
     }
 
-    pub fn listen(&self, listener: &SyncConnection) -> Result<()> {
+    pub(crate) fn listen(&self, listener: &SyncConnection) -> Result<()> {
         let peripheral = self.clone();
         let mut rule = PropertiesPropertiesChanged::match_rule(None, None);
         // For some silly lifetime reasons, we need to assign path separately...
@@ -159,7 +159,7 @@ impl Peripheral {
         Ok(())
     }
 
-    pub fn stop_listening(&self, listener: &SyncConnection) -> Result<()> {
+    pub(crate) fn stop_listening(&self, listener: &SyncConnection) -> Result<()> {
         trace!("Stop listening for events");
         let mut token = self.listen_token.lock().unwrap();
         if token.is_some() {
@@ -170,7 +170,12 @@ impl Peripheral {
         Ok(())
     }
 
-    pub fn add_attribute(&self, path: &str, uuid: Uuid, properties: CharPropFlags) -> Result<()> {
+    pub(crate) fn add_attribute(
+        &self,
+        path: &str,
+        uuid: Uuid,
+        properties: CharPropFlags,
+    ) -> Result<()> {
         trace!(
             "Adding attribute {} ({:?}) under {}",
             uuid,
@@ -236,7 +241,7 @@ impl Peripheral {
         Ok(())
     }
 
-    pub fn update_properties(&self, args: OrgBluezDevice1Properties) {
+    pub(crate) fn update_properties(&self, args: OrgBluezDevice1Properties) {
         trace!("Updating peripheral properties");
         let mut properties = self.properties.lock().unwrap();
         let mut emit_updated = false;
@@ -363,12 +368,15 @@ impl Peripheral {
         }
     }
 
-    pub fn proxy(&self) -> Proxy<&SyncConnection> {
+    pub(crate) fn proxy(&self) -> Proxy<&SyncConnection> {
         self.connection
             .with_proxy(BLUEZ_DEST, &self.path, DEFAULT_TIMEOUT)
     }
 
-    pub fn proxy_for(&self, characteristic: &Characteristic) -> Option<Proxy<&SyncConnection>> {
+    pub(crate) fn proxy_for(
+        &self,
+        characteristic: &Characteristic,
+    ) -> Option<Proxy<&SyncConnection>> {
         let map = self.attributes_map.lock().unwrap();
         map.get(&characteristic.value_handle).map(|(path, _h, _c)| {
             self.connection

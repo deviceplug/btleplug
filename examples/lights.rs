@@ -1,6 +1,6 @@
 use btleplug::{
     api::{bleuuid::uuid_from_u16, Central, Peripheral, WriteType},
-    Manager,
+    platform::Manager,
 };
 use rand::{thread_rng, Rng};
 use std::thread;

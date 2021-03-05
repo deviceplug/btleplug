@@ -16,7 +16,7 @@ use crate::Result;
 
 use bindings::windows::devices::radios::{Radio, RadioKind};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Manager {}
 
 impl Manager {

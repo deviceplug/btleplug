@@ -19,6 +19,7 @@ use std::sync::Arc;
 
 /// This struct is the interface into BlueZ. It can be used to list, manage, and connect to bluetooth
 /// adapters.
+#[derive(Clone)]
 pub struct Manager {
     dbus_conn: Arc<SyncConnection>,
 }

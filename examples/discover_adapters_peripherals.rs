@@ -1,8 +1,4 @@
-#[allow(unused_imports)]
-use rand::{thread_rng, Rng};
 use simple_logger::SimpleLogger;
-#[allow(dead_code)]
-#[allow(unused_imports)]
 use std::thread;
 use std::time::Duration;
 

@@ -201,7 +201,7 @@ impl Adapter {
         );
     }
 
-    pub fn proxy(&self) -> Proxy<&SyncConnection> {
+    pub(crate) fn proxy(&self) -> Proxy<&SyncConnection> {
         self.connection
             .with_proxy(BLUEZ_DEST, &self.path, DEFAULT_TIMEOUT)
     }

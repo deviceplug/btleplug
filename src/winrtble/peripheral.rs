@@ -89,17 +89,16 @@ impl Peripheral {
                     let manufacturer_id = d.company_id().unwrap();
                     let data = utils::to_vec(&d.data().unwrap());
 
-                    // Emit event of newly received advertisement
-                    self.adapter
-                        .emit(CentralEvent::ManufacturerDataAdvertisement {
-                            address: self.address,
-                            manufacturer_id,
-                            data: data.clone(),
-                        });
-
                     (manufacturer_id, data)
                 })
                 .collect();
+
+            // Emit event of newly received advertisement
+            self.adapter
+                .emit(CentralEvent::ManufacturerDataAdvertisement {
+                    address: self.address,
+                    manufacturer_data: properties.manufacturer_data.clone(),
+                });
         }
 
         // The Windows Runtime API (as of 19041) does not directly expose Service Data as a friendly API (like Manufacturer Data above)
@@ -110,36 +109,32 @@ impl Peripheral {
                 .filter_map(|d| {
                     let data = utils::to_vec(&d.data().unwrap());
 
-                    let service_data = match d.data_type().unwrap() {
+                    match d.data_type().unwrap() {
                         advertisement_data_type::SERVICE_DATA_16_BIT_UUID => {
                             let (uuid, data) = data.split_at(2);
                             let uuid = uuid_from_u16(u16::from_le_bytes(uuid.try_into().unwrap()));
-                            (uuid, data.to_owned())
+                            Some((uuid, data.to_owned()))
                         }
                         advertisement_data_type::SERVICE_DATA_32_BIT_UUID => {
                             let (uuid, data) = data.split_at(4);
                             let uuid = uuid_from_u32(u32::from_le_bytes(uuid.try_into().unwrap()));
-                            (uuid, data.to_owned())
+                            Some((uuid, data.to_owned()))
                         }
                         advertisement_data_type::SERVICE_DATA_128_BIT_UUID => {
                             let (uuid, data) = data.split_at(16);
                             let uuid = Uuid::from_slice(uuid).unwrap();
-                            (uuid, data.to_owned())
+                            Some((uuid, data.to_owned()))
                         }
-                        _ => return None,
-                    };
-
-                    // Emit event of newly received advertisement
-                    let (uuid, data) = service_data;
-                    self.adapter.emit(CentralEvent::ServiceDataAdvertisement {
-                        address: self.address,
-                        service: uuid,
-                        data: data.clone(),
-                    });
-
-                    Some((uuid, data))
+                        _ => None,
+                    }
                 })
                 .collect();
+
+            // Emit event of newly received advertisement
+            self.adapter.emit(CentralEvent::ServiceDataAdvertisement {
+                address: self.address,
+                service_data: properties.service_data.clone(),
+            });
         }
 
         if let Ok(services) = advertisement.service_uuids() {

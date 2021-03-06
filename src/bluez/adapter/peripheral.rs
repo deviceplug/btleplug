@@ -294,12 +294,6 @@ impl Peripheral {
                 .iter()
                 .filter_map(|(&k, v)| {
                     if let Some(v) = cast::<Vec<u8>>(&v.0) {
-                        self.adapter
-                            .emit(CentralEvent::ManufacturerDataAdvertisement {
-                                address: self.address(),
-                                manufacturer_id: k,
-                                data: v.clone(),
-                            });
                         Some((k, v.to_owned()))
                     } else {
                         warn!("Manufacturer data had wrong type: {:?}", &v.0);
@@ -307,6 +301,11 @@ impl Peripheral {
                     }
                 })
                 .collect();
+            self.adapter
+                .emit(CentralEvent::ManufacturerDataAdvertisement {
+                    address: self.address(),
+                    manufacturer_data: properties.manufacturer_data.clone(),
+                });
         }
 
         if let Some(service_data) = args.service_data() {
@@ -315,11 +314,6 @@ impl Peripheral {
                 .filter_map(|(service, data)| {
                     let service: Uuid = service.parse().unwrap();
                     if let Some(data) = cast::<Vec<u8>>(&data.0) {
-                        self.adapter.emit(CentralEvent::ServiceDataAdvertisement {
-                            address: self.address(),
-                            service,
-                            data: data.clone(),
-                        });
                         Some((service, data.to_owned()))
                     } else {
                         warn!("Service data had wrong type: {:?}", &data.0);
@@ -327,6 +321,10 @@ impl Peripheral {
                     }
                 })
                 .collect();
+            self.adapter.emit(CentralEvent::ServiceDataAdvertisement {
+                address: self.address(),
+                service_data: properties.service_data.clone(),
+            });
         }
 
         if let Some(services) = args.uuids() {

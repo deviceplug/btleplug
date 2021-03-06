@@ -330,14 +330,12 @@ pub enum CentralEvent {
     /// Emitted when a Manufacturer Data advertisement has been received from a device
     ManufacturerDataAdvertisement {
         address: BDAddr,
-        manufacturer_id: u16,
-        data: Vec<u8>,
+        manufacturer_data: HashMap<u16, Vec<u8>>,
     },
     /// Emitted when a Service Data advertisement has been received from a device
     ServiceDataAdvertisement {
         address: BDAddr,
-        service: Uuid,
-        data: Vec<u8>,
+        service_data: HashMap<Uuid, Vec<u8>>,
     },
     /// Emitted when the advertised services for a device has been updated
     ServicesAdvertisement {

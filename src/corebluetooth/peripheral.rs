@@ -93,21 +93,17 @@ impl Peripheral {
                             .insert(manufacturer_id, data.clone());
                         m_clone.emit(CentralEvent::ManufacturerDataAdvertisement {
                             address: properties.address,
-                            manufacturer_id,
-                            data,
+                            manufacturer_data: properties.manufacturer_data.clone(),
                         });
                     }
                     Some(CBPeripheralEvent::ServiceData(service_data)) => {
                         let mut properties = p_clone.lock().unwrap();
                         properties.service_data.extend(service_data.clone());
 
-                        for (service, data) in service_data.into_iter() {
-                            m_clone.emit(CentralEvent::ServiceDataAdvertisement {
-                                address: properties.address,
-                                service,
-                                data,
-                            });
-                        }
+                        m_clone.emit(CentralEvent::ServiceDataAdvertisement {
+                            address: properties.address,
+                            service_data,
+                        });
                     }
                     Some(CBPeripheralEvent::Services(services)) => {
                         let mut properties = p_clone.lock().unwrap();

@@ -54,24 +54,20 @@ pub fn main() {
             }
             CentralEvent::ManufacturerDataAdvertisement {
                 address,
-                manufacturer_id,
-                data,
+                manufacturer_data,
             } => {
                 println!(
-                    "ManufacturerDataAdvertisement: {:?}, {}, {:?}",
-                    address, manufacturer_id, data
+                    "ManufacturerDataAdvertisement: {:?}, {:?}",
+                    address, manufacturer_data
                 );
             }
             CentralEvent::ServiceDataAdvertisement {
                 address,
-                service,
-                data,
+                service_data,
             } => {
                 println!(
-                    "ServiceDataAdvertisement: {:?}, {}, {:?}",
-                    address,
-                    service.to_short_string(),
-                    data
+                    "ServiceDataAdvertisement: {:?}, {:?}",
+                    address, service_data
                 );
             }
             CentralEvent::ServicesAdvertisement { address, services } => {

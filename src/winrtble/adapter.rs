@@ -16,6 +16,7 @@ use crate::{
     api::{AdapterManager, BDAddr, Central, CentralEvent},
     Result,
 };
+use std::convert::TryInto;
 use std::sync::{mpsc::Receiver, Arc, Mutex};
 
 #[derive(Clone)]
@@ -44,7 +45,7 @@ impl Central for Adapter {
         let manager = self.manager.clone();
         watcher.start(Box::new(move |args| {
             let bluetooth_address = args.bluetooth_address().unwrap();
-            let address = bluetooth_address.into();
+            let address = bluetooth_address.try_into().unwrap();
             let peripheral = manager
                 .peripheral(address)
                 .unwrap_or_else(|| Peripheral::new(manager.clone(), address));

@@ -118,12 +118,6 @@ impl From<ParseBDAddrError> for Error {
     }
 }
 
-impl From<::uuid::Error> for Error {
-    fn from(error: ::uuid::Error) -> Self {
-        Error::Other(format!("Error parsing UUID: {}", error))
-    }
-}
-
 impl FromStr for BDAddr {
     type Err = ParseBDAddrError;
 

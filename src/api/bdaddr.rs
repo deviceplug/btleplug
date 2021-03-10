@@ -136,11 +136,13 @@ impl BDAddr {
     pub fn into_inner(self) -> [u8; 6] {
         self.address
     }
+
     /// Check if this address is a randomly generated.
     pub fn is_random_static(&self) -> bool {
         self.address[5] & 0b11 == 0b11
     }
-    /// Parses a Bluetooth address colons `:` as delimiters.
+
+    /// Parses a Bluetooth address with colons `:` as delimiters.
     ///
     /// All hex-digits `[0-9a-fA-F]` are allowed.
     pub fn from_str_delim(s: &str) -> Result<Self, ParseBDAddrError> {
@@ -157,6 +159,7 @@ impl BDAddr {
             Err(ParseBDAddrError::IncorrectByteCount)
         }
     }
+
     /// Parses a Bluetooth address without delimiters.
     ///
     /// All hex-digits `[0-9a-fA-F]` are allowed.
@@ -174,6 +177,7 @@ impl BDAddr {
         }
         Ok(Self { address })
     }
+
     /// Writes the address without delimiters.
     pub fn write_no_delim(&self, f: &mut impl fmt::Write) -> fmt::Result {
         for b in &self.address {
@@ -181,6 +185,7 @@ impl BDAddr {
         }
         Ok(())
     }
+
     /// Create a `String` with the address with no delimiters.
     ///
     /// For the more common presentation with colons use the `to_string()`

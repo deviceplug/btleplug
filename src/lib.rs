@@ -103,6 +103,9 @@ pub enum Error {
     #[error("Timed out after {:?}", _0)]
     TimedOut(Duration),
 
+    #[error("Error parsing UUID: {0}")]
+    Uuid(#[from] uuid::Error),
+
     #[error("{}", _0)]
     Other(String),
 }

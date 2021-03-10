@@ -1,15 +1,12 @@
 //! Implementation of Bluetooth's MAC address.
 
-use std::fmt;
+use std::fmt::{self, Debug, Display, Formatter, LowerHex, UpperHex};
 use std::str::FromStr;
-use thiserror::Error;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde_cr as serde;
-
-use crate::Error;
 
 /// Stores the 6 byte address used to identify Bluetooth devices.
 #[cfg_attr(
@@ -18,27 +15,26 @@ use crate::Error;
     serde(crate = "serde_cr")
 )]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Default)]
-#[repr(C)]
 pub struct BDAddr {
-    address: [u8; 6usize],
+    address: [u8; 6],
 }
 
-#[derive(Debug, Error, Clone, PartialEq)]
+#[derive(Debug, thiserror::Error, Clone, PartialEq)]
 pub enum ParseBDAddrError {
     #[error("Bluetooth address has to be 6 bytes long")]
     IncorrectByteCount,
-    #[error("All digits in a Bluetooth address must be hex-digits [0-9a-fA-F]")]
-    InvalidDigit,
+    #[error("Invalid digit in address: {0}")]
+    InvalidDigit(#[from] std::num::ParseIntError),
 }
 
-impl fmt::Display for BDAddr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        <Self as fmt::LowerHex>::fmt(self, f)
+impl Display for BDAddr {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        <Self as UpperHex>::fmt(self, f)
     }
 }
 
-impl fmt::LowerHex for BDAddr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl LowerHex for BDAddr {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let a = &self.address;
         write!(
             f,
@@ -48,8 +44,8 @@ impl fmt::LowerHex for BDAddr {
     }
 }
 
-impl fmt::UpperHex for BDAddr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl UpperHex for BDAddr {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let a = &self.address;
         write!(
             f,
@@ -59,9 +55,9 @@ impl fmt::UpperHex for BDAddr {
     }
 }
 
-impl fmt::Debug for BDAddr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        <Self as fmt::Display>::fmt(self, f)
+impl Debug for BDAddr {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        <Self as Display>::fmt(self, f)
     }
 }
 
@@ -119,12 +115,6 @@ impl From<BDAddr> for u64 {
     }
 }
 
-impl From<ParseBDAddrError> for Error {
-    fn from(e: ParseBDAddrError) -> Self {
-        Error::Other(format!("ParseBDAddrError: {}", e))
-    }
-}
-
 impl FromStr for BDAddr {
     type Err = ParseBDAddrError;
 
@@ -142,11 +132,9 @@ impl FromStr for BDAddr {
 }
 
 impl BDAddr {
+    /// Destruct the address into the underlying array.
     pub fn into_inner(self) -> [u8; 6] {
         self.address
-    }
-    pub fn bytes(&self) -> &[u8; 6] {
-        &self.address
     }
     /// Check if this address is a randomly generated.
     pub fn is_random_static(&self) -> bool {
@@ -158,9 +146,7 @@ impl BDAddr {
     pub fn from_str_delim(s: &str) -> Result<Self, ParseBDAddrError> {
         let bytes = s
             .split(':')
-            .map(|part: &str| {
-                u8::from_str_radix(part, 16).map_err(|_| ParseBDAddrError::InvalidDigit)
-            })
+            .map(|part: &str| u8::from_str_radix(part, 16).map_err(ParseBDAddrError::InvalidDigit))
             .collect::<Result<Vec<u8>, _>>()?;
 
         if bytes.len() == 6 {
@@ -178,19 +164,18 @@ impl BDAddr {
         if s.len() != 12 {
             return Err(ParseBDAddrError::IncorrectByteCount);
         }
-        if s.bytes().any(|b| !b.is_ascii_hexdigit()) {
-            return Err(ParseBDAddrError::InvalidDigit);
-        }
 
         let mut address = [0; 6];
-        for i in (0..12).step_by(2) {
-            let part = &s[i..i + 2];
-            address[i / 2] = u8::from_str_radix(part, 16).expect("Checked upfront");
+        let mut cur = s;
+        for byte in address.iter_mut() {
+            let (part, rest) = cur.split_at(2);
+            *byte = u8::from_str_radix(part, 16)?;
+            cur = rest;
         }
         Ok(Self { address })
     }
     /// Writes the address without delimiters.
-    pub fn write_flat(&self, f: &mut impl fmt::Write) -> fmt::Result {
+    pub fn write_no_delim(&self, f: &mut impl fmt::Write) -> fmt::Result {
         for b in &self.address {
             write!(f, "{:02x}", b)?;
         }
@@ -200,9 +185,9 @@ impl BDAddr {
     ///
     /// For the more common presentation with colons use the `to_string()`
     /// method.
-    pub fn to_string_flat(&self) -> String {
+    pub fn to_string_no_delim(&self) -> String {
         let mut s = String::with_capacity(12);
-        self.write_flat(&mut s)
+        self.write_no_delim(&mut s)
             .expect("A String-Writer never fails");
         s
     }
@@ -221,33 +206,27 @@ mod tests {
 
     #[test]
     fn parse_addr() {
-        let bytes = [0x2a, 0x00, 0xaa, 0xbb, 0xcc, 0xdd];
-        let values = vec![
-            ("2a:00:aa:bb:cc:dd", Ok(BDAddr { address: bytes })),
-            ("2a00AabbCcdd", Ok(BDAddr { address: bytes })),
-            ("2A:00:00", Err(ParseBDAddrError::IncorrectByteCount)),
-            ("2A:00:AA:BB:CC:ZZ", Err(ParseBDAddrError::InvalidDigit)),
-            ("2A00aABbcCZz", Err(ParseBDAddrError::InvalidDigit)),
-        ];
+        let addr = BDAddr::from([0x2a, 0x00, 0xaa, 0xbb, 0xcc, 0xdd]);
 
-        for (input, expected) in values {
-            println!("testing: {}", input);
-            let result: Result<BDAddr, _> = input.parse();
-            assert_eq!(result, expected);
-
-            if let Ok(addr) = result {
-                assert_eq!(bytes, addr.into_inner());
-            }
-        }
+        let result: Result<BDAddr, _> = "2a:00:aa:bb:cc:dd".parse();
+        assert_eq!(result, Ok(addr));
+        let result: Result<BDAddr, _> = "2a00AabbCcdd".parse();
+        assert_eq!(result, Ok(addr));
+        let result: Result<BDAddr, _> = "2A:00:00".parse();
+        assert_eq!(result, Err(ParseBDAddrError::IncorrectByteCount));
+        let result: Result<BDAddr, _> = "2A:00:AA:BB:CC:ZZ".parse();
+        assert!(matches!(result, Err(ParseBDAddrError::InvalidDigit(_))));
+        let result: Result<BDAddr, _> = "2A00aABbcCZz".parse();
+        assert!(matches!(result, Err(ParseBDAddrError::InvalidDigit(_))));
     }
 
     #[test]
     fn display_addr() {
-        assert_eq!(format!("{}", ADDR), "1f:2a:00:cc:22:f1");
-        assert_eq!(format!("{:?}", ADDR), "1f:2a:00:cc:22:f1");
+        assert_eq!(format!("{}", ADDR), "1F:2A:00:CC:22:F1");
+        assert_eq!(format!("{:?}", ADDR), "1F:2A:00:CC:22:F1");
         assert_eq!(format!("{:x}", ADDR), "1f:2a:00:cc:22:f1");
         assert_eq!(format!("{:X}", ADDR), "1F:2A:00:CC:22:F1");
-        assert_eq!(format!("{}", ADDR.to_string_flat()), "1f2a00cc22f1");
+        assert_eq!(format!("{}", ADDR.to_string_no_delim()), "1f2a00cc22f1");
     }
 
     #[test]

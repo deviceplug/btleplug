@@ -97,11 +97,17 @@ impl<'a> TryFrom<&'a [u8]> for BDAddr {
     }
 }
 
-impl From<u64> for BDAddr {
-    fn from(int: u64) -> Self {
+impl TryFrom<u64> for BDAddr {
+    type Error = ParseBDAddrError;
+
+    fn try_from(int: u64) -> Result<Self, Self::Error> {
         let slice = int.to_be_bytes(); // Reverse order to have MSB on index 0
-        Self {
-            address: slice[2..].try_into().unwrap(),
+        if slice[0..2] == [0, 0] {
+            Ok(Self {
+                address: slice[2..].try_into().unwrap(),
+            })
+        } else {
+            Err(ParseBDAddrError::IncorrectByteCount)
         }
     }
 }
@@ -235,7 +241,7 @@ mod tests {
 
     #[test]
     fn u64_to_addr() {
-        let hex_addr: BDAddr = HEX.into();
+        let hex_addr: BDAddr = HEX.try_into().unwrap();
         assert_eq!(hex_addr, ADDR);
 
         let hex_back: u64 = hex_addr.into();
@@ -243,11 +249,19 @@ mod tests {
     }
 
     #[test]
+    fn invalid_u64_to_addr() {
+        assert_eq!(
+            BDAddr::try_from(0x1122334455667788),
+            Err(ParseBDAddrError::IncorrectByteCount)
+        );
+    }
+
+    #[test]
     fn addr_to_u64() {
         let addr_as_hex: u64 = ADDR.into();
         assert_eq!(HEX, addr_as_hex);
 
-        let addr_back: BDAddr = addr_as_hex.into();
+        let addr_back: BDAddr = addr_as_hex.try_into().unwrap();
         assert_eq!(ADDR, addr_back);
     }
 }

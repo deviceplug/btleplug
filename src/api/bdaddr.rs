@@ -1,5 +1,6 @@
 //! Implementation of Bluetooth's MAC address.
 
+use std::convert::{TryFrom, TryInto};
 use std::fmt::{self, Debug, Display, Formatter, LowerHex, UpperHex};
 use std::str::FromStr;
 
@@ -84,26 +85,24 @@ impl From<[u8; 6]> for BDAddr {
     }
 }
 
-impl<'a> std::convert::TryFrom<&'a [u8]> for BDAddr {
+impl<'a> TryFrom<&'a [u8]> for BDAddr {
     type Error = ParseBDAddrError;
 
     fn try_from(slice: &'a [u8]) -> Result<Self, Self::Error> {
-        if slice.len() < 6 {
-            Err(ParseBDAddrError::IncorrectByteCount)
-        } else {
-            let mut cpy = [0; 6];
-            cpy.copy_from_slice(&slice[..6]);
-            Ok(cpy.into())
-        }
+        Ok(Self {
+            address: slice
+                .try_into()
+                .map_err(|_| ParseBDAddrError::IncorrectByteCount)?,
+        })
     }
 }
 
 impl From<u64> for BDAddr {
     fn from(int: u64) -> Self {
-        let mut cpy = [0; 6];
         let slice = int.to_be_bytes(); // Reverse order to have MSB on index 0
-        cpy.copy_from_slice(&slice[2..]);
-        cpy.into()
+        Self {
+            address: slice[2..].try_into().unwrap(),
+        }
     }
 }
 

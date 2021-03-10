@@ -148,7 +148,7 @@ impl BDAddr {
     pub fn from_str_delim(s: &str) -> Result<Self, ParseBDAddrError> {
         let bytes = s
             .split(':')
-            .map(|part: &str| u8::from_str_radix(part, 16).map_err(ParseBDAddrError::InvalidDigit))
+            .map(|part: &str| u8::from_str_radix(part, 16))
             .collect::<Result<Vec<u8>, _>>()?;
 
         if bytes.len() == 6 {

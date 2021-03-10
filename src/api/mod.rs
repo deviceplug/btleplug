@@ -15,7 +15,7 @@ mod adapter_manager;
 mod bdaddr;
 pub mod bleuuid;
 
-use crate::{Error, Result};
+use crate::Result;
 pub use adapter_manager::AdapterManager;
 use bitflags::bitflags;
 #[cfg(feature = "serde")]
@@ -25,11 +25,11 @@ use serde_cr as serde;
 use std::sync::mpsc::Receiver;
 use std::{
     collections::{BTreeSet, HashMap},
-    fmt::{self, Debug},
+    fmt::{self, Debug, Display, Formatter},
 };
 use uuid::Uuid;
 
-pub use self::bdaddr::BDAddr;
+pub use self::bdaddr::{BDAddr, ParseBDAddrError};
 
 #[cfg_attr(
     feature = "serde",
@@ -136,8 +136,8 @@ pub struct Characteristic {
     pub properties: CharPropFlags,
 }
 
-impl fmt::Display for Characteristic {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Display for Characteristic {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(
             f,
             "uuid: {:?}, char properties: {:?}",
@@ -310,11 +310,4 @@ pub trait Central: Send + Sync + Clone {
     /// Returns a particular [`Peripheral`](trait.Peripheral.html) by its address if it has been
     /// discovered.
     fn peripheral(&self, address: BDAddr) -> Option<Self::Peripheral>;
-}
-
-#[cfg(test)]
-mod tests {
-    // use super::*;
-
-    // No tests, yet.
 }

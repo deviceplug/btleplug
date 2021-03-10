@@ -73,6 +73,7 @@
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 extern crate cocoa;
 
+use crate::api::ParseBDAddrError;
 use std::result;
 use std::time::Duration;
 
@@ -105,6 +106,9 @@ pub enum Error {
 
     #[error("Error parsing UUID: {0}")]
     Uuid(#[from] uuid::Error),
+
+    #[error("Invalid Bluetooth address: {0}")]
+    InvalidBDAddr(#[from] ParseBDAddrError),
 
     #[error("{}", _0)]
     Other(String),

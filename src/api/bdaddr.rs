@@ -76,8 +76,8 @@ impl From<[u8; 6]> for BDAddr {
     ///
     /// ```
     /// # use btleplug::api::BDAddr;
-    /// let addr: BDAddr = [0x2a, 0xCC, 0x00, 0x34, 0xfa, 0x00].into();
-    /// assert_eq!("2a:cc:00:34:fa:00", addr.to_string());
+    /// let addr: BDAddr = [0x2A, 0xCC, 0x00, 0x34, 0xFA, 0x00].into();
+    /// assert_eq!("2A:CC:00:34:FA:00", addr.to_string());
     /// ```
     fn from(address: [u8; 6]) -> Self {
         Self { address }

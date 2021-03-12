@@ -6,11 +6,14 @@ fn main() {
         windows::devices::bluetooth::generic_attribute_profile::{
             GattCharacteristic,
             GattCharacteristicProperties,
+            GattCharacteristicsResult,
             GattClientCharacteristicConfigurationDescriptorValue,
             GattCommunicationStatus,
             GattDeviceService,
             GattDeviceServicesResult,
+            GattReadResult,
             GattValueChangedEventArgs,
+            GattWriteOption,
         },
         windows::devices::bluetooth::advertisement::*,
         windows::devices::bluetooth::{
@@ -21,9 +24,16 @@ fn main() {
             Radio,
             RadioKind
         },
+        windows::foundation::{
+            EventRegistrationToken,
+            IAsyncOperation,
+            TypedEventHandler
+        },
+        windows::foundation::collections::IVector,
         windows::storage::streams::{
             DataReader,
             DataWriter,
+            IBuffer,
         },
     );
 }

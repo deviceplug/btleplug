@@ -120,6 +120,26 @@ async fn central_event(event: BluetoothEvent, session: BluetoothSession) -> Opti
                 manufacturer_data,
             })
         }
+        BluetoothEvent::Device {
+            id,
+            event: DeviceEvent::ServiceData { service_data },
+        } => {
+            let device = session.get_device_info(&id).await.ok()?;
+            Some(CentralEvent::ServiceDataAdvertisement {
+                address: (&device.mac_address).into(),
+                service_data,
+            })
+        }
+        BluetoothEvent::Device {
+            id,
+            event: DeviceEvent::Services { services },
+        } => {
+            let device = session.get_device_info(&id).await.ok()?;
+            Some(CentralEvent::ServicesAdvertisement {
+                address: (&device.mac_address).into(),
+                services,
+            })
+        }
         _ => None,
     }
 }

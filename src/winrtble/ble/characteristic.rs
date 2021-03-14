@@ -38,9 +38,6 @@ pub struct BLECharacteristic {
     notify_token: Option<EventRegistrationToken>,
 }
 
-unsafe impl Send for BLECharacteristic {}
-unsafe impl Sync for BLECharacteristic {}
-
 impl BLECharacteristic {
     pub fn new(characteristic: GattCharacteristic) -> Self {
         BLECharacteristic {

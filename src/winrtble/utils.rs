@@ -12,10 +12,7 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use super::bindings;
-use crate::{
-    api::{BDAddr, CharPropFlags},
-    Error, Result,
-};
+use crate::{api::CharPropFlags, Error, Result};
 use bindings::windows::{
     devices::bluetooth::generic_attribute_profile::{
         GattCharacteristicProperties, GattCommunicationStatus,

@@ -81,11 +81,7 @@ impl Peripheral {
                     Some(CBPeripheralEvent::Notification(uuid, data)) => {
                         util::send_notification(
                             &ns_clone,
-                            &ValueNotification {
-                                uuid,
-                                handle: None,
-                                value: data,
-                            },
+                            &ValueNotification { uuid, value: data },
                         );
                     }
                     Some(CBPeripheralEvent::ManufacturerData(manufacturer_id, data)) => {

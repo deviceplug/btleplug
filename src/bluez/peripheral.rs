@@ -168,11 +168,7 @@ fn value_notification(
                 .iter()
                 .find(|characteristic| characteristic.id == id)?
                 .uuid;
-            Some(ValueNotification {
-                uuid,
-                handle: None,
-                value,
-            })
+            Some(ValueNotification { uuid, value })
         }
         _ => None,
     }

@@ -294,7 +294,7 @@ impl ApiPeripheral for Peripheral {
         write_type: WriteType,
     ) -> Result<()> {
         if let Some(ble_characteristic) = self.ble_characteristics.get(&characteristic.uuid) {
-            ble_characteristic.write_value(data, write_type)
+            ble_characteristic.write_value(data, write_type).await
         } else {
             Err(Error::NotSupported("write".into()))
         }
@@ -307,14 +307,16 @@ impl ApiPeripheral for Peripheral {
         {
             let notification_senders = self.notification_senders.clone();
             let uuid = characteristic.uuid;
-            ble_characteristic.subscribe(Box::new(move |value| {
-                let notification = ValueNotification {
-                    uuid: uuid,
-                    handle: None,
-                    value,
-                };
-                util::send_notification(&notification_senders, &notification);
-            }))
+            ble_characteristic
+                .subscribe(Box::new(move |value| {
+                    let notification = ValueNotification {
+                        uuid: uuid,
+                        handle: None,
+                        value,
+                    };
+                    util::send_notification(&notification_senders, &notification);
+                }))
+                .await
         } else {
             Err(Error::NotSupported("subscribe".into()))
         }
@@ -325,7 +327,7 @@ impl ApiPeripheral for Peripheral {
     async fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
         if let Some(mut ble_characteristic) = self.ble_characteristics.get_mut(&characteristic.uuid)
         {
-            ble_characteristic.unsubscribe()
+            ble_characteristic.unsubscribe().await
         } else {
             Err(Error::NotSupported("unsubscribe".into()))
         }
@@ -333,7 +335,7 @@ impl ApiPeripheral for Peripheral {
 
     async fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
         if let Some(ble_characteristic) = self.ble_characteristics.get(&characteristic.uuid) {
-            return ble_characteristic.read_value();
+            ble_characteristic.read_value().await
         } else {
             Err(Error::NotSupported("read".into()))
         }

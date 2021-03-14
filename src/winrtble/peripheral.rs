@@ -42,7 +42,7 @@ use bindings::windows::devices::bluetooth::advertisement::*;
 
 #[derive(Clone)]
 pub struct Peripheral {
-    device: Arc<Mutex<Option<BLEDevice>>>,
+    device: Arc<tokio::sync::Mutex<Option<BLEDevice>>>,
     adapter: AdapterManager<Self>,
     address: BDAddr,
     properties: Arc<Mutex<PeripheralProperties>>,
@@ -54,7 +54,7 @@ pub struct Peripheral {
 
 impl Peripheral {
     pub(crate) fn new(adapter: AdapterManager<Self>, address: BDAddr) -> Self {
-        let device = Arc::new(Mutex::new(None));
+        let device = Arc::new(tokio::sync::Mutex::new(None));
         let mut properties = PeripheralProperties::default();
         properties.address = address;
         let properties = Arc::new(Mutex::new(properties));
@@ -244,10 +244,11 @@ impl ApiPeripheral for Peripheral {
                     adapter_clone.emit(CentralEvent::DeviceDisconnected(address));
                 }
             }),
-        )?;
+        )
+        .await?;
 
-        device.connect()?;
-        let mut d = self.device.lock().unwrap();
+        device.connect().await?;
+        let mut d = self.device.lock().await;
         *d = Some(device);
         self.adapter
             .emit(CentralEvent::DeviceConnected(self.address));
@@ -256,8 +257,7 @@ impl ApiPeripheral for Peripheral {
 
     /// Terminates a connection to the device. This is a synchronous operation.
     async fn disconnect(&self) -> Result<()> {
-        let winrt_error = |e| Error::Other(format!("{:?}", e));
-        let mut device = self.device.lock().map_err(winrt_error)?;
+        let mut device = self.device.lock().await;
         *device = None;
         self.adapter
             .emit(CentralEvent::DeviceDisconnected(self.address));
@@ -266,10 +266,10 @@ impl ApiPeripheral for Peripheral {
 
     /// Discovers all characteristics for the device. This is a synchronous operation.
     async fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
-        let device = self.device.lock().unwrap();
+        let device = self.device.lock().await;
         if let Some(ref device) = *device {
             let mut characteristics_result = vec![];
-            let characteristics = device.discover_characteristics()?;
+            let characteristics = device.discover_characteristics().await?;
             for characteristic in characteristics {
                 let uuid = utils::to_uuid(&characteristic.uuid().unwrap());
                 let properties =

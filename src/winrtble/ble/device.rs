@@ -27,9 +27,6 @@ pub struct BLEDevice {
     connection_token: EventRegistrationToken,
 }
 
-unsafe impl Send for BLEDevice {}
-unsafe impl Sync for BLEDevice {}
-
 impl BLEDevice {
     pub async fn new(
         address: BDAddr,

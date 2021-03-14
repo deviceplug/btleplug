@@ -22,9 +22,6 @@ pub struct BLEWatcher {
     watcher: BluetoothLEAdvertisementWatcher,
 }
 
-unsafe impl Send for BLEWatcher {}
-unsafe impl Sync for BLEWatcher {}
-
 impl From<windows::Error> for Error {
     fn from(err: windows::Error) -> Error {
         Error::Other(format!("{:?}", err))

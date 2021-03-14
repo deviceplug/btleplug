@@ -81,10 +81,7 @@ impl AddressType {
 pub struct ValueNotification {
     /// UUID of the characteristic that fired the notification.
     pub uuid: Uuid,
-    /// The handle that has changed. Only valid on Linux, will be None on all
-    /// other platforms.
-    pub handle: Option<u16>,
-    /// The new value of the handle.
+    /// The new value of the characteristic.
     pub value: Vec<u8>,
 }
 

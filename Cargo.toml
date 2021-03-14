@@ -45,6 +45,7 @@ objc = "0.2.7"
 libc = "0.2.85"
 
 [target.'cfg(target_os = "windows")'.dependencies]
+tokio = { version = "1.2", features = ["rt", "sync"] }
 windows = "0.4.0"
 
 [target.'cfg(target_os = "windows")'.build-dependencies]

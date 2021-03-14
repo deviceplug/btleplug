@@ -11,7 +11,7 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use super::{ble::watcher::BLEWatcher, peripheral::Peripheral, utils};
+use super::{ble::watcher::BLEWatcher, peripheral::Peripheral};
 use crate::{
     api::{AdapterManager, BDAddr, Central, CentralEvent},
     Error, Result,

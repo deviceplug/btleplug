@@ -66,7 +66,11 @@ impl std::str::FromStr for Handle {
             handle: 0,
         };
         let get_handle = |p| {
-            u16::from_str_radix(&s[p..].trim_start_matches(char::is_alphabetic)[..4], 16).unwrap()
+            let string = match &s[p..].find('/') {
+                None => &s[p..],
+                Some(x) => &s[p..p + x],
+            };
+            u16::from_str_radix(&string[(&string.len() - 4)..], 16).unwrap()
         };
 
         if let Some(descriptor) = s.find("descriptor") {
@@ -123,6 +127,20 @@ mod tests {
         );
     }
     #[test]
+    fn test_parse_characteristic_handle_alphabetic() {
+        let handle: Handle = "/org/bluez/hci0/dev_01_02_03_04_05_06/serviceaa25/charff06"
+            .parse()
+            .unwrap();
+        assert_eq!(
+            handle,
+            Handle {
+                typ: AttributeType::Characteristic,
+                handle: 0xff06_u16,
+                parent: 0xaa25_u16
+            }
+        );
+    }
+    #[test]
     fn test_parse_service_handle() {
         let handle: Handle = "/org/bluez/hci0/dev_01_02_03_04_05_06/service0025"
             .parse()
@@ -132,6 +150,20 @@ mod tests {
             Handle {
                 typ: AttributeType::Service,
                 handle: 0x25_u16,
+                parent: 0_u16
+            }
+        );
+    }
+    #[test]
+    fn test_parse_service_handle_alphabetic() {
+        let handle: Handle = "/org/bluez/hci0/dev_01_02_03_04_05_06/serviceff00"
+            .parse()
+            .unwrap();
+        assert_eq!(
+            handle,
+            Handle {
+                typ: AttributeType::Service,
+                handle: 0xff00_u16,
                 parent: 0_u16
             }
         );

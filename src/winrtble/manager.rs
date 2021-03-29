@@ -31,8 +31,7 @@ impl api::Manager for Manager {
 
     async fn adapters(&self) -> Result<Vec<Adapter>> {
         let mut result: Vec<Adapter> = vec![];
-        let operation = Radio::get_radios_async().unwrap();
-        let radios = operation.await.unwrap();
+        let radios = Radio::get_radios_async().unwrap().await.unwrap();
 
         for radio in &radios {
             let kind = radio.kind().unwrap();

@@ -76,8 +76,7 @@ impl BLEDevice {
         &self,
         service: &GattDeviceService,
     ) -> std::result::Result<Vec<GattCharacteristic>, windows::Error> {
-        let operation = service.get_characteristics_async()?;
-        let async_result = operation.await?;
+        let async_result = service.get_characteristics_async()?.await?;
         let status = async_result.status();
         if status == Ok(GattCommunicationStatus::Success) {
             let results = async_result.characteristics()?;

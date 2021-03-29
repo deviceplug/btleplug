@@ -62,8 +62,12 @@ impl BLECharacteristic {
     }
 
     pub async fn read_value(&self) -> Result<Vec<u8>> {
-        let operation = self.characteristic.read_value_async().unwrap();
-        let result = operation.await.unwrap();
+        let result = self
+            .characteristic
+            .read_value_async()
+            .unwrap()
+            .await
+            .unwrap();
         if result.status().unwrap() == GattCommunicationStatus::Success {
             let value = result.value().unwrap();
             let reader = DataReader::from_buffer(&value).unwrap();
@@ -96,11 +100,12 @@ impl BLECharacteristic {
             self.notify_token = Some(token);
         }
         let config = GattClientCharacteristicConfigurationDescriptorValue::Notify;
-        let operation = self
+        let status = self
             .characteristic
             .write_client_characteristic_configuration_descriptor_async(config)
+            .unwrap()
+            .await
             .unwrap();
-        let status = operation.await.unwrap();
         trace!("subscribe {:?}", status);
         Ok(())
     }
@@ -111,11 +116,12 @@ impl BLECharacteristic {
         }
         self.notify_token = None;
         let config = GattClientCharacteristicConfigurationDescriptorValue::None;
-        let operation = self
+        let status = self
             .characteristic
             .write_client_characteristic_configuration_descriptor_async(config)
+            .unwrap()
+            .await
             .unwrap();
-        let status = operation.await.unwrap();
         trace!("unsubscribe {:?}", status);
         Ok(())
     }

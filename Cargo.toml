@@ -50,10 +50,10 @@ libc = "0.2.98"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 tokio = { version = "1.2", features = ["rt", "sync"] }
-windows = "0.4.0"
+windows = "0.6.0"
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
-windows = "0.4.0"
+windows = "0.6.0"
 
 [dev-dependencies]
 simple_logger = "1.11.0"

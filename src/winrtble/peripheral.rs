@@ -46,7 +46,6 @@ pub struct Peripheral {
     adapter: AdapterManager<Self>,
     address: BDAddr,
     properties: Arc<Mutex<PeripheralProperties>>,
-    characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
     connected: Arc<AtomicBool>,
     ble_characteristics: Arc<DashMap<Uuid, BLECharacteristic>>,
     notification_senders: Arc<Mutex<Vec<UnboundedSender<ValueNotification>>>>,
@@ -58,7 +57,6 @@ impl Peripheral {
         let mut properties = PeripheralProperties::default();
         properties.address = address;
         let properties = Arc::new(Mutex::new(properties));
-        let characteristics = Arc::new(Mutex::new(BTreeSet::new()));
         let connected = Arc::new(AtomicBool::new(false));
         let ble_characteristics = Arc::new(DashMap::new());
         let notification_senders = Arc::new(Mutex::new(Vec::new()));
@@ -67,7 +65,6 @@ impl Peripheral {
             adapter,
             address,
             properties,
-            characteristics,
             connected,
             ble_characteristics,
             notification_senders,
@@ -194,11 +191,10 @@ impl Debug for Peripheral {
             ""
         };
         let properties = self.properties.lock().unwrap();
-        let characteristics = self.characteristics.lock().unwrap();
         write!(
             f,
             "{} properties: {:?}, characteristics: {:?} {}",
-            self.address, *properties, *characteristics, connected
+            self.address, *properties, self.ble_characteristics, connected
         )
     }
 }
@@ -220,8 +216,10 @@ impl ApiPeripheral for Peripheral {
     /// The set of characteristics we've discovered for this device. This will be empty until
     /// `discover_characteristics` is called.
     fn characteristics(&self) -> BTreeSet<Characteristic> {
-        let l = self.characteristics.lock().unwrap();
-        l.clone()
+        self.ble_characteristics
+            .iter()
+            .map(|item| item.value().to_characteristic())
+            .collect()
     }
 
     /// Returns true iff we are currently connected to the device.
@@ -270,15 +268,13 @@ impl ApiPeripheral for Peripheral {
         if let Some(ref device) = *device {
             let mut characteristics_result = vec![];
             let characteristics = device.discover_characteristics().await?;
-            for characteristic in characteristics {
-                let uuid = utils::to_uuid(&characteristic.uuid().unwrap());
-                let properties =
-                    utils::to_char_props(&characteristic.characteristic_properties().unwrap());
-                let chara = Characteristic { uuid, properties };
-                characteristics_result.push(chara);
+            for gatt_characteristic in characteristics {
+                let ble_characteristic = BLECharacteristic::new(gatt_characteristic);
+                let characteristic = ble_characteristic.to_characteristic();
                 self.ble_characteristics
-                    .entry(uuid)
-                    .or_insert_with(|| BLECharacteristic::new(characteristic));
+                    .entry(characteristic.uuid.clone())
+                    .or_insert_with(|| ble_characteristic);
+                characteristics_result.push(characteristic);
             }
             return Ok(characteristics_result);
         }

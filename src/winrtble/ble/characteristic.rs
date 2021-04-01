@@ -12,7 +12,11 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use super::super::bindings;
-use crate::{api::WriteType, Error, Result};
+use crate::{
+    api::{Characteristic, WriteType},
+    winrtble::utils,
+    Error, Result,
+};
 
 use bindings::windows::devices::bluetooth::generic_attribute_profile::{
     GattCharacteristic, GattClientCharacteristicConfigurationDescriptorValue,
@@ -33,6 +37,7 @@ impl Into<GattWriteOption> for WriteType {
     }
 }
 
+#[derive(Debug)]
 pub struct BLECharacteristic {
     characteristic: GattCharacteristic,
     notify_token: Option<EventRegistrationToken>,
@@ -124,6 +129,13 @@ impl BLECharacteristic {
             .unwrap();
         trace!("unsubscribe {:?}", status);
         Ok(())
+    }
+
+    pub fn to_characteristic(&self) -> Characteristic {
+        let uuid = utils::to_uuid(&self.characteristic.uuid().unwrap());
+        let properties =
+            utils::to_char_props(&self.characteristic.characteristic_properties().unwrap());
+        Characteristic { uuid, properties }
     }
 }
 

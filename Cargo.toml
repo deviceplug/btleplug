@@ -1,6 +1,6 @@
 [package]
 name = "btleplug"
-version = "0.7.1"
+version = "0.7.2"
 authors = ["Nonpolynomial, LLC <kyle@nonpolynomial.com>"]
 license = "MIT/Apache-2.0/BSD-3-Clause"
 repository = "https://github.com/deviceplug/btleplug"

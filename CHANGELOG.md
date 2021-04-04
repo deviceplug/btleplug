@@ -1,3 +1,9 @@
+# 0.7.2 (2021-04-04)
+
+## Bugfixes
+
+- Windows UWP characteristic methods now return errors instead of unwrapping everything.
+
 # 0.7.1 (2021-03-01)
 
 ## Bugfixes

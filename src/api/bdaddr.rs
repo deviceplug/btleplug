@@ -231,20 +231,20 @@ pub mod serde {
     /// # Example
     ///
     /// ```
-    /// //use btleplug::api::BDAddr;
-    /// //use serde::{Serialize, Deserialize};
-    /// //^^^ Error can't find crate `serde`???
-    /// //# use serde_cr as serde;
-    /// //
-    /// //#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
-    /// //struct S {
-    /// //    addr: BDAddr,
-    /// //}
-    /// //
-    /// //let s = serde_json::from_str(r#"{ "addr": "00:DE:AD:BE:EF:00" }"#)?;
-    /// //let expect = S { addr: [0x00, 0xDE, 0xAD, 0xBE, 0xEF, 0x00].into() };
-    /// //assert_eq!(s, expect);
-    /// //# Ok::<(), Box<dyn std::error::Error>>(())
+    /// # use serde_cr as serde;
+    /// use btleplug::api::BDAddr;
+    /// use serde::{Serialize, Deserialize};
+    ///
+    /// #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+    /// # #[serde(crate = "serde_cr")]
+    /// struct S {
+    ///     addr: BDAddr,
+    /// }
+    ///
+    /// let s: S = serde_json::from_str(r#"{ "addr": "00:DE:AD:BE:EF:00" }"#)?;
+    /// let expect = S { addr: [0x00, 0xDE, 0xAD, 0xBE, 0xEF, 0x00].into() };
+    /// assert_eq!(s, expect);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub mod colon_delim {
         use super::*;
@@ -288,6 +288,26 @@ pub mod serde {
     }
 
     /// De-/Serialization of [`BDAddr`] as string of hex-digits without any delimiters.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use serde_cr as serde;
+    /// use btleplug::api::BDAddr;
+    /// use serde::{Serialize, Deserialize};
+    ///
+    /// #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+    /// # #[serde(crate = "serde_cr")]
+    /// struct S {
+    ///     #[serde(with = "btleplug::serde::bdaddr::no_delim")]
+    ///     addr: BDAddr,
+    /// }
+    ///
+    /// let s: S = serde_json::from_str(r#"{ "addr": "00deadbeef00" }"#)?;
+    /// let expect = S { addr: [0x00, 0xDE, 0xAD, 0xBE, 0xEF, 0x00].into() };
+    /// assert_eq!(s, expect);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub mod no_delim {
         use super::*;
 
@@ -331,6 +351,26 @@ pub mod serde {
     }
 
     /// De-/Serialization of [`BDAddr`] as an array of bytes.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use serde_cr as serde;
+    /// use btleplug::api::BDAddr;
+    /// use serde::{Serialize, Deserialize};
+    ///
+    /// #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+    /// # #[serde(crate = "serde_cr")]
+    /// struct S {
+    ///     #[serde(with = "btleplug::serde::bdaddr::bytes")]
+    ///     addr: BDAddr,
+    /// }
+    ///
+    /// let s: S = serde_json::from_str(r#"{ "addr": [ 0, 1, 2, 3, 4, 5] }"#)?;
+    /// let expect = S { addr: [0, 1, 2, 3, 4, 5].into() };
+    /// assert_eq!(s, expect);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub mod bytes {
         use super::*;
 

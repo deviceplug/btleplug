@@ -4,17 +4,7 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt::{self, Debug, Display, Formatter, LowerHex, UpperHex};
 use std::str::FromStr;
 
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "serde")]
-use serde_cr as serde;
-
 /// Stores the 6 byte address used to identify Bluetooth devices.
-#[cfg_attr(
-    feature = "serde",
-    derive(Serialize, Deserialize),
-    serde(crate = "serde_cr")
-)]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Default)]
 pub struct BDAddr {
     address: [u8; 6],
@@ -200,6 +190,163 @@ impl BDAddr {
         self.write_no_delim(&mut s)
             .expect("A String-Writer never fails");
         s
+    }
+}
+
+/// Different de-/serialization formats for [`BDAddr`].
+#[cfg(feature = "serde")]
+pub mod serde {
+    use std::fmt::{self, Write as _};
+
+    use serde::{
+        de::{Deserialize, Deserializer, Error as DeError, Visitor},
+        ser::{Serialize, Serializer},
+    };
+    use serde_cr as serde;
+
+    use super::*;
+
+    impl Serialize for BDAddr {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            colon_delim::serialize(self, serializer)
+        }
+    }
+
+    impl<'de> Deserialize<'de> for BDAddr {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            colon_delim::deserialize(deserializer)
+        }
+    }
+
+    /// De-/Serialization of [`BDAddr`] as string of hex-digits with colons as delimiters.
+    ///
+    /// This is the standard used to de-/seriallize [`BDAddr`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// //use btleplug::api::BDAddr;
+    /// //use serde::{Serialize, Deserialize};
+    /// //^^^ Error can't find crate `serde`???
+    /// //# use serde_cr as serde;
+    /// //
+    /// //#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+    /// //struct S {
+    /// //    addr: BDAddr,
+    /// //}
+    /// //
+    /// //let s = serde_json::from_str(r#"{ "addr": "00:DE:AD:BE:EF:00" }"#)?;
+    /// //let expect = S { addr: [0x00, 0xDE, 0xAD, 0xBE, 0xEF, 0x00].into() };
+    /// //assert_eq!(s, expect);
+    /// //# Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub mod colon_delim {
+        use super::*;
+
+        struct ColonDelimVisitor;
+
+        pub fn serialize<S>(addr: &BDAddr, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            let mut buf = String::with_capacity(17);
+            write!(&mut buf, "{:X}", addr).expect("never fails to write to string");
+            serializer.serialize_str(&buf)
+        }
+
+        pub fn deserialize<'de, D>(d: D) -> Result<BDAddr, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            let buf = d.deserialize_str(ColonDelimVisitor)?;
+            BDAddr::from_str_delim(buf).map_err(D::Error::custom)
+        }
+
+        impl<'de> Visitor<'de> for ColonDelimVisitor {
+            type Value = &'de str;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                write!(
+                    formatter,
+                    "A colon seperated Bluetooth address, like `00:11:22:33:44:55`"
+                )
+            }
+
+            fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                Ok(v)
+            }
+        }
+    }
+
+    /// De-/Serialization of [`BDAddr`] as string of hex-digits without any delimiters.
+    pub mod no_delim {
+        use super::*;
+
+        struct NoDelimVisitor;
+
+        pub fn serialize<S>(addr: &BDAddr, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            let mut buf = String::with_capacity(12);
+            addr.write_no_delim(&mut buf)
+                .expect("never fails to write to string");
+            serializer.serialize_str(&buf)
+        }
+
+        pub fn deserialize<'de, D>(d: D) -> Result<BDAddr, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            let buf = d.deserialize_str(NoDelimVisitor)?;
+            BDAddr::from_str_no_delim(buf).map_err(D::Error::custom)
+        }
+
+        impl<'de> Visitor<'de> for NoDelimVisitor {
+            type Value = &'de str;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                write!(
+                    formatter,
+                    "A Bluetooth address without any delimiters, like `001122334455`"
+                )
+            }
+
+            fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                Ok(v)
+            }
+        }
+    }
+
+    /// De-/Serialization of [`BDAddr`] as an array of bytes.
+    pub mod bytes {
+        use super::*;
+
+        pub fn serialize<S>(addr: &BDAddr, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            addr.address.serialize(serializer)
+        }
+
+        pub fn deserialize<'de, D>(d: D) -> Result<BDAddr, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            Ok(<[u8; 6]>::deserialize(d)?.into())
+        }
     }
 }
 

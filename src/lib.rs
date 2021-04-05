@@ -101,6 +101,8 @@ mod common;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod corebluetooth;
 pub mod platform;
+#[cfg(feature = "serde")]
+pub mod serde;
 #[cfg(target_os = "windows")]
 mod winrtble;
 

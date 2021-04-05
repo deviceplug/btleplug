@@ -12,7 +12,7 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 mod adapter_manager;
-mod bdaddr;
+pub(crate) mod bdaddr;
 pub mod bleuuid;
 
 pub use adapter_manager::AdapterManager;

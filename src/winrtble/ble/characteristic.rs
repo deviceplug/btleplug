@@ -18,12 +18,12 @@ use crate::{
     Error, Result,
 };
 
-use bindings::windows::devices::bluetooth::generic_attribute_profile::{
+use bindings::Windows::Devices::Bluetooth::GenericAttributeProfile::{
     GattCharacteristic, GattClientCharacteristicConfigurationDescriptorValue,
     GattCommunicationStatus, GattValueChangedEventArgs, GattWriteOption,
 };
-use bindings::windows::foundation::{EventRegistrationToken, TypedEventHandler};
-use bindings::windows::storage::streams::{DataReader, DataWriter};
+use bindings::Windows::Foundation::{EventRegistrationToken, TypedEventHandler};
+use bindings::Windows::Storage::Streams::{DataReader, DataWriter};
 use log::{debug, trace};
 
 pub type NotifiyEventHandler = Box<dyn Fn(Vec<u8>) + Send>;
@@ -53,10 +53,10 @@ impl BLECharacteristic {
 
     pub async fn write_value(&self, data: &[u8], write_type: WriteType) -> Result<()> {
         let writer = DataWriter::new().unwrap();
-        writer.write_bytes(data).unwrap();
+        writer.WriteBytes(data).unwrap();
         let operation = self
             .characteristic
-            .write_value_with_option_async(writer.detach_buffer().unwrap(), write_type.into())
+            .WriteValueWithOptionAsync(writer.DetachBuffer().unwrap(), write_type.into())
             .unwrap();
         let result = operation.await.unwrap();
         if result == GattCommunicationStatus::Success {
@@ -69,16 +69,16 @@ impl BLECharacteristic {
     pub async fn read_value(&self) -> Result<Vec<u8>> {
         let result = self
             .characteristic
-            .read_value_async()
+            .ReadValueAsync()
             .unwrap()
             .await
             .unwrap();
-        if result.status().unwrap() == GattCommunicationStatus::Success {
-            let value = result.value().unwrap();
-            let reader = DataReader::from_buffer(&value).unwrap();
-            let len = reader.unconsumed_buffer_length().unwrap() as usize;
+        if result.Status().unwrap() == GattCommunicationStatus::Success {
+            let value = result.Value().unwrap();
+            let reader = DataReader::FromBuffer(&value).unwrap();
+            let len = reader.UnconsumedBufferLength().unwrap() as usize;
             let mut input = vec![0u8; len];
-            reader.read_bytes(&mut input[0..len]).unwrap();
+            reader.ReadBytes(&mut input[0..len]).unwrap();
             Ok(input)
         } else {
             Err(Error::NotSupported("get_status".into()))
@@ -90,24 +90,24 @@ impl BLECharacteristic {
             let value_handler = TypedEventHandler::new(
                 move |_: &Option<GattCharacteristic>, args: &Option<GattValueChangedEventArgs>| {
                     if let Some(args) = args {
-                        let value = args.characteristic_value().unwrap();
-                        let reader = DataReader::from_buffer(&value).unwrap();
-                        let len = reader.unconsumed_buffer_length().unwrap() as usize;
+                        let value = args.CharacteristicValue().unwrap();
+                        let reader = DataReader::FromBuffer(&value).unwrap();
+                        let len = reader.UnconsumedBufferLength().unwrap() as usize;
                         let mut input: Vec<u8> = vec![0u8; len];
-                        reader.read_bytes(&mut input[0..len]).unwrap();
+                        reader.ReadBytes(&mut input[0..len]).unwrap();
                         trace!("changed {:?}", input);
                         on_value_changed(input);
                     }
                     Ok(())
                 },
             );
-            let token = self.characteristic.value_changed(&value_handler).unwrap();
+            let token = self.characteristic.ValueChanged(&value_handler).unwrap();
             self.notify_token = Some(token);
         }
         let config = GattClientCharacteristicConfigurationDescriptorValue::Notify;
         let status = self
             .characteristic
-            .write_client_characteristic_configuration_descriptor_async(config)
+            .WriteClientCharacteristicConfigurationDescriptorAsync(config)
             .unwrap()
             .await
             .unwrap();
@@ -117,13 +117,13 @@ impl BLECharacteristic {
 
     pub async fn unsubscribe(&mut self) -> Result<()> {
         if let Some(token) = &self.notify_token {
-            self.characteristic.remove_value_changed(token).unwrap();
+            self.characteristic.RemoveValueChanged(token).unwrap();
         }
         self.notify_token = None;
         let config = GattClientCharacteristicConfigurationDescriptorValue::None;
         let status = self
             .characteristic
-            .write_client_characteristic_configuration_descriptor_async(config)
+            .WriteClientCharacteristicConfigurationDescriptorAsync(config)
             .unwrap()
             .await
             .unwrap();
@@ -132,9 +132,9 @@ impl BLECharacteristic {
     }
 
     pub fn to_characteristic(&self) -> Characteristic {
-        let uuid = utils::to_uuid(&self.characteristic.uuid().unwrap());
+        let uuid = utils::to_uuid(&self.characteristic.Uuid().unwrap());
         let properties =
-            utils::to_char_props(&self.characteristic.characteristic_properties().unwrap());
+            utils::to_char_props(&self.characteristic.CharacteristicProperties().unwrap());
         Characteristic { uuid, properties }
     }
 }
@@ -142,7 +142,7 @@ impl BLECharacteristic {
 impl Drop for BLECharacteristic {
     fn drop(&mut self) {
         if let Some(token) = &self.notify_token {
-            let result = self.characteristic.remove_value_changed(token);
+            let result = self.characteristic.RemoveValueChanged(token);
             if let Err(err) = result {
                 debug!("Drop:remove_connection_status_changed {:?}", err);
             }

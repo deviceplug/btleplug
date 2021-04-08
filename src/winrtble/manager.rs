@@ -14,7 +14,7 @@
 use super::{adapter::Adapter, bindings};
 use crate::{api, Result};
 use async_trait::async_trait;
-use bindings::windows::devices::radios::{Radio, RadioKind};
+use bindings::Windows::Devices::Radios::{Radio, RadioKind};
 
 #[derive(Clone, Debug)]
 pub struct Manager {}
@@ -31,10 +31,10 @@ impl api::Manager for Manager {
 
     async fn adapters(&self) -> Result<Vec<Adapter>> {
         let mut result: Vec<Adapter> = vec![];
-        let radios = Radio::get_radios_async().unwrap().await.unwrap();
+        let radios = Radio::GetRadiosAsync().unwrap().await.unwrap();
 
         for radio in &radios {
-            let kind = radio.kind().unwrap();
+            let kind = radio.Kind().unwrap();
             if kind == RadioKind::Bluetooth {
                 result.push(Adapter::new());
             }

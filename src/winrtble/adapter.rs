@@ -48,7 +48,7 @@ impl Central for Adapter {
         let watcher = self.watcher.lock().unwrap();
         let manager = self.manager.clone();
         watcher.start(Box::new(move |args| {
-            let bluetooth_address = args.bluetooth_address().unwrap();
+            let bluetooth_address = args.BluetoothAddress().unwrap();
             let address = bluetooth_address.try_into().unwrap();
             if let Some(mut entry) = manager.peripheral_mut(address) {
                 entry.value_mut().update_properties(args);

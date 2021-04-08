@@ -1,7 +1,7 @@
 fn main() {
     #[cfg(target_os = "windows")]
     windows::build!(
-        windows::devices::bluetooth::generic_attribute_profile::{
+        Windows::Devices::Bluetooth::GenericAttributeProfile::{
             GattCharacteristic,
             GattCharacteristicProperties,
             GattCharacteristicsResult,
@@ -13,22 +13,28 @@ fn main() {
             GattValueChangedEventArgs,
             GattWriteOption,
         },
-        windows::devices::bluetooth::advertisement::*,
-        windows::devices::bluetooth::{
+        Windows::Devices::Bluetooth::Advertisement::*,
+        Windows::Devices::Bluetooth::{
             BluetoothConnectionStatus,
             BluetoothLEDevice,
         },
-        windows::devices::radios::{
+        Windows::Devices::Radios::{
             Radio,
             RadioKind
         },
-        windows::foundation::{
+        Windows::Foundation::{
+            DateTime,
             EventRegistrationToken,
             IAsyncOperation,
-            TypedEventHandler
+            IReference,
+            TimeSpan,
+            TypedEventHandler,
         },
-        windows::foundation::collections::IVector,
-        windows::storage::streams::{
+        Windows::Foundation::Collections::{
+            IVector,
+            IVectorView,
+        },
+        Windows::Storage::Streams::{
             DataReader,
             DataWriter,
             IBuffer,

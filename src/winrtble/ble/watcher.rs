@@ -13,8 +13,8 @@
 
 use super::super::bindings;
 use crate::{Error, Result};
-use bindings::windows::devices::bluetooth::advertisement::*;
-use bindings::windows::foundation::TypedEventHandler;
+use bindings::Windows::Devices::Bluetooth::Advertisement::*;
+use bindings::Windows::Foundation::TypedEventHandler;
 
 pub type AdvertismentEventHandler = Box<dyn Fn(&BluetoothLEAdvertisementReceivedEventArgs) + Send>;
 
@@ -31,13 +31,13 @@ impl From<windows::Error> for Error {
 impl BLEWatcher {
     pub fn new() -> Self {
         let ad = BluetoothLEAdvertisementFilter::new().unwrap();
-        let watcher = BluetoothLEAdvertisementWatcher::create(&ad).unwrap();
+        let watcher = BluetoothLEAdvertisementWatcher::Create(&ad).unwrap();
         BLEWatcher { watcher }
     }
 
     pub fn start(&self, on_received: AdvertismentEventHandler) -> Result<()> {
         self.watcher
-            .set_scanning_mode(BluetoothLEScanningMode::Active)
+            .SetScanningMode(BluetoothLEScanningMode::Active)
             .unwrap();
         let handler: TypedEventHandler<
             BluetoothLEAdvertisementWatcher,
@@ -51,13 +51,13 @@ impl BLEWatcher {
             },
         );
 
-        self.watcher.received(&handler)?;
-        self.watcher.start()?;
+        self.watcher.Received(&handler)?;
+        self.watcher.Start()?;
         Ok(())
     }
 
     pub fn stop(&self) -> Result<()> {
-        self.watcher.stop()?;
+        self.watcher.Stop()?;
         Ok(())
     }
 }

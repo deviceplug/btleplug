@@ -38,7 +38,7 @@ use std::{
 };
 use uuid::Uuid;
 
-use bindings::windows::devices::bluetooth::advertisement::*;
+use bindings::Windows::Devices::Bluetooth::Advertisement::*;
 
 #[derive(Clone)]
 pub struct Peripheral {
@@ -73,22 +73,22 @@ impl Peripheral {
 
     pub(crate) fn update_properties(&self, args: &BluetoothLEAdvertisementReceivedEventArgs) {
         let mut properties = self.properties.lock().unwrap();
-        let advertisement = args.advertisement().unwrap();
+        let advertisement = args.Advertisement().unwrap();
 
         properties.discovery_count += 1;
 
         // Advertisements are cumulative: set/replace data only if it's set
-        if let Ok(name) = advertisement.local_name() {
+        if let Ok(name) = advertisement.LocalName() {
             if !name.is_empty() {
                 properties.local_name = Some(name.to_string());
             }
         }
-        if let Ok(manufacturer_data) = advertisement.manufacturer_data() {
+        if let Ok(manufacturer_data) = advertisement.ManufacturerData() {
             properties.manufacturer_data = manufacturer_data
                 .into_iter()
                 .map(|d| {
-                    let manufacturer_id = d.company_id().unwrap();
-                    let data = utils::to_vec(&d.data().unwrap());
+                    let manufacturer_id = d.CompanyId().unwrap();
+                    let data = utils::to_vec(&d.Data().unwrap());
 
                     (manufacturer_id, data)
                 })
@@ -104,13 +104,13 @@ impl Peripheral {
 
         // The Windows Runtime API (as of 19041) does not directly expose Service Data as a friendly API (like Manufacturer Data above)
         // Instead they provide data sections for access to raw advertising data. That is processed here.
-        if let Ok(data_sections) = advertisement.data_sections() {
+        if let Ok(data_sections) = advertisement.DataSections() {
             properties.service_data = data_sections
                 .into_iter()
                 .filter_map(|d| {
-                    let data = utils::to_vec(&d.data().unwrap());
+                    let data = utils::to_vec(&d.Data().unwrap());
 
-                    match d.data_type().unwrap() {
+                    match d.DataType().unwrap() {
                         advertisement_data_type::SERVICE_DATA_16_BIT_UUID => {
                             let (uuid, data) = data.split_at(2);
                             let uuid = uuid_from_u16(u16::from_le_bytes(uuid.try_into().unwrap()));
@@ -138,7 +138,7 @@ impl Peripheral {
             });
         }
 
-        if let Ok(services) = advertisement.service_uuids() {
+        if let Ok(services) = advertisement.ServiceUuids() {
             properties.services = services
                 .into_iter()
                 .map(|uuid| utils::to_uuid(&uuid))
@@ -154,9 +154,9 @@ impl Peripheral {
         // https://social.msdn.microsoft.com/Forums/en-US/c71d51a2-56a1-425a-9063-de44fda48766/bluetooth-address-public-or-random?forum=wdk
         properties.address_type = AddressType::default();
         properties.has_scan_response =
-            args.advertisement_type().unwrap() == BluetoothLEAdvertisementType::ScanResponse;
+            args.AdvertisementType().unwrap() == BluetoothLEAdvertisementType::ScanResponse;
         properties.tx_power_level = args
-            .raw_signal_strength_in_dbm()
+            .RawSignalStrengthInDBm()
             .ok()
             .map(|rssi| rssi as i8);
     }

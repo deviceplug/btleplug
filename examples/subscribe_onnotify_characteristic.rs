@@ -11,15 +11,17 @@ use btleplug::winrtble::{adapter::Adapter, manager::Manager};
 #[cfg(target_os = "macos")]
 use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
 #[allow(unused_imports)]
-use btleplug::api::{UUID, ValueNotification, Central, CentralEvent, Peripheral, Characteristic, CharPropFlags};
+use btleplug::api::{ValueNotification, Central, CentralEvent, Peripheral, Characteristic, CharPropFlags};
+use std::io::Cursor;
+use uuid::Uuid;
+use btleplug::api::{NotificationHandler, UUID};
 
-const PERIPHERAL_NAME_MATCH_FILTER: &'static str = "Neuro";
+const PERIPHERAL_NAME_MATCH_FILTER: &'static str = "Neuro"; // filter BLE device by partial name
+
 // string to match with BLE name
 const SUBSCRIBE_TO_CHARACTERISTIC: UUID = UUID::B128( // only NOTIFY type should be specified   s
-    [0x1B, 0xC5, 0xD5, 0xA5, 0x02, 0x00, 0xCF, 0x88, 0xE4, 0x11, 0xB9, 0xD6, 0x03, 0x00, 0x2F, 0x3D]);
-//3D:2F:00:03:D6:B9:11:E4:88:CF:00:02:A5:D5:C5:1B
-// const DEVICE_COMMAND: UUID = UUID::B16(0x4600);
-// const DEVICE_COMMAND: Vec<u8> = vec![0x46];
+                                                      [0x9E,0xCA,0xDC,0x24,0x0E,0xE5,0xA9,0x67,0x93,0xF3,0x34,0xB5,0x02,0x00,0x40,0x6E]);
+//6E:40:00:02:B5:34:F3:93:67:A9:E5:0E:24:DC:CA:9E - in REVERSED bytes ORDER !!!
 
 #[cfg(target_os = "linux")]
 fn print_adapter_info(adapter: &Adapter) {
@@ -36,7 +38,8 @@ fn print_adapter_info(_adapter: &Adapter) {
 }
 
 fn my_on_notification_handler(data: ValueNotification) {
-    println!("Received data from [{:?}] = {:?}", data.uuid, data.value.get(0));
+    let rdr = Cursor::new(data.value);
+    println!("Received data from [{:?}] = {:?}", data.uuid, rdr);
 }
 
 /**
@@ -77,32 +80,23 @@ fn main() {
                             println!("Discover peripheral : \'{:?}\' characteristics...", peripheral.properties().local_name);
                             for chars_vector in chars.into_iter() {
                                 for char_item in chars_vector.iter() {
-                                    // println!("Checking CHARACTERISTIC...: {:?} result = {:?}", char_item.uuid,
-                                    //          char_item.uuid == SUBSCRIBE_TO_CHARACTERISTIC);
+                                    println!("Checking CHARACTERISTIC...: {:?} result = {:?}", char_item.uuid,
+                                             char_item.uuid == SUBSCRIBE_TO_CHARACTERISTIC);
                                     // subscribe on selected chars
                                     if char_item.uuid == SUBSCRIBE_TO_CHARACTERISTIC
                                         && char_item.properties == CharPropFlags::NOTIFY {
                                         println!("Lets try subscribe to desired CHARACTERISTIC...: {:?}", char_item.uuid);
-                                        // do subscribe
-                                        //     peripheral.on_notification(Box::new(my_on_notification_handler));
-                                        peripheral.on_notification(
-                                            Box::new(|data: ValueNotification| {
-                                                let handle = thread::spawn(move || {
-                                                    println!("Received data from [{:?}] = {:?}", data.uuid, data.value.get(0));
-                                                });
-                                            })
-                                        );
+
+                                        // do subscribe to notify characteristic
+                                        peripheral.on_notification(Box::new(my_on_notification_handler));
+
                                         let subscribe_result = peripheral.subscribe(&char_item);
                                         let is_subscribed = subscribe_result.is_ok();
                                         println!("Is subscribed? = {}", is_subscribed);
                                         if is_subscribed {
-                                            // send command to device
-                                            // let DEVICE_COMMAND = vec![0x46];
-                                            // let connect_result = peripheral.command(&char_item, &DEVICE_COMMAND);
-                                            // println!("Sent command OK? = {:?}", connect_result.is_ok());
                                             loop {
-                                                print!(".");
-                                                thread::sleep(Duration::from_millis(10));
+                                                // print!(".");
+                                                thread::sleep(Duration::from_millis(1));
                                             }
                                         }
                                     }
@@ -121,34 +115,3 @@ fn main() {
         }
     }
 }
-
-/*                            let (event_sender, event_receiver) = channel(256);
-
-                            let on_event = move |event: CentralEvent| match event {
-                                CentralEvent::DeviceDiscovered(bd_addr) => {
-                                    println!("DeviceDiscovered: {:?}", bd_addr);
-                                    let s = event_sender.clone();
-                                    let e = event.clone();
-                                    task::spawn(async move {
-                                        s.send(e).await;
-                                    });
-                                }
-                                CentralEvent::DeviceConnected(bd_addr) => {
-                                    println!("DeviceConnected: {:?}", bd_addr);
-                                    let s = event_sender.clone();
-                                    let e = event.clone();
-                                    task::spawn(async move {
-                                        s.send(e).await;
-                                    });
-                                }
-                                CentralEvent::DeviceDisconnected(bd_addr) => {
-                                    println!("DeviceDisconnected: {:?}", bd_addr);
-                                    let s = event_sender.clone();
-                                    let e = event.clone();
-                                    task::spawn(async move {
-                                        s.send(e).await;
-                                    });
-                                }
-                                _ => {}
-                            };
-                            adapter.on_event(Box::new(on_event));*/

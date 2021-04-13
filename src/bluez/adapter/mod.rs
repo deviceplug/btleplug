@@ -22,6 +22,11 @@ use super::{
     bluez_dbus::gatt_characteristic::ORG_BLUEZ_GATT_CHARACTERISTIC1_NAME,
     bluez_dbus::gatt_service::ORG_BLUEZ_GATT_SERVICE1_NAME, BLUEZ_DEST, DEFAULT_TIMEOUT,
 };
+use crate::{
+    api::{AdapterManager, BDAddr, Central, CentralEvent, CharPropFlags},
+    bluez::adapter::peripheral::Peripheral,
+    Error, Result,
+};
 use dashmap::DashMap;
 use dbus::{
     arg::RefArg,
@@ -30,7 +35,10 @@ use dbus::{
     message::SignalArgs,
     Path,
 };
-
+use displaydoc::Display;
+use log::{debug, error, info, trace, warn};
+use parking_lot::ReentrantMutex;
+use static_assertions::assert_impl_all;
 use std::{
     self,
     iter::Iterator,
@@ -39,18 +47,8 @@ use std::{
     thread::{self, JoinHandle},
     time::Duration,
 };
-
-use parking_lot::ReentrantMutex;
-
-use crate::{api::UUID, Result};
-use crate::{
-    api::{AdapterManager, BDAddr, Central, CentralEvent, CharPropFlags},
-    Error,
-};
-
-use crate::bluez::adapter::peripheral::Peripheral;
-use displaydoc::Display;
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum TokenType {
@@ -68,7 +66,7 @@ pub enum ParseCharPropFlagsError {
 
 impl From<ParseCharPropFlagsError> for Error {
     fn from(e: ParseCharPropFlagsError) -> Self {
-        Error::Other(format!("ParseUUIDError: {}", e))
+        Error::Other(format!("ParseCharPropFlagsError: {}", e))
     }
 }
 
@@ -366,7 +364,7 @@ impl Adapter {
 
             if let Some(device) = self.manager.peripheral(device_id) {
                 trace!("Adding characteristic \"{}\" on \"{:?}\"", path, device_id);
-                let uuid: UUID = characteristic.uuid().unwrap().parse()?;
+                let uuid: Uuid = characteristic.uuid().unwrap().parse()?;
                 let flags = if let Some(flags) = characteristic.flags() {
                     flags.iter().map(|s| s.parse::<CharPropFlags>()).fold(
                         Ok(CharPropFlags::new()),

@@ -1,7 +1,7 @@
 extern crate btleplug;
 extern crate rand;
 
-use btleplug::api::{Central, Peripheral, WriteType, UUID};
+use btleplug::api::{bleuuid::uuid_from_u16, Central, Peripheral, WriteType};
 #[cfg(target_os = "linux")]
 use btleplug::bluez::manager::Manager;
 #[cfg(target_os = "macos")]
@@ -11,6 +11,9 @@ use btleplug::winrtble::manager::Manager;
 use rand::{thread_rng, Rng};
 use std::thread;
 use std::time::Duration;
+use uuid::Uuid;
+
+const LIGHT_CHARACTERISTIC_UUID: Uuid = uuid_from_u16(0xFFE9);
 
 pub fn main() {
     let manager = Manager::new().unwrap();
@@ -51,7 +54,7 @@ pub fn main() {
     let chars = light.characteristics();
     let cmd_char = chars
         .iter()
-        .find(|c| c.uuid == UUID::B16(0xFFE9))
+        .find(|c| c.uuid == LIGHT_CHARACTERISTIC_UUID)
         .expect("Unable to find characterics");
 
     // dance party

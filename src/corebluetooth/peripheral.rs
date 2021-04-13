@@ -14,16 +14,16 @@ use super::{
 use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, NotificationHandler,
-        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, WriteType, UUID,
+        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, WriteType,
     },
     common::util,
     Error, Result,
 };
-use async_std::{
-    channel::{Receiver, SendError, Sender},
-    prelude::StreamExt,
-    task,
-};
+use async_std::task;
+use futures::channel::mpsc::{Receiver, SendError, Sender};
+use futures::sink::SinkExt;
+use futures::stream::StreamExt;
+use log::{debug, error, info};
 use std::{
     collections::{BTreeSet, HashMap},
     fmt::{self, Debug, Display, Formatter},
@@ -38,8 +38,7 @@ pub struct Peripheral {
     manager: AdapterManager<Self>,
     uuid: Uuid,
     characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
-    pub(crate) properties: PeripheralProperties,
-    event_receiver: Receiver<CBPeripheralEvent>,
+    pub(crate) properties: Arc<Mutex<PeripheralProperties>>,
     message_sender: Sender<CoreBluetoothMessage>,
     // We're not actually holding a peripheral object here, that's held out in
     // the objc thread. We'll just communicate with it through our
@@ -56,7 +55,7 @@ impl Peripheral {
     ) -> Self {
         // Since we're building the object, we have an active advertisement.
         // Build properties now.
-        let properties = PeripheralProperties {
+        let properties = Arc::new(Mutex::from(PeripheralProperties {
             // Rumble required ONLY a BDAddr, not something you can get from
             // MacOS, so we make it up for now. This sucks.
             address: uuid_to_bdaddr(&uuid.to_string()),
@@ -64,32 +63,66 @@ impl Peripheral {
             local_name: local_name,
             tx_power_level: None,
             manufacturer_data: HashMap::new(),
+            service_data: HashMap::new(),
+            services: Vec::new(),
             discovery_count: 1,
             has_scan_response: true,
-        };
+        }));
         let notification_handlers = Arc::new(Mutex::new(Vec::<NotificationHandler>::new()));
-        let mut er_clone = event_receiver.clone();
         let nh_clone = notification_handlers.clone();
+        let p_clone = properties.clone();
+        let m_clone = manager.clone();
         task::spawn(async move {
+            let mut event_receiver = event_receiver;
             loop {
-                let event = er_clone.next().await;
-                if event.is_none() {
-                    error!("Event receiver died, breaking out of corebluetooth device loop.");
-                    break;
-                }
-                if let Some(CBPeripheralEvent::Notification(uuid, data)) = event {
-                    let mut id = *uuid.as_bytes();
-                    id.reverse();
-                    util::invoke_handlers(
-                        &nh_clone,
-                        &ValueNotification {
-                            uuid: UUID::B128(id),
-                            handle: None,
-                            value: data,
-                        },
-                    );
-                } else {
-                    error!("Unhandled CBPeripheralEvent");
+                match event_receiver.next().await {
+                    Some(CBPeripheralEvent::Notification(uuid, data)) => {
+                        util::invoke_handlers(
+                            &nh_clone,
+                            &ValueNotification {
+                                uuid,
+                                handle: None,
+                                value: data,
+                            },
+                        );
+                    }
+                    Some(CBPeripheralEvent::ManufacturerData(manufacturer_id, data)) => {
+                        let mut properties = p_clone.lock().unwrap();
+                        properties
+                            .manufacturer_data
+                            .insert(manufacturer_id, data.clone());
+                        m_clone.emit(CentralEvent::ManufacturerDataAdvertisement {
+                            address: properties.address,
+                            manufacturer_id,
+                            data,
+                        });
+                    }
+                    Some(CBPeripheralEvent::ServiceData(service_data)) => {
+                        let mut properties = p_clone.lock().unwrap();
+                        properties.service_data.extend(service_data.clone());
+
+                        for (service, data) in service_data.into_iter() {
+                            m_clone.emit(CentralEvent::ServiceDataAdvertisement {
+                                address: properties.address,
+                                service,
+                                data,
+                            });
+                        }
+                    }
+                    Some(CBPeripheralEvent::Services(services)) => {
+                        let mut properties = p_clone.lock().unwrap();
+                        properties.services = services.clone();
+
+                        m_clone.emit(CentralEvent::ServicesAdvertisement {
+                            address: properties.address,
+                            services,
+                        });
+                    }
+                    Some(CBPeripheralEvent::Disconnected) => (),
+                    None => {
+                        error!("Event receiver died, breaking out of corebluetooth device loop.");
+                        break;
+                    }
                 }
             }
         });
@@ -99,7 +132,6 @@ impl Peripheral {
             characteristics: Arc::new(Mutex::new(BTreeSet::new())),
             notification_handlers,
             uuid,
-            event_receiver,
             message_sender,
         }
     }
@@ -126,33 +158,21 @@ impl Debug for Peripheral {
             .field("uuid", &self.uuid)
             .field("characteristics", &self.characteristics)
             .field("properties", &self.properties)
-            .field("event_receiver", &self.event_receiver)
             .field("message_sender", &self.message_sender)
             .finish()
     }
 }
 
-fn get_apple_uuid(uuid: UUID) -> Uuid {
-    let mut u;
-    if let UUID::B128(big_u) = uuid {
-        u = big_u;
-    } else {
-        panic!("Wrong UUID type!");
-    }
-    u.reverse();
-    Uuid::from_bytes(u)
-}
-
 impl ApiPeripheral for Peripheral {
     /// Returns the address of the peripheral.
     fn address(&self) -> BDAddr {
-        self.properties.address
+        self.properties.lock().unwrap().address
     }
 
     /// Returns the set of properties associated with the peripheral. These may be updated over time
     /// as additional advertising reports are received.
     fn properties(&self) -> PeripheralProperties {
-        self.properties.clone()
+        self.properties.lock().unwrap().clone()
     }
 
     /// The set of characteristics we've discovered for this device. This will be empty until
@@ -172,8 +192,9 @@ impl ApiPeripheral for Peripheral {
     fn connect(&self) -> Result<()> {
         info!("Trying device connect!");
         task::block_on(async {
+            let mut message_sender = self.message_sender.clone();
             let fut = CoreBluetoothReplyFuture::default();
-            self.message_sender
+            message_sender
                 .send(CoreBluetoothMessage::ConnectDevice(
                     self.uuid,
                     fut.get_state_clone(),
@@ -182,7 +203,9 @@ impl ApiPeripheral for Peripheral {
             match fut.await {
                 CoreBluetoothReply::Connected(chars) => {
                     *(self.characteristics.lock().unwrap()) = chars;
-                    self.emit(CentralEvent::DeviceConnected(self.properties.address));
+                    self.emit(CentralEvent::DeviceConnected(
+                        self.properties.lock().unwrap().address,
+                    ));
                 }
                 _ => panic!("Shouldn't get anything but connected!"),
             }
@@ -212,11 +235,12 @@ impl ApiPeripheral for Peripheral {
         write_type: WriteType,
     ) -> Result<()> {
         task::block_on(async {
+            let mut message_sender = self.message_sender.clone();
             let fut = CoreBluetoothReplyFuture::default();
-            self.message_sender
+            message_sender
                 .send(CoreBluetoothMessage::WriteValue(
                     self.uuid,
-                    get_apple_uuid(characteristic.uuid),
+                    characteristic.uuid,
                     Vec::from(data),
                     write_type,
                     fut.get_state_clone(),
@@ -234,7 +258,7 @@ impl ApiPeripheral for Peripheral {
     /// characteristic and for the specified declaration UUID. See
     /// [here](https://www.bluetooth.com/specifications/gatt/declarations) for valid UUIDs.
     /// Synchronously returns either an error or the device response.
-    fn read_by_type(&self, _characteristic: &Characteristic, _uuid: UUID) -> Result<Vec<u8>> {
+    fn read_by_type(&self, _characteristic: &Characteristic, _uuid: Uuid) -> Result<Vec<u8>> {
         Err(Error::NotSupported("read_by_type".into()))
     }
 
@@ -243,11 +267,12 @@ impl ApiPeripheral for Peripheral {
     fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
         info!("Trying to subscribe!");
         task::block_on(async {
+            let mut message_sender = self.message_sender.clone();
             let fut = CoreBluetoothReplyFuture::default();
-            self.message_sender
+            message_sender
                 .send(CoreBluetoothMessage::Subscribe(
                     self.uuid,
-                    get_apple_uuid(characteristic.uuid),
+                    characteristic.uuid,
                     fut.get_state_clone(),
                 ))
                 .await?;
@@ -264,11 +289,12 @@ impl ApiPeripheral for Peripheral {
     fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
         info!("Trying to unsubscribe!");
         task::block_on(async {
+            let mut message_sender = self.message_sender.clone();
             let fut = CoreBluetoothReplyFuture::default();
-            self.message_sender
+            message_sender
                 .send(CoreBluetoothMessage::Unsubscribe(
                     self.uuid,
-                    get_apple_uuid(characteristic.uuid),
+                    characteristic.uuid,
                     fut.get_state_clone(),
                 ))
                 .await?;
@@ -291,11 +317,12 @@ impl ApiPeripheral for Peripheral {
     fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
         info!("Trying read!");
         task::block_on(async {
+            let mut message_sender = self.message_sender.clone();
             let fut = CoreBluetoothReplyFuture::default();
-            self.message_sender
+            message_sender
                 .send(CoreBluetoothMessage::ReadValue(
                     self.uuid,
-                    get_apple_uuid(characteristic.uuid),
+                    characteristic.uuid,
                     fut.get_state_clone(),
                 ))
                 .await?;
@@ -309,8 +336,8 @@ impl ApiPeripheral for Peripheral {
     }
 }
 
-impl<T> From<SendError<T>> for Error {
-    fn from(_: SendError<T>) -> Self {
+impl From<SendError> for Error {
+    fn from(_: SendError) -> Self {
         Error::Other("Channel closed".to_string())
     }
 }

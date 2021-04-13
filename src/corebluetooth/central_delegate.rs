@@ -16,10 +16,21 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use async_std::{
-    channel::{Receiver, Sender},
-    task,
+use super::{
+    framework::{cb, nil, ns},
+    utils::{CoreBluetoothUtils, NSStringUtils},
 };
+use futures::channel::mpsc::{self, Receiver, Sender};
+use futures::sink::SinkExt;
+use libc::{c_char, c_void};
+use log::{error, trace, debug};
+use objc::{
+    declare::ClassDecl,
+    rc::StrongPtr,
+    runtime::{Class, Object, Protocol, Sel},
+};
+use objc::{msg_send, sel, sel_impl};
+use std::ffi::CStr;
 use std::{
     collections::HashMap,
     fmt::{self, Debug, Formatter},
@@ -28,28 +39,16 @@ use std::{
     str::FromStr,
     sync::Once,
 };
-
-use objc::{
-    declare::ClassDecl,
-    rc::StrongPtr,
-    runtime::{Class, Object, Protocol, Sel},
-};
-
-use super::{
-    framework::{cb, nil, ns},
-    utils::{CoreBluetoothUtils, NSStringUtils},
-};
-
 use uuid::Uuid;
-
-use libc::{c_char, c_void};
-use std::ffi::CStr;
 
 pub enum CentralDelegateEvent {
     DidUpdateState,
     DiscoveredPeripheral(StrongPtr),
     // Peripheral UUID, HashMap Service Uuid to StrongPtr
     DiscoveredServices(Uuid, HashMap<Uuid, StrongPtr>),
+    ManufacturerData(Uuid, u16, Vec<u8>),
+    ServiceData(Uuid, HashMap<Uuid, Vec<u8>>),
+    Services(Uuid, Vec<Uuid>),
     // DiscoveredIncludedServices(Uuid, HashMap<Uuid, StrongPtr>),
     // Peripheral UUID, HashMap Characteristic Uuid to StrongPtr
     DiscoveredCharacteristics(Uuid, HashMap<Uuid, StrongPtr>),
@@ -108,40 +107,48 @@ impl Debug for CentralDelegateEvent {
                 .field(uuid1)
                 .field(uuid2)
                 .finish(),
+            CentralDelegateEvent::ManufacturerData(uuid, manufacturer_id, manufacturer_data) => f
+                .debug_tuple("ManufacturerData")
+                .field(uuid)
+                .field(manufacturer_id)
+                .field(manufacturer_data)
+                .finish(),
+            CentralDelegateEvent::ServiceData(uuid, service_data) => f
+                .debug_tuple("ServiceData")
+                .field(uuid)
+                .field(service_data)
+                .finish(),
+            CentralDelegateEvent::Services(uuid, services) => f
+                .debug_tuple("Services")
+                .field(uuid)
+                .field(services)
+                .finish(),
         }
     }
 }
 
 pub mod CentralDelegate {
+    use std::convert::TryInto;
     use CoreBluetoothUtils::cbuuid_to_uuid;
 
     use super::*;
 
-    pub fn delegate() -> *mut Object {
-        unsafe {
+    pub fn delegate() -> (*mut Object, Receiver<CentralDelegateEvent>) {
+        let (sender, receiver) = mpsc::channel::<CentralDelegateEvent>(256);
+        let sendbox = Box::new(sender);
+        let delegate = unsafe {
             let mut delegate: *mut Object = msg_send![delegate_class(), alloc];
-            delegate = msg_send![delegate, init];
+            delegate = msg_send![
+                delegate,
+                initWithSender: Box::into_raw(sendbox) as *mut c_void
+            ];
             delegate
-        }
-    }
-
-    pub fn delegate_receiver_clone(delegate: *mut Object) -> Receiver<CentralDelegateEvent> {
-        unsafe {
-            // Just clone here and return, so we don't have to worry about
-            // accidentally screwing up ownership by passing the bare pointer
-            // outside.
-            (*(*(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_RECEIVER_IVAR)
-                as *mut Receiver<CentralDelegateEvent>))
-                .clone()
-        }
+        };
+        (delegate, receiver)
     }
 
     pub fn delegate_drop_channel(delegate: *mut Object) {
         unsafe {
-            let _ = Box::from_raw(
-                *(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_RECEIVER_IVAR)
-                    as *mut Receiver<CentralDelegateEvent>,
-            );
             let _ = Box::from_raw(
                 *(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR)
                     as *mut Sender<CentralDelegateEvent>,
@@ -150,7 +157,6 @@ pub mod CentralDelegate {
     }
 
     const DELEGATE_SENDER_IVAR: &'static str = "_sender";
-    const DELEGATE_RECEIVER_IVAR: &'static str = "_receiver";
 
     fn delegate_class() -> &'static Class {
         trace!("delegate_class");
@@ -165,11 +171,10 @@ pub mod CentralDelegate {
             decl.add_protocol(Protocol::get("CBCentralManagerDelegate").unwrap());
 
             decl.add_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR); /* crossbeam_channel::Sender<DelegateMessage>* */
-            decl.add_ivar::<*mut c_void>(DELEGATE_RECEIVER_IVAR); /* crossbeam_channel::Receiver<DelegateMessage>* */
             unsafe {
                 // Initialization
-                decl.add_method(sel!(init),
-                                delegate_init as extern fn(&mut Object, Sel) -> *mut Object);
+                decl.add_method(sel!(initWithSender:),
+                                delegate_init as extern fn(&mut Object, Sel, *mut c_void) -> *mut Object);
 
                 // CentralManager Events
                 decl.add_method(sel!(centralManagerDidUpdateState:),
@@ -240,47 +245,41 @@ pub mod CentralDelegate {
     }
 
     fn send_delegate_event(delegate: &mut Object, event: CentralDelegateEvent) {
-        let sender = delegate_get_sender_clone(delegate);
-        task::block_on(async {
+        let mut sender = delegate_get_sender_clone(delegate);
+        futures::executor::block_on(async {
             if let Err(e) = sender.send(event).await {
                 error!("Error sending delegate event: {}", e);
             }
         });
     }
 
-    extern "C" fn delegate_init(delegate: &mut Object, _cmd: Sel) -> *mut Object {
+    extern "C" fn delegate_init(
+        delegate: &mut Object,
+        _cmd: Sel,
+        sender: *mut c_void,
+    ) -> *mut Object {
         trace!("delegate_init");
-        let (sender, recv) = async_std::channel::bounded::<CentralDelegateEvent>(256);
         // TODO Should these maybe be Option<T>, so we can denote when we've
         // dropped? Not quite sure how delegate lifetime works here.
-        let sendbox = Box::new(sender);
-        let recvbox = Box::new(recv);
         unsafe {
             trace!("Storing off ivars!");
-            delegate.set_ivar::<*mut c_void>(
-                DELEGATE_SENDER_IVAR,
-                Box::into_raw(sendbox) as *mut c_void,
-            );
-            delegate.set_ivar::<*mut c_void>(
-                DELEGATE_RECEIVER_IVAR,
-                Box::into_raw(recvbox) as *mut c_void,
-            );
+            delegate.set_ivar(DELEGATE_SENDER_IVAR, sender);
         }
         delegate
     }
 
     fn get_characteristic_value(characteristic: *mut Object) -> Vec<u8> {
-        info!("Getting data!");
+        trace!("Getting data!");
         let value = cb::characteristic_value(characteristic);
         let length = ns::data_length(value);
         if length == 0 {
-            info!("data is 0?");
+            debug!("data is 0?");
             return vec![];
         }
 
         let bytes = ns::data_bytes(value);
         let v = unsafe { slice::from_raw_parts(bytes, length as usize).to_vec() };
-        info!("BluetoothGATTCharacteristic::get_value -> {:?}", v);
+        trace!("BluetoothGATTCharacteristic::get_value -> {:?}", v);
         v
     }
 
@@ -345,7 +344,7 @@ pub mod CentralDelegate {
         _cmd: Sel,
         _central: *mut Object,
         peripheral: *mut Object,
-        _adv_data: *mut Object,
+        adv_data: *mut Object,
         _rssi: *mut Object,
     ) {
         trace!(
@@ -361,6 +360,66 @@ pub mod CentralDelegate {
             delegate,
             CentralDelegateEvent::DiscoveredPeripheral(held_peripheral),
         );
+
+        let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
+        let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
+
+        let manufacturer_data = ns::dictionary_objectforkey(adv_data, unsafe {
+            cb::ADVERTISEMENT_DATA_MANUFACTURER_DATA_KEY
+        });
+        if manufacturer_data != nil {
+            // manufacturer_data: NSData
+            let length = ns::data_length(manufacturer_data);
+            if length >= 2 {
+                let bytes = ns::data_bytes(manufacturer_data);
+                let v = unsafe { slice::from_raw_parts(bytes, length as usize) };
+                let (manufacturer_id, manufacturer_data) = v.split_at(2);
+
+                send_delegate_event(
+                    delegate,
+                    CentralDelegateEvent::ManufacturerData(
+                        puuid,
+                        u16::from_le_bytes(manufacturer_id.try_into().unwrap()),
+                        Vec::from(manufacturer_data),
+                    ),
+                );
+            }
+        }
+        let service_data = ns::dictionary_objectforkey(adv_data, unsafe {
+            cb::ADVERTISEMENT_DATA_SERVICE_DATA_KEY
+        });
+        if service_data != nil {
+            // service_data: [CBUUID, NSData]
+            let uuids = ns::dictionary_allkeys(service_data);
+            let mut result = HashMap::new();
+            for i in 0..ns::array_count(uuids) {
+                let uuid = ns::array_objectatindex(uuids, i);
+                let data = ns::dictionary_objectforkey(service_data, uuid);
+                let data_length = ns::data_length(data);
+                let data = unsafe {
+                    slice::from_raw_parts(ns::data_bytes(data), data_length as usize).to_vec()
+                };
+
+                result.insert(cbuuid_to_uuid(uuid), data);
+            }
+
+            send_delegate_event(delegate, CentralDelegateEvent::ServiceData(puuid, result));
+        }
+
+        let services = ns::dictionary_objectforkey(adv_data, unsafe {
+            cb::ADVERTISEMENT_DATA_SERVICE_UUIDS_KEY
+        });
+        if services != nil {
+            // services: [CBUUID]
+            let mut result = Vec::new();
+            for i in 0..ns::array_count(services) {
+                let uuid = ns::array_objectatindex(services, i);
+
+                result.push(cbuuid_to_uuid(uuid));
+            }
+
+            send_delegate_event(delegate, CentralDelegateEvent::Services(puuid, result));
+        }
     }
 
     ////////////////////////////////////////////////////////////////

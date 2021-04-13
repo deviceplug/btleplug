@@ -16,9 +16,9 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use std::os::raw::{c_char, c_int, c_uint};
-
 use objc::runtime::{Class, Object, BOOL};
+use objc::{msg_send, sel, sel_impl};
+use std::os::raw::{c_char, c_int, c_uint};
 
 #[allow(non_upper_case_globals)]
 pub const nil: *mut Object = 0 as *mut Object;
@@ -271,6 +271,8 @@ pub mod cb {
 
         #[link(name = "CoreBluetooth", kind = "framework")]
         extern "C" {
+            pub static CBAdvertisementDataManufacturerDataKey: *mut Object;
+            pub static CBAdvertisementDataServiceDataKey: *mut Object;
             pub static CBAdvertisementDataServiceUUIDsKey: *mut Object;
 
             pub static CBCentralManagerScanOptionAllowDuplicatesKey: *mut Object;
@@ -522,5 +524,7 @@ pub mod cb {
 
     // CBAdvertisementData...Key
 
-    pub use self::link::CBAdvertisementDataServiceUUIDsKey as ADVERTISEMENTDATASERVICEUUIDSKEY;
+    pub use self::link::CBAdvertisementDataManufacturerDataKey as ADVERTISEMENT_DATA_MANUFACTURER_DATA_KEY;
+    pub use self::link::CBAdvertisementDataServiceDataKey as ADVERTISEMENT_DATA_SERVICE_DATA_KEY;
+    pub use self::link::CBAdvertisementDataServiceUUIDsKey as ADVERTISEMENT_DATA_SERVICE_UUIDS_KEY;
 }

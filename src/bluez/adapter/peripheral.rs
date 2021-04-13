@@ -11,19 +11,11 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use dbus::{
-    arg::{cast, PropMap, RefArg, Variant},
-    blocking::{stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged, Proxy, SyncConnection},
-    channel::Token,
-    message::{Message, SignalArgs},
-    Path,
-};
-
 use crate::{
     api::{
         AdapterManager, AddressType, BDAddr, CentralEvent, CharPropFlags, Characteristic,
         NotificationHandler, Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification,
-        WriteType, UUID,
+        WriteType,
     },
     bluez::{
         bluez_dbus::device::OrgBluezDevice1, bluez_dbus::device::OrgBluezDevice1Properties,
@@ -33,13 +25,22 @@ use crate::{
     common::util::invoke_handlers,
     Error, Result,
 };
-
+use dbus::{
+    arg::{cast, PropMap, RefArg, Variant},
+    blocking::{stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged, Proxy, SyncConnection},
+    channel::Token,
+    message::{Message, SignalArgs},
+    Path,
+};
+use log::{debug, error, trace, warn};
+use static_assertions::assert_impl_all;
 use std::{
     collections::{BTreeSet, HashMap},
     fmt::{self, Debug, Display, Formatter},
     sync::{Arc, Condvar, Mutex},
     time::Instant,
 };
+use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 enum PeripheralState {
@@ -167,7 +168,7 @@ impl Peripheral {
         Ok(())
     }
 
-    pub fn add_attribute(&self, path: &str, uuid: UUID, properties: CharPropFlags) -> Result<()> {
+    pub fn add_attribute(&self, path: &str, uuid: Uuid, properties: CharPropFlags) -> Result<()> {
         trace!(
             "Adding attribute {} ({:?}) under {}",
             uuid,
@@ -178,9 +179,9 @@ impl Peripheral {
         let handle: Handle = path.parse()?;
         // Create a placeholder attribute to store properties and uuid
         let attribute = Characteristic {
-            uuid: uuid,
+            uuid,
             value_handle: handle.handle,
-            properties: properties,
+            properties,
             end_handle: 0,
             start_handle: 0,
         };
@@ -236,6 +237,7 @@ impl Peripheral {
     pub fn update_properties(&self, args: OrgBluezDevice1Properties) {
         trace!("Updating peripheral properties");
         let mut properties = self.properties.lock().unwrap();
+        let mut emit_updated = false;
 
         properties.discovery_count += 1;
 
@@ -265,6 +267,7 @@ impl Peripheral {
         if let Some(name) = args.name() {
             debug!("Updating \"{}\" local name to \"{:?}\"", self.address, name);
             properties.local_name = Some(name.to_owned());
+            emit_updated = true;
         }
 
         if let Some(services_resolved) = args.services_resolved() {
@@ -280,18 +283,6 @@ impl Peripheral {
             cvar.notify_all();
         }
 
-        // if let Some(services) = args.get("ServiceData") {
-        //     debug!("Updating services to \"{:?}\"", services);
-
-        //     if let Some(mut iter) = services.0.as_iter() {
-        //         loop {
-        //             if let (Some(uuid), ())
-        //         }
-        //     }
-        // }
-
-        // As of writing this: ManufacturerData returns a 'Variant({<manufacturer_id>: Variant([<manufacturer_data>])})'.
-        // This Variant wrapped dictionary and array is difficult to navigate. So uh.. trust me, this works on my machine™.
         if let Some(manufacturer_data) = args.manufacturer_data() {
             debug!(
                 "Updating \"{}\" manufacturer data \"{:?}\"",
@@ -301,6 +292,12 @@ impl Peripheral {
                 .into_iter()
                 .filter_map(|(&k, v)| {
                     if let Some(v) = cast::<Vec<u8>>(&v.0) {
+                        self.adapter
+                            .emit(CentralEvent::ManufacturerDataAdvertisement {
+                                address: self.address(),
+                                manufacturer_id: k,
+                                data: v.clone(),
+                            });
                         Some((k, v.to_owned()))
                     } else {
                         warn!("Manufacturer data had wrong type: {:?}", &v.0);
@@ -308,6 +305,38 @@ impl Peripheral {
                     }
                 })
                 .collect();
+        }
+
+        if let Some(service_data) = args.service_data() {
+            properties.service_data = service_data
+                .into_iter()
+                .filter_map(|(service, data)| {
+                    let service: Uuid = service.parse().unwrap();
+                    if let Some(data) = cast::<Vec<u8>>(&data.0) {
+                        self.adapter.emit(CentralEvent::ServiceDataAdvertisement {
+                            address: self.address(),
+                            service,
+                            data: data.clone(),
+                        });
+                        Some((service, data.to_owned()))
+                    } else {
+                        warn!("Service data had wrong type: {:?}", &data.0);
+                        None
+                    }
+                })
+                .collect();
+        }
+
+        if let Some(services) = args.uuids() {
+            properties.services = services
+                .into_iter()
+                .filter_map(|uuid| uuid.parse().ok())
+                .collect();
+
+            self.adapter.emit(CentralEvent::ServicesAdvertisement {
+                address: self.address.clone(),
+                services: properties.services.clone(),
+            });
         }
 
         if let Some(address_type) = args.address_type() {
@@ -319,15 +348,19 @@ impl Peripheral {
             );
 
             properties.address_type = address_type;
+            emit_updated = true;
         }
 
         if let Some(rssi) = args.rssi() {
             let rssi = rssi as i8;
             debug!("Updating \"{}\" RSSI \"{:?}\"", self.address, rssi);
             properties.tx_power_level = Some(rssi);
+            emit_updated = true;
         }
 
-        self.adapter.emit(CentralEvent::DeviceUpdated(self.address));
+        if emit_updated {
+            self.adapter.emit(CentralEvent::DeviceUpdated(self.address));
+        }
     }
 
     pub fn proxy(&self) -> Proxy<&SyncConnection> {
@@ -491,7 +524,7 @@ impl ApiPeripheral for Peripheral {
     }
 
     // Is this looking for a characteristic with a descriptor? or a service with a characteristic?
-    fn read_by_type(&self, characteristic: &Characteristic, uuid: UUID) -> Result<Vec<u8>> {
+    fn read_by_type(&self, characteristic: &Characteristic, uuid: Uuid) -> Result<Vec<u8>> {
         if let Some(characteristic) =
             self.attributes_map
                 .lock()

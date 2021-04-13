@@ -18,6 +18,7 @@ use bindings::windows::devices::bluetooth::generic_attribute_profile::{
 };
 use bindings::windows::devices::bluetooth::{BluetoothConnectionStatus, BluetoothLEDevice};
 use bindings::windows::foundation::{EventRegistrationToken, TypedEventHandler};
+use log::{debug, trace, error};
 
 pub type ConnectedEventHandler = Box<dyn Fn(bool) + Send>;
 
@@ -34,17 +35,20 @@ impl BLEDevice {
         let async_op = BluetoothLEDevice::from_bluetooth_address_async(utils::to_address(address))
             .map_err(|_| Error::DeviceNotFound)?;
         let device = async_op.get().map_err(|_| Error::DeviceNotFound)?;
-        let connection_status_handler =
-            TypedEventHandler::new(move |sender: &BluetoothLEDevice, _: &winrt::Object| {
-                let sender = &*sender;
-                let is_connected = sender
-                    .connection_status()
-                    .ok()
-                    .map_or(false, |v| v == BluetoothConnectionStatus::Connected);
-                connection_status_changed(is_connected);
-                info!("state {:?}", sender.connection_status());
+        let connection_status_handler = TypedEventHandler::new(
+            move |sender: &Option<BluetoothLEDevice>, _: &Option<windows::Object>| {
+                if let Some(sender) = sender {
+                    let is_connected = sender
+                        .connection_status()
+                        .ok()
+                        .map_or(false, |v| v == BluetoothConnectionStatus::Connected);
+                    connection_status_changed(is_connected);
+                    trace!("state {:?}", sender.connection_status());
+                }
+
                 Ok(())
-            });
+            },
+        );
         let connection_token = device
             .connection_status_changed(&connection_status_handler)
             .map_err(|_| Error::Other("Could not add connection status handler".into()))?;
@@ -71,33 +75,30 @@ impl BLEDevice {
 
     fn get_characteristics(&self, service: &GattDeviceService) -> Vec<GattCharacteristic> {
         let mut characteristics = Vec::new();
-        let service3 = service;
-        let async_result = service3.get_characteristics_async().and_then(|ao| ao.get());
+        let async_result = service.get_characteristics_async().and_then(|ao| ao.get());
         match async_result {
-            Ok(async_result) => match async_result.status() {
-                Ok(GattCommunicationStatus::Success) => {
+            Ok(async_result) => {
+                let status = async_result.status();
+                if status == Ok(GattCommunicationStatus::Success) {
                     match async_result.characteristics() {
-                        // Ok(Some(results)) => {
                         Ok(results) => {
-                            info!("characteristics {:?}", results.size());
+                            debug!("characteristics {:?}", results.size());
                             for characteristic in &results {
                                 characteristics.push(characteristic);
                             }
                         }
                         Err(error) => {
-                            info!("get_characteristics {:?}", error);
+                            error!("get_characteristics {:?}", error);
                         }
                     }
+                } else {
+                    trace!("get_status {:?}", status);
                 }
-                rest => {
-                    info!("get_status {:?}", rest);
-                }
-            },
+            }
             Err(error) => {
-                info!("get_characteristics_async {:?}", error);
+                error!("get_characteristics_async {:?}", error);
             }
         }
-        // }
         characteristics
     }
 
@@ -108,7 +109,7 @@ impl BLEDevice {
         if status == GattCommunicationStatus::Success {
             let mut characteristics = Vec::new();
             let services = service_result.services().map_err(winrt_error)?;
-            info!("services {:?}", services.size());
+            debug!("services {:?}", services.size());
             for service in &services {
                 characteristics.append(&mut self.get_characteristics(&service));
             }
@@ -124,7 +125,7 @@ impl Drop for BLEDevice {
             .device
             .remove_connection_status_changed(&self.connection_token);
         if let Err(err) = result {
-            info!("Drop:remove_connection_status_changed {:?}", err);
+            debug!("Drop:remove_connection_status_changed {:?}", err);
         }
     }
 }

@@ -20,9 +20,6 @@
 //! An example of how to use the library to control some BLE smart lights:
 //!
 //! ```rust,no_run
-//! extern crate btleplug;
-//! extern crate rand;
-//!
 //! use std::thread;
 //! use std::time::Duration;
 //! use rand::{Rng, thread_rng};
@@ -32,7 +29,10 @@
 //! use btleplug::winrtble::{adapter::Adapter, manager::Manager};
 //! #[cfg(target_os = "macos")]
 //! use btleplug::corebluetooth::{adapter::Adapter, manager::Manager};
-//! use btleplug::api::{Central, Peripheral, WriteType, UUID};
+//! use btleplug::api::{bleuuid::uuid_from_u16, Central, Peripheral, WriteType};
+//! use uuid::Uuid;
+//!
+//! const LIGHT_CHARACTERISTIC_UUID: Uuid = uuid_from_u16(0xFFE9);
 //!
 //! // adapter retreival works differently depending on your platform right now.
 //! // API needs to be aligned.
@@ -63,7 +63,7 @@
 //!
 //!     // find the characteristic we want
 //!     let chars = light.characteristics();
-//!     let cmd_char = chars.iter().find(|c| c.uuid == UUID::B16(0xFFE9)).unwrap();
+//!     let cmd_char = chars.iter().find(|c| c.uuid == LIGHT_CHARACTERISTIC_UUID).unwrap();
 //!
 //!     // dance party
 //!     let mut rng = thread_rng();
@@ -75,41 +75,11 @@
 //! }
 //! ```
 
-extern crate libc;
-
-#[macro_use]
-extern crate log;
-
-#[cfg(target_os = "linux")]
-#[macro_use]
-extern crate static_assertions;
-
-#[cfg(target_os = "linux")]
-extern crate nix;
-
-#[cfg(target_os = "windows")]
-extern crate winrt;
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-#[macro_use]
-extern crate objc;
-
 // We won't actually use anything specifically out of this crate. However, if we
 // want the CoreBluetooth code to compile, we need the objc protocols
 // (specifically, the core bluetooth protocols) exposed by it.
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 extern crate cocoa;
-
-extern crate bytes;
-
-#[cfg(target_os = "linux")]
-extern crate enum_primitive;
-extern crate num;
-
-#[macro_use]
-extern crate bitflags;
-
-extern crate thiserror;
 
 use std::result;
 use std::time::Duration;

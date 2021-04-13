@@ -1,3 +1,35 @@
+# 0.7.2 (2021-04-04)
+
+## Bugfixes
+
+- Windows UWP characteristic methods now return errors instead of unwrapping everything.
+
+# 0.7.1 (2021-03-01)
+
+## Bugfixes
+
+- Fixed commit/merge issues with 0.7.0 that ended up with incorrect dependencies being brought in.
+
+# 0.7.0 (2021-02-28) (Yanked)
+
+## Breaking API Changes
+
+- Move to using Uuid crate instead of having an internal type.
+- Remove discover_characteristics_in_range (unused or duplicated elsewhere)
+- write() commands are now passed a WriteType for specifying WriteWith/WithoutResponse
+- Variants added to CentralEvent enum, may break exhaustive checks
+
+## Features
+
+- Add capabilities for service and manufacturer advertisements
+- Lots of CoreBluetooth cleanup
+- Update to using windows library (instead of winrt)
+- Replace usage of async_std for channels in macOS with futures crate
+
+## Bugfixes
+
+- De-escalate log message levels, so there are less message spams at the info level.
+
 # 0.6.0 (2021-02-04)
 
 ## Breaking API Changes

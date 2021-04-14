@@ -19,9 +19,9 @@ use btleplug::api::{NotificationHandler, UUID};
 const PERIPHERAL_NAME_MATCH_FILTER: &'static str = "Neuro"; // filter BLE device by partial name
 
 // string to match with BLE name
-const SUBSCRIBE_TO_CHARACTERISTIC: UUID = UUID::B128( // only NOTIFY type should be specified   s
-                                                      [0x9E,0xCA,0xDC,0x24,0x0E,0xE5,0xA9,0x67,0x93,0xF3,0x34,0xB5,0x02,0x00,0x40,0x6E]);
-//6E:40:00:02:B5:34:F3:93:67:A9:E5:0E:24:DC:CA:9E - in REVERSED bytes ORDER !!!
+const SUBSCRIBE_TO_CHARACTERISTIC: UUID = UUID::B128( // only NOTIFY type should be specified
+[0x9E,0xCA,0xDC,0x24,0x0E,0xE5,0xA9,0x67,0x93,0xF3,0x34,0xB5,0x02,0x00,0x40,0x6E]);
+//6E:40:00:02:B5:34:F3:93:67:A9:E5:0E:24:DC:CA:9E - in REVERSED byte ORDER !!!
 
 #[cfg(target_os = "linux")]
 fn print_adapter_info(adapter: &Adapter) {
@@ -44,7 +44,7 @@ fn my_on_notification_handler(data: ValueNotification) {
 
 /**
 If you are getting run time error like that :
- thread 'main' panicked at 'Can't scan BLE adapter for connected devices...: PermissionDenied', src/libcore/result.rs:1188:5
+ thread 'main' panicked at 'Can't scan BLE adapter for connected devices...: PermissionDenied',
  you can try to run app with > sudo ./discover_adapters_peripherals
  on linux
 **/

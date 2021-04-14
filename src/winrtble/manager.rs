@@ -12,25 +12,29 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use super::{adapter::Adapter, bindings};
-#[allow(unused_imports)]
-use crate::{Error, Result};
+use crate::{api, Result};
+use async_trait::async_trait;
+use bindings::Windows::Devices::Radios::{Radio, RadioKind};
 
-use bindings::windows::devices::radios::{Radio, RadioKind};
-
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Manager {}
 
 impl Manager {
-    pub fn new() -> Result<Self> {
+    pub async fn new() -> Result<Self> {
         Ok(Self {})
     }
+}
 
-    pub fn adapters(&self) -> Result<Vec<Adapter>> {
+#[async_trait]
+impl api::Manager for Manager {
+    type Adapter = Adapter;
+
+    async fn adapters(&self) -> Result<Vec<Adapter>> {
         let mut result: Vec<Adapter> = vec![];
-        let radios = Radio::get_radios_async().unwrap().get().unwrap();
+        let radios = Radio::GetRadiosAsync().unwrap().await.unwrap();
 
         for radio in &radios {
-            let kind = radio.kind().unwrap();
+            let kind = radio.Kind().unwrap();
             if kind == RadioKind::Bluetooth {
                 result.push(Adapter::new());
             }

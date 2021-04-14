@@ -12,11 +12,12 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 pub mod adapter;
-pub mod bindings;
+#[allow(dead_code)]
+mod bindings;
 mod ble;
 pub mod manager;
 pub mod peripheral;
-pub mod utils;
+mod utils;
 
 /// Only some of the assigned numbers are populated here as needed from https://www.bluetooth.com/specifications/assigned-numbers/generic-access-profile/
 mod advertisement_data_type {

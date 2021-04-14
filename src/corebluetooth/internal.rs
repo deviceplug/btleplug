@@ -12,10 +12,9 @@ use super::{
     central_delegate::{CentralDelegate, CentralDelegateEvent},
     framework::{cb, ns},
     future::{BtlePlugFuture, BtlePlugFutureStateShared},
-    utils::{CoreBluetoothUtils, NSStringUtils},
+    utils::{core_bluetooth::cbuuid_to_uuid, nsstring::nsstring_to_string, nsuuid_to_uuid},
 };
 use crate::api::{CharPropFlags, Characteristic, WriteType};
-use async_std::task;
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::select;
 use futures::sink::SinkExt;
@@ -30,11 +29,10 @@ use std::{
     fmt::{self, Debug, Formatter},
     ops::Deref,
     os::raw::c_uint,
-    str::FromStr,
     thread,
 };
+use tokio::runtime;
 use uuid::Uuid;
-use CoreBluetoothUtils::cbuuid_to_uuid;
 
 struct CBCharacteristic {
     pub characteristic: StrongPtr,
@@ -77,7 +75,7 @@ impl CBCharacteristic {
 
     fn form_flags(characteristic: *mut Object) -> CharPropFlags {
         let flags = cb::characteristic_properties(characteristic);
-        let mut v = CharPropFlags::new();
+        let mut v = CharPropFlags::default();
         if (flags & cb::CHARACTERISTICPROPERTY_BROADCAST) != 0 {
             v |= CharPropFlags::BROADCAST;
         }
@@ -186,10 +184,6 @@ impl CBPeripheral {
             let mut char_set = BTreeSet::new();
             for (&uuid, c) in &self.characteristics {
                 let char = Characteristic {
-                    // We can't get handles on macOS, just set them to 0.
-                    start_handle: 0,
-                    end_handle: 0,
-                    value_handle: 0,
                     uuid,
                     properties: c.properties,
                 };
@@ -349,9 +343,8 @@ impl CoreBluetoothInternal {
     }
 
     async fn on_discovered_peripheral(&mut self, peripheral: StrongPtr) {
-        let uuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(*peripheral));
-        let uuid = Uuid::from_str(&NSStringUtils::string_to_string(uuid_nsstring)).unwrap();
-        let name = NSStringUtils::string_to_maybe_string(cb::peripheral_name(*peripheral));
+        let uuid = nsuuid_to_uuid(cb::peer_identifier(*peripheral));
+        let name = nsstring_to_string(cb::peripheral_name(*peripheral));
         if self.peripherals.contains_key(&uuid) {
             if let Some(name) = name {
                 self.dispatch_event(CoreBluetoothEvent::DeviceUpdated(uuid, name))
@@ -448,20 +441,18 @@ impl CoreBluetoothInternal {
                 // we're trying to do a read, we'll have a future we can
                 // fulfill. Otherwise, just treat the returned value as a
                 // notification and use the event system.
-                if c.read_future_state.len() > 0 {
+                if !c.read_future_state.is_empty() {
                     let state = c.read_future_state.pop_back().unwrap();
                     state
                         .lock()
                         .unwrap()
                         .set_reply(CoreBluetoothReply::ReadResult(data_clone));
-                } else {
-                    if let Err(e) = p
-                        .event_sender
-                        .send(CBPeripheralEvent::Notification(characteristic_uuid, data))
-                        .await
-                    {
-                        error!("Error sending notification event: {}", e);
-                    }
+                } else if let Err(e) = p
+                    .event_sender
+                    .send(CBPeripheralEvent::Notification(characteristic_uuid, data))
+                    .await
+                {
+                    error!("Error sending notification event: {}", e);
                 }
             }
         }
@@ -681,8 +672,10 @@ pub fn run_corebluetooth_thread(
     event_sender: Sender<CoreBluetoothEvent>,
 ) -> Sender<CoreBluetoothMessage> {
     let (sender, receiver) = mpsc::channel::<CoreBluetoothMessage>(256);
+    // CoreBluetoothInternal is !Send, so we need to keep it on a single thread.
     thread::spawn(move || {
-        task::block_on(async move {
+        let runtime = runtime::Builder::new_current_thread().build().unwrap();
+        runtime.block_on(async move {
             let mut cbi = CoreBluetoothInternal::new(receiver, event_sender);
             loop {
                 cbi.wait_for_message().await;

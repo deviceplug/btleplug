@@ -11,12 +11,16 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use super::{ble::watcher::BLEWatcher, peripheral::Peripheral, utils};
+use super::{ble::watcher::BLEWatcher, peripheral::Peripheral};
 use crate::{
     api::{AdapterManager, BDAddr, Central, CentralEvent},
-    Result,
+    Error, Result,
 };
-use std::sync::{mpsc::Receiver, Arc, Mutex};
+use async_trait::async_trait;
+use futures::stream::Stream;
+use std::convert::TryInto;
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
 pub struct Adapter {
@@ -25,53 +29,52 @@ pub struct Adapter {
 }
 
 impl Adapter {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let watcher = Arc::new(Mutex::new(BLEWatcher::new()));
-        let manager = AdapterManager::<Peripheral>::new();
+        let manager = AdapterManager::default();
         Adapter { watcher, manager }
     }
 }
 
-impl Central<Peripheral> for Adapter {
-    fn event_receiver(&self) -> Option<Receiver<CentralEvent>> {
-        self.manager.event_receiver()
+#[async_trait]
+impl Central for Adapter {
+    type Peripheral = Peripheral;
+
+    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent>>>> {
+        Ok(self.manager.event_stream())
     }
 
-    fn start_scan(&self) -> Result<()> {
+    async fn start_scan(&self) -> Result<()> {
         let watcher = self.watcher.lock().unwrap();
         let manager = self.manager.clone();
         watcher.start(Box::new(move |args| {
-            let bluetooth_address = args.bluetooth_address().unwrap();
-            let address = utils::to_addr(bluetooth_address);
-            let peripheral = manager
-                .peripheral(address)
-                .unwrap_or_else(|| Peripheral::new(manager.clone(), address));
-            peripheral.update_properties(args);
-            if !manager.has_peripheral(&address) {
+            let bluetooth_address = args.BluetoothAddress().unwrap();
+            let address = bluetooth_address.try_into().unwrap();
+            if let Some(mut entry) = manager.peripheral_mut(address) {
+                entry.value_mut().update_properties(args);
+                manager.emit(CentralEvent::DeviceUpdated(address));
+            } else {
+                let peripheral = Peripheral::new(manager.clone(), address);
+                peripheral.update_properties(args);
                 manager.add_peripheral(address, peripheral);
                 manager.emit(CentralEvent::DeviceDiscovered(address));
-            } else {
-                manager.update_peripheral(address, peripheral);
-                manager.emit(CentralEvent::DeviceUpdated(address));
             }
         }))
     }
 
-    fn stop_scan(&self) -> Result<()> {
+    async fn stop_scan(&self) -> Result<()> {
         let watcher = self.watcher.lock().unwrap();
         watcher.stop().unwrap();
         Ok(())
     }
 
-    fn peripherals(&self) -> Vec<Peripheral> {
-        self.manager.peripherals()
+    async fn peripherals(&self) -> Result<Vec<Peripheral>> {
+        Ok(self.manager.peripherals())
     }
 
-    fn peripheral(&self, address: BDAddr) -> Option<Peripheral> {
-        self.manager.peripheral(address)
+    async fn peripheral(&self, address: BDAddr) -> Result<Peripheral> {
+        self.manager
+            .peripheral(address)
+            .ok_or(Error::DeviceNotFound)
     }
-
-    fn active(&self, _enabled: bool) {}
-
-    fn filter_duplicates(&self, _enabled: bool) {}
 }

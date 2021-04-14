@@ -32,6 +32,9 @@ jobs:
            - clippy
      # Run any user-specific setup steps
      - ${{ parameters.setup }}
+     - script: sudo apt-get -y install libdbus-1-dev
+       displayName: Install packages
+       condition: eq(variables['Agent.OS'], 'Linux')
      - script: cargo +nightly fmt --all -- --check
        displayName: cargo fmt --check
      - script: cargo +nightly clippy --all
@@ -85,15 +88,10 @@ jobs:
        condition: eq(variables['Agent.OS'], 'Linux')
      - script: cargo check --all --bins --examples
        displayName: cargo check
-     # Can't do no features because we're in a workspace
-     #
-     # - script: cargo check --all --bins --examples --no-default-features
-     #   displayName: cargo check --no-default-features
-
-     # Can't do all features because we have platform specific features
-     #
-     # - script: cargo check --all --bins --examples --all-features
-     #   displayName: cargo check --all-features
+     - script: cargo check --all --bins --examples --no-default-features
+       displayName: cargo check --no-default-features
+     - script: cargo check --all --bins --examples --all-features
+       displayName: cargo check --all-features
      - script: cargo test --all
        displayName: cargo test
        # Set timeout for tests, as some tests seem to randomly stall.

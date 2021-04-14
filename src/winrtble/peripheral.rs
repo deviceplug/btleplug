@@ -18,131 +18,127 @@ use super::{
 use crate::{
     api::{
         bleuuid::{uuid_from_u16, uuid_from_u32},
-        AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic, NotificationHandler,
+        AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic,
         Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, WriteType,
     },
     common::util,
     Error, Result,
 };
+use async_trait::async_trait;
 use dashmap::DashMap;
+use futures::channel::mpsc::{self, UnboundedSender};
+use futures::stream::Stream;
 use std::{
     collections::BTreeSet,
     convert::TryInto,
     fmt::{self, Debug, Display, Formatter},
+    pin::Pin,
     sync::atomic::{AtomicBool, Ordering},
     sync::{Arc, Mutex},
 };
 use uuid::Uuid;
 
-use bindings::windows::devices::bluetooth::advertisement::*;
+use bindings::Windows::Devices::Bluetooth::Advertisement::*;
 
 #[derive(Clone)]
 pub struct Peripheral {
-    device: Arc<Mutex<Option<BLEDevice>>>,
+    device: Arc<tokio::sync::Mutex<Option<BLEDevice>>>,
     adapter: AdapterManager<Self>,
     address: BDAddr,
     properties: Arc<Mutex<PeripheralProperties>>,
-    characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
     connected: Arc<AtomicBool>,
     ble_characteristics: Arc<DashMap<Uuid, BLECharacteristic>>,
-    notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
+    notification_senders: Arc<Mutex<Vec<UnboundedSender<ValueNotification>>>>,
 }
 
 impl Peripheral {
-    pub fn new(adapter: AdapterManager<Self>, address: BDAddr) -> Self {
-        let device = Arc::new(Mutex::new(None));
+    pub(crate) fn new(adapter: AdapterManager<Self>, address: BDAddr) -> Self {
+        let device = Arc::new(tokio::sync::Mutex::new(None));
         let mut properties = PeripheralProperties::default();
         properties.address = address;
         let properties = Arc::new(Mutex::new(properties));
-        let characteristics = Arc::new(Mutex::new(BTreeSet::new()));
         let connected = Arc::new(AtomicBool::new(false));
         let ble_characteristics = Arc::new(DashMap::new());
-        let notification_handlers = Arc::new(Mutex::new(Vec::new()));
+        let notification_senders = Arc::new(Mutex::new(Vec::new()));
         Peripheral {
             device,
             adapter,
             address,
             properties,
-            characteristics,
             connected,
             ble_characteristics,
-            notification_handlers,
+            notification_senders,
         }
     }
 
-    pub fn update_properties(&self, args: &BluetoothLEAdvertisementReceivedEventArgs) {
+    pub(crate) fn update_properties(&self, args: &BluetoothLEAdvertisementReceivedEventArgs) {
         let mut properties = self.properties.lock().unwrap();
-        let advertisement = args.advertisement().unwrap();
+        let advertisement = args.Advertisement().unwrap();
 
         properties.discovery_count += 1;
 
         // Advertisements are cumulative: set/replace data only if it's set
-        if let Ok(name) = advertisement.local_name() {
+        if let Ok(name) = advertisement.LocalName() {
             if !name.is_empty() {
                 properties.local_name = Some(name.to_string());
             }
         }
-        if let Ok(manufacturer_data) = advertisement.manufacturer_data() {
+        if let Ok(manufacturer_data) = advertisement.ManufacturerData() {
             properties.manufacturer_data = manufacturer_data
                 .into_iter()
                 .map(|d| {
-                    let manufacturer_id = d.company_id().unwrap();
-                    let data = utils::to_vec(&d.data().unwrap());
-
-                    // Emit event of newly received advertisement
-                    self.adapter
-                        .emit(CentralEvent::ManufacturerDataAdvertisement {
-                            address: self.address,
-                            manufacturer_id,
-                            data: data.clone(),
-                        });
+                    let manufacturer_id = d.CompanyId().unwrap();
+                    let data = utils::to_vec(&d.Data().unwrap());
 
                     (manufacturer_id, data)
                 })
                 .collect();
+
+            // Emit event of newly received advertisement
+            self.adapter
+                .emit(CentralEvent::ManufacturerDataAdvertisement {
+                    address: self.address,
+                    manufacturer_data: properties.manufacturer_data.clone(),
+                });
         }
 
         // The Windows Runtime API (as of 19041) does not directly expose Service Data as a friendly API (like Manufacturer Data above)
         // Instead they provide data sections for access to raw advertising data. That is processed here.
-        if let Ok(data_sections) = advertisement.data_sections() {
+        if let Ok(data_sections) = advertisement.DataSections() {
             properties.service_data = data_sections
                 .into_iter()
                 .filter_map(|d| {
-                    let data = utils::to_vec(&d.data().unwrap());
+                    let data = utils::to_vec(&d.Data().unwrap());
 
-                    let service_data = match d.data_type().unwrap() {
+                    match d.DataType().unwrap() {
                         advertisement_data_type::SERVICE_DATA_16_BIT_UUID => {
                             let (uuid, data) = data.split_at(2);
                             let uuid = uuid_from_u16(u16::from_le_bytes(uuid.try_into().unwrap()));
-                            (uuid, data.to_owned())
+                            Some((uuid, data.to_owned()))
                         }
                         advertisement_data_type::SERVICE_DATA_32_BIT_UUID => {
                             let (uuid, data) = data.split_at(4);
                             let uuid = uuid_from_u32(u32::from_le_bytes(uuid.try_into().unwrap()));
-                            (uuid, data.to_owned())
+                            Some((uuid, data.to_owned()))
                         }
                         advertisement_data_type::SERVICE_DATA_128_BIT_UUID => {
                             let (uuid, data) = data.split_at(16);
                             let uuid = Uuid::from_slice(uuid).unwrap();
-                            (uuid, data.to_owned())
+                            Some((uuid, data.to_owned()))
                         }
-                        _ => return None,
-                    };
-
-                    // Emit event of newly received advertisement
-                    let (uuid, data) = service_data;
-                    self.adapter.emit(CentralEvent::ServiceDataAdvertisement {
-                        address: self.address,
-                        service: uuid,
-                        data: data.clone(),
-                    });
-
-                    Some((uuid, data))
+                        _ => None,
+                    }
                 })
                 .collect();
+
+            // Emit event of newly received advertisement
+            self.adapter.emit(CentralEvent::ServiceDataAdvertisement {
+                address: self.address,
+                service_data: properties.service_data.clone(),
+            });
         }
 
-        if let Ok(services) = advertisement.service_uuids() {
+        if let Ok(services) = advertisement.ServiceUuids() {
             properties.services = services
                 .into_iter()
                 .map(|uuid| utils::to_uuid(&uuid))
@@ -158,9 +154,9 @@ impl Peripheral {
         // https://social.msdn.microsoft.com/Forums/en-US/c71d51a2-56a1-425a-9063-de44fda48766/bluetooth-address-public-or-random?forum=wdk
         properties.address_type = AddressType::default();
         properties.has_scan_response =
-            args.advertisement_type().unwrap() == BluetoothLEAdvertisementType::ScanResponse;
+            args.AdvertisementType().unwrap() == BluetoothLEAdvertisementType::ScanResponse;
         properties.tx_power_level = args
-            .raw_signal_strength_in_dbm()
+            .RawSignalStrengthInDBm()
             .ok()
             .map(|rssi| rssi as i8);
     }
@@ -168,7 +164,7 @@ impl Peripheral {
 
 impl Display for Peripheral {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let connected = if self.is_connected() {
+        let connected = if self.connected.load(Ordering::Relaxed) {
             " connected"
         } else {
             ""
@@ -189,65 +185,68 @@ impl Display for Peripheral {
 
 impl Debug for Peripheral {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let connected = if self.is_connected() {
+        let connected = if self.connected.load(Ordering::Relaxed) {
             " connected"
         } else {
             ""
         };
         let properties = self.properties.lock().unwrap();
-        let characteristics = self.characteristics.lock().unwrap();
         write!(
             f,
             "{} properties: {:?}, characteristics: {:?} {}",
-            self.address, *properties, *characteristics, connected
+            self.address, *properties, self.ble_characteristics, connected
         )
     }
 }
 
+#[async_trait]
 impl ApiPeripheral for Peripheral {
     /// Returns the address of the peripheral.
     fn address(&self) -> BDAddr {
-        self.address.clone()
+        self.address
     }
 
     /// Returns the set of properties associated with the peripheral. These may be updated over time
     /// as additional advertising reports are received.
-    fn properties(&self) -> PeripheralProperties {
+    async fn properties(&self) -> Result<PeripheralProperties> {
         let l = self.properties.lock().unwrap();
-        l.clone()
+        Ok(l.clone())
     }
 
     /// The set of characteristics we've discovered for this device. This will be empty until
     /// `discover_characteristics` is called.
     fn characteristics(&self) -> BTreeSet<Characteristic> {
-        let l = self.characteristics.lock().unwrap();
-        l.clone()
+        self.ble_characteristics
+            .iter()
+            .map(|item| item.value().to_characteristic())
+            .collect()
     }
 
     /// Returns true iff we are currently connected to the device.
-    fn is_connected(&self) -> bool {
-        self.connected.load(Ordering::Relaxed)
+    async fn is_connected(&self) -> Result<bool> {
+        Ok(self.connected.load(Ordering::Relaxed))
     }
 
     /// Creates a connection to the device. This is a synchronous operation; if this method returns
     /// Ok there has been successful connection. Note that peripherals allow only one connection at
     /// a time. Operations that attempt to communicate with a device will fail until it is connected.
-    fn connect(&self) -> Result<()> {
+    async fn connect(&self) -> Result<()> {
         let connected = self.connected.clone();
         let adapter_clone = self.adapter.clone();
-        let address_clone = self.address.clone();
+        let address = self.address;
         let device = BLEDevice::new(
             self.address,
             Box::new(move |is_connected| {
                 connected.store(is_connected, Ordering::Relaxed);
                 if !is_connected {
-                    adapter_clone.emit(CentralEvent::DeviceDisconnected(address_clone));
+                    adapter_clone.emit(CentralEvent::DeviceDisconnected(address));
                 }
             }),
-        )?;
+        )
+        .await?;
 
-        device.connect()?;
-        let mut d = self.device.lock().unwrap();
+        device.connect().await?;
+        let mut d = self.device.lock().await;
         *d = Some(device);
         self.adapter
             .emit(CentralEvent::DeviceConnected(self.address));
@@ -255,9 +254,8 @@ impl ApiPeripheral for Peripheral {
     }
 
     /// Terminates a connection to the device. This is a synchronous operation.
-    fn disconnect(&self) -> Result<()> {
-        let winrt_error = |e| Error::Other(format!("{:?}", e));
-        let mut device = self.device.lock().map_err(winrt_error)?;
+    async fn disconnect(&self) -> Result<()> {
+        let mut device = self.device.lock().await;
         *device = None;
         self.adapter
             .emit(CentralEvent::DeviceDisconnected(self.address));
@@ -265,26 +263,18 @@ impl ApiPeripheral for Peripheral {
     }
 
     /// Discovers all characteristics for the device. This is a synchronous operation.
-    fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
-        let device = self.device.lock().unwrap();
+    async fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
+        let device = self.device.lock().await;
         if let Some(ref device) = *device {
             let mut characteristics_result = vec![];
-            let characteristics = device.discover_characteristics()?;
-            for characteristic in characteristics {
-                let uuid = utils::to_uuid(&characteristic.uuid().unwrap());
-                let properties =
-                    utils::to_char_props(&characteristic.characteristic_properties().unwrap());
-                let chara = Characteristic {
-                    uuid,
-                    start_handle: 0,
-                    end_handle: 0,
-                    value_handle: 0,
-                    properties,
-                };
-                characteristics_result.push(chara);
+            let characteristics = device.discover_characteristics().await?;
+            for gatt_characteristic in characteristics {
+                let ble_characteristic = BLECharacteristic::new(gatt_characteristic);
+                let characteristic = ble_characteristic.to_characteristic();
                 self.ble_characteristics
-                    .entry(uuid)
-                    .or_insert_with(|| BLECharacteristic::new(characteristic));
+                    .entry(characteristic.uuid.clone())
+                    .or_insert_with(|| ble_characteristic);
+                characteristics_result.push(characteristic);
             }
             return Ok(characteristics_result);
         }
@@ -293,46 +283,32 @@ impl ApiPeripheral for Peripheral {
 
     /// Write some data to the characteristic. Returns an error if the write couldn't be send or (in
     /// the case of a write-with-response) if the device returns an error.
-    fn write(
+    async fn write(
         &self,
         characteristic: &Characteristic,
         data: &[u8],
         write_type: WriteType,
     ) -> Result<()> {
         if let Some(ble_characteristic) = self.ble_characteristics.get(&characteristic.uuid) {
-            ble_characteristic.write_value(data, write_type)
+            ble_characteristic.write_value(data, write_type).await
         } else {
             Err(Error::NotSupported("write".into()))
         }
     }
 
-    /// Sends a read-by-type request to device for the range of handles covered by the
-    /// characteristic and for the specified declaration UUID. See
-    /// [here](https://www.bluetooth.com/specifications/gatt/declarations) for valid UUIDs.
-    /// Synchronously returns either an error or the device response.
-    fn read_by_type(&self, characteristic: &Characteristic, _uuid: Uuid) -> Result<Vec<u8>> {
-        if let Some(ble_characteristic) = self.ble_characteristics.get(&characteristic.uuid) {
-            return ble_characteristic.read_value();
-        } else {
-            Err(Error::NotSupported("read_by_type".into()))
-        }
-    }
-
     /// Enables either notify or indicate (depending on support) for the specified characteristic.
     /// This is a synchronous call.
-    fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
+    async fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
         if let Some(mut ble_characteristic) = self.ble_characteristics.get_mut(&characteristic.uuid)
         {
-            let notification_handlers = self.notification_handlers.clone();
+            let notification_senders = self.notification_senders.clone();
             let uuid = characteristic.uuid;
-            ble_characteristic.subscribe(Box::new(move |value| {
-                let notification = ValueNotification {
-                    uuid: uuid,
-                    handle: None,
-                    value,
-                };
-                util::invoke_handlers(&notification_handlers, &notification);
-            }))
+            ble_characteristic
+                .subscribe(Box::new(move |value| {
+                    let notification = ValueNotification { uuid: uuid, value };
+                    util::send_notification(&notification_senders, &notification);
+                }))
+                .await
         } else {
             Err(Error::NotSupported("subscribe".into()))
         }
@@ -340,28 +316,27 @@ impl ApiPeripheral for Peripheral {
 
     /// Disables either notify or indicate (depending on support) for the specified characteristic.
     /// This is a synchronous call.
-    fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
+    async fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
         if let Some(mut ble_characteristic) = self.ble_characteristics.get_mut(&characteristic.uuid)
         {
-            ble_characteristic.unsubscribe()
+            ble_characteristic.unsubscribe().await
         } else {
             Err(Error::NotSupported("unsubscribe".into()))
         }
     }
 
-    /// Registers a handler that will be called when value notification messages are received from
-    /// the device. This method should only be used after a connection has been established. Note
-    /// that the handler will be called in a common thread, so it should not block.
-    fn on_notification(&self, handler: NotificationHandler) {
-        let mut list = self.notification_handlers.lock().unwrap();
-        list.push(handler);
-    }
-
-    fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
+    async fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
         if let Some(ble_characteristic) = self.ble_characteristics.get(&characteristic.uuid) {
-            return ble_characteristic.read_value();
+            ble_characteristic.read_value().await
         } else {
             Err(Error::NotSupported("read".into()))
         }
+    }
+
+    async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification>>>> {
+        let (sender, receiver) = mpsc::unbounded();
+        let mut senders = self.notification_senders.lock().unwrap();
+        senders.push(sender);
+        Ok(Box::pin(receiver))
     }
 }

@@ -12,24 +12,27 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 mod adapter_manager;
+mod bdaddr;
 pub mod bleuuid;
 
-use crate::{Error, Result};
 pub use adapter_manager::AdapterManager;
+
+use crate::Result;
+use async_trait::async_trait;
 use bitflags::bitflags;
+use futures::stream::Stream;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde_cr as serde;
-use std::sync::mpsc::Receiver;
 use std::{
     collections::{BTreeSet, HashMap},
-    convert::TryFrom,
     fmt::{self, Debug, Display, Formatter},
-    str::FromStr,
+    pin::Pin,
 };
-use thiserror::Error;
 use uuid::Uuid;
+
+pub use self::bdaddr::{BDAddr, ParseBDAddrError};
 
 #[cfg_attr(
     feature = "serde",
@@ -73,92 +76,14 @@ impl AddressType {
     }
 }
 
-/// Stores the 6 byte address used to identify Bluetooth devices.
-#[cfg_attr(
-    feature = "serde",
-    derive(Serialize, Deserialize),
-    serde(crate = "serde_cr")
-)]
-#[derive(Copy, Clone, Hash, Eq, PartialEq, Default)]
-#[repr(C)]
-pub struct BDAddr {
-    pub address: [u8; 6usize],
-}
-
-impl Display for BDAddr {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let a = self.address;
-        write!(
-            f,
-            "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-            a[5], a[4], a[3], a[2], a[1], a[0]
-        )
-    }
-}
-
-impl Debug for BDAddr {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        (self as &dyn Display).fmt(f)
-    }
-}
-
-type ParseBDAddrResult<T> = std::result::Result<T, ParseBDAddrError>;
-
-#[derive(Debug, Error, Clone, PartialEq)]
-pub enum ParseBDAddrError {
-    #[error("Bluetooth address has to be 6 bytes long")]
-    IncorrectByteCount,
-    #[error("Malformed integer in Bluetooth address")]
-    InvalidInt,
-}
-
-impl From<ParseBDAddrError> for Error {
-    fn from(e: ParseBDAddrError) -> Self {
-        Error::Other(format!("ParseBDAddrError: {}", e))
-    }
-}
-
-impl From<::uuid::Error> for Error {
-    fn from(error: ::uuid::Error) -> Self {
-        Error::Other(format!("Error parsing UUID: {}", error))
-    }
-}
-
-impl FromStr for BDAddr {
-    type Err = ParseBDAddrError;
-
-    fn from_str(s: &str) -> ParseBDAddrResult<Self> {
-        let bytes = s
-            .split(':')
-            .map(|part: &str| {
-                u8::from_str_radix(part, 16).map_err(|_| ParseBDAddrError::InvalidInt)
-            })
-            .collect::<ParseBDAddrResult<Vec<u8>>>()?;
-
-        if let Ok(mut address) = <[u8; 6]>::try_from(bytes.as_slice()) {
-            address.reverse();
-            Ok(BDAddr { address })
-        } else {
-            Err(ParseBDAddrError::IncorrectByteCount)
-        }
-    }
-}
-
 /// A notification sent from a peripheral due to a change in a value.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ValueNotification {
     /// UUID of the characteristic that fired the notification.
     pub uuid: Uuid,
-    /// The handle that has changed. Only valid on Linux, will be None on all
-    /// other platforms.
-    pub handle: Option<u16>,
-    /// The new value of the handle.
+    /// The new value of the characteristic.
     pub value: Vec<u8>,
 }
-
-pub type Callback<T> = Box<dyn Fn(Result<T>) + Send>;
-
-pub type NotificationHandler = Box<dyn FnMut(ValueNotification) + Send>;
 
 bitflags! {
     /// A set of properties that indicate what operations are supported by a Characteristic.
@@ -174,8 +99,8 @@ bitflags! {
     }
 }
 
-impl CharPropFlags {
-    pub fn new() -> Self {
+impl Default for CharPropFlags {
+    fn default() -> Self {
         Self { bits: 0 }
     }
 }
@@ -190,15 +115,6 @@ impl CharPropFlags {
 /// able to write to it, read from it, set its notify or indicate status, or send a command to it.
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
 pub struct Characteristic {
-    /// The start of the handle range that contains this characteristic. Only
-    /// valid on Linux, will be 0 on all other platforms.
-    pub start_handle: u16,
-    /// The end of the handle range that contains this characteristic. Only
-    /// valid on Linux, will be 0 on all other platforms.
-    pub end_handle: u16,
-    /// The value handle of the characteristic. Only
-    /// valid on Linux, will be 0 on all other platforms.
-    pub value_handle: u16,
     /// The UUID for this characteristic. This uniquely identifies its behavior.
     pub uuid: Uuid,
     /// The set of properties for this characteristic, which indicate what functionality it
@@ -256,63 +172,56 @@ pub enum WriteType {
 /// Peripheral is the device that you would like to communicate with (the "server" of BLE). This
 /// struct contains both the current state of the device (its properties, characteristics, etc.)
 /// as well as functions for communication.
+#[async_trait]
 pub trait Peripheral: Send + Sync + Clone + Debug {
-    /// Returns the address of the peripheral.
+    /// Returns the MAC address of the peripheral.
     fn address(&self) -> BDAddr;
 
     /// Returns the set of properties associated with the peripheral. These may be updated over time
     /// as additional advertising reports are received.
-    fn properties(&self) -> PeripheralProperties;
+    async fn properties(&self) -> Result<PeripheralProperties>;
 
     /// The set of characteristics we've discovered for this device. This will be empty until
     /// `discover_characteristics` is called.
     fn characteristics(&self) -> BTreeSet<Characteristic>;
 
     /// Returns true iff we are currently connected to the device.
-    fn is_connected(&self) -> bool;
+    async fn is_connected(&self) -> Result<bool>;
 
-    /// Creates a connection to the device. This is a synchronous operation; if this method returns
-    /// Ok there has been successful connection. Note that peripherals allow only one connection at
-    /// a time. Operations that attempt to communicate with a device will fail until it is connected.
-    fn connect(&self) -> Result<()>;
+    /// Creates a connection to the device. If this method returns Ok there has been successful
+    /// connection. Note that peripherals allow only one connection at a time. Operations that
+    /// attempt to communicate with a device will fail until it is connected.
+    async fn connect(&self) -> Result<()>;
 
-    /// Terminates a connection to the device. This is a synchronous operation.
-    fn disconnect(&self) -> Result<()>;
+    /// Terminates a connection to the device.
+    async fn disconnect(&self) -> Result<()>;
 
-    /// Discovers all characteristics for the device. This is a synchronous operation.
-    fn discover_characteristics(&self) -> Result<Vec<Characteristic>>;
+    /// Discovers all characteristics for the device.
+    async fn discover_characteristics(&self) -> Result<Vec<Characteristic>>;
 
-    /// Write some data to the characteristic. Returns an error if the write couldn't be send or (in
+    /// Write some data to the characteristic. Returns an error if the write couldn't be sent or (in
     /// the case of a write-with-response) if the device returns an error.
-    fn write(
+    async fn write(
         &self,
         characteristic: &Characteristic,
         data: &[u8],
         write_type: WriteType,
     ) -> Result<()>;
 
-    /// Sends a request (read) to the device. Synchronously returns either an error if the request
-    /// was not accepted or the response from the device.
-    fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>>;
-
-    /// Sends a read-by-type request to device for the range of handles covered by the
-    /// characteristic and for the specified declaration UUID. See
-    /// [here](https://www.bluetooth.com/specifications/gatt/declarations) for valid UUIDs.
-    /// Synchronously returns either an error or the device response.
-    fn read_by_type(&self, characteristic: &Characteristic, uuid: Uuid) -> Result<Vec<u8>>;
+    /// Sends a read request to the device. Returns either an error if the request was not accepted
+    /// or the response from the device.
+    async fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>>;
 
     /// Enables either notify or indicate (depending on support) for the specified characteristic.
-    /// This is a synchronous call.
-    fn subscribe(&self, characteristic: &Characteristic) -> Result<()>;
+    async fn subscribe(&self, characteristic: &Characteristic) -> Result<()>;
 
     /// Disables either notify or indicate (depending on support) for the specified characteristic.
-    /// This is a synchronous call.
-    fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()>;
+    async fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()>;
 
-    /// Registers a handler that will be called when value notification messages are received from
-    /// the device. This method should only be used after a connection has been established. Note
-    /// that the handler will be called in a common thread, so it should not block.
-    fn on_notification(&self, handler: NotificationHandler);
+    /// Returns a stream of notifications for characteristic value updates. The stream will receive
+    /// a notification when a value notification or indication is received from the device. This
+    /// method should only be used after a connection has been established.
+    async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification>>>>;
 }
 
 #[cfg_attr(
@@ -330,14 +239,12 @@ pub enum CentralEvent {
     /// Emitted when a Manufacturer Data advertisement has been received from a device
     ManufacturerDataAdvertisement {
         address: BDAddr,
-        manufacturer_id: u16,
-        data: Vec<u8>,
+        manufacturer_data: HashMap<u16, Vec<u8>>,
     },
     /// Emitted when a Service Data advertisement has been received from a device
     ServiceDataAdvertisement {
         address: BDAddr,
-        service: Uuid,
-        data: Vec<u8>,
+        service_data: HashMap<Uuid, Vec<u8>>,
     },
     /// Emitted when the advertised services for a device has been updated
     ServicesAdvertisement {
@@ -347,85 +254,35 @@ pub enum CentralEvent {
 }
 
 /// Central is the "client" of BLE. It's able to scan for and establish connections to peripherals.
-pub trait Central<P: Peripheral>: Send + Sync + Clone {
-    /// Retreive the Event [Receiver] for the event channel. This channel
-    /// receiver will receive notifications when events occur for this Central
-    /// module. As this uses an std::channel which cannot be cloned, after the
-    /// first call (which will contain Some<Receiver<CentralEvent>>), all
-    /// subsequent calls will return None. See [`Event`](enum.CentralEvent.html)
-    /// for the full set of events returned.
-    fn event_receiver(&self) -> Option<Receiver<CentralEvent>>;
+#[async_trait]
+pub trait Central: Send + Sync + Clone {
+    type Peripheral: Peripheral;
+
+    /// Retrieve a stream of `CentralEvent`s. This stream will receive notifications when events
+    /// occur for this Central module. See [`CentralEvent`](enum.CentralEvent.html) for the full set
+    /// of possible events.
+    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent>>>>;
 
     /// Starts a scan for BLE devices. This scan will generally continue until explicitly stopped,
-    /// although this may depend on your bluetooth adapter. Discovered devices will be announced
-    /// to subscribers of `on_event` and will be available via `peripherals()`.
-    fn start_scan(&self) -> Result<()>;
-
-    /// Control whether to use active or passive scan mode to find BLE devices. Active mode scan
-    /// notifies advertises about the scan, whereas passive scan only receives data from the
-    /// advertiser. Defaults to use active mode.
-    fn active(&self, enabled: bool);
-
-    /// Control whether to filter multiple advertisements by the same peer device. Receving
-    /// can be useful for some applications. E.g. when using scan to collect information from
-    /// beacons that update data frequently. Defaults to filter duplicate advertisements.
-    fn filter_duplicates(&self, enabled: bool);
+    /// although this may depend on your Bluetooth adapter. Discovered devices will be announced
+    /// to subscribers of `events` and will be available via `peripherals()`.
+    async fn start_scan(&self) -> Result<()>;
 
     /// Stops scanning for BLE devices.
-    fn stop_scan(&self) -> Result<()>;
+    async fn stop_scan(&self) -> Result<()>;
 
     /// Returns the list of [`Peripherals`](trait.Peripheral.html) that have been discovered so far.
     /// Note that this list may contain peripherals that are no longer available.
-    fn peripherals(&self) -> Vec<P>;
+    async fn peripherals(&self) -> Result<Vec<Self::Peripheral>>;
 
     /// Returns a particular [`Peripheral`](trait.Peripheral.html) by its address if it has been
     /// discovered.
-    fn peripheral(&self, address: BDAddr) -> Option<P>;
+    async fn peripheral(&self, address: BDAddr) -> Result<Self::Peripheral>;
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use bitflags::_core::ptr::eq;
+#[async_trait]
+pub trait Manager {
+    type Adapter: Central;
 
-    #[test]
-    fn compare_uud() {
-        assert_eq!(UUID::B128([
-                0x23, 0xD1, 0xBC, 0xEA, 0x5F, 0x78, 0x23, 0x15, 0xDE, 0xEF, 0x12, 0x12, 0x32, 0x15, 0x00, 0x00
-            ]),
-            UUID::B128([
-                0x23, 0xD1, 0xBC, 0xEA, 0x5F, 0x78, 0x23, 0x15, 0xDE, 0xEF, 0x12, 0x12, 0x32, 0x15, 0x00, 0x00
-            ])
-        );
-        let compare_to = UUID::B128([
-            0x23, 0xD1, 0xBC, 0xEA, 0x5F, 0x78, 0x23, 0x15, 0xDE, 0xEF, 0x12, 0x12, 0x32, 0x15, 0x00, 0x00
-        ]);
-        assert!(UUID::B128([
-                0x23, 0xD1, 0xBC, 0xEA, 0x5F, 0x78, 0x23, 0x15, 0xDE, 0xEF, 0x12, 0x12, 0x32, 0x15, 0x00, 0x00
-            ]).eq(&compare_to)
-        );
-    }
-
-    #[test]
-    fn parse_addr() {
-        let values = vec![
-            (
-                "2A:00:AA:BB:CC:DD",
-                Ok(BDAddr {
-                    address: [0xDD, 0xCC, 0xBB, 0xAA, 0x00, 0x2A],
-                }),
-            ),
-            ("2A:00:00", Err(ParseBDAddrError::IncorrectByteCount)),
-            ("2A:00:AA:BB:CC:ZZ", Err(ParseBDAddrError::InvalidInt)),
-        ];
-
-        for (input, expected) in values {
-            let result: ParseBDAddrResult<BDAddr> = input.parse();
-            assert_eq!(result, expected);
-
-            if let Ok(uuid) = result {
-                assert_eq!(input, uuid.to_string());
-            }
-        }
-    }
+    async fn adapters(&self) -> Result<Vec<Self::Adapter>>;
 }

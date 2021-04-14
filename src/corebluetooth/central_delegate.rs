@@ -18,12 +18,15 @@
 
 use super::{
     framework::{cb, nil, ns},
-    utils::{CoreBluetoothUtils, NSStringUtils},
+    utils::{
+        core_bluetooth::{cbuuid_to_uuid, characteristic_debug, peripheral_debug, service_debug},
+        nsdata_to_vec, nsuuid_to_uuid,
+    },
 };
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::sink::SinkExt;
 use libc::{c_char, c_void};
-use log::{error, trace, debug};
+use log::{error, trace};
 use objc::{
     declare::ClassDecl,
     rc::StrongPtr,
@@ -36,7 +39,6 @@ use std::{
     fmt::{self, Debug, Formatter},
     ops::Deref,
     slice,
-    str::FromStr,
     sync::Once,
 };
 use uuid::Uuid;
@@ -129,7 +131,6 @@ impl Debug for CentralDelegateEvent {
 
 pub mod CentralDelegate {
     use std::convert::TryInto;
-    use CoreBluetoothUtils::cbuuid_to_uuid;
 
     use super::*;
 
@@ -149,14 +150,12 @@ pub mod CentralDelegate {
 
     pub fn delegate_drop_channel(delegate: *mut Object) {
         unsafe {
-            let _ = Box::from_raw(
-                *(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR)
-                    as *mut Sender<CentralDelegateEvent>,
-            );
+            let _ = Box::from_raw(*(&*delegate).get_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR)
+                as *mut Sender<CentralDelegateEvent>);
         }
     }
 
-    const DELEGATE_SENDER_IVAR: &'static str = "_sender";
+    const DELEGATE_SENDER_IVAR: &str = "_sender";
 
     fn delegate_class() -> &'static Class {
         trace!("delegate_class");
@@ -238,7 +237,7 @@ pub mod CentralDelegate {
 
     fn delegate_get_sender_clone(delegate: &mut Object) -> Sender<CentralDelegateEvent> {
         unsafe {
-            (*(*(&mut *delegate).get_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR)
+            (*(*(&*delegate).get_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR)
                 as *mut Sender<CentralDelegateEvent>))
                 .clone()
         }
@@ -271,14 +270,7 @@ pub mod CentralDelegate {
     fn get_characteristic_value(characteristic: *mut Object) -> Vec<u8> {
         trace!("Getting data!");
         let value = cb::characteristic_value(characteristic);
-        let length = ns::data_length(value);
-        if length == 0 {
-            debug!("data is 0?");
-            return vec![];
-        }
-
-        let bytes = ns::data_bytes(value);
-        let v = unsafe { slice::from_raw_parts(bytes, length as usize).to_vec() };
+        let v = nsdata_to_vec(value);
         trace!("BluetoothGATTCharacteristic::get_value -> {:?}", v);
         v
     }
@@ -310,12 +302,11 @@ pub mod CentralDelegate {
     ) {
         trace!(
             "delegate_centralmanager_didconnectperipheral {}",
-            CoreBluetoothUtils::peripheral_debug(peripheral)
+            peripheral_debug(peripheral)
         );
         cb::peripheral_setdelegate(peripheral, delegate);
         cb::peripheral_discoverservices(peripheral);
-        let uuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-        let uuid = Uuid::from_str(&NSStringUtils::string_to_string(uuid_nsstring)).unwrap();
+        let uuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
         send_delegate_event(delegate, CentralDelegateEvent::ConnectedDevice(uuid));
     }
 
@@ -328,10 +319,9 @@ pub mod CentralDelegate {
     ) {
         trace!(
             "delegate_centralmanager_diddisconnectperipheral_error {}",
-            CoreBluetoothUtils::peripheral_debug(peripheral)
+            peripheral_debug(peripheral)
         );
-        let uuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-        let uuid = Uuid::from_str(&NSStringUtils::string_to_string(uuid_nsstring)).unwrap();
+        let uuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
         send_delegate_event(delegate, CentralDelegateEvent::DisconnectedDevice(uuid));
     }
 
@@ -349,7 +339,7 @@ pub mod CentralDelegate {
     ) {
         trace!(
             "delegate_centralmanager_diddiscoverperipheral_advertisementdata_rssi {}",
-            CoreBluetoothUtils::peripheral_debug(peripheral)
+            peripheral_debug(peripheral)
         );
 
         let held_peripheral;
@@ -361,8 +351,7 @@ pub mod CentralDelegate {
             CentralDelegateEvent::DiscoveredPeripheral(held_peripheral),
         );
 
-        let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-        let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
+        let puuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
 
         let manufacturer_data = ns::dictionary_objectforkey(adv_data, unsafe {
             cb::ADVERTISEMENT_DATA_MANUFACTURER_DATA_KEY
@@ -395,11 +384,7 @@ pub mod CentralDelegate {
             for i in 0..ns::array_count(uuids) {
                 let uuid = ns::array_objectatindex(uuids, i);
                 let data = ns::dictionary_objectforkey(service_data, uuid);
-                let data_length = ns::data_length(data);
-                let data = unsafe {
-                    slice::from_raw_parts(ns::data_bytes(data), data_length as usize).to_vec()
-                };
-
+                let data = nsdata_to_vec(data);
                 result.insert(cbuuid_to_uuid(uuid), data);
             }
 
@@ -436,7 +421,7 @@ pub mod CentralDelegate {
     ) {
         trace!(
             "delegate_peripheral_diddiscoverservices {} {}",
-            CoreBluetoothUtils::peripheral_debug(peripheral),
+            peripheral_debug(peripheral),
             localized_description(error)
         );
         if error == nil {
@@ -458,14 +443,10 @@ pub mod CentralDelegate {
                 }
                 service_map.insert(uuid, held_service);
             }
-            let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-            let puuid_str = NSStringUtils::string_to_string(puuid_nsstring);
+            let puuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
             send_delegate_event(
                 delegate,
-                CentralDelegateEvent::DiscoveredServices(
-                    Uuid::from_str(&puuid_str).unwrap(),
-                    service_map,
-                ),
+                CentralDelegateEvent::DiscoveredServices(puuid, service_map),
             );
         }
     }
@@ -479,8 +460,8 @@ pub mod CentralDelegate {
     ) {
         trace!(
             "delegate_peripheral_diddiscoverincludedservicesforservice_error {} {} {}",
-            CoreBluetoothUtils::peripheral_debug(peripheral),
-            CoreBluetoothUtils::service_debug(service),
+            peripheral_debug(peripheral),
+            service_debug(service),
             localized_description(error)
         );
         if error == nil {
@@ -501,8 +482,8 @@ pub mod CentralDelegate {
     ) {
         trace!(
             "delegate_peripheral_diddiscovercharacteristicsforservice_error {} {} {}",
-            CoreBluetoothUtils::peripheral_debug(peripheral),
-            CoreBluetoothUtils::service_debug(service),
+            peripheral_debug(peripheral),
+            service_debug(service),
             localized_description(error)
         );
         if error == nil {
@@ -520,8 +501,7 @@ pub mod CentralDelegate {
                 }
                 char_map.insert(uuid, held_char);
             }
-            let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-            let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
+            let puuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
             send_delegate_event(
                 delegate,
                 CentralDelegateEvent::DiscoveredCharacteristics(puuid, char_map),
@@ -538,14 +518,13 @@ pub mod CentralDelegate {
     ) {
         trace!(
             "delegate_peripheral_didupdatevalueforcharacteristic_error {} {} {}",
-            CoreBluetoothUtils::peripheral_debug(peripheral),
-            CoreBluetoothUtils::characteristic_debug(characteristic),
+            peripheral_debug(peripheral),
+            characteristic_debug(characteristic),
             localized_description(error)
         );
         if error == nil {
             let v = get_characteristic_value(characteristic);
-            let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-            let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
+            let puuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
             let characteristic_uuid = cbuuid_to_uuid(cb::attribute_uuid(characteristic));
             send_delegate_event(
                 delegate,
@@ -564,13 +543,12 @@ pub mod CentralDelegate {
     ) {
         trace!(
             "delegate_peripheral_didwritevalueforcharacteristic_error {} {} {}",
-            CoreBluetoothUtils::peripheral_debug(peripheral),
-            CoreBluetoothUtils::characteristic_debug(characteristic),
+            peripheral_debug(peripheral),
+            characteristic_debug(characteristic),
             localized_description(error)
         );
         if error == nil {
-            let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-            let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
+            let puuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
             let characteristic_uuid = cbuuid_to_uuid(cb::attribute_uuid(characteristic));
             send_delegate_event(
                 delegate,
@@ -588,8 +566,7 @@ pub mod CentralDelegate {
     ) {
         trace!("delegate_peripheral_didupdatenotificationstateforcharacteristic_error");
         // TODO check for error here
-        let puuid_nsstring = ns::uuid_uuidstring(cb::peer_identifier(peripheral));
-        let puuid = Uuid::from_str(&NSStringUtils::string_to_string(puuid_nsstring)).unwrap();
+        let puuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
         let characteristic_uuid = cbuuid_to_uuid(cb::attribute_uuid(characteristic));
         if cb::characteristic_isnotifying(characteristic) == objc::runtime::YES {
             send_delegate_event(
@@ -625,7 +602,7 @@ pub mod CentralDelegate {
     ) {
         trace!(
             "delegate_peripheral_didreadrssi_error {}",
-            CoreBluetoothUtils::peripheral_debug(peripheral)
+            peripheral_debug(peripheral)
         );
         if error == nil {}
     }

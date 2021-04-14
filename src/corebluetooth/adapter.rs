@@ -1,14 +1,15 @@
 use super::internal::{run_corebluetooth_thread, CoreBluetoothEvent, CoreBluetoothMessage};
 use super::peripheral::Peripheral;
 use crate::api::{AdapterManager, BDAddr, Central, CentralEvent};
-use crate::Result;
-use async_std::task;
+use crate::{Error, Result};
+use async_trait::async_trait;
 use futures::channel::mpsc::{self, Sender};
 use futures::sink::SinkExt;
-use futures::stream::StreamExt;
+use futures::stream::{Stream, StreamExt};
 use log::info;
-use std::convert::TryInto;
-use std::sync::mpsc::Receiver;
+use std::convert::{TryFrom, TryInto};
+use std::pin::Pin;
+use tokio::task;
 
 #[derive(Clone, Debug)]
 pub struct Adapter {
@@ -16,26 +17,30 @@ pub struct Adapter {
     sender: Sender<CoreBluetoothMessage>,
 }
 
-pub fn uuid_to_bdaddr(uuid: &String) -> BDAddr {
-    BDAddr {
-        address: uuid.as_bytes()[0..6].try_into().unwrap(),
-    }
+pub(crate) fn uuid_to_bdaddr(uuid: &str) -> BDAddr {
+    let b: [u8; 6] = uuid.as_bytes()[0..6].try_into().unwrap();
+    BDAddr::try_from(b).unwrap()
 }
 
 impl Adapter {
-    pub fn new() -> Self {
+    pub(crate) async fn new() -> Result<Self> {
         let (sender, mut receiver) = mpsc::channel(256);
         let adapter_sender = run_corebluetooth_thread(sender);
         // Since init currently blocked until the state update, we know the
         // receiver is dropped after that. We can pick it up here and make it
         // part of our event loop to update our peripherals.
         info!("Waiting on adapter connect");
-        task::block_on(async { receiver.next().await.unwrap() });
-        info!("Waiting on adapter connected");
-        let adapter_sender_clone = adapter_sender.clone();
-        let manager = AdapterManager::new();
+        if !matches!(
+            receiver.next().await,
+            Some(CoreBluetoothEvent::AdapterConnected)
+        ) {
+            return Err(Error::Other("Adapter failed to connect.".to_string()));
+        }
+        info!("Adapter connected");
+        let manager = AdapterManager::default();
 
         let manager_clone = manager.clone();
+        let adapter_sender_clone = adapter_sender.clone();
         task::spawn(async move {
             while let Some(msg) = receiver.next().await {
                 match msg {
@@ -70,49 +75,44 @@ impl Adapter {
             }
         });
 
-        Adapter {
+        Ok(Adapter {
             manager,
             sender: adapter_sender,
-        }
-    }
-
-    pub fn emit(&self, event: CentralEvent) {
-        self.manager.emit(event)
+        })
     }
 }
 
-impl Central<Peripheral> for Adapter {
-    fn event_receiver(&self) -> Option<Receiver<CentralEvent>> {
-        self.manager.event_receiver()
+#[async_trait]
+impl Central for Adapter {
+    type Peripheral = Peripheral;
+
+    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent>>>> {
+        Ok(self.manager.event_stream())
     }
 
-    fn start_scan(&self) -> Result<()> {
-        info!("Starting CoreBluetooth Scan");
-        task::block_on(async {
-            let mut sender = self.sender.clone();
-            sender.send(CoreBluetoothMessage::StartScanning).await?;
-            Ok(())
-        })
+    async fn start_scan(&self) -> Result<()> {
+        self.sender
+            .to_owned()
+            .send(CoreBluetoothMessage::StartScanning)
+            .await?;
+        Ok(())
     }
 
-    fn stop_scan(&self) -> Result<()> {
-        info!("Stopping CoreBluetooth Scan");
-        task::block_on(async {
-            let mut sender = self.sender.clone();
-            sender.send(CoreBluetoothMessage::StopScanning).await?;
-            Ok(())
-        })
+    async fn stop_scan(&self) -> Result<()> {
+        self.sender
+            .to_owned()
+            .send(CoreBluetoothMessage::StopScanning)
+            .await?;
+        Ok(())
     }
 
-    fn peripherals(&self) -> Vec<Peripheral> {
-        self.manager.peripherals()
+    async fn peripherals(&self) -> Result<Vec<Peripheral>> {
+        Ok(self.manager.peripherals())
     }
 
-    fn peripheral(&self, address: BDAddr) -> Option<Peripheral> {
-        self.manager.peripheral(address)
+    async fn peripheral(&self, address: BDAddr) -> Result<Peripheral> {
+        self.manager
+            .peripheral(address)
+            .ok_or(Error::DeviceNotFound)
     }
-
-    fn active(&self, _enabled: bool) {}
-
-    fn filter_duplicates(&self, _enabled: bool) {}
 }

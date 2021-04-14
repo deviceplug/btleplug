@@ -12,15 +12,12 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use super::bindings;
-use crate::{
-    api::{BDAddr, CharPropFlags},
-    Error, Result,
-};
-use bindings::windows::{
-    devices::bluetooth::generic_attribute_profile::{
+use crate::{api::CharPropFlags, Error, Result};
+use bindings::Windows::{
+    Devices::Bluetooth::GenericAttributeProfile::{
         GattCharacteristicProperties, GattCommunicationStatus,
     },
-    storage::streams::{DataReader, IBuffer},
+    Storage::Streams::{DataReader, IBuffer},
 };
 use std::str::FromStr;
 use uuid::Uuid;
@@ -40,32 +37,16 @@ pub fn to_error(status: GattCommunicationStatus) -> Result<()> {
     }
 }
 
-pub fn to_addr(addr: u64) -> BDAddr {
-    let mut address: [u8; 6usize] = [0, 0, 0, 0, 0, 0];
-    for i in 0..6 {
-        address[i] = (addr >> (8 * i)) as u8;
-    }
-    BDAddr { address }
-}
-
-pub fn to_address(addr: BDAddr) -> u64 {
-    let mut address = 0u64;
-    for i in (0..6).rev() {
-        address |= (u64::from(addr.address[i])) << (8 * i);
-    }
-    address
-}
-
 pub fn to_uuid(uuid: &Guid) -> Uuid {
     let guid_s = format!("{:?}", uuid);
     Uuid::from_str(&guid_s).unwrap()
 }
 
 pub fn to_vec(buffer: &IBuffer) -> Vec<u8> {
-    let reader = DataReader::from_buffer(buffer).unwrap();
-    let len = reader.unconsumed_buffer_length().unwrap() as usize;
+    let reader = DataReader::FromBuffer(buffer).unwrap();
+    let len = reader.UnconsumedBufferLength().unwrap() as usize;
     let mut data = vec![0u8; len];
-    reader.read_bytes(&mut data).unwrap();
+    reader.ReadBytes(&mut data).unwrap();
     data
 }
 
@@ -81,14 +62,6 @@ pub fn to_char_props(_: &GattCharacteristicProperties) -> CharPropFlags {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn check_address() {
-        let bluetooth_address = 252566450624623;
-        let addr = to_addr(bluetooth_address);
-        let result = to_address(addr);
-        assert_eq!(bluetooth_address, result);
-    }
 
     #[test]
     fn check_uuid_to_guid_conversion() {

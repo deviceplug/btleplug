@@ -263,6 +263,20 @@ pub mod cb {
         unsafe { msg_send![cbcentralmanager, cancelPeripheralConnection: peripheral] }
     }
 
+    // CBManager
+    pub fn manager_authorization() -> CBManagerAuthorization {
+        unsafe { msg_send![Class::get("CBManager").unwrap(), authorization] }
+    }
+
+    #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+    #[repr(i64)]
+    pub enum CBManagerAuthorization {
+        NotDetermined = 0,
+        Restricted = 1,
+        Denied = 2,
+        AllowedAlways = 3,
+    }
+
     // CBPeer
 
     pub fn peer_identifier(cbpeer: *mut Object) -> *mut Object /* NSUUID* */ {

@@ -27,7 +27,7 @@ pub(crate) fn uuid_to_bdaddr(uuid: &str) -> BDAddr {
 impl Adapter {
     pub(crate) async fn new() -> Result<Self> {
         let (sender, mut receiver) = mpsc::channel(256);
-        let adapter_sender = run_corebluetooth_thread(sender);
+        let adapter_sender = run_corebluetooth_thread(sender)?;
         // Since init currently blocked until the state update, we know the
         // receiver is dropped after that. We can pick it up here and make it
         // part of our event loop to update our peripherals.

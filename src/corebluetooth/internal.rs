@@ -10,16 +10,20 @@
 
 use super::{
     central_delegate::{CentralDelegate, CentralDelegateEvent},
-    framework::{cb, ns},
+    framework::{
+        cb::{self, CBManagerAuthorization},
+        ns,
+    },
     future::{BtlePlugFuture, BtlePlugFutureStateShared},
     utils::{core_bluetooth::cbuuid_to_uuid, nsstring::nsstring_to_string, nsuuid_to_uuid},
 };
 use crate::api::{CharPropFlags, Characteristic, WriteType};
+use crate::Error;
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::select;
 use futures::sink::SinkExt;
 use futures::stream::{Fuse, StreamExt};
-use log::{error, info, trace};
+use log::{error, info, trace, warn};
 use objc::{
     rc::StrongPtr,
     runtime::{Object, YES},
@@ -670,7 +674,16 @@ impl Drop for CoreBluetoothInternal {
 
 pub fn run_corebluetooth_thread(
     event_sender: Sender<CoreBluetoothEvent>,
-) -> Sender<CoreBluetoothMessage> {
+) -> Result<Sender<CoreBluetoothMessage>, Error> {
+    let authorization = cb::manager_authorization();
+    if authorization != CBManagerAuthorization::AllowedAlways
+        && authorization != CBManagerAuthorization::NotDetermined
+    {
+        warn!("Authorization status {:?}", authorization);
+        return Err(Error::PermissionDenied);
+    } else {
+        trace!("Authorization status {:?}", authorization);
+    }
     let (sender, receiver) = mpsc::channel::<CoreBluetoothMessage>(256);
     // CoreBluetoothInternal is !Send, so we need to keep it on a single thread.
     thread::spawn(move || {
@@ -682,5 +695,5 @@ pub fn run_corebluetooth_thread(
             }
         })
     });
-    sender
+    Ok(sender)
 }

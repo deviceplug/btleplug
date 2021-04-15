@@ -67,12 +67,7 @@ impl BLECharacteristic {
     }
 
     pub async fn read_value(&self) -> Result<Vec<u8>> {
-        let result = self
-            .characteristic
-            .ReadValueAsync()
-            .unwrap()
-            .await
-            .unwrap();
+        let result = self.characteristic.ReadValueAsync().unwrap().await.unwrap();
         if result.Status().unwrap() == GattCommunicationStatus::Success {
             let value = result.Value().unwrap();
             let reader = DataReader::FromBuffer(&value).unwrap();

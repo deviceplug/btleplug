@@ -155,10 +155,7 @@ impl Peripheral {
         properties.address_type = AddressType::default();
         properties.has_scan_response =
             args.AdvertisementType().unwrap() == BluetoothLEAdvertisementType::ScanResponse;
-        properties.tx_power_level = args
-            .RawSignalStrengthInDBm()
-            .ok()
-            .map(|rssi| rssi as i8);
+        properties.tx_power_level = args.RawSignalStrengthInDBm().ok().map(|rssi| rssi as i8);
     }
 }
 

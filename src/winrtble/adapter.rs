@@ -23,6 +23,7 @@ use std::convert::TryInto;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
+/// Implementation of [api::Central](crate::api::Central).
 #[derive(Clone)]
 pub struct Adapter {
     watcher: Arc<Mutex<BLEWatcher>>,

@@ -33,6 +33,7 @@ use std::{
 use tokio::task;
 use uuid::Uuid;
 
+/// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone)]
 pub struct Peripheral {
     notification_senders: Arc<Mutex<Vec<UnboundedSender<ValueNotification>>>>,

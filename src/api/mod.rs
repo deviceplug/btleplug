@@ -11,6 +11,16 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
+//! The `api` module contains the traits and types which make up btleplug's API. These traits have a
+//! different implementation for each supported platform, but only one implementation can be found
+//! on any given platform. These implementations are in the [`platform`](crate::platform) module.
+//!
+//! You will may want to import both the traits and their implementations, like:
+//! ```
+//! use btleplug::api::{Central, Manager as _, Peripheral as _};
+//! use btleplug::platform::{Adapter, Manager, Peripheral};
+//! ```
+
 pub(crate) mod bdaddr;
 pub mod bleuuid;
 
@@ -251,6 +261,7 @@ pub enum CentralEvent {
 }
 
 /// Central is the "client" of BLE. It's able to scan for and establish connections to peripherals.
+/// A Central can be obtained from [`Manager::adapters()`].
 #[async_trait]
 pub trait Central: Send + Sync + Clone {
     type Peripheral: Peripheral;
@@ -277,9 +288,29 @@ pub trait Central: Send + Sync + Clone {
     async fn peripheral(&self, address: BDAddr) -> Result<Self::Peripheral>;
 }
 
+/// The Manager is the entry point to the library, providing access to all the Bluetooth adapters on
+/// the system. You can obtain an instance from [`platform::Manager::new()`](crate::platform::Manager::new).
+///
+/// ## Usage
+/// ```
+/// use btleplug::api::Manager as _;
+/// use btleplug::platform::Manager;
+/// # use std::error::Error;
+///
+/// # async fn example() -> Result<(), Box<dyn Error>> {
+/// let manager = Manager::new().await?;
+/// let adapter_list = manager.adapters().await?;
+/// if adapter_list.is_empty() {
+///    eprintln!("No Bluetooth adapters");
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[async_trait]
 pub trait Manager {
+    /// The concrete type of the [`Central`] implementation.
     type Adapter: Central;
 
+    /// Get a list of all Bluetooth adapters on the system. Each adapter implements [`Central`].
     async fn adapters(&self) -> Result<Vec<Self::Adapter>>;
 }

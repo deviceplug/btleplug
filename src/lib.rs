@@ -106,6 +106,7 @@ pub mod serde;
 #[cfg(target_os = "windows")]
 mod winrtble;
 
+/// The main error type returned by most methods in btleplug.
 #[derive(Debug, thiserror::Error, Clone)]
 pub enum Error {
     #[error("Permission denied")]
@@ -133,5 +134,5 @@ pub enum Error {
     Other(String),
 }
 
-// BtlePlug Result type
+/// Convenience type for a result using the btleplug [`Error`] type.
 pub type Result<T> = result::Result<T, Error>;

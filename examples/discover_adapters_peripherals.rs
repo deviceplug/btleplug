@@ -6,12 +6,6 @@ use tokio::time;
 use btleplug::api::{Central, Manager as _, Peripheral};
 use btleplug::platform::Manager;
 
-/**
-If you are getting run time error like that :
- thread 'main' panicked at 'Can't scan BLE adapter for connected devices...: PermissionDenied', src/libcore/result.rs:1188:5
- you can try to run app with > sudo ./discover_adapters_peripherals
- on linux
-**/
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::new().init()?;

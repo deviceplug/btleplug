@@ -13,10 +13,10 @@ use super::{
 };
 use crate::{
     api::{
-        self, AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic,
-        PeripheralProperties, ValueNotification, WriteType,
+        self, AddressType, BDAddr, CentralEvent, Characteristic, PeripheralProperties,
+        ValueNotification, WriteType,
     },
-    common::util,
+    common::{adapter_manager::AdapterManager, util},
     Error, Result,
 };
 use async_trait::async_trait;

@@ -267,8 +267,7 @@ pub trait Central: Send + Sync + Clone {
     type Peripheral: Peripheral;
 
     /// Retrieve a stream of `CentralEvent`s. This stream will receive notifications when events
-    /// occur for this Central module. See [`CentralEvent`](enum.CentralEvent.html) for the full set
-    /// of possible events.
+    /// occur for this Central module. See [`CentralEvent`] for the full set of possible events.
     async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent>>>>;
 
     /// Starts a scan for BLE devices. This scan will generally continue until explicitly stopped,
@@ -279,12 +278,11 @@ pub trait Central: Send + Sync + Clone {
     /// Stops scanning for BLE devices.
     async fn stop_scan(&self) -> Result<()>;
 
-    /// Returns the list of [`Peripherals`](trait.Peripheral.html) that have been discovered so far.
-    /// Note that this list may contain peripherals that are no longer available.
+    /// Returns the list of [`Peripheral`]s that have been discovered so far. Note that this list
+    /// may contain peripherals that are no longer available.
     async fn peripherals(&self) -> Result<Vec<Self::Peripheral>>;
 
-    /// Returns a particular [`Peripheral`](trait.Peripheral.html) by its address if it has been
-    /// discovered.
+    /// Returns a particular [`Peripheral`] by its address if it has been discovered.
     async fn peripheral(&self, address: BDAddr) -> Result<Self::Peripheral>;
 }
 

@@ -11,8 +11,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let manager = Manager::new().await?;
     let adapter_list = manager.adapters().await?;
-    if adapter_list.len() <= 0 {
-        eprint!("Bluetooth adapter(s) were NOT found, sorry...\n");
+    if adapter_list.is_empty() {
+        eprintln!("Bluetooth adapter(s) were NOT found, sorry...");
     } else {
         for adapter in adapter_list.iter() {
             println!("connecting to BLE adapter: ...");

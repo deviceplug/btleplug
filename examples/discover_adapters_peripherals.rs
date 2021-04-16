@@ -1,4 +1,3 @@
-use simple_logger::SimpleLogger;
 use std::error::Error;
 use std::time::Duration;
 use tokio::time;
@@ -8,7 +7,8 @@ use btleplug::platform::Manager;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    SimpleLogger::new().init()?;
+    pretty_env_logger::init();
+
     let manager = Manager::new().await?;
     let adapter_list = manager.adapters().await?;
     if adapter_list.len() <= 0 {

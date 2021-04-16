@@ -10,6 +10,8 @@ async fn get_central(manager: &Manager) -> Adapter {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    pretty_env_logger::init();
+
     let manager = Manager::new().await?;
 
     // get the first bluetooth adapter

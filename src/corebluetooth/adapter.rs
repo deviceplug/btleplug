@@ -12,6 +12,7 @@ use std::convert::{TryFrom, TryInto};
 use std::pin::Pin;
 use tokio::task;
 
+/// Implementation of [api::Central](crate::api::Central).
 #[derive(Clone, Debug)]
 pub struct Adapter {
     manager: AdapterManager<Peripheral>,

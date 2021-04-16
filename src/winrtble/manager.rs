@@ -16,6 +16,7 @@ use crate::{api, Result};
 use async_trait::async_trait;
 use bindings::Windows::Devices::Radios::{Radio, RadioKind};
 
+/// Implementation of [api::Manager](crate::api::Manager).
 #[derive(Clone, Debug)]
 pub struct Manager {}
 

@@ -6,6 +6,7 @@ use bluez_async::{AdapterId, BluetoothError, BluetoothEvent, BluetoothSession, D
 use futures::stream::{self, Stream, StreamExt};
 use std::pin::Pin;
 
+/// Implementation of [api::Central](crate::api::Central).
 #[derive(Clone, Debug)]
 pub struct Adapter {
     session: BluetoothSession,

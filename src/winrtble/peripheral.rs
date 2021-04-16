@@ -40,6 +40,7 @@ use uuid::Uuid;
 
 use bindings::Windows::Devices::Bluetooth::Advertisement::*;
 
+/// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone)]
 pub struct Peripheral {
     device: Arc<tokio::sync::Mutex<Option<BLEDevice>>>,

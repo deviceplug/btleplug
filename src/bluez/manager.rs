@@ -3,6 +3,7 @@ use crate::{api, Result};
 use async_trait::async_trait;
 use bluez_async::BluetoothSession;
 
+/// Implementation of [api::Manager](crate::api::Manager).
 #[derive(Clone, Debug)]
 pub struct Manager {
     session: BluetoothSession,

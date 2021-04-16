@@ -114,31 +114,29 @@ Beyond that, some of our other goals are:
 - O: In development
 - Blank: Not started
 
-| Feature | Windows | MacOS | Linux |
-|---------|---------|-------|-------|
-| Bring Up Adapter |X|X|X|
-| Handle Multiple Adapters |||X|
-| Discover Devices |X|X|X|
-| └ Discover Services ||| [O](https://github.com/deviceplug/btleplug/issues/11) |
-| └ Discover Name |X|X|X|
-| └ Discover Manufacturer Data |X||X|
-| GATT Server Connect |X|X|X|
-| GATT Server Connect Event |X|X|X|
-| GATT Server Disconnect |X|X|X|
-| GATT Server Disconnect Event |X|X|X|
-| Write to Characteristic (Sync) |X|X|X|
-| Write to Characteristic (Async) |||X|
-| Read from Characteristic (Sync) |X|X|X|
-| Read from Characteristic (Async) |X|||
-| Subscribe to Characteristic (Sync) |X|X|X|
-| Subscribe to Characteristic (Async) ||||
-| Unsubscribe from Characteristic (Sync) |X|X||
-| Unsubscribe from Characteristic (Async) ||||
-| Get Characteristic Notification Event |X|X|X|
-| Read Descriptor (Sync) ||||
-| Read Descriptor (Async) ||||
-| Write Descriptor (Sync) ||||
-| Write Descriptor (Async) ||||
+| Feature                               | Windows | MacOS | Linux                                                 |
+| ------------------------------------- | ------- | ----- | ----------------------------------------------------- |
+| Bring Up Adapter                      | X       | X     | X                                                     |
+| Handle Multiple Adapters              |         |       | X                                                     |
+| Discover Devices                      | X       | X     | X                                                     |
+| └ Discover Services                   |         |       | [O](https://github.com/deviceplug/btleplug/issues/11) |
+| └ Discover Characteristics            | X       | X     | X                                                     |
+| └ Discover Descriptors                |         |       |                                                       |
+| └ Discover Name                       | X       | X     | X                                                     |
+| └ Discover Manufacturer Data          | X       | X     | X                                                     |
+| └ Discover Service Data               | X       | X     | X                                                     |
+| └ Discover MAC address                | X       |       | X                                                     |
+| GATT Server Connect                   | X       | X     | X                                                     |
+| GATT Server Connect Event             | X       | X     | X                                                     |
+| GATT Server Disconnect                | X       | X     | X                                                     |
+| GATT Server Disconnect Event          | X       | X     | X                                                     |
+| Write to Characteristic               | X       | X     | X                                                     |
+| Read from Characteristic              | X       | X     | X                                                     |
+| Subscribe to Characteristic           | X       | X     | X                                                     |
+| Unsubscribe from Characteristic       | X       | X     | X                                                     |
+| Get Characteristic Notification Event | X       | X     | X                                                     |
+| Read Descriptor                       |         |       |                                                       |
+| Write Descriptor                      |         |       |                                                       |
 
 ## Library Features
 

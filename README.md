@@ -9,19 +9,12 @@
 
 [![Github donate button](https://img.shields.io/badge/github-donate-ff69b4.svg)](https://www.github.com/sponsors/qdot)
 
+btleplug is an async Rust BLE library, supporting Windows 10, macOS, Linux, and
+possibly iOS. It grew out of several earlier abandoned libraries for various
+platforms, with the goal of building a fully cross platform library. Adding
+support for other platforms such as Android is also planned.
 
-btleplug is a Rust BLE library, support Windows 10, macOS, Linux, and
-possibly iOS. It is currently made up of parts of other abandoned
-projects with a goal of building a fully cross platform proof of
-concept.
-
-Our goal is the bring in some of the outstanding PRs from other
-projects, expand the platform support, and possibly make the API
-surface more ergonomic for being a truly cross-platform library.
-
-Oh and async might happen to because why not.
-
-btleplug is meant to be *host/central mode only*. If you are
+btleplug is meant to be _host/central mode only_. If you are
 interested in peripheral BTLE (i.e. acting like a Bluetooth LE device
 instead of connecting to one), check out
 [bluster](https://github.com/dfrankland/bluster/tree/master/src).
@@ -31,21 +24,14 @@ plans to add BT2/Classic support.
 
 ## A Whole New World of Bluetooth Copypasta
 
-At the moment, and probably for the foreseeable future, very little of
-what is included in BTLEPlug will be new or original code. The goal
-for the moment is to get a single library that works everywhere, then
-start bending the API surface around the different platform
-requirements once we can at least bring up adapters and start finding
-devices everywhere.
+Much of the code in btleplug is based on other Rust BLE libraries, adapted to
+be async and implement a common API.
 
-The libraries we're forking include:
+The libraries we've taken code from include:
 
 - [rumble](https://github.com/mwylde/rumble)
-  - Started with a bluez implementation, but became our main repo fork
-    basis because it was the only library to have even a partial UWP
-    implementation. API surface was built to reflect bluez 1:1, which
-    makes cross-platform ergonomics a bit difficult, but it's a model
-    we can start with for now, and change later.
+  - Most of the code from this has since been removed in favour of the D-Bus
+    interface to BlueZ, but it has influenced the API design.
   - Project seems to be abandoned.
 - [blurmac](https://github.com/servo/devices) ([alternative repo?](https://github.com/akosthekiss/blurmac))
   - Complete-ish WebBluetooth BTLE implementation for MacOS/iOS
@@ -80,21 +66,17 @@ for updating APIs.
 The issues in this repo reflect the development goals of the project.
 First and foremost is getting as many platforms as possible up and
 running enough to support [our main usage of this
-library](https://github.com/buttplugio/buttplug-rs). For the time
-being we'll most likely keep the rumble API surface model, just so we
-don't have to change large portions of the code as we go.
+library](https://github.com/buttplugio/buttplug-rs).
 
 Beyond that, some of our other goals are:
 
 - Make API more ergonomic to support multiple bluetooth APIs (not just
-  focusing on bluez)
+  focusing on BlueZ).
 - Add FFI so this library can be used from C (and maybe C++ using
   [cxx](https://github.com/dtolnay/cxx).
-- Provide both async and sync versions of as many APIs as possible
-  (once again, depending on platform API capabilities)
 - Possibly create a WASM compatible layer using
   [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen) and
-  [WebBluetooth](https://webbluetoothcg.github.io/web-bluetooth/)
+  [WebBluetooth](https://webbluetoothcg.github.io/web-bluetooth/).
 
 ## Platform Status
 

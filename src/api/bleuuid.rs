@@ -1,3 +1,5 @@
+//! Utilities for dealing with BLE UUIDs, converting to and from their short formats.
+
 use uuid::Uuid;
 
 const BLUETOOTH_BASE_UUID: u128 = 0x00000000_0000_1000_8000_00805f9b34fb;

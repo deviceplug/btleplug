@@ -18,10 +18,10 @@ use super::{
 use crate::{
     api::{
         bleuuid::{uuid_from_u16, uuid_from_u32},
-        AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic,
-        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, WriteType,
+        AddressType, BDAddr, CentralEvent, Characteristic, Peripheral as ApiPeripheral,
+        PeripheralProperties, ValueNotification, WriteType,
     },
-    common::util,
+    common::{adapter_manager::AdapterManager, util},
     Error, Result,
 };
 use async_trait::async_trait;

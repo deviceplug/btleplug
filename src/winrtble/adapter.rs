@@ -13,7 +13,8 @@
 
 use super::{ble::watcher::BLEWatcher, peripheral::Peripheral};
 use crate::{
-    api::{AdapterManager, BDAddr, Central, CentralEvent},
+    api::{BDAddr, Central, CentralEvent},
+    common::adapter_manager::AdapterManager,
     Error, Result,
 };
 use async_trait::async_trait;

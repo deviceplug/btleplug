@@ -1,6 +1,7 @@
 use super::internal::{run_corebluetooth_thread, CoreBluetoothEvent, CoreBluetoothMessage};
 use super::peripheral::Peripheral;
-use crate::api::{AdapterManager, BDAddr, Central, CentralEvent};
+use crate::api::{BDAddr, Central, CentralEvent};
+use crate::common::adapter_manager::AdapterManager;
 use crate::{Error, Result};
 use async_trait::async_trait;
 use futures::channel::mpsc::{self, Sender};

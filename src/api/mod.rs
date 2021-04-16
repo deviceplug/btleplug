@@ -11,11 +11,8 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-mod adapter_manager;
 pub(crate) mod bdaddr;
 pub mod bleuuid;
-
-pub use adapter_manager::AdapterManager;
 
 use crate::Result;
 use async_trait::async_trait;

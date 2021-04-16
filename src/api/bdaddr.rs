@@ -10,6 +10,7 @@ pub struct BDAddr {
     address: [u8; 6],
 }
 
+/// An error parsing a [`BDAddr`] from a string.
 #[derive(Debug, thiserror::Error, Clone, PartialEq)]
 pub enum ParseBDAddrError {
     #[error("Bluetooth address has to be 6 bytes long")]

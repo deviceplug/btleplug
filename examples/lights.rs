@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let cmd_char = chars
         .iter()
         .find(|c| c.uuid == LIGHT_CHARACTERISTIC_UUID)
-        .expect("Unable to find characterics");
+        .expect("Unable to find characteristic with UUID = " + LIGHT_CHARACTERISTIC_UUID.to_string());
 
     // dance party
     let mut rng = thread_rng();

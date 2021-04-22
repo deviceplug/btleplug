@@ -37,8 +37,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     let properties = peripheral.properties().await?;
                     let is_connected = peripheral.is_connected().await?;
                     println!(
-                        "Found BLE peripheral : \'{:?}\' : address = {:?} is connected: {:?}", properties.local_name,
-                             peripheral.address().address, peripheral.is_connected().await?
+                        "peripheral : {:?} is connected: {:?}",
+                        properties.local_name,
+                        peripheral.is_connected().await?
                     );
                     if properties.local_name.is_some() && !is_connected {
                         println!(

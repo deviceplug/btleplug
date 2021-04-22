@@ -9,19 +9,12 @@
 
 [![Github donate button](https://img.shields.io/badge/github-donate-ff69b4.svg)](https://www.github.com/sponsors/qdot)
 
+btleplug is an async Rust BLE library, supporting Windows 10, macOS, Linux, and
+possibly iOS. It grew out of several earlier abandoned libraries for various
+platforms, with the goal of building a fully cross platform library. Adding
+support for other platforms such as Android is also planned.
 
-btleplug is a Rust BLE library, support Windows 10, macOS, Linux, and
-possibly iOS. It is currently made up of parts of other abandoned
-projects with a goal of building a fully cross platform proof of
-concept.
-
-Our goal is the bring in some of the outstanding PRs from other
-projects, expand the platform support, and possibly make the API
-surface more ergonomic for being a truly cross-platform library.
-
-Oh and async might happen to because why not.
-
-btleplug is meant to be *host/central mode only*. If you are
+btleplug is meant to be _host/central mode only_. If you are
 interested in peripheral BTLE (i.e. acting like a Bluetooth LE device
 instead of connecting to one), check out
 [bluster](https://github.com/dfrankland/bluster/tree/master/src).
@@ -31,21 +24,14 @@ plans to add BT2/Classic support.
 
 ## A Whole New World of Bluetooth Copypasta
 
-At the moment, and probably for the foreseeable future, very little of
-what is included in BTLEPlug will be new or original code. The goal
-for the moment is to get a single library that works everywhere, then
-start bending the API surface around the different platform
-requirements once we can at least bring up adapters and start finding
-devices everywhere.
+Much of the code in btleplug is based on other Rust BLE libraries, adapted to
+be async and implement a common API.
 
-The libraries we're forking include:
+The libraries we've taken code from include:
 
 - [rumble](https://github.com/mwylde/rumble)
-  - Started with a bluez implementation, but became our main repo fork
-    basis because it was the only library to have even a partial UWP
-    implementation. API surface was built to reflect bluez 1:1, which
-    makes cross-platform ergonomics a bit difficult, but it's a model
-    we can start with for now, and change later.
+  - Most of the code from this has since been removed in favour of the D-Bus
+    interface to BlueZ, but it has influenced the API design.
   - Project seems to be abandoned.
 - [blurmac](https://github.com/servo/devices) ([alternative repo?](https://github.com/akosthekiss/blurmac))
   - Complete-ish WebBluetooth BTLE implementation for MacOS/iOS
@@ -80,21 +66,17 @@ for updating APIs.
 The issues in this repo reflect the development goals of the project.
 First and foremost is getting as many platforms as possible up and
 running enough to support [our main usage of this
-library](https://github.com/buttplugio/buttplug-rs). For the time
-being we'll most likely keep the rumble API surface model, just so we
-don't have to change large portions of the code as we go.
+library](https://github.com/buttplugio/buttplug-rs).
 
 Beyond that, some of our other goals are:
 
 - Make API more ergonomic to support multiple bluetooth APIs (not just
-  focusing on bluez)
+  focusing on BlueZ).
 - Add FFI so this library can be used from C (and maybe C++ using
   [cxx](https://github.com/dtolnay/cxx).
-- Provide both async and sync versions of as many APIs as possible
-  (once again, depending on platform API capabilities)
 - Possibly create a WASM compatible layer using
   [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen) and
-  [WebBluetooth](https://webbluetoothcg.github.io/web-bluetooth/)
+  [WebBluetooth](https://webbluetoothcg.github.io/web-bluetooth/).
 
 ## Platform Status
 
@@ -132,31 +114,29 @@ Beyond that, some of our other goals are:
 - O: In development
 - Blank: Not started
 
-| Feature | Windows | MacOS | Linux |
-|---------|---------|-------|-------|
-| Bring Up Adapter |X|X|X|
-| Handle Multiple Adapters |||X|
-| Discover Devices |X|X|X|
-| └ Discover Services ||| [O](https://github.com/deviceplug/btleplug/issues/11) |
-| └ Discover Name |X|X|X|
-| └ Discover Manufacturer Data |X||X|
-| GATT Server Connect |X|X|X|
-| GATT Server Connect Event |X|X|X|
-| GATT Server Disconnect |X|X|X|
-| GATT Server Disconnect Event |X|X|X|
-| Write to Characteristic (Sync) |X|X|X|
-| Write to Characteristic (Async) |||X|
-| Read from Characteristic (Sync) |X|X|X|
-| Read from Characteristic (Async) |X|||
-| Subscribe to Characteristic (Sync) |X|X|X|
-| Subscribe to Characteristic (Async) ||||
-| Unsubscribe from Characteristic (Sync) |X|X||
-| Unsubscribe from Characteristic (Async) ||||
-| Get Characteristic Notification Event |X|X|X|
-| Read Descriptor (Sync) ||||
-| Read Descriptor (Async) ||||
-| Write Descriptor (Sync) ||||
-| Write Descriptor (Async) ||||
+| Feature                               | Windows | MacOS | Linux                                                 |
+| ------------------------------------- | ------- | ----- | ----------------------------------------------------- |
+| Bring Up Adapter                      | X       | X     | X                                                     |
+| Handle Multiple Adapters              |         |       | X                                                     |
+| Discover Devices                      | X       | X     | X                                                     |
+| └ Discover Services                   |         |       | [O](https://github.com/deviceplug/btleplug/issues/11) |
+| └ Discover Characteristics            | X       | X     | X                                                     |
+| └ Discover Descriptors                |         |       |                                                       |
+| └ Discover Name                       | X       | X     | X                                                     |
+| └ Discover Manufacturer Data          | X       | X     | X                                                     |
+| └ Discover Service Data               | X       | X     | X                                                     |
+| └ Discover MAC address                | X       |       | X                                                     |
+| GATT Server Connect                   | X       | X     | X                                                     |
+| GATT Server Connect Event             | X       | X     | X                                                     |
+| GATT Server Disconnect                | X       | X     | X                                                     |
+| GATT Server Disconnect Event          | X       | X     | X                                                     |
+| Write to Characteristic               | X       | X     | X                                                     |
+| Read from Characteristic              | X       | X     | X                                                     |
+| Subscribe to Characteristic           | X       | X     | X                                                     |
+| Unsubscribe from Characteristic       | X       | X     | X                                                     |
+| Get Characteristic Notification Event | X       | X     | X                                                     |
+| Read Descriptor                       |         |       |                                                       |
+| Write Descriptor                      |         |       |                                                       |
 
 ## Library Features
 
@@ -167,121 +147,6 @@ To enable implementation of serde's `Serialize` and `Deserialize` across some co
 ```toml
 [dependencies]
 btleplug = { version = "0.4", features = ["serde"] }
-```
-
-## Old rumble README Content
-
-### Rumble
-
-Rumble is a Bluetooth Low Energy (BLE) central module library for Rust.
-Currently only Linux (with the BlueZ bluetooth library) is supported, although
-other operating systems may be supported in the future. Rumble interfaces with
-BlueZ using its socket interface rather than DBus. This offers much more control
-and reliability over the DBus interface, and does not require running BlueZ in
-experimental mode for BLE.
-
-As of version 0.2, the API is becoming more stable and the library itself more
-useful. You should still expect to encounter bugs, limitations, and odd behaviors.
-Pull requests (and wireshark traces) welcome!
-
-### Usage
-
-An example of how to use the library to control some BLE smart lights:
-
-```rust
-extern crate rumble;
-extern crate rand;
-
-use std::thread;
-use std::time::Duration;
-use rand::{Rng, thread_rng};
-use rumble::bluez::manager::Manager;
-use rumble::api::{Central, Peripheral, WriteType, UUID};
-
-pub fn main() {
-    let manager = Manager::new().unwrap();
-
-    // get the first bluetooth adapter
-    let adapters = manager.adapters().unwrap();
-    let mut adapter = adapters.into_iter().nth(0).unwrap();
-
-    // reset the adapter -- clears out any errant state
-    adapter = manager.down(&adapter).unwrap();
-    adapter = manager.up(&adapter).unwrap();
-
-    // connect to the adapter
-    let central = adapter.connect().unwrap();
-
-    // start scanning for devices
-    central.start_scan().unwrap();
-    // instead of waiting, you can use central.on_event to be notified of
-    // new devices
-    thread::sleep(Duration::from_secs(2));
-
-    // find the device we're interested in
-    let light = central.peripherals().into_iter()
-        .find(|p| p.properties().local_name.iter()
-            .any(|name| name.contains("LEDBlue"))).unwrap();
-
-    // connect to the device
-    light.connect().unwrap();
-
-    // discover characteristics
-    light.discover_characteristics().unwrap();
-
-    // find the characteristic we want
-    let chars = light.characteristics();
-    let cmd_char = chars.iter().find(|c| c.uuid == UUID::B16(0xFFE9)).unwrap();
-
-    // dance party
-    let mut rng = thread_rng();
-    for _ in 0..20 {
-        let color_cmd = vec![0x56, rng.gen(), rng.gen(), rng.gen(), 0x00, 0xF0, 0xAA];
-        light.write(&cmd_char, &color_cmd, WriteType::WithoutResponse).unwrap();
-        thread::sleep(Duration::from_millis(200));
-    }
-}
-```
-
-Above code use is just waits for 2 seconds to see whatever device it can discover. This code example shows how to use event-driven discovery:
-
-```rust
-let (event_sender, event_receiver) = channel(256);
-// Add ourselves to the central event handler output now, so we don't
-// have to carry around the Central object. We'll be using this in
-// connect anyways.
-let on_event = move |event: CentralEvent| match event {
-    CentralEvent::DeviceDiscovered(bd_addr) => {
-        println!("DeviceDiscovered: {:?}", bd_addr);
-        let s = event_sender.clone();
-        let e = event.clone();
-        task::spawn(async move {
-            s.send(e).await;
-        });
-    }
-    CentralEvent::DeviceConnected(bd_addr) => {
-        println!("DeviceConnected: {:?}", bd_addr);
-        let s = event_sender.clone();
-        let e = event.clone();
-        task::spawn(async move {
-            s.send(e).await;
-        });
-    }
-    CentralEvent::DeviceDisconnected(bd_addr) => {
-        println!("DeviceDisconnected: {:?}", bd_addr);
-        let s = event_sender.clone();
-        let e = event.clone();
-        task::spawn(async move {
-            s.send(e).await;
-        });
-    }
-    _ => {}
-};
-
-central.on_event(Box::new(on_event));
-
-// Infinite loop otherwise the application will quit
-loop {};
 ```
 
 ## License

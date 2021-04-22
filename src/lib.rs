@@ -11,9 +11,9 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-//! BtlePlug is a Bluetooth Low Energy (BLE) central module library for Rust. It
-//! currently supports Windows 10, macOS (and possibly iOS), Linux (using BlueZ
-//! sockets instead of D-Bus). Android support is coming in a future update.
+//! btleplug is a Bluetooth Low Energy (BLE) central module library for Rust.
+//! It currently supports Windows 10, macOS (and possibly iOS) and Linux
+//! (BlueZ). Android support is planned for the future.
 //!
 //! ## Usage
 //!
@@ -101,9 +101,12 @@ mod common;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod corebluetooth;
 pub mod platform;
+#[cfg(feature = "serde")]
+pub mod serde;
 #[cfg(target_os = "windows")]
 mod winrtble;
 
+/// The main error type returned by most methods in btleplug.
 #[derive(Debug, thiserror::Error, Clone)]
 pub enum Error {
     #[error("Permission denied")]
@@ -131,5 +134,5 @@ pub enum Error {
     Other(String),
 }
 
-// BtlePlug Result type
+/// Convenience type for a result using the btleplug [`Error`] type.
 pub type Result<T> = result::Result<T, Error>;

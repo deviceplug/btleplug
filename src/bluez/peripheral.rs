@@ -15,6 +15,7 @@ use crate::api::{
 };
 use crate::{Error, Result};
 
+/// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone, Debug)]
 pub struct Peripheral {
     session: BluetoothSession,

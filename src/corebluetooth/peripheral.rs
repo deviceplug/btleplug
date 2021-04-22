@@ -13,10 +13,10 @@ use super::{
 };
 use crate::{
     api::{
-        self, AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic,
-        PeripheralProperties, ValueNotification, WriteType,
+        self, AddressType, BDAddr, CentralEvent, Characteristic, PeripheralProperties,
+        ValueNotification, WriteType,
     },
-    common::util,
+    common::{adapter_manager::AdapterManager, util},
     Error, Result,
 };
 use async_trait::async_trait;
@@ -33,6 +33,7 @@ use std::{
 use tokio::task;
 use uuid::Uuid;
 
+/// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone)]
 pub struct Peripheral {
     notification_senders: Arc<Mutex<Vec<UnboundedSender<ValueNotification>>>>,

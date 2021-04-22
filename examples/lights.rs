@@ -25,6 +25,8 @@ async fn find_light(central: &Adapter) -> Option<Peripheral> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    pretty_env_logger::init();
+
     let manager = Manager::new().await.unwrap();
 
     // get the first bluetooth adapter

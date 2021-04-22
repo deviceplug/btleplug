@@ -1,4 +1,3 @@
-use simple_logger::SimpleLogger;
 use std::error::Error;
 use std::time::Duration;
 use tokio::time;
@@ -6,19 +5,14 @@ use tokio::time;
 use btleplug::api::{Central, Manager as _, Peripheral};
 use btleplug::platform::Manager;
 
-/**
-If you are getting run time error like that :
- thread 'main' panicked at 'Can't scan BLE adapter for connected devices...: PermissionDenied', src/libcore/result.rs:1188:5
- you can try to run app with > sudo ./discover_adapters_peripherals
- on linux
-**/
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    SimpleLogger::new().init()?;
+    pretty_env_logger::init();
+
     let manager = Manager::new().await?;
     let adapter_list = manager.adapters().await?;
-    if adapter_list.len() <= 0 {
-        eprint!("Bluetooth adapter(s) were NOT found, sorry...\n");
+    if adapter_list.is_empty() {
+        eprintln!("Bluetooth adapter(s) were NOT found, sorry...");
     } else {
         for adapter in adapter_list.iter() {
             println!("connecting to BLE adapter: ...");

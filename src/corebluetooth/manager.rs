@@ -9,6 +9,7 @@ use super::adapter::Adapter;
 use crate::{api, Result};
 use async_trait::async_trait;
 
+/// Implementation of [api::Manager](crate::api::Manager).
 #[derive(Clone, Debug)]
 pub struct Manager {}
 

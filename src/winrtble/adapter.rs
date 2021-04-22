@@ -13,7 +13,8 @@
 
 use super::{ble::watcher::BLEWatcher, peripheral::Peripheral};
 use crate::{
-    api::{AdapterManager, BDAddr, Central, CentralEvent},
+    api::{BDAddr, Central, CentralEvent},
+    common::adapter_manager::AdapterManager,
     Error, Result,
 };
 use async_trait::async_trait;
@@ -22,6 +23,7 @@ use std::convert::TryInto;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
+/// Implementation of [api::Central](crate::api::Central).
 #[derive(Clone)]
 pub struct Adapter {
     watcher: Arc<Mutex<BLEWatcher>>,

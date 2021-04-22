@@ -11,11 +11,18 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-mod adapter_manager;
-mod bdaddr;
-pub mod bleuuid;
+//! The `api` module contains the traits and types which make up btleplug's API. These traits have a
+//! different implementation for each supported platform, but only one implementation can be found
+//! on any given platform. These implementations are in the [`platform`](crate::platform) module.
+//!
+//! You will may want to import both the traits and their implementations, like:
+//! ```
+//! use btleplug::api::{Central, Manager as _, Peripheral as _};
+//! use btleplug::platform::{Adapter, Manager, Peripheral};
+//! ```
 
-pub use adapter_manager::AdapterManager;
+pub(crate) mod bdaddr;
+pub mod bleuuid;
 
 use crate::Result;
 use async_trait::async_trait;
@@ -254,13 +261,13 @@ pub enum CentralEvent {
 }
 
 /// Central is the "client" of BLE. It's able to scan for and establish connections to peripherals.
+/// A Central can be obtained from [`Manager::adapters()`].
 #[async_trait]
 pub trait Central: Send + Sync + Clone {
     type Peripheral: Peripheral;
 
     /// Retrieve a stream of `CentralEvent`s. This stream will receive notifications when events
-    /// occur for this Central module. See [`CentralEvent`](enum.CentralEvent.html) for the full set
-    /// of possible events.
+    /// occur for this Central module. See [`CentralEvent`] for the full set of possible events.
     async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent>>>>;
 
     /// Starts a scan for BLE devices. This scan will generally continue until explicitly stopped,
@@ -271,18 +278,37 @@ pub trait Central: Send + Sync + Clone {
     /// Stops scanning for BLE devices.
     async fn stop_scan(&self) -> Result<()>;
 
-    /// Returns the list of [`Peripherals`](trait.Peripheral.html) that have been discovered so far.
-    /// Note that this list may contain peripherals that are no longer available.
+    /// Returns the list of [`Peripheral`]s that have been discovered so far. Note that this list
+    /// may contain peripherals that are no longer available.
     async fn peripherals(&self) -> Result<Vec<Self::Peripheral>>;
 
-    /// Returns a particular [`Peripheral`](trait.Peripheral.html) by its address if it has been
-    /// discovered.
+    /// Returns a particular [`Peripheral`] by its address if it has been discovered.
     async fn peripheral(&self, address: BDAddr) -> Result<Self::Peripheral>;
 }
 
+/// The Manager is the entry point to the library, providing access to all the Bluetooth adapters on
+/// the system. You can obtain an instance from [`platform::Manager::new()`](crate::platform::Manager::new).
+///
+/// ## Usage
+/// ```
+/// use btleplug::api::Manager as _;
+/// use btleplug::platform::Manager;
+/// # use std::error::Error;
+///
+/// # async fn example() -> Result<(), Box<dyn Error>> {
+/// let manager = Manager::new().await?;
+/// let adapter_list = manager.adapters().await?;
+/// if adapter_list.is_empty() {
+///    eprintln!("No Bluetooth adapters");
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[async_trait]
 pub trait Manager {
+    /// The concrete type of the [`Central`] implementation.
     type Adapter: Central;
 
+    /// Get a list of all Bluetooth adapters on the system. Each adapter implements [`Central`].
     async fn adapters(&self) -> Result<Vec<Self::Adapter>>;
 }

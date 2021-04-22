@@ -18,10 +18,10 @@ use super::{
 use crate::{
     api::{
         bleuuid::{uuid_from_u16, uuid_from_u32},
-        AdapterManager, AddressType, BDAddr, CentralEvent, Characteristic,
-        Peripheral as ApiPeripheral, PeripheralProperties, ValueNotification, WriteType,
+        AddressType, BDAddr, CentralEvent, Characteristic, Peripheral as ApiPeripheral,
+        PeripheralProperties, ValueNotification, WriteType,
     },
-    common::util,
+    common::{adapter_manager::AdapterManager, util},
     Error, Result,
 };
 use async_trait::async_trait;
@@ -40,6 +40,7 @@ use uuid::Uuid;
 
 use bindings::Windows::Devices::Bluetooth::Advertisement::*;
 
+/// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone)]
 pub struct Peripheral {
     device: Arc<tokio::sync::Mutex<Option<BLEDevice>>>,
@@ -155,10 +156,7 @@ impl Peripheral {
         properties.address_type = AddressType::default();
         properties.has_scan_response =
             args.AdvertisementType().unwrap() == BluetoothLEAdvertisementType::ScanResponse;
-        properties.tx_power_level = args
-            .RawSignalStrengthInDBm()
-            .ok()
-            .map(|rssi| rssi as i8);
+        properties.tx_power_level = args.RawSignalStrengthInDBm().ok().map(|rssi| rssi as i8);
     }
 }
 

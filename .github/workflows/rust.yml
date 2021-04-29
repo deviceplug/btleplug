@@ -7,6 +7,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  grcov-version: 0.8.0
 
 jobs:
   build:
@@ -61,10 +62,20 @@ jobs:
       - name: Install dependencies
         if: ${{ runner.os == 'Linux' }}
         run: sudo apt-get install libdbus-1-dev
+      - name: Cache grcov
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/bin/grcov
+            ~/.cargo/bin/grcov.exe
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+          key: ${{ runner.os }}-cargo-bin-${{ env.grcov-version }}
       - name: Install grcov
         uses: actions-rs/install@v0.1
         with:
           crate: grcov
+          version: ${{ env.grcov-version }}
       - name: Install llvm-tools
         run: rustup component add llvm-tools-preview
       - name: Build for coverage

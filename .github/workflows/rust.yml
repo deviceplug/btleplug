@@ -59,11 +59,11 @@ jobs:
       - name: Install llvm-tools
         run: rustup component add llvm-tools-preview
       - name: Build for coverage
-        run: cargo build --verbose
+        run: cargo build --all-features
         env:
           RUSTFLAGS: "-Zinstrument-coverage"
       - name: Run tests with coverage
-        run: cargo test --verbose
+        run: cargo test --all-features
         env:
           RUSTFLAGS: "-Zinstrument-coverage"
           LLVM_PROFILE_FILE: "test-coverage-%p-%m.profraw"

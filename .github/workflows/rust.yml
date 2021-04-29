@@ -65,7 +65,6 @@ jobs:
         uses: actions-rs/install@v0.1
         with:
           crate: grcov
-          use-tool-cache: true
       - name: Install llvm-tools
         run: rustup component add llvm-tools-preview
       - name: Build for coverage

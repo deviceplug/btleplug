@@ -1,0 +1,38 @@
+name: Rust
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install dependencies
+        run: sudo apt-get install libdbus-1-dev
+      - name: Check
+        run: cargo check --all --bins --examples
+      - name: Check without default features
+        run: cargo check --all --bins --examples --no-default-features
+      - name: Check with all features
+        run: cargo check --all --bins --examples --all-features
+      - name: Run tests
+        run: cargo test --all
+      - name: Run clippy
+        uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Format Rust code
+        run: cargo fmt --all -- --check

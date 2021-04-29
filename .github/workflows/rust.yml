@@ -46,16 +46,26 @@ jobs:
         run: cargo fmt --all -- --check
 
   coverage:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os:
+          - macOS-latest
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
 
     env:
       RUSTC_BOOTSTRAP: 1
     steps:
       - uses: actions/checkout@v2
       - name: Install dependencies
+        if: ${{ runner.os == 'Linux' }}
         run: sudo apt-get install libdbus-1-dev
       - name: Install grcov
-        run: curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-linux-x86_64.tar.bz2 | tar jxf -
+        uses: actions-rs/install@v0.1
+        with:
+          crate: grcov
+          use-tool-cache: true
       - name: Install llvm-tools
         run: rustup component add llvm-tools-preview
       - name: Build for coverage
@@ -68,7 +78,7 @@ jobs:
           RUSTFLAGS: "-Zinstrument-coverage"
           LLVM_PROFILE_FILE: "test-coverage-%p-%m.profraw"
       - name: Convert coverage
-        run: ./grcov . -s . --binary-path target/debug/ -t lcov --branch --ignore-not-existing -o target/debug/lcov.info
+        run: grcov . -s . --binary-path target/debug/ -t lcov --branch --ignore-not-existing -o target/debug/lcov.info
       - name: Upload coverage to codecov.io
         uses: codecov/codecov-action@v1
         with:

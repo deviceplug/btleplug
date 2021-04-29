@@ -10,11 +10,18 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os:
+          - macOS-latest
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v2
       - name: Install dependencies
+        if: ${{ runner.os == 'Linux' }}
         run: sudo apt-get install libdbus-1-dev
       - name: Check
         run: cargo check --all --bins --examples
@@ -27,6 +34,7 @@ jobs:
       - name: Run clippy
         uses: actions-rs/clippy-check@v1
         with:
+          name: clippy ${{ matrix.os }}
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all-features
 

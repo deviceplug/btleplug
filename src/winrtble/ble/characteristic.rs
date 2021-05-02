@@ -70,8 +70,7 @@ impl BLECharacteristic {
     pub async fn read_value(&self) -> Result<Vec<u8>> {
         let result = self
             .characteristic
-            // 1 = Ignore cache, 0 = Use windows cache
-            .ReadValueWithCacheModeAsync(BluetoothCacheMode(1))
+            .ReadValueWithCacheModeAsync(BluetoothCacheMode::Uncached)
             .unwrap()
             .await
             .unwrap();

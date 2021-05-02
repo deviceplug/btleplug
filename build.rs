@@ -17,6 +17,7 @@ fn main() {
         Windows::Devices::Bluetooth::{
             BluetoothConnectionStatus,
             BluetoothLEDevice,
+            BluetoothCacheMode,
         },
         Windows::Devices::Radios::{
             Radio,

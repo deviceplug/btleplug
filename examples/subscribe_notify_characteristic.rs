@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use btleplug::api::{ValueNotification, CentralEvent, Characteristic, CharPropFlags};
+use btleplug::api::{ValueNotification, CharPropFlags};
 use btleplug::platform::{Adapter, Manager};
 use btleplug::api::{Central, Manager as _, Peripheral};
 use std::io::Cursor;
@@ -36,7 +36,7 @@ If you are getting run time error like that :
 **/
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let subscribe_to_characteristic: Uuid = Uuid::parse_str()?;
+    let subscribe_to_characteristic: Uuid = Uuid::parse_str(&NOTIFY_CHARACTERISTIC_MATCH_UUID)?;
 
     let manager = Manager::new().await?;
     let adapter_list = manager.adapters().await?;

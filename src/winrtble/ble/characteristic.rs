@@ -20,8 +20,9 @@ use crate::{
 
 use bindings::Windows::Devices::Bluetooth::BluetoothCacheMode;
 use bindings::Windows::Devices::Bluetooth::GenericAttributeProfile::{
-    GattCharacteristic, GattClientCharacteristicConfigurationDescriptorValue,
-    GattCommunicationStatus, GattValueChangedEventArgs, GattWriteOption,
+    GattCharacteristic, GattCharacteristicProperties,
+    GattClientCharacteristicConfigurationDescriptorValue, GattCommunicationStatus,
+    GattValueChangedEventArgs, GattWriteOption,
 };
 use bindings::Windows::Foundation::{EventRegistrationToken, TypedEventHandler};
 use bindings::Windows::Storage::Streams::{DataReader, DataWriter};
@@ -34,6 +35,21 @@ impl Into<GattWriteOption> for WriteType {
         match self {
             WriteType::WithoutResponse => GattWriteOption::WriteWithoutResponse,
             WriteType::WithResponse => GattWriteOption::WriteWithResponse,
+        }
+    }
+}
+
+impl From<GattCharacteristicProperties> for GattClientCharacteristicConfigurationDescriptorValue {
+    fn from(properties: GattCharacteristicProperties) -> Self {
+        let notify = GattCharacteristicProperties::Notify;
+        let indicate = GattCharacteristicProperties::Indicate;
+
+        if properties & indicate == indicate {
+            GattClientCharacteristicConfigurationDescriptorValue::Indicate
+        } else if properties & notify == notify {
+            GattClientCharacteristicConfigurationDescriptorValue::Notify
+        } else {
+            GattClientCharacteristicConfigurationDescriptorValue::None
         }
     }
 }
@@ -105,7 +121,11 @@ impl BLECharacteristic {
             let token = self.characteristic.ValueChanged(&value_handler).unwrap();
             self.notify_token = Some(token);
         }
-        let config = GattClientCharacteristicConfigurationDescriptorValue::Notify;
+        let config = self.characteristic.CharacteristicProperties()?.into();
+        if config == GattClientCharacteristicConfigurationDescriptorValue::None {
+            return Err(Error::NotSupported("Can not subscribe to attribute".into()));
+        }
+
         let status = self
             .characteristic
             .WriteClientCharacteristicConfigurationDescriptorAsync(config)

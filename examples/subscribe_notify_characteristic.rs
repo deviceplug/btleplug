@@ -63,14 +63,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     println!("peripheral : {:?} is connected: {:?}",
                              &local_name, is_connected);
                     // filter needed peripheral
-                    if /*local_name.is_some()
-                        && */!is_connected
-                        && local_name.contains(PERIPHERAL_NAME_MATCH_FILTER) {
-                        println!("start connect to peripheral : {:?}...", &local_name);
-                        peripheral
-                            .connect()
-                            .await
-                            .expect("Can't connect to peripheral...");
+                    if local_name.contains(PERIPHERAL_NAME_MATCH_FILTER) {
+                        println!("found matching peripheral : {:?}...", &local_name);
+                        if !is_connected { // we can be connected previously
+                            let connect_result = peripheral
+                                .connect()
+                                .await;
+                            match connect_result {
+                                Ok(_) => {}
+                                Err(err) => {
+                                    eprintln!("Can't connect to peripheral, skipping due to error = {:?}...", err);
+                                    continue;
+                                }
+                            }                        }
                         let is_connected = peripheral.is_connected().await?;
                         println!(
                             "now connected (\'{:?}\') to peripheral : {:?}...",

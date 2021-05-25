@@ -2,7 +2,10 @@ use super::peripheral::Peripheral;
 use crate::api::{BDAddr, Central, CentralEvent};
 use crate::{Error, Result};
 use async_trait::async_trait;
-use bluez_async::{AdapterId, BluetoothError, BluetoothEvent, BluetoothSession, DeviceEvent};
+use bluez_async::{
+    AdapterId, BluetoothError, BluetoothEvent, BluetoothSession, DeviceEvent, DiscoveryFilter,
+    Transport,
+};
 use futures::stream::{self, Stream, StreamExt};
 use std::pin::Pin;
 
@@ -44,7 +47,11 @@ impl Central for Adapter {
     }
 
     async fn start_scan(&self) -> Result<()> {
-        self.session.start_discovery().await?;
+        let filter = DiscoveryFilter {
+            transport: Some(Transport::Auto),
+            ..Default::default()
+        };
+        self.session.start_discovery_with_filter(&filter).await?;
         Ok(())
     }
 

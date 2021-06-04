@@ -228,7 +228,7 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     /// Returns a stream of notifications for characteristic value updates. The stream will receive
     /// a notification when a value notification or indication is received from the device. This
     /// method should only be used after a connection has been established.
-    async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification>>>>;
+    async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>>;
 }
 
 #[cfg_attr(

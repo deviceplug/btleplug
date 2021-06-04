@@ -42,7 +42,7 @@ impl Adapter {
 impl Central for Adapter {
     type Peripheral = Peripheral;
 
-    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent>>>> {
+    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent> + Send>>> {
         Ok(self.manager.event_stream())
     }
 

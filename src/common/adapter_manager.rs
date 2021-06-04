@@ -58,7 +58,7 @@ where
         send_notification(&self.async_senders, &event);
     }
 
-    pub fn event_stream(&self) -> Pin<Box<dyn Stream<Item = CentralEvent>>> {
+    pub fn event_stream(&self) -> Pin<Box<dyn Stream<Item = CentralEvent> + Send>> {
         let (sender, receiver) = mpsc::unbounded();
         self.async_senders.lock().unwrap().push(sender);
         Box::pin(receiver)

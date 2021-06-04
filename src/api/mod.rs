@@ -268,7 +268,7 @@ pub trait Central: Send + Sync + Clone {
 
     /// Retrieve a stream of `CentralEvent`s. This stream will receive notifications when events
     /// occur for this Central module. See [`CentralEvent`] for the full set of possible events.
-    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent>>>>;
+    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent> + Send>>>;
 
     /// Starts a scan for BLE devices. This scan will generally continue until explicitly stopped,
     /// although this may depend on your Bluetooth adapter. Discovered devices will be announced

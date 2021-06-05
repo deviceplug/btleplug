@@ -101,7 +101,7 @@ impl CBCharacteristic {
         if (flags & cb::CHARACTERISTICPROPERTY_AUTHENTICATEDSIGNEDWRITES) != 0 {
             v |= CharPropFlags::AUTHENTICATED_SIGNED_WRITES;
         }
-        info!("Flags: {:?}", v);
+        trace!("Flags: {:?}", v);
         v
     }
 }
@@ -298,7 +298,7 @@ impl CoreBluetoothInternal {
         manufacturer_id: u16,
         manufacturer_data: Vec<u8>,
     ) {
-        info!(
+        trace!(
             "Got manufacturer data advertisement! {}: {:?}",
             manufacturer_id, manufacturer_data
         );
@@ -321,7 +321,7 @@ impl CoreBluetoothInternal {
         peripheral_uuid: Uuid,
         service_data: HashMap<Uuid, Vec<u8>>,
     ) {
-        info!("Got service data advertisement! {:?}", service_data);
+        trace!("Got service data advertisement! {:?}", service_data);
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Err(e) = p
                 .event_sender
@@ -334,7 +334,7 @@ impl CoreBluetoothInternal {
     }
 
     async fn on_services(&mut self, peripheral_uuid: Uuid, services: Vec<Uuid>) {
-        info!("Got service advertisement! {:?}", services);
+        trace!("Got service advertisement! {:?}", services);
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Err(e) = p
                 .event_sender
@@ -373,9 +373,9 @@ impl CoreBluetoothInternal {
         peripheral_uuid: Uuid,
         service_map: HashMap<Uuid, StrongPtr>,
     ) {
-        info!("Found services!");
+        trace!("Found services!");
         for id in service_map.keys() {
-            info!("{}", id);
+            trace!("{}", id);
         }
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             p.set_services(service_map);
@@ -387,9 +387,9 @@ impl CoreBluetoothInternal {
         peripheral_uuid: Uuid,
         char_map: HashMap<Uuid, StrongPtr>,
     ) {
-        info!("Found chars!");
+        trace!("Found chars!");
         for id in char_map.keys() {
-            info!("{}", id);
+            trace!("{}", id);
         }
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             p.set_characteristics(char_map);
@@ -491,7 +491,7 @@ impl CoreBluetoothInternal {
     ) {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
-                info!("Writing value! With kind {:?}", kind);
+                trace!("Writing value! With kind {:?}", kind);
                 cb::peripheral_writevalue_forcharacteristic(
                     *p.peripheral,
                     ns::data(data.as_ptr(), data.len() as c_uint),
@@ -520,7 +520,7 @@ impl CoreBluetoothInternal {
     ) {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
-                info!("Reading value!");
+                trace!("Reading value!");
                 cb::peripheral_readvalue_forcharacteristic(*p.peripheral, *c.characteristic);
                 c.read_future_state.push_front(fut);
             }
@@ -535,7 +535,7 @@ impl CoreBluetoothInternal {
     ) {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
-                info!("Setting subscribe!");
+                trace!("Setting subscribe!");
                 cb::peripheral_setnotifyvalue_forcharacteristic(
                     *p.peripheral,
                     objc::runtime::YES,
@@ -554,7 +554,7 @@ impl CoreBluetoothInternal {
     ) {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
-                info!("Setting subscribe!");
+                trace!("Setting subscribe!");
                 cb::peripheral_setnotifyvalue_forcharacteristic(
                     *p.peripheral,
                     objc::runtime::NO,
@@ -622,12 +622,12 @@ impl CoreBluetoothInternal {
                 };
             }
             adapter_msg = self.message_receiver.select_next_some() => {
-                info!("Adapter message!");
+                trace!("Adapter message!");
                 match adapter_msg {
                     CoreBluetoothMessage::StartScanning => self.start_discovery(),
                     CoreBluetoothMessage::StopScanning => self.stop_discovery(),
                     CoreBluetoothMessage::ConnectDevice(peripheral_uuid, fut) => {
-                        info!("got connectdevice msg!");
+                        trace!("got connectdevice msg!");
                         self.connect_peripheral(peripheral_uuid, fut);
                     }
                     CoreBluetoothMessage::DisconnectDevice(_peripheral_uuid, _fut) => {}

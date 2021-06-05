@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use futures::channel::mpsc::{self, Sender};
 use futures::sink::SinkExt;
 use futures::stream::{Stream, StreamExt};
-use log::info;
+use log::*;
 use std::convert::{TryFrom, TryInto};
 use std::pin::Pin;
 use tokio::task;
@@ -31,7 +31,7 @@ impl Adapter {
         // Since init currently blocked until the state update, we know the
         // receiver is dropped after that. We can pick it up here and make it
         // part of our event loop to update our peripherals.
-        info!("Waiting on adapter connect");
+        debug!("Waiting on adapter connect");
         if !matches!(
             receiver.next().await,
             Some(CoreBluetoothEvent::AdapterConnected)
@@ -40,7 +40,7 @@ impl Adapter {
                 "Adapter failed to connect.".to_string().into(),
             ));
         }
-        info!("Adapter connected");
+        debug!("Adapter connected");
         let manager = AdapterManager::default();
 
         let manager_clone = manager.clone();

@@ -13,7 +13,7 @@ use super::{
 };
 use crate::{
     api::{
-        self, BDAddr, CentralEvent, Characteristic, PeripheralProperties,
+        self, CharPropFlags, BDAddr, CentralEvent, Characteristic, PeripheralProperties,
         ValueNotification, WriteType,
     },
     common::{adapter_manager::AdapterManager, util},
@@ -23,7 +23,7 @@ use async_trait::async_trait;
 use futures::channel::mpsc::{self, Receiver, SendError, Sender, UnboundedSender};
 use futures::sink::SinkExt;
 use futures::stream::{Stream, StreamExt};
-use log::{debug, error, info};
+use log::*;
 use std::{
     collections::{BTreeSet, HashMap},
     fmt::{self, Debug, Display, Formatter},
@@ -198,7 +198,7 @@ impl api::Peripheral for Peripheral {
             }
             _ => panic!("Shouldn't get anything but connected!"),
         }
-        info!("Device connected!");
+        trace!("Device connected!");
         Ok(())
     }
 
@@ -271,7 +271,7 @@ impl api::Peripheral for Peripheral {
             ))
             .await?;
         match fut.await {
-            CoreBluetoothReply::Ok => info!("subscribed!"),
+            CoreBluetoothReply::Ok => trace!("subscribed!"),
             _ => panic!("Didn't subscribe!"),
         }
         Ok(())

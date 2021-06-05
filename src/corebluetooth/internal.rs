@@ -501,7 +501,13 @@ impl CoreBluetoothInternal {
                         WriteType::WithoutResponse => 1,
                     },
                 );
-                c.write_future_state.push_front(fut);
+                // WriteWithoutResponse does not call the corebluetooth
+                // callback, it just always succeeds silently.  
+                if kind == WriteType::WithoutResponse {
+                    fut.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
+                } else {
+                    c.write_future_state.push_front(fut);
+                }
             }
         }
     }

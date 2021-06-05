@@ -216,9 +216,15 @@ impl api::Peripheral for Peripheral {
         &self,
         characteristic: &Characteristic,
         data: &[u8],
-        write_type: WriteType,
+        mut write_type: WriteType,
     ) -> Result<()> {
         let fut = CoreBluetoothReplyFuture::default();
+        // If we get WriteWithoutResponse for a characteristic that only
+        // supports WriteWithResponse, slam the type to WriteWithResponse.
+        // Otherwise we won't handle the future correctly.
+        if write_type == WriteType::WithoutResponse && !characteristic.properties.contains(CharPropFlags::WRITE_WITHOUT_RESPONSE) {
+            write_type = WriteType::WithResponse
+        }
         self.message_sender
             .to_owned()
             .send(CoreBluetoothMessage::WriteValue(

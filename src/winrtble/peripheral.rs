@@ -155,7 +155,7 @@ impl Peripheral {
 
         // windows does not provide the address type in the advertisement event args but only in the device object
         // https://social.msdn.microsoft.com/Forums/en-US/c71d51a2-56a1-425a-9063-de44fda48766/bluetooth-address-public-or-random?forum=wdk
-        properties.address_type = AddressType::default();
+        properties.address_type = None;
         properties.tx_power_level = args.RawSignalStrengthInDBm().ok().map(|rssi| rssi as i8);
     }
 }

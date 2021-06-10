@@ -62,7 +62,7 @@ impl Peripheral {
             // Rumble required ONLY a BDAddr, not something you can get from
             // MacOS, so we make it up for now. This sucks.
             address: uuid_to_bdaddr(&uuid.to_string()),
-            address_type: AddressType::Random,
+            address_type: None,
             local_name,
             tx_power_level: None,
             manufacturer_data: HashMap::new(),

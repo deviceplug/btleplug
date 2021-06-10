@@ -63,7 +63,7 @@ impl api::Peripheral for Peripheral {
         let device_info = self.device_info().await?;
         Ok(Some(PeripheralProperties {
             address: (&device_info.mac_address).into(),
-            address_type: device_info.address_type.into(),
+            address_type: Some(device_info.address_type.into()),
             local_name: device_info.name,
             tx_power_level: device_info.tx_power.map(|tx_power| tx_power as i8),
             manufacturer_data: device_info.manufacturer_data,

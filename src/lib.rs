@@ -102,6 +102,8 @@ mod bluez;
 mod common;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod corebluetooth;
+#[cfg(target_os = "android")]
+mod droidplug;
 pub mod platform;
 #[cfg(feature = "serde")]
 pub mod serde;

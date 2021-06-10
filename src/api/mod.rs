@@ -147,7 +147,7 @@ pub struct PeripheralProperties {
     /// The address of this peripheral
     pub address: BDAddr,
     /// The type of address (either random or public)
-    pub address_type: AddressType,
+    pub address_type: Option<AddressType>,
     /// The local name. This is generally a human-readable string that identifies the type of device.
     pub local_name: Option<String>,
     /// The transmission power level for the device

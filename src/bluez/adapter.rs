@@ -74,6 +74,12 @@ impl Central for Adapter {
             })
             .ok_or(Error::DeviceNotFound)
     }
+
+    async fn add_peripheral(&self, _address: BDAddr) -> Result<Peripheral> {
+        Err(Error::NotSupported(
+            "Can't add a Peripheral from a BDAddr".to_string(),
+        ))
+    }
 }
 
 impl From<BluetoothError> for Error {

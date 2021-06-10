@@ -16,6 +16,7 @@ async fn find_light(central: &Adapter) -> Option<Peripheral> {
         if p.properties()
             .await
             .unwrap()
+            .unwrap()
             .local_name
             .iter()
             .any(|name| name.contains("LEDBlue"))

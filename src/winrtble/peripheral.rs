@@ -46,7 +46,7 @@ pub struct Peripheral {
     device: Arc<tokio::sync::Mutex<Option<BLEDevice>>>,
     adapter: AdapterManager<Self>,
     address: BDAddr,
-    properties: Arc<Mutex<PeripheralProperties>>,
+    properties: Arc<Mutex<Option<PeripheralProperties>>>,
     connected: Arc<AtomicBool>,
     ble_characteristics: Arc<DashMap<Uuid, BLECharacteristic>>,
     notification_senders: Arc<Mutex<Vec<UnboundedSender<ValueNotification>>>>,
@@ -55,9 +55,7 @@ pub struct Peripheral {
 impl Peripheral {
     pub(crate) fn new(adapter: AdapterManager<Self>, address: BDAddr) -> Self {
         let device = Arc::new(tokio::sync::Mutex::new(None));
-        let mut properties = PeripheralProperties::default();
-        properties.address = address;
-        let properties = Arc::new(Mutex::new(properties));
+        let properties = Arc::new(Mutex::new(None));
         let connected = Arc::new(AtomicBool::new(false));
         let ble_characteristics = Arc::new(DashMap::new());
         let notification_senders = Arc::new(Mutex::new(Vec::new()));
@@ -73,7 +71,11 @@ impl Peripheral {
     }
 
     pub(crate) fn update_properties(&self, args: &BluetoothLEAdvertisementReceivedEventArgs) {
-        let mut properties = self.properties.lock().unwrap();
+        let mut properties = self.properties.lock().unwrap().get_or_insert_with(|| {
+            let mut properties = PeripheralProperties::default();
+            properties.address = self.address;
+            properties
+        });
         let advertisement = args.Advertisement().unwrap();
 
         properties.discovery_count += 1;
@@ -154,8 +156,6 @@ impl Peripheral {
         // windows does not provide the address type in the advertisement event args but only in the device object
         // https://social.msdn.microsoft.com/Forums/en-US/c71d51a2-56a1-425a-9063-de44fda48766/bluetooth-address-public-or-random?forum=wdk
         properties.address_type = AddressType::default();
-        properties.has_scan_response =
-            args.AdvertisementType().unwrap() == BluetoothLEAdvertisementType::ScanResponse;
         properties.tx_power_level = args.RawSignalStrengthInDBm().ok().map(|rssi| rssi as i8);
     }
 }
@@ -206,7 +206,7 @@ impl ApiPeripheral for Peripheral {
 
     /// Returns the set of properties associated with the peripheral. These may be updated over time
     /// as additional advertising reports are received.
-    async fn properties(&self) -> Result<PeripheralProperties> {
+    async fn properties(&self) -> Result<Option<PeripheralProperties>> {
         let l = self.properties.lock().unwrap();
         Ok(l.clone())
     }

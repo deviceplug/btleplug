@@ -73,6 +73,7 @@
 //!         if p.properties()
 //!             .await
 //!             .unwrap()
+//!             .unwrap()
 //!             .local_name
 //!             .iter()
 //!             .any(|name| name.contains("LEDBlue"))

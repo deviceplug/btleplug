@@ -34,6 +34,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let properties = peripheral.properties().await?;
                 let is_connected = peripheral.is_connected().await?;
                 let local_name = properties
+                    .unwrap()
                     .local_name
                     .unwrap_or(String::from("(peripheral name unknown)"));
                 println!(

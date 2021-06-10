@@ -69,7 +69,6 @@ impl Peripheral {
             service_data: HashMap::new(),
             services: Vec::new(),
             discovery_count: 1,
-            has_scan_response: true,
         }));
         let notification_senders = Arc::new(Mutex::new(Vec::new()));
         let ns_clone = notification_senders.clone();
@@ -164,8 +163,8 @@ impl api::Peripheral for Peripheral {
         self.properties.lock().unwrap().address
     }
 
-    async fn properties(&self) -> Result<PeripheralProperties> {
-        Ok(self.properties.lock().unwrap().clone())
+    async fn properties(&self) -> Result<Option<PeripheralProperties>> {
+        Ok(Some(self.properties.lock().unwrap().clone()))
     }
 
     fn characteristics(&self) -> BTreeSet<Characteristic> {

@@ -59,9 +59,9 @@ impl api::Peripheral for Peripheral {
         self.mac_address
     }
 
-    async fn properties(&self) -> Result<PeripheralProperties> {
+    async fn properties(&self) -> Result<Option<PeripheralProperties>> {
         let device_info = self.device_info().await?;
-        Ok(PeripheralProperties {
+        Ok(Some(PeripheralProperties {
             address: (&device_info.mac_address).into(),
             address_type: device_info.address_type.into(),
             local_name: device_info.name,
@@ -70,8 +70,7 @@ impl api::Peripheral for Peripheral {
             service_data: device_info.service_data,
             services: device_info.services,
             discovery_count: 0,
-            has_scan_response: true,
-        })
+        }))
     }
 
     fn characteristics(&self) -> BTreeSet<Characteristic> {

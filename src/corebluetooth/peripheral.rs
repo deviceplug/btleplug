@@ -294,6 +294,6 @@ impl api::Peripheral for Peripheral {
 
 impl From<SendError> for Error {
     fn from(_: SendError) -> Self {
-        Error::Other("Channel closed".to_string())
+        Error::Other("Channel closed".to_string().into())
     }
 }

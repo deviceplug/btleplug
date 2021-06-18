@@ -108,7 +108,7 @@ pub mod serde;
 mod winrtble;
 
 /// The main error type returned by most methods in btleplug.
-#[derive(Debug, thiserror::Error, Clone)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Permission denied")]
     PermissionDenied,
@@ -132,7 +132,7 @@ pub enum Error {
     InvalidBDAddr(#[from] ParseBDAddrError),
 
     #[error("{}", _0)]
-    Other(String),
+    Other(Box<dyn std::error::Error>),
 }
 
 /// Convenience type for a result using the btleplug [`Error`] type.

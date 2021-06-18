@@ -36,7 +36,9 @@ impl Adapter {
             receiver.next().await,
             Some(CoreBluetoothEvent::AdapterConnected)
         ) {
-            return Err(Error::Other("Adapter failed to connect.".to_string()));
+            return Err(Error::Other(
+                "Adapter failed to connect.".to_string().into(),
+            ));
         }
         info!("Adapter connected");
         let manager = AdapterManager::default();

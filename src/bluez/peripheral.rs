@@ -41,10 +41,13 @@ impl Peripheral {
             .find(|info| info.uuid == characteristic.uuid)
             .cloned()
             .ok_or_else(|| {
-                Error::Other(format!(
-                    "Characteristic with UUID {} not found.",
-                    characteristic.uuid
-                ))
+                Error::Other(
+                    format!(
+                        "Characteristic with UUID {} not found.",
+                        characteristic.uuid
+                    )
+                    .into(),
+                )
             })
     }
 

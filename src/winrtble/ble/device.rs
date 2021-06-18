@@ -60,7 +60,7 @@ impl BLEDevice {
     }
 
     async fn get_gatt_services(&self) -> Result<GattDeviceServicesResult> {
-        let winrt_error = |e| Error::Other(format!("{:?}", e));
+        let winrt_error = |e| Error::Other(format!("{:?}", e).into());
         let async_op = self.device.GetGattServicesAsync().map_err(winrt_error)?;
         let service_result = async_op.await.map_err(winrt_error)?;
         Ok(service_result)
@@ -89,7 +89,7 @@ impl BLEDevice {
     }
 
     pub async fn discover_characteristics(&self) -> Result<Vec<GattCharacteristic>> {
-        let winrt_error = |e| Error::Other(format!("{:?}", e));
+        let winrt_error = |e| Error::Other(format!("{:?}", e).into());
         let service_result = self.get_gatt_services().await?;
         let status = service_result.Status().map_err(winrt_error)?;
         if status == GattCommunicationStatus::Success {

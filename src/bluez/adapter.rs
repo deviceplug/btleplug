@@ -84,7 +84,7 @@ impl Central for Adapter {
 
 impl From<BluetoothError> for Error {
     fn from(error: BluetoothError) -> Self {
-        Error::Other(error.to_string())
+        Error::Other(Box::new(error))
     }
 }
 

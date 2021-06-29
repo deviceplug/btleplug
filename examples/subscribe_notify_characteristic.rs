@@ -75,7 +75,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     eprintln!("Can't connect to peripheral, skipping due to error = {:?}...", err);
                                     continue;
                                 }
-                            }                        }
+                            }
+                        }
                         let is_connected = peripheral.is_connected().await?;
                         println!(
                             "now connected (\'{:?}\') to peripheral : {:?}...",

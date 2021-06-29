@@ -33,37 +33,44 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 for peripheral in peripherals.iter() {
                     let properties = peripheral.properties().await?;
                     let is_connected = peripheral.is_connected().await?;
+                    let local_name = properties.local_name.unwrap_or(String::from("Unknown prop name"));
                     println!(
                         "peripheral : {:?} is connected: {:?}",
-                        properties.local_name,
-                        peripheral.is_connected().await?
+                        local_name,
+                        is_connected
                     );
-                    if properties.local_name.is_some() && !is_connected {
+                    if !is_connected {
                         println!(
                             "start connect to peripheral : {:?}...",
-                            properties.local_name
+                            &local_name
                         );
-                        peripheral
+                        let connect_result = peripheral
                             .connect()
-                            .await
-                            .expect("Can't connect to peripheral...");
+                            .await;
+                        match connect_result {
+                            Ok(_) => {}
+                            Err(err) => {
+                                eprintln!("Can't connect to peripheral, skipping due to error = {:?}...", err);
+                                continue;
+                            }
+                        }
                         let is_connected = peripheral.is_connected().await?;
                         println!(
                             "now connected (\'{:?}\') to peripheral : {:?}...",
-                            is_connected, properties.local_name
+                            is_connected, &local_name
                         );
                         let chars = peripheral.discover_characteristics().await?;
                         if is_connected {
                             println!(
                                 "Discover peripheral : \'{:?}\' characteristics...",
-                                properties.local_name
+                                &local_name
                             );
                             for characteristic in chars.into_iter() {
                                 println!("{:?}", characteristic);
                             }
                             println!(
                                 "disconnecting from peripheral : {:?}...",
-                                properties.local_name
+                                &local_name
                             );
                             peripheral
                                 .disconnect()

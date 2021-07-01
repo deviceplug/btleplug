@@ -1,3 +1,6 @@
+// See the "macOS permissions note" in README.md before running this on macOS
+// Big Sur or later.
+
 use btleplug::api::{bleuuid::BleUuid, Central, CentralEvent, Manager as _};
 use btleplug::platform::{Adapter, Manager};
 use futures::stream::StreamExt;

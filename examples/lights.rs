@@ -1,3 +1,6 @@
+// See the "macOS permissions note" in README.md before running this on macOS
+// Big Sur or later.
+
 use btleplug::api::{bleuuid::uuid_from_u16, Central, Manager as _, Peripheral as _, WriteType};
 use btleplug::platform::{Adapter, Manager, Peripheral};
 use rand::{thread_rng, Rng};

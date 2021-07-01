@@ -108,6 +108,16 @@ Beyond that, some of our other goals are:
   - Please hold off on filing more issues until base implementation is
     landed.
 
+### macOS permissions note
+
+To use Bluetooth on macOS Big Sur (11) or later, you need to either package your
+binary into an application bundle with an `Info.plist` including
+`NSBluetoothAlwaysUsageDescription`, or (for a command-line application such as
+the examples included with `btleplug`) enable the Bluetooth permission for your
+terminal. You can do the latter by going to _System Preferences_ → _Security &
+Privacy_ → _Privacy_ → _Bluetooth_, clicking the '+' button, and selecting
+'Terminal' (or iTerm or whichever terminal applicatation you use).
+
 ### Platform Feature Table
 
 - X: Completed and released

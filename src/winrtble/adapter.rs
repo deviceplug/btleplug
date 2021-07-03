@@ -20,6 +20,7 @@ use crate::{
 use async_trait::async_trait;
 use futures::stream::Stream;
 use std::convert::TryInto;
+use std::fmt::{self, Debug, Formatter};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
@@ -35,6 +36,14 @@ impl Adapter {
         let watcher = Arc::new(Mutex::new(BLEWatcher::new()));
         let manager = AdapterManager::default();
         Adapter { watcher, manager }
+    }
+}
+
+impl Debug for Adapter {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.debug_struct("Adapter")
+            .field("manager", &self.manager)
+            .finish()
     }
 }
 

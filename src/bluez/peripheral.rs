@@ -140,7 +140,7 @@ impl api::Peripheral for Peripheral {
         Ok(self.session.stop_notify(&characteristic_info.id).await?)
     }
 
-    async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification>>>> {
+    async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
         let device_id = self.device.clone();
         let events = self.session.device_event_stream(&device_id).await?;
         let characteristics = self.characteristics.clone();

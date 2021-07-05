@@ -69,13 +69,12 @@ impl BLECharacteristic {
     }
 
     pub async fn write_value(&self, data: &[u8], write_type: WriteType) -> Result<()> {
-        let writer = DataWriter::new().unwrap();
-        writer.WriteBytes(data).unwrap();
+        let writer = DataWriter::new()?;
+        writer.WriteBytes(data)?;
         let operation = self
             .characteristic
-            .WriteValueWithOptionAsync(writer.DetachBuffer().unwrap(), write_type.into())
-            .unwrap();
-        let result = operation.await.unwrap();
+            .WriteValueWithOptionAsync(writer.DetachBuffer()?, write_type.into())?;
+        let result = operation.await?;
         if result == GattCommunicationStatus::Success {
             Ok(())
         } else {
@@ -89,16 +88,14 @@ impl BLECharacteristic {
     pub async fn read_value(&self) -> Result<Vec<u8>> {
         let result = self
             .characteristic
-            .ReadValueWithCacheModeAsync(BluetoothCacheMode::Uncached)
-            .unwrap()
-            .await
-            .unwrap();
-        if result.Status().unwrap() == GattCommunicationStatus::Success {
-            let value = result.Value().unwrap();
-            let reader = DataReader::FromBuffer(&value).unwrap();
-            let len = reader.UnconsumedBufferLength().unwrap() as usize;
+            .ReadValueWithCacheModeAsync(BluetoothCacheMode::Uncached)?
+            .await?;
+        if result.Status()? == GattCommunicationStatus::Success {
+            let value = result.Value()?;
+            let reader = DataReader::FromBuffer(&value)?;
+            let len = reader.UnconsumedBufferLength()? as usize;
             let mut input = vec![0u8; len];
-            reader.ReadBytes(&mut input[0..len]).unwrap();
+            reader.ReadBytes(&mut input[0..len])?;
             Ok(input)
         } else {
             Err(Error::Other(format!(
@@ -113,18 +110,18 @@ impl BLECharacteristic {
             let value_handler = TypedEventHandler::new(
                 move |_: &Option<GattCharacteristic>, args: &Option<GattValueChangedEventArgs>| {
                     if let Some(args) = args {
-                        let value = args.CharacteristicValue().unwrap();
-                        let reader = DataReader::FromBuffer(&value).unwrap();
-                        let len = reader.UnconsumedBufferLength().unwrap() as usize;
+                        let value = args.CharacteristicValue()?;
+                        let reader = DataReader::FromBuffer(&value)?;
+                        let len = reader.UnconsumedBufferLength()? as usize;
                         let mut input: Vec<u8> = vec![0u8; len];
-                        reader.ReadBytes(&mut input[0..len]).unwrap();
+                        reader.ReadBytes(&mut input[0..len])?;
                         trace!("changed {:?}", input);
                         on_value_changed(input);
                     }
                     Ok(())
                 },
             );
-            let token = self.characteristic.ValueChanged(&value_handler).unwrap();
+            let token = self.characteristic.ValueChanged(&value_handler)?;
             self.notify_token = Some(token);
         }
         let config = self.characteristic.CharacteristicProperties()?.into();
@@ -134,10 +131,8 @@ impl BLECharacteristic {
 
         let status = self
             .characteristic
-            .WriteClientCharacteristicConfigurationDescriptorAsync(config)
-            .unwrap()
-            .await
-            .unwrap();
+            .WriteClientCharacteristicConfigurationDescriptorAsync(config)?
+            .await?;
         trace!("subscribe {:?}", status);
         if status == GattCommunicationStatus::Success {
             Ok(())
@@ -151,16 +146,14 @@ impl BLECharacteristic {
 
     pub async fn unsubscribe(&mut self) -> Result<()> {
         if let Some(token) = &self.notify_token {
-            self.characteristic.RemoveValueChanged(token).unwrap();
+            self.characteristic.RemoveValueChanged(token)?;
         }
         self.notify_token = None;
         let config = GattClientCharacteristicConfigurationDescriptorValue::None;
         let status = self
             .characteristic
-            .WriteClientCharacteristicConfigurationDescriptorAsync(config)
-            .unwrap()
-            .await
-            .unwrap();
+            .WriteClientCharacteristicConfigurationDescriptorAsync(config)?
+            .await?;
         trace!("unsubscribe {:?}", status);
         if status == GattCommunicationStatus::Success {
             Ok(())

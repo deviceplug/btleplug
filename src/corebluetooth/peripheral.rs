@@ -285,7 +285,7 @@ impl api::Peripheral for Peripheral {
         Ok(())
     }
 
-    async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification>>>> {
+    async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
         let (sender, receiver) = mpsc::unbounded();
         let mut senders = self.notification_senders.lock().unwrap();
         senders.push(sender);

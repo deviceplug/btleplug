@@ -23,7 +23,7 @@ impl Adapter {
 impl Central for Adapter {
     type Peripheral = Peripheral;
 
-    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent>>>> {
+    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent> + Send>>> {
         // There's a race between getting this event stream and getting the current set of devices.
         // Get the stream first, on the basis that it's better to have a duplicate DeviceDiscovered
         // event than to miss one. It's unlikely to happen in any case.

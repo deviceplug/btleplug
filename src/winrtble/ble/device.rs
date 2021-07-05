@@ -36,7 +36,7 @@ impl BLEDevice {
             .map_err(|_| Error::DeviceNotFound)?;
         let device = async_op.await.map_err(|_| Error::DeviceNotFound)?;
         let connection_status_handler = TypedEventHandler::new(
-            move |sender: &Option<BluetoothLEDevice>, _: &Option<windows::Object>| {
+            move |sender: &Option<BluetoothLEDevice>, _| {
                 if let Some(sender) = sender {
                     let is_connected = sender
                         .ConnectionStatus()

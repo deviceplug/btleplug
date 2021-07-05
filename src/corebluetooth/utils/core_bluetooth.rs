@@ -24,11 +24,14 @@ use super::nsstring::nsstring_to_string;
 
 /// Convert a CBUUID object to the standard Uuid type.
 pub fn cbuuid_to_uuid(cbuuid: *mut Object) -> Uuid {
-    // NOTE: CoreBluetooth tends to return uppercase UUID strings, and only 4 character long if
-    // the UUID is short (16 bits).
+    // NOTE: CoreBluetooth tends to return uppercase UUID strings, and only 4
+    // character long if the UUID is short (16 bits). It can also return 8
+    // character strings if the rest of the UUID matches the generic UUID.
     let uuid = nsstring_to_string(cb::uuid_uuidstring(cbuuid)).unwrap();
     let long = if uuid.len() == 4 {
         format!("0000{}-0000-1000-8000-00805f9b34fb", uuid)
+    } else if uuid.len() == 8 {
+        format!("{}-0000-1000-8000-00805f9b34fb", uuid)
     } else {
         uuid
     };

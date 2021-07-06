@@ -62,14 +62,13 @@ impl Peripheral {
             // Rumble required ONLY a BDAddr, not something you can get from
             // MacOS, so we make it up for now. This sucks.
             address: uuid_to_bdaddr(&uuid.to_string()),
-            address_type: AddressType::Random,
+            address_type: None,
             local_name,
             tx_power_level: None,
             manufacturer_data: HashMap::new(),
             service_data: HashMap::new(),
             services: Vec::new(),
             discovery_count: 1,
-            has_scan_response: true,
         }));
         let notification_senders = Arc::new(Mutex::new(Vec::new()));
         let ns_clone = notification_senders.clone();
@@ -164,8 +163,8 @@ impl api::Peripheral for Peripheral {
         self.properties.lock().unwrap().address
     }
 
-    async fn properties(&self) -> Result<PeripheralProperties> {
-        Ok(self.properties.lock().unwrap().clone())
+    async fn properties(&self) -> Result<Option<PeripheralProperties>> {
+        Ok(Some(self.properties.lock().unwrap().clone()))
     }
 
     fn characteristics(&self) -> BTreeSet<Characteristic> {
@@ -295,6 +294,6 @@ impl api::Peripheral for Peripheral {
 
 impl From<SendError> for Error {
     fn from(_: SendError) -> Self {
-        Error::Other("Channel closed".to_string())
+        Error::Other("Channel closed".to_string().into())
     }
 }

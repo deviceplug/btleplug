@@ -147,7 +147,7 @@ pub struct PeripheralProperties {
     /// The address of this peripheral
     pub address: BDAddr,
     /// The type of address (either random or public)
-    pub address_type: AddressType,
+    pub address_type: Option<AddressType>,
     /// The local name. This is generally a human-readable string that identifies the type of device.
     pub local_name: Option<String>,
     /// The transmission power level for the device
@@ -162,8 +162,6 @@ pub struct PeripheralProperties {
     pub services: Vec<Uuid>,
     /// Number of times we've seen advertising reports for this device
     pub discovery_count: u32,
-    /// True if we've discovered the device before
-    pub has_scan_response: bool,
 }
 
 /// The type of write operation to use.
@@ -186,7 +184,7 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
 
     /// Returns the set of properties associated with the peripheral. These may be updated over time
     /// as additional advertising reports are received.
-    async fn properties(&self) -> Result<PeripheralProperties>;
+    async fn properties(&self) -> Result<Option<PeripheralProperties>>;
 
     /// The set of characteristics we've discovered for this device. This will be empty until
     /// `discover_characteristics` is called.
@@ -284,6 +282,9 @@ pub trait Central: Send + Sync + Clone {
 
     /// Returns a particular [`Peripheral`] by its address if it has been discovered.
     async fn peripheral(&self, address: BDAddr) -> Result<Self::Peripheral>;
+
+    /// Add a [`Peripheral`] from a MAC address without a scan result. Not supported on all Bluetooth systems.
+    async fn add_peripheral(&self, address: BDAddr) -> Result<Self::Peripheral>;
 }
 
 /// The Manager is the entry point to the library, providing access to all the Bluetooth adapters on

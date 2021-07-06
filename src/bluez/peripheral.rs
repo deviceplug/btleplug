@@ -41,10 +41,13 @@ impl Peripheral {
             .find(|info| info.uuid == characteristic.uuid)
             .cloned()
             .ok_or_else(|| {
-                Error::Other(format!(
-                    "Characteristic with UUID {} not found.",
-                    characteristic.uuid
-                ))
+                Error::Other(
+                    format!(
+                        "Characteristic with UUID {} not found.",
+                        characteristic.uuid
+                    )
+                    .into(),
+                )
             })
     }
 
@@ -59,19 +62,18 @@ impl api::Peripheral for Peripheral {
         self.mac_address
     }
 
-    async fn properties(&self) -> Result<PeripheralProperties> {
+    async fn properties(&self) -> Result<Option<PeripheralProperties>> {
         let device_info = self.device_info().await?;
-        Ok(PeripheralProperties {
+        Ok(Some(PeripheralProperties {
             address: (&device_info.mac_address).into(),
-            address_type: device_info.address_type.into(),
+            address_type: Some(device_info.address_type.into()),
             local_name: device_info.name,
             tx_power_level: device_info.tx_power.map(|tx_power| tx_power as i8),
             manufacturer_data: device_info.manufacturer_data,
             service_data: device_info.service_data,
             services: device_info.services,
             discovery_count: 0,
-            has_scan_response: true,
-        })
+        }))
     }
 
     fn characteristics(&self) -> BTreeSet<Characteristic> {

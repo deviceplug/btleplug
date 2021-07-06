@@ -81,7 +81,7 @@ impl BLECharacteristic {
         } else {
             Err(Error::Other(format!(
                 "Windows UWP threw error on write: {:?}",
-                result
+                result.into()
             )))
         }
     }
@@ -101,10 +101,9 @@ impl BLECharacteristic {
             reader.ReadBytes(&mut input[0..len]).unwrap();
             Ok(input)
         } else {
-            Err(Error::Other(format!(
-                "Windows UWP threw error on read: {:?}",
-                result
-            )))
+            Err(Error::Other(
+                format!("Windows UWP threw error on read: {:?}", result).into(),
+            ))
         }
     }
 
@@ -142,10 +141,9 @@ impl BLECharacteristic {
         if status == GattCommunicationStatus::Success {
             Ok(())
         } else {
-            Err(Error::Other(format!(
-                "Windows UWP threw error on subscribe: {:?}",
-                status
-            )))
+            Err(Error::Other(
+                format!("Windows UWP threw error on subscribe: {:?}", status).into(),
+            ))
         }
     }
 
@@ -165,10 +163,9 @@ impl BLECharacteristic {
         if status == GattCommunicationStatus::Success {
             Ok(())
         } else {
-            Err(Error::Other(format!(
-                "Windows UWP threw error on unsubscribe: {:?}",
-                status
-            )))
+            Err(Error::Other(
+                format!("Windows UWP threw error on unsubscribe: {:?}", status).into(),
+            ))
         }
     }
 

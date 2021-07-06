@@ -36,7 +36,9 @@ impl Adapter {
             receiver.next().await,
             Some(CoreBluetoothEvent::AdapterConnected)
         ) {
-            return Err(Error::Other("Adapter failed to connect.".to_string()));
+            return Err(Error::Other(
+                "Adapter failed to connect.".to_string().into(),
+            ));
         }
         info!("Adapter connected");
         let manager = AdapterManager::default();
@@ -116,5 +118,11 @@ impl Central for Adapter {
         self.manager
             .peripheral(address)
             .ok_or(Error::DeviceNotFound)
+    }
+
+    async fn add_peripheral(&self, _address: BDAddr) -> Result<Peripheral> {
+        Err(Error::NotSupported(
+            "Can't add a Peripheral from a BDAddr".to_string(),
+        ))
     }
 }

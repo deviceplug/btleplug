@@ -24,7 +24,7 @@ pub struct BLEWatcher {
 
 impl From<windows::Error> for Error {
     fn from(err: windows::Error) -> Error {
-        Error::Other(format!("{:?}", err))
+        Error::Other(format!("{:?}", err).into())
     }
 }
 

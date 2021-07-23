@@ -281,6 +281,9 @@ impl ApiPeripheral for Peripheral {
                     value_handle: 0,
                     properties,
                 };
+                let charas_mtx = Arc::clone(&self.characteristics);
+                let mut charas = charas_mtx.lock().unwrap();
+                charas.insert(chara.clone());
                 characteristics_result.push(chara);
                 self.ble_characteristics
                     .entry(uuid)

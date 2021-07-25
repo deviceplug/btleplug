@@ -1,3 +1,10 @@
+# 0.7.3 (2021-07-25)
+
+## Bugfixes
+
+- Fix issue with characteristic array not updating on Win10
+- #172: Fix setting local_name in macOS
+
 # 0.7.2 (2021-04-04)
 
 ## Bugfixes

@@ -71,10 +71,11 @@ impl Peripheral {
     }
 
     pub(crate) fn update_properties(&self, args: &BluetoothLEAdvertisementReceivedEventArgs) {
-        let mut properties = self.properties.lock().unwrap().get_or_insert_with(|| {
-            let mut properties = PeripheralProperties::default();
-            properties.address = self.address;
-            properties
+        let mut maybe_properties = self.properties.lock().unwrap();
+        let properties = maybe_properties.get_or_insert_with(|| {
+            let mut new_properties = PeripheralProperties::default();
+            new_properties.address = self.address;
+            new_properties
         });
         let advertisement = args.Advertisement().unwrap();
 
@@ -173,6 +174,8 @@ impl Display for Peripheral {
             "{} {}{}",
             self.address,
             properties
+                .clone()
+                .unwrap()
                 .local_name
                 .clone()
                 .unwrap_or_else(|| "(unknown)".to_string()),

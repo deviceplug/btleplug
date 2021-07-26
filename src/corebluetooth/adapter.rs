@@ -1,6 +1,7 @@
 use super::internal::{run_corebluetooth_thread, CoreBluetoothEvent, CoreBluetoothMessage};
 use super::peripheral::Peripheral;
 use crate::api::{BDAddr, Central, CentralEvent};
+use crate::api::{Peripheral as _};
 use crate::common::adapter_manager::AdapterManager;
 use crate::{Error, Result};
 use async_trait::async_trait;
@@ -65,11 +66,8 @@ impl Adapter {
                     CoreBluetoothEvent::DeviceUpdated(uuid, name) => {
                         let id = uuid_to_bdaddr(&uuid.to_string());
                         let peripheral = manager_clone.peripheral(id).unwrap();
-                        {
-                            let mut properties = peripheral.properties.lock().unwrap();
-                            properties.local_name = Some(name);
-                        }
-                        manager_clone.update_peripheral(id, peripheral);
+                        let mut properties = peripheral.properties().await.unwrap();
+                        properties.local_name = Some(name);
                         manager_clone.emit(CentralEvent::DeviceUpdated(id));
                     }
                     CoreBluetoothEvent::DeviceLost(uuid) => {

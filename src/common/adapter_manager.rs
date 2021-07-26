@@ -64,6 +64,7 @@ where
         Box::pin(receiver)
     }
 
+    #[allow(dead_code)]
     pub fn has_peripheral(&self, addr: &BDAddr) -> bool {
         self.peripherals.contains_key(addr)
     }

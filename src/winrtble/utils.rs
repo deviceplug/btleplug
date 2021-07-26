@@ -50,6 +50,7 @@ pub fn to_vec(buffer: &IBuffer) -> Vec<u8> {
     data
 }
 
+#[allow(dead_code)]
 pub fn to_guid(uuid: &Uuid) -> Guid {
     let (data1, data2, data3, data4) = uuid.as_fields();
     Guid::from_values(data1, data2, data3, data4.to_owned())

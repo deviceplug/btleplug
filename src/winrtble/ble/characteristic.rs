@@ -80,8 +80,8 @@ impl BLECharacteristic {
         } else {
             Err(Error::Other(format!(
                 "Windows UWP threw error on write: {:?}",
-                result.into()
-            )))
+                result).into()
+            ))
         }
     }
 

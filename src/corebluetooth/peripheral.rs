@@ -13,7 +13,7 @@ use super::{
 };
 use crate::{
     api::{
-        self, AddressType, BDAddr, CentralEvent, Characteristic, PeripheralProperties,
+        self, BDAddr, CentralEvent, Characteristic, PeripheralProperties,
         ValueNotification, WriteType,
     },
     common::{adapter_manager::AdapterManager, util},
@@ -133,6 +133,10 @@ impl Peripheral {
     fn emit(&self, event: CentralEvent) {
         debug!("emitted {:?}", event);
         self.manager.emit(event)
+    }
+
+    pub(super) fn update_name(&self, name: &str) {
+        self.properties.lock().unwrap().local_name = Some(name.to_string());
     }
 }
 

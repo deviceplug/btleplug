@@ -13,7 +13,7 @@ use super::{
 };
 use crate::{
     api::{
-        self, CharPropFlags, BDAddr, CentralEvent, Characteristic, PeripheralProperties,
+        self, BDAddr, CentralEvent, CharPropFlags, Characteristic, PeripheralProperties,
         ValueNotification, WriteType,
     },
     common::{adapter_manager::AdapterManager, util},
@@ -222,7 +222,11 @@ impl api::Peripheral for Peripheral {
         // If we get WriteWithoutResponse for a characteristic that only
         // supports WriteWithResponse, slam the type to WriteWithResponse.
         // Otherwise we won't handle the future correctly.
-        if write_type == WriteType::WithoutResponse && !characteristic.properties.contains(CharPropFlags::WRITE_WITHOUT_RESPONSE) {
+        if write_type == WriteType::WithoutResponse
+            && !characteristic
+                .properties
+                .contains(CharPropFlags::WRITE_WITHOUT_RESPONSE)
+        {
             write_type = WriteType::WithResponse
         }
         self.message_sender

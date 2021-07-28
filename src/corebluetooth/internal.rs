@@ -300,7 +300,8 @@ impl CoreBluetoothInternal {
     ) {
         trace!(
             "Got manufacturer data advertisement! {}: {:?}",
-            manufacturer_id, manufacturer_data
+            manufacturer_id,
+            manufacturer_data
         );
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Err(e) = p
@@ -502,7 +503,7 @@ impl CoreBluetoothInternal {
                     },
                 );
                 // WriteWithoutResponse does not call the corebluetooth
-                // callback, it just always succeeds silently.  
+                // callback, it just always succeeds silently.
                 if kind == WriteType::WithoutResponse {
                     fut.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
                 } else {

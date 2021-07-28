@@ -35,8 +35,8 @@ impl BLEDevice {
         let async_op = BluetoothLEDevice::FromBluetoothAddressAsync(address.into())
             .map_err(|_| Error::DeviceNotFound)?;
         let device = async_op.await.map_err(|_| Error::DeviceNotFound)?;
-        let connection_status_handler = TypedEventHandler::new(
-            move |sender: &Option<BluetoothLEDevice>, _| {
+        let connection_status_handler =
+            TypedEventHandler::new(move |sender: &Option<BluetoothLEDevice>, _| {
                 if let Some(sender) = sender {
                     let is_connected = sender
                         .ConnectionStatus()
@@ -47,8 +47,7 @@ impl BLEDevice {
                 }
 
                 Ok(())
-            },
-        );
+            });
         let connection_token = device
             .ConnectionStatusChanged(&connection_status_handler)
             .map_err(|_| Error::Other("Could not add connection status handler".into()))?;

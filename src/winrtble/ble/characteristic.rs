@@ -78,9 +78,8 @@ impl BLECharacteristic {
         if result == GattCommunicationStatus::Success {
             Ok(())
         } else {
-            Err(Error::Other(format!(
-                "Windows UWP threw error on write: {:?}",
-                result).into()
+            Err(Error::Other(
+                format!("Windows UWP threw error on write: {:?}", result).into(),
             ))
         }
     }

@@ -22,6 +22,14 @@ acting like a Bluetooth LE device instead of connecting to one), check out
 This library **DOES NOT SUPPORT BLUETOOTH 2/CLASSIC**. There are no plans to add BT2/Classic
 support.
 
+## v0.8+, now with Async!
+
+Note that as of v0.8, btleplug is now async, using tokio as a runtime. The API has changed
+drastically since 0.7, and no longer resembles [rumble](https://github.com/mwylde/rumble) as much as
+it did before.
+
+While we've done our best to test it, we expect there will be issues with this release. [Please file issues as you find them](https://github.com/deviceplug/btleplug/issues/) and we will address them as soon as possible.
+
 ## Development Goals
 
 The issues in this repo reflect the development goals of the project. First and foremost is getting
@@ -30,6 +38,7 @@ library](https://github.com/buttplugio/buttplug-rs).
 
 Beyond that, some of our other goals are:
 
+- Add Android (now happening in v0.9)
 - Add FFI so this library can be used from C (and maybe C++ using
   [cxx](https://github.com/dtolnay/cxx).
 - Possibly create a WASM compatible layer using

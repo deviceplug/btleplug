@@ -1,6 +1,6 @@
 btleplug is covered under the following BSD-3-Clause license:
 
-Copyright (c) 2020, Nonpolynomial
+Copyright (c) 2020-2021, Nonpolynomial
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without

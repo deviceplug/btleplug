@@ -1,3 +1,13 @@
+# 0.8.0 (2021-07-27)
+
+## Features
+
+- Overhaul API, moving to async based system
+
+## Breaking Changes
+
+- Pretty much everything? The whole API got rewritten. All hail the new flesh.
+
 # 0.7.3 (2021-07-25)
 
 ## Bugfixes

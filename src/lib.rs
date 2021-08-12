@@ -132,7 +132,7 @@ pub enum Error {
     InvalidBDAddr(#[from] ParseBDAddrError),
 
     #[error("{}", _0)]
-    Other(Box<dyn std::error::Error>),
+    Other(Box<dyn std::error::Error + Send + Sync>),
 }
 
 /// Convenience type for a result using the btleplug [`Error`] type.

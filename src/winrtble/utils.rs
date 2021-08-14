@@ -56,8 +56,39 @@ pub fn to_guid(uuid: &Uuid) -> Guid {
     Guid::from_values(data1, data2, data3, data4.to_owned())
 }
 
-pub fn to_char_props(_: &GattCharacteristicProperties) -> CharPropFlags {
-    CharPropFlags::from_bits_truncate(0 as u8)
+pub fn to_char_props(props: &GattCharacteristicProperties) -> CharPropFlags {
+    let mut flags = CharPropFlags::default();
+    if *props & GattCharacteristicProperties::Broadcast != GattCharacteristicProperties::None {
+        flags |= CharPropFlags::BROADCAST;
+    }
+    if *props & GattCharacteristicProperties::Read != GattCharacteristicProperties::None {
+        flags |= CharPropFlags::READ;
+    }
+    if *props & GattCharacteristicProperties::WriteWithoutResponse
+        != GattCharacteristicProperties::None
+    {
+        flags |= CharPropFlags::WRITE_WITHOUT_RESPONSE;
+    }
+    if *props & GattCharacteristicProperties::Write != GattCharacteristicProperties::None {
+        flags |= CharPropFlags::WRITE;
+    }
+    if *props & GattCharacteristicProperties::Notify != GattCharacteristicProperties::None {
+        flags |= CharPropFlags::NOTIFY;
+    }
+    if *props & GattCharacteristicProperties::Indicate != GattCharacteristicProperties::None {
+        flags |= CharPropFlags::INDICATE;
+    }
+    if *props & GattCharacteristicProperties::AuthenticatedSignedWrites
+        != GattCharacteristicProperties::None
+    {
+        flags |= CharPropFlags::AUTHENTICATED_SIGNED_WRITES;
+    }
+    if *props & GattCharacteristicProperties::ExtendedProperties
+        != GattCharacteristicProperties::None
+    {
+        flags |= CharPropFlags::EXTENDED_PROPERTIES;
+    }
+    flags
 }
 
 #[cfg(test)]

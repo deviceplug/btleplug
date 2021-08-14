@@ -1,3 +1,10 @@
+# 0.8.1 (2021-08-14)
+
+## Bugfixes
+
+- Errors now Sync/Send (usable with Anyhow)
+- Characteristic properties now properly reported on windows
+
 # 0.8.0 (2021-07-27)
 
 ## Features

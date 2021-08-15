@@ -44,39 +44,40 @@ use bindings::Windows::Devices::Bluetooth::Advertisement::*;
 /// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone)]
 pub struct Peripheral {
-    device: Arc<tokio::sync::Mutex<Option<BLEDevice>>>,
-    adapter: AdapterManager<Self>,
+    shared: Arc<Shared>,
+}
+
+struct Shared {
+    device: tokio::sync::Mutex<Option<BLEDevice>>,
+    adapter: AdapterManager<Peripheral>,
     address: BDAddr,
-    properties: Arc<Mutex<Option<PeripheralProperties>>>,
-    connected: Arc<AtomicBool>,
-    ble_characteristics: Arc<DashMap<Uuid, BLECharacteristic>>,
+    properties: Mutex<Option<PeripheralProperties>>,
+    connected: AtomicBool,
+    ble_characteristics: DashMap<Uuid, BLECharacteristic>,
     notifications_channel: broadcast::Sender<ValueNotification>,
 }
 
 impl Peripheral {
     pub(crate) fn new(adapter: AdapterManager<Self>, address: BDAddr) -> Self {
-        let device = Arc::new(tokio::sync::Mutex::new(None));
-        let properties = Arc::new(Mutex::new(None));
-        let connected = Arc::new(AtomicBool::new(false));
-        let ble_characteristics = Arc::new(DashMap::new());
         let (broadcast_sender, _) = broadcast::channel(16);
-        let notifications_channel = broadcast_sender;
         Peripheral {
-            device,
-            adapter,
-            address,
-            properties,
-            connected,
-            ble_characteristics,
-            notifications_channel,
+            shared: Arc::new(Shared {
+                adapter: adapter,
+                device: tokio::sync::Mutex::new(None),
+                address: address,
+                properties: Mutex::new(None),
+                connected: AtomicBool::new(false),
+                ble_characteristics: DashMap::new(),
+                notifications_channel: broadcast_sender,
+            }),
         }
     }
 
     pub(crate) fn update_properties(&self, args: &BluetoothLEAdvertisementReceivedEventArgs) {
-        let mut maybe_properties = self.properties.lock().unwrap();
+        let mut maybe_properties = self.shared.properties.lock().unwrap();
         let properties = maybe_properties.get_or_insert_with(|| {
             let mut new_properties = PeripheralProperties::default();
-            new_properties.address = self.address;
+            new_properties.address = self.shared.address;
             new_properties
         });
         let advertisement = args.Advertisement().unwrap();
@@ -101,9 +102,10 @@ impl Peripheral {
                 .collect();
 
             // Emit event of newly received advertisement
-            self.adapter
+            self.shared
+                .adapter
                 .emit(CentralEvent::ManufacturerDataAdvertisement {
-                    address: self.address,
+                    address: self.shared.address,
                     manufacturer_data: properties.manufacturer_data.clone(),
                 });
         }
@@ -138,10 +140,12 @@ impl Peripheral {
                 .collect();
 
             // Emit event of newly received advertisement
-            self.adapter.emit(CentralEvent::ServiceDataAdvertisement {
-                address: self.address,
-                service_data: properties.service_data.clone(),
-            });
+            self.shared
+                .adapter
+                .emit(CentralEvent::ServiceDataAdvertisement {
+                    address: self.shared.address,
+                    service_data: properties.service_data.clone(),
+                });
         }
 
         if let Ok(services) = advertisement.ServiceUuids() {
@@ -150,10 +154,12 @@ impl Peripheral {
                 .map(|uuid| utils::to_uuid(&uuid))
                 .collect();
 
-            self.adapter.emit(CentralEvent::ServicesAdvertisement {
-                address: self.address,
-                services: properties.services.clone(),
-            });
+            self.shared
+                .adapter
+                .emit(CentralEvent::ServicesAdvertisement {
+                    address: self.shared.address,
+                    services: properties.services.clone(),
+                });
         }
 
         // windows does not provide the address type in the advertisement event args but only in the device object
@@ -165,16 +171,16 @@ impl Peripheral {
 
 impl Display for Peripheral {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let connected = if self.connected.load(Ordering::Relaxed) {
+        let connected = if self.shared.connected.load(Ordering::Relaxed) {
             " connected"
         } else {
             ""
         };
-        let properties = self.properties.lock().unwrap();
+        let properties = self.shared.properties.lock().unwrap();
         write!(
             f,
             "{} {}{}",
-            self.address,
+            self.shared.address,
             properties
                 .clone()
                 .unwrap()
@@ -188,16 +194,16 @@ impl Display for Peripheral {
 
 impl Debug for Peripheral {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let connected = if self.connected.load(Ordering::Relaxed) {
+        let connected = if self.shared.connected.load(Ordering::Relaxed) {
             " connected"
         } else {
             ""
         };
-        let properties = self.properties.lock().unwrap();
+        let properties = self.shared.properties.lock().unwrap();
         write!(
             f,
             "{} properties: {:?}, characteristics: {:?} {}",
-            self.address, *properties, self.ble_characteristics, connected
+            self.shared.address, *properties, self.shared.ble_characteristics, connected
         )
     }
 }
@@ -206,20 +212,21 @@ impl Debug for Peripheral {
 impl ApiPeripheral for Peripheral {
     /// Returns the address of the peripheral.
     fn address(&self) -> BDAddr {
-        self.address
+        self.shared.address
     }
 
     /// Returns the set of properties associated with the peripheral. These may be updated over time
     /// as additional advertising reports are received.
     async fn properties(&self) -> Result<Option<PeripheralProperties>> {
-        let l = self.properties.lock().unwrap();
+        let l = self.shared.properties.lock().unwrap();
         Ok(l.clone())
     }
 
     /// The set of characteristics we've discovered for this device. This will be empty until
     /// `discover_characteristics` is called.
     fn characteristics(&self) -> BTreeSet<Characteristic> {
-        self.ble_characteristics
+        self.shared
+            .ble_characteristics
             .iter()
             .map(|item| item.value().to_characteristic())
             .collect()
@@ -227,20 +234,22 @@ impl ApiPeripheral for Peripheral {
 
     /// Returns true iff we are currently connected to the device.
     async fn is_connected(&self) -> Result<bool> {
-        Ok(self.connected.load(Ordering::Relaxed))
+        Ok(self.shared.connected.load(Ordering::Relaxed))
     }
 
     /// Creates a connection to the device. This is a synchronous operation; if this method returns
     /// Ok there has been successful connection. Note that peripherals allow only one connection at
     /// a time. Operations that attempt to communicate with a device will fail until it is connected.
     async fn connect(&self) -> Result<()> {
-        let connected = self.connected.clone();
-        let adapter_clone = self.adapter.clone();
-        let address = self.address;
+        let shared_clone = self.shared.clone();
+        let adapter_clone = self.shared.adapter.clone();
+        let address = self.shared.address;
         let device = BLEDevice::new(
-            self.address,
+            self.shared.address,
             Box::new(move |is_connected| {
-                connected.store(is_connected, Ordering::Relaxed);
+                shared_clone
+                    .connected
+                    .store(is_connected, Ordering::Relaxed);
                 if !is_connected {
                     adapter_clone.emit(CentralEvent::DeviceDisconnected(address));
                 }
@@ -249,32 +258,35 @@ impl ApiPeripheral for Peripheral {
         .await?;
 
         device.connect().await?;
-        let mut d = self.device.lock().await;
+        let mut d = self.shared.device.lock().await;
         *d = Some(device);
-        self.adapter
-            .emit(CentralEvent::DeviceConnected(self.address));
+        self.shared
+            .adapter
+            .emit(CentralEvent::DeviceConnected(self.shared.address));
         Ok(())
     }
 
     /// Terminates a connection to the device. This is a synchronous operation.
     async fn disconnect(&self) -> Result<()> {
-        let mut device = self.device.lock().await;
+        let mut device = self.shared.device.lock().await;
         *device = None;
-        self.adapter
-            .emit(CentralEvent::DeviceDisconnected(self.address));
+        self.shared
+            .adapter
+            .emit(CentralEvent::DeviceDisconnected(self.shared.address));
         Ok(())
     }
 
     /// Discovers all characteristics for the device. This is a synchronous operation.
     async fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
-        let device = self.device.lock().await;
+        let device = self.shared.device.lock().await;
         if let Some(ref device) = *device {
             let mut characteristics_result = vec![];
             let characteristics = device.discover_characteristics().await?;
             for gatt_characteristic in characteristics {
                 let ble_characteristic = BLECharacteristic::new(gatt_characteristic);
                 let characteristic = ble_characteristic.to_characteristic();
-                self.ble_characteristics
+                self.shared
+                    .ble_characteristics
                     .entry(characteristic.uuid.clone())
                     .or_insert_with(|| ble_characteristic);
                 characteristics_result.push(characteristic);
@@ -292,7 +304,8 @@ impl ApiPeripheral for Peripheral {
         data: &[u8],
         write_type: WriteType,
     ) -> Result<()> {
-        if let Some(ble_characteristic) = self.ble_characteristics.get(&characteristic.uuid) {
+        if let Some(ble_characteristic) = self.shared.ble_characteristics.get(&characteristic.uuid)
+        {
             ble_characteristic.write_value(data, write_type).await
         } else {
             Err(Error::NotSupported("write".into()))
@@ -302,9 +315,12 @@ impl ApiPeripheral for Peripheral {
     /// Enables either notify or indicate (depending on support) for the specified characteristic.
     /// This is a synchronous call.
     async fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
-        if let Some(mut ble_characteristic) = self.ble_characteristics.get_mut(&characteristic.uuid)
+        if let Some(mut ble_characteristic) = self
+            .shared
+            .ble_characteristics
+            .get_mut(&characteristic.uuid)
         {
-            let notifications_sender = self.notifications_channel.clone();
+            let notifications_sender = self.shared.notifications_channel.clone();
             let uuid = characteristic.uuid;
             ble_characteristic
                 .subscribe(Box::new(move |value| {
@@ -322,7 +338,10 @@ impl ApiPeripheral for Peripheral {
     /// Disables either notify or indicate (depending on support) for the specified characteristic.
     /// This is a synchronous call.
     async fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
-        if let Some(mut ble_characteristic) = self.ble_characteristics.get_mut(&characteristic.uuid)
+        if let Some(mut ble_characteristic) = self
+            .shared
+            .ble_characteristics
+            .get_mut(&characteristic.uuid)
         {
             ble_characteristic.unsubscribe().await
         } else {
@@ -331,7 +350,8 @@ impl ApiPeripheral for Peripheral {
     }
 
     async fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
-        if let Some(ble_characteristic) = self.ble_characteristics.get(&characteristic.uuid) {
+        if let Some(ble_characteristic) = self.shared.ble_characteristics.get(&characteristic.uuid)
+        {
             ble_characteristic.read_value().await
         } else {
             Err(Error::NotSupported("read".into()))
@@ -339,7 +359,7 @@ impl ApiPeripheral for Peripheral {
     }
 
     async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
-        let receiver = self.notifications_channel.subscribe();
+        let receiver = self.shared.notifications_channel.subscribe();
         Ok(Box::pin(BroadcastStream::new(receiver).filter_map(
             |x| async move {
                 if x.is_ok() {

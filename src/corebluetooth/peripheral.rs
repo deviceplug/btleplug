@@ -36,11 +36,15 @@ use uuid::Uuid;
 /// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone)]
 pub struct Peripheral {
-    notification_senders: Arc<Mutex<Vec<UnboundedSender<ValueNotification>>>>,
-    manager: AdapterManager<Self>,
+    shared: Arc<Shared>,
+}
+
+struct Shared {
+    notifications_channel: broadcast::Sender<ValueNotification>,
+    manager: AdapterManager<Peripheral>,
     uuid: Uuid,
-    characteristics: Arc<Mutex<BTreeSet<Characteristic>>>,
-    properties: Arc<Mutex<PeripheralProperties>>,
+    characteristics: Mutex<BTreeSet<Characteristic>>,
+    properties: Mutex<PeripheralProperties>,
     message_sender: Sender<CoreBluetoothMessage>,
     // We're not actually holding a peripheral object here, that's held out in
     // the objc thread. We'll just communicate with it through our
@@ -58,7 +62,7 @@ impl Peripheral {
     ) -> Self {
         // Since we're building the object, we have an active advertisement.
         // Build properties now.
-        let properties = Arc::new(Mutex::from(PeripheralProperties {
+        let properties = Mutex::from(PeripheralProperties {
             // Rumble required ONLY a BDAddr, not something you can get from
             // MacOS, so we make it up for now. This sucks.
             address: uuid_to_bdaddr(&uuid.to_string()),
@@ -69,23 +73,33 @@ impl Peripheral {
             service_data: HashMap::new(),
             services: Vec::new(),
             discovery_count: 1,
-        }));
-        let notification_senders = Arc::new(Mutex::new(Vec::new()));
-        let ns_clone = notification_senders.clone();
-        let p_clone = properties.clone();
-        let m_clone = manager.clone();
+        });
+        let (notifications_channel, _) = broadcast::channel(16);
+
+        let shared = Arc::new(Shared {
+            properties,
+            manager,
+            characteristics: Arc::new(Mutex::new(BTreeSet::new())),
+            notifications_channel,
+            uuid,
+            message_sender,
+        });
+        let shared_clone = shared.clone();
         task::spawn(async move {
             let mut event_receiver = event_receiver;
+            let shared = shared_clone;
+
             loop {
                 match event_receiver.next().await {
                     Some(CBPeripheralEvent::Notification(uuid, data)) => {
-                        util::send_notification(
-                            &ns_clone,
-                            &ValueNotification { uuid, value: data },
-                        );
+                        let notification = ValueNotification { uuid, value: data };
+
+                        // Note: we ignore send errors here which may happen while there are no
+                        // receivers...
+                        let _ = shared.notifications_channel.send(notification);
                     }
                     Some(CBPeripheralEvent::ManufacturerData(manufacturer_id, data)) => {
-                        let mut properties = p_clone.lock().unwrap();
+                        let mut properties = shared.properties.lock().unwrap();
                         properties
                             .manufacturer_data
                             .insert(manufacturer_id, data.clone());
@@ -95,19 +109,19 @@ impl Peripheral {
                         });
                     }
                     Some(CBPeripheralEvent::ServiceData(service_data)) => {
-                        let mut properties = p_clone.lock().unwrap();
+                        let mut properties = shared.properties.lock().unwrap();
                         properties.service_data.extend(service_data.clone());
 
-                        m_clone.emit(CentralEvent::ServiceDataAdvertisement {
+                        shared.manager.emit(CentralEvent::ServiceDataAdvertisement {
                             address: properties.address,
                             service_data,
                         });
                     }
                     Some(CBPeripheralEvent::Services(services)) => {
-                        let mut properties = p_clone.lock().unwrap();
+                        let mut properties = shared.properties.lock().unwrap();
                         properties.services = services.clone();
 
-                        m_clone.emit(CentralEvent::ServicesAdvertisement {
+                        shared.manager.emit(CentralEvent::ServicesAdvertisement {
                             address: properties.address,
                             services,
                         });
@@ -120,23 +134,16 @@ impl Peripheral {
                 }
             }
         });
-        Self {
-            properties,
-            manager,
-            characteristics: Arc::new(Mutex::new(BTreeSet::new())),
-            notification_senders,
-            uuid,
-            message_sender,
-        }
+        Self { shared: shared }
     }
 
     fn emit(&self, event: CentralEvent) {
         debug!("emitted {:?}", event);
-        self.manager.emit(event)
+        self.shared.manager.emit(event)
     }
 
     pub(super) fn update_name(&self, name: &str) {
-        self.properties.lock().unwrap().local_name = Some(name.to_string());
+        self.shared.properties.lock().unwrap().local_name = Some(name.to_string());
     }
 }
 
@@ -153,10 +160,10 @@ impl Display for Peripheral {
 impl Debug for Peripheral {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         f.debug_struct("Peripheral")
-            .field("uuid", &self.uuid)
-            .field("characteristics", &self.characteristics)
-            .field("properties", &self.properties)
-            .field("message_sender", &self.message_sender)
+            .field("uuid", &self.shared.uuid)
+            .field("characteristics", &self.shared.characteristics)
+            .field("properties", &self.shared.properties)
+            .field("message_sender", &self.shared.message_sender)
             .finish()
     }
 }
@@ -164,15 +171,17 @@ impl Debug for Peripheral {
 #[async_trait]
 impl api::Peripheral for Peripheral {
     fn address(&self) -> BDAddr {
-        self.properties.lock().unwrap().address
+        // TODO: look at moving/copying address out of properties so we don't have to
+        // take a lock here! (the address for the peripheral won't ever change)
+        self.shared.properties.lock().unwrap().address
     }
 
     async fn properties(&self) -> Result<Option<PeripheralProperties>> {
-        Ok(Some(self.properties.lock().unwrap().clone()))
+        Ok(Some(self.shared.properties.lock().unwrap().clone()))
     }
 
     fn characteristics(&self) -> BTreeSet<Characteristic> {
-        self.characteristics.lock().unwrap().clone()
+        self.shared.characteristics.lock().unwrap().clone()
     }
 
     async fn is_connected(&self) -> Result<bool> {
@@ -182,18 +191,21 @@ impl api::Peripheral for Peripheral {
 
     async fn connect(&self) -> Result<()> {
         let fut = CoreBluetoothReplyFuture::default();
-        self.message_sender
+        self.shared
+            .message_sender
             .to_owned()
             .send(CoreBluetoothMessage::ConnectDevice(
-                self.uuid,
+                self.shared.uuid,
                 fut.get_state_clone(),
             ))
             .await?;
         match fut.await {
             CoreBluetoothReply::Connected(chars) => {
-                *(self.characteristics.lock().unwrap()) = chars;
-                self.emit(CentralEvent::DeviceConnected(
-                    self.properties.lock().unwrap().address,
+                *(self.shared.characteristics.lock().unwrap()) = chars;
+                self.shared.manager.emit(CentralEvent::DeviceConnected(
+                    // TODO: look at moving/copying address out of properties so we don't have to
+                    // take a lock here! (the address for the peripheral won't ever change)
+                    self.shared.properties.lock().unwrap().address,
                 ));
             }
             _ => panic!("Shouldn't get anything but connected!"),
@@ -208,7 +220,7 @@ impl api::Peripheral for Peripheral {
     }
 
     async fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
-        let characteristics = self.characteristics.lock().unwrap().clone();
+        let characteristics = self.shared.characteristics.lock().unwrap().clone();
         Ok(characteristics.into_iter().collect())
     }
 
@@ -229,10 +241,11 @@ impl api::Peripheral for Peripheral {
         {
             write_type = WriteType::WithResponse
         }
-        self.message_sender
+        self.shared
+            .message_sender
             .to_owned()
             .send(CoreBluetoothMessage::WriteValue(
-                self.uuid,
+                self.shared.uuid,
                 characteristic.uuid,
                 Vec::from(data),
                 write_type,
@@ -248,10 +261,11 @@ impl api::Peripheral for Peripheral {
 
     async fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
         let fut = CoreBluetoothReplyFuture::default();
-        self.message_sender
+        self.shared
+            .message_sender
             .to_owned()
             .send(CoreBluetoothMessage::ReadValue(
-                self.uuid,
+                self.shared.uuid,
                 characteristic.uuid,
                 fut.get_state_clone(),
             ))
@@ -266,7 +280,8 @@ impl api::Peripheral for Peripheral {
 
     async fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
         let fut = CoreBluetoothReplyFuture::default();
-        self.message_sender
+        self.shared
+            .message_sender
             .to_owned()
             .send(CoreBluetoothMessage::Subscribe(
                 self.uuid,
@@ -283,10 +298,11 @@ impl api::Peripheral for Peripheral {
 
     async fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
         let fut = CoreBluetoothReplyFuture::default();
-        self.message_sender
+        self.shared
+            .message_sender
             .to_owned()
             .send(CoreBluetoothMessage::Unsubscribe(
-                self.uuid,
+                self.shared.uuid,
                 characteristic.uuid,
                 fut.get_state_clone(),
             ))
@@ -299,10 +315,16 @@ impl api::Peripheral for Peripheral {
     }
 
     async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
-        let (sender, receiver) = mpsc::unbounded();
-        let mut senders = self.notification_senders.lock().unwrap();
-        senders.push(sender);
-        Ok(Box::pin(receiver))
+        let receiver = self.shared.notifications_channel.subscribe();
+        Ok(Box::pin(BroadcastStream::new(receiver).filter_map(
+            |x| async move {
+                if x.is_ok() {
+                    Some(x.unwrap())
+                } else {
+                    None
+                }
+            },
+        )))
     }
 }
 

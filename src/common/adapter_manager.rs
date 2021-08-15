@@ -11,31 +11,36 @@
 // following copyright:
 //
 // Copyright (c) 2014 The Rust Project Developers
-use crate::{
-    api::{BDAddr, CentralEvent, Peripheral},
-    common::util::send_notification,
-};
+use crate::api::{BDAddr, CentralEvent, Peripheral};
 use dashmap::{mapref::one::RefMut, DashMap};
-use futures::channel::mpsc::{self, UnboundedSender};
-use futures::stream::Stream;
+use futures::stream::{Stream, StreamExt};
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::broadcast;
+use tokio_stream::wrappers::BroadcastStream;
 
 #[derive(Clone, Debug)]
 pub struct AdapterManager<PeripheralType>
 where
     PeripheralType: Peripheral,
 {
-    peripherals: Arc<DashMap<BDAddr, PeripheralType>>,
-    async_senders: Arc<Mutex<Vec<UnboundedSender<CentralEvent>>>>,
+    shared: Arc<Shared<PeripheralType>>,
+}
+
+#[derive(Debug)]
+struct Shared<PeripheralType> {
+    peripherals: DashMap<BDAddr, PeripheralType>,
+    events_channel: broadcast::Sender<CentralEvent>,
 }
 
 impl<PeripheralType: Peripheral + 'static> Default for AdapterManager<PeripheralType> {
     fn default() -> Self {
-        let peripherals = Arc::new(DashMap::new());
+        let (broadcast_sender, _) = broadcast::channel(16);
         AdapterManager {
-            peripherals,
-            async_senders: Arc::new(Mutex::new(vec![])),
+            shared: Arc::new(Shared {
+                peripherals: DashMap::new(),
+                events_channel: broadcast_sender,
+            }),
         }
     }
 }
@@ -47,50 +52,59 @@ where
     pub fn emit(&self, event: CentralEvent) {
         match event {
             CentralEvent::DeviceDisconnected(addr) => {
-                self.peripherals.remove(&addr);
+                self.shared.peripherals.remove(&addr);
             }
             CentralEvent::DeviceLost(addr) => {
-                self.peripherals.remove(&addr);
+                self.shared.peripherals.remove(&addr);
             }
             _ => {}
         }
 
-        send_notification(&self.async_senders, &event);
+        // Note: we ignore possible send errors which are expected while there
+        // could be zero recievers if application is not subscribed
+        let _ = self.shared.events_channel.send(event);
     }
 
     pub fn event_stream(&self) -> Pin<Box<dyn Stream<Item = CentralEvent> + Send>> {
-        let (sender, receiver) = mpsc::unbounded();
-        self.async_senders.lock().unwrap().push(sender);
-        Box::pin(receiver)
+        let receiver = self.shared.events_channel.subscribe();
+        Box::pin(BroadcastStream::new(receiver).filter_map(|x| async move {
+            if x.is_ok() {
+                Some(x.unwrap())
+            } else {
+                None
+            }
+        }))
     }
 
     #[allow(dead_code)]
     pub fn has_peripheral(&self, addr: &BDAddr) -> bool {
-        self.peripherals.contains_key(addr)
+        self.shared.peripherals.contains_key(addr)
     }
 
     pub fn add_peripheral(&self, addr: BDAddr, peripheral: PeripheralType) {
         assert!(
-            !self.peripherals.contains_key(&addr),
+            !self.shared.peripherals.contains_key(&addr),
             "Adding a peripheral that's already in the map."
         );
         assert_eq!(peripheral.address(), addr, "Device has unexpected address."); // TODO remove addr argument
-        self.peripherals.insert(addr, peripheral);
+        self.shared.peripherals.insert(addr, peripheral);
     }
 
     pub fn peripherals(&self) -> Vec<PeripheralType> {
-        self.peripherals
+        self.shared
+            .peripherals
             .iter()
             .map(|val| val.value().clone())
             .collect()
     }
 
     pub fn peripheral_mut(&self, address: BDAddr) -> Option<RefMut<BDAddr, PeripheralType>> {
-        self.peripherals.get_mut(&address)
+        self.shared.peripherals.get_mut(&address)
     }
 
     pub fn peripheral(&self, address: BDAddr) -> Option<PeripheralType> {
-        self.peripherals
+        self.shared
+            .peripherals
             .get(&address)
             .map(|val| val.value().clone())
     }

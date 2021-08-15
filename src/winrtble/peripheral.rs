@@ -21,13 +21,12 @@ use crate::{
         BDAddr, CentralEvent, Characteristic, Peripheral as ApiPeripheral, PeripheralProperties,
         ValueNotification, WriteType,
     },
-    common::{adapter_manager::AdapterManager, util},
+    common::adapter_manager::AdapterManager,
     Error, Result,
 };
 use async_trait::async_trait;
 use dashmap::DashMap;
-use futures::channel::mpsc::{self, UnboundedSender};
-use futures::stream::Stream;
+use futures::stream::{Stream, StreamExt};
 use std::{
     collections::BTreeSet,
     convert::TryInto,
@@ -36,6 +35,8 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
     sync::{Arc, Mutex},
 };
+use tokio::sync::broadcast;
+use tokio_stream::wrappers::BroadcastStream;
 use uuid::Uuid;
 
 use bindings::Windows::Devices::Bluetooth::Advertisement::*;
@@ -49,7 +50,7 @@ pub struct Peripheral {
     properties: Arc<Mutex<Option<PeripheralProperties>>>,
     connected: Arc<AtomicBool>,
     ble_characteristics: Arc<DashMap<Uuid, BLECharacteristic>>,
-    notification_senders: Arc<Mutex<Vec<UnboundedSender<ValueNotification>>>>,
+    notifications_channel: broadcast::Sender<ValueNotification>,
 }
 
 impl Peripheral {
@@ -58,7 +59,8 @@ impl Peripheral {
         let properties = Arc::new(Mutex::new(None));
         let connected = Arc::new(AtomicBool::new(false));
         let ble_characteristics = Arc::new(DashMap::new());
-        let notification_senders = Arc::new(Mutex::new(Vec::new()));
+        let (broadcast_sender, _) = broadcast::channel(16);
+        let notifications_channel = broadcast_sender;
         Peripheral {
             device,
             adapter,
@@ -66,7 +68,7 @@ impl Peripheral {
             properties,
             connected,
             ble_characteristics,
-            notification_senders,
+            notifications_channel,
         }
     }
 
@@ -302,12 +304,14 @@ impl ApiPeripheral for Peripheral {
     async fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
         if let Some(mut ble_characteristic) = self.ble_characteristics.get_mut(&characteristic.uuid)
         {
-            let notification_senders = self.notification_senders.clone();
+            let notifications_sender = self.notifications_channel.clone();
             let uuid = characteristic.uuid;
             ble_characteristic
                 .subscribe(Box::new(move |value| {
                     let notification = ValueNotification { uuid: uuid, value };
-                    util::send_notification(&notification_senders, &notification);
+                    // Note: we ignore send errors here which may happen while there are no
+                    // receivers...
+                    let _ = notifications_sender.send(notification);
                 }))
                 .await
         } else {
@@ -335,9 +339,15 @@ impl ApiPeripheral for Peripheral {
     }
 
     async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
-        let (sender, receiver) = mpsc::unbounded();
-        let mut senders = self.notification_senders.lock().unwrap();
-        senders.push(sender);
-        Ok(Box::pin(receiver))
+        let receiver = self.notifications_channel.subscribe();
+        Ok(Box::pin(BroadcastStream::new(receiver).filter_map(
+            |x| async move {
+                if x.is_ok() {
+                    Some(x.unwrap())
+                } else {
+                    None
+                }
+            },
+        )))
     }
 }

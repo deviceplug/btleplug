@@ -11,7 +11,7 @@
 use super::{
     central_delegate::{CentralDelegate, CentralDelegateEvent},
     framework::{
-        cb::{self, CBManagerAuthorization},
+        cb::{self, CBManagerAuthorization, CBPeripheralState},
         ns,
     },
     future::{BtlePlugFuture, BtlePlugFutureStateShared},
@@ -110,6 +110,7 @@ impl CBCharacteristic {
 pub enum CoreBluetoothReply {
     ReadResult(Vec<u8>),
     Connected(BTreeSet<Characteristic>),
+    State(CBPeripheralState),
     Ok,
     Err(String),
 }
@@ -253,6 +254,7 @@ pub enum CoreBluetoothMessage {
     Subscribe(Uuid, Uuid, CoreBluetoothReplyStateShared),
     // device uuid, characteristic uuid, future
     Unsubscribe(Uuid, Uuid, CoreBluetoothReplyStateShared),
+    IsConnected(Uuid, CoreBluetoothReplyStateShared),
 }
 
 #[derive(Debug)]
@@ -403,6 +405,7 @@ impl CoreBluetoothInternal {
     }
 
     async fn on_peripheral_disconnect(&mut self, peripheral_uuid: Uuid) {
+        trace!("Got disconnect event!");
         self.peripherals.remove(&peripheral_uuid);
         self.dispatch_event(CoreBluetoothEvent::DeviceLost(peripheral_uuid))
             .await;
@@ -479,6 +482,15 @@ impl CoreBluetoothInternal {
             trace!("Connecting peripheral!");
             p.connected_future_state = Some(fut);
             cb::centralmanager_connectperipheral(*self.manager, *p.peripheral);
+        }
+    }
+    fn is_connected(&mut self, peripheral_uuid: Uuid, fut: CoreBluetoothReplyStateShared) {
+        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
+            let state = cb::peripheral_state(
+                *p.peripheral
+            );
+            trace!("Connected state {:?} ", state);
+            fut.lock().unwrap().set_reply(CoreBluetoothReply::State(state));
         }
     }
 
@@ -647,6 +659,9 @@ impl CoreBluetoothInternal {
                     }
                     CoreBluetoothMessage::Unsubscribe(peripheral_uuid, char_uuid, fut) => {
                         self.unsubscribe(peripheral_uuid, char_uuid, fut)
+                    }
+                    CoreBluetoothMessage::IsConnected(peripheral_uuid, fut) => {
+                        self.is_connected(peripheral_uuid, fut);
                     }
                 };
             }

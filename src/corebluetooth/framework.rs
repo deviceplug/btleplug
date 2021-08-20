@@ -289,7 +289,16 @@ pub mod cb {
         unsafe { msg_send![cbperipheral, name] }
     }
 
-    pub fn peripheral_state(cbperipheral: *mut Object) -> c_int {
+    //returns
+    #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+    #[repr(i64)]
+    pub enum CBPeripheralState {
+        Disonnected = 0,
+        Connecting = 1,
+        Connected = 2,
+        Disconnecting = 3,
+    }
+    pub fn peripheral_state(cbperipheral: *mut Object) -> CBPeripheralState {
         unsafe { msg_send![cbperipheral, state] }
     }
 

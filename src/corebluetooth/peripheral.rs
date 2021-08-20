@@ -17,7 +17,7 @@ use crate::{
         self, BDAddr, CentralEvent, CharPropFlags, Characteristic, PeripheralProperties,
         ValueNotification, WriteType,
     },
-    common::adapter_manager::AdapterManager,
+    common::{adapter_manager::AdapterManager, util::notifications_stream_from_broadcast_receiver},
     Error, Result,
 };
 use async_trait::async_trait;
@@ -33,7 +33,6 @@ use std::{
 };
 use tokio::sync::broadcast;
 use tokio::task;
-use tokio_stream::wrappers::BroadcastStream;
 use uuid::Uuid;
 
 /// Implementation of [api::Peripheral](crate::api::Peripheral).
@@ -330,15 +329,7 @@ impl api::Peripheral for Peripheral {
 
     async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
         let receiver = self.shared.notifications_channel.subscribe();
-        Ok(Box::pin(BroadcastStream::new(receiver).filter_map(
-            |x| async move {
-                if x.is_ok() {
-                    Some(x.unwrap())
-                } else {
-                    None
-                }
-            },
-        )))
+        Ok(notifications_stream_from_broadcast_receiver(receiver))
     }
 }
 

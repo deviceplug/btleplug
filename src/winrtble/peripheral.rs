@@ -21,12 +21,12 @@ use crate::{
         BDAddr, CentralEvent, Characteristic, Peripheral as ApiPeripheral, PeripheralProperties,
         ValueNotification, WriteType,
     },
-    common::adapter_manager::AdapterManager,
+    common::{adapter_manager::AdapterManager, util::notifications_stream_from_broadcast_receiver},
     Error, Result,
 };
 use async_trait::async_trait;
 use dashmap::DashMap;
-use futures::stream::{Stream, StreamExt};
+use futures::stream::Stream;
 use std::{
     collections::BTreeSet,
     convert::TryInto,
@@ -36,7 +36,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tokio::sync::broadcast;
-use tokio_stream::wrappers::BroadcastStream;
 use uuid::Uuid;
 
 use bindings::Windows::Devices::Bluetooth::Advertisement::*;
@@ -360,14 +359,6 @@ impl ApiPeripheral for Peripheral {
 
     async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
         let receiver = self.shared.notifications_channel.subscribe();
-        Ok(Box::pin(BroadcastStream::new(receiver).filter_map(
-            |x| async move {
-                if x.is_ok() {
-                    Some(x.unwrap())
-                } else {
-                    None
-                }
-            },
-        )))
+        Ok(notifications_stream_from_broadcast_receiver(receiver))
     }
 }

@@ -5,15 +5,20 @@
 // Licensed under the BSD 3-Clause license. See LICENSE file in the project root
 // for full license information.
 
-use futures::channel::mpsc::UnboundedSender;
+use crate::api::ValueNotification;
+use futures::stream::{Stream, StreamExt};
+use std::pin::Pin;
+use tokio::sync::broadcast::Receiver;
+use tokio_stream::wrappers::BroadcastStream;
 
-use std::sync::{Arc, Mutex};
-
-pub fn send_notification<T: Clone>(
-    notification_senders: &Arc<Mutex<Vec<UnboundedSender<T>>>>,
-    n: &T,
-) {
-    let mut senders = notification_senders.lock().unwrap();
-    // Remove sender from the list if the other end of the channel has been dropped.
-    senders.retain(|sender| sender.unbounded_send(n.clone()).is_ok());
+pub fn notifications_stream_from_broadcast_receiver(
+    receiver: Receiver<ValueNotification>,
+) -> Pin<Box<dyn Stream<Item = ValueNotification> + Send>> {
+    Box::pin(BroadcastStream::new(receiver).filter_map(|x| async move {
+        if x.is_ok() {
+            Some(x.unwrap())
+        } else {
+            None
+        }
+    }))
 }

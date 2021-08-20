@@ -7,11 +7,9 @@
 
 use super::{
     adapter::uuid_to_bdaddr,
+    framework::cb::CBPeripheralState,
     internal::{
         CBPeripheralEvent, CoreBluetoothMessage, CoreBluetoothReply, CoreBluetoothReplyFuture,
-    },
-    framework::{
-        cb::{CBPeripheralState},
     },
 };
 use crate::{
@@ -122,7 +120,6 @@ impl Peripheral {
                     }
                 }
             }
-            //drop?
         });
         Self {
             properties,
@@ -180,7 +177,6 @@ impl api::Peripheral for Peripheral {
     }
 
     async fn is_connected(&self) -> Result<bool> {
-        // TODO
         let fut = CoreBluetoothReplyFuture::default();
         self.message_sender
             .to_owned()
@@ -190,12 +186,10 @@ impl api::Peripheral for Peripheral {
             ))
             .await?;
         match fut.await {
-            CoreBluetoothReply::State(state) => {
-                match state {
-                    CBPeripheralState::Connected => Ok(true),
-                    _ => Ok(false)
-                }
-            }
+            CoreBluetoothReply::State(state) => match state {
+                CBPeripheralState::Connected => Ok(true),
+                _ => Ok(false),
+            },
             _ => panic!("Shouldn't get anything but a State!"),
         }
     }

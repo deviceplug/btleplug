@@ -484,13 +484,14 @@ impl CoreBluetoothInternal {
             cb::centralmanager_connectperipheral(*self.manager, *p.peripheral);
         }
     }
+
     fn is_connected(&mut self, peripheral_uuid: Uuid, fut: CoreBluetoothReplyStateShared) {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
-            let state = cb::peripheral_state(
-                *p.peripheral
-            );
+            let state = cb::peripheral_state(*p.peripheral);
             trace!("Connected state {:?} ", state);
-            fut.lock().unwrap().set_reply(CoreBluetoothReply::State(state));
+            fut.lock()
+                .unwrap()
+                .set_reply(CoreBluetoothReply::State(state));
         }
     }
 

@@ -70,7 +70,7 @@ impl Adapter {
                     }
                     CoreBluetoothEvent::DeviceUpdated { uuid, name } => {
                         let id = uuid_to_bdaddr(&uuid.to_string());
-                        if let Some(mut entry) = manager_clone.peripheral_mut(id) {
+                        if let Some(entry) = manager_clone.peripheral_mut(id) {
                             entry.value().update_name(&name);
                             manager_clone.emit(CentralEvent::DeviceUpdated(id));
                         }

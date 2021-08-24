@@ -23,7 +23,7 @@ use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::select;
 use futures::sink::SinkExt;
 use futures::stream::{Fuse, StreamExt};
-use log::{error, info, trace, warn};
+use log::{error, trace, warn};
 use objc::{
     rc::StrongPtr,
     runtime::{Object, YES},

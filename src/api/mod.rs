@@ -237,7 +237,6 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
 #[derive(Debug, Clone)]
 pub enum CentralEvent {
     DeviceDiscovered(BDAddr),
-    DeviceLost(BDAddr),
     DeviceUpdated(BDAddr),
     DeviceConnected(BDAddr),
     DeviceDisconnected(BDAddr),

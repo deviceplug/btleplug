@@ -188,10 +188,10 @@ impl api::Peripheral for Peripheral {
         self.shared
             .message_sender
             .to_owned()
-            .send(CoreBluetoothMessage::IsConnected(
-                self.shared.uuid,
-                fut.get_state_clone(),
-            ))
+            .send(CoreBluetoothMessage::IsConnected {
+                peripheral_uuid: self.shared.uuid,
+                future: fut.get_state_clone(),
+            })
             .await?;
         match fut.await {
             CoreBluetoothReply::State(state) => match state {
@@ -207,10 +207,10 @@ impl api::Peripheral for Peripheral {
         self.shared
             .message_sender
             .to_owned()
-            .send(CoreBluetoothMessage::ConnectDevice(
-                self.shared.uuid,
-                fut.get_state_clone(),
-            ))
+            .send(CoreBluetoothMessage::ConnectDevice {
+                peripheral_uuid: self.shared.uuid,
+                future: fut.get_state_clone(),
+            })
             .await?;
         match fut.await {
             CoreBluetoothReply::Connected(chars) => {
@@ -257,13 +257,13 @@ impl api::Peripheral for Peripheral {
         self.shared
             .message_sender
             .to_owned()
-            .send(CoreBluetoothMessage::WriteValue(
-                self.shared.uuid,
-                characteristic.uuid,
-                Vec::from(data),
+            .send(CoreBluetoothMessage::WriteValue {
+                peripheral_uuid: self.shared.uuid,
+                characteristic_uuid: characteristic.uuid,
+                data: Vec::from(data),
                 write_type,
-                fut.get_state_clone(),
-            ))
+                future: fut.get_state_clone(),
+            })
             .await?;
         match fut.await {
             CoreBluetoothReply::Ok => {}
@@ -277,11 +277,11 @@ impl api::Peripheral for Peripheral {
         self.shared
             .message_sender
             .to_owned()
-            .send(CoreBluetoothMessage::ReadValue(
-                self.shared.uuid,
-                characteristic.uuid,
-                fut.get_state_clone(),
-            ))
+            .send(CoreBluetoothMessage::ReadValue {
+                peripheral_uuid: self.shared.uuid,
+                characteristic_uuid: characteristic.uuid,
+                future: fut.get_state_clone(),
+            })
             .await?;
         match fut.await {
             CoreBluetoothReply::ReadResult(chars) => Ok(chars),
@@ -296,11 +296,11 @@ impl api::Peripheral for Peripheral {
         self.shared
             .message_sender
             .to_owned()
-            .send(CoreBluetoothMessage::Subscribe(
-                self.shared.uuid,
-                characteristic.uuid,
-                fut.get_state_clone(),
-            ))
+            .send(CoreBluetoothMessage::Subscribe {
+                peripheral_uuid: self.shared.uuid,
+                characteristic_uuid: characteristic.uuid,
+                future: fut.get_state_clone(),
+            })
             .await?;
         match fut.await {
             CoreBluetoothReply::Ok => trace!("subscribed!"),
@@ -314,11 +314,11 @@ impl api::Peripheral for Peripheral {
         self.shared
             .message_sender
             .to_owned()
-            .send(CoreBluetoothMessage::Unsubscribe(
-                self.shared.uuid,
-                characteristic.uuid,
-                fut.get_state_clone(),
-            ))
+            .send(CoreBluetoothMessage::Unsubscribe {
+                peripheral_uuid: self.shared.uuid,
+                characteristic_uuid: characteristic.uuid,
+                future: fut.get_state_clone(),
+            })
             .await?;
         match fut.await {
             CoreBluetoothReply::Ok => {}

@@ -238,23 +238,40 @@ impl Debug for CoreBluetoothInternal {
 pub enum CoreBluetoothMessage {
     StartScanning,
     StopScanning,
-    ConnectDevice(Uuid, CoreBluetoothReplyStateShared),
-    DisconnectDevice(Uuid, CoreBluetoothReplyStateShared),
-    // device uuid, characteristic uuid, future
-    ReadValue(Uuid, Uuid, CoreBluetoothReplyStateShared),
-    // device uuid, characteristic uuid, data, kind, future
-    WriteValue(
-        Uuid,
-        Uuid,
-        Vec<u8>,
-        WriteType,
-        CoreBluetoothReplyStateShared,
-    ),
-    // device uuid, characteristic uuid, future
-    Subscribe(Uuid, Uuid, CoreBluetoothReplyStateShared),
-    // device uuid, characteristic uuid, future
-    Unsubscribe(Uuid, Uuid, CoreBluetoothReplyStateShared),
-    IsConnected(Uuid, CoreBluetoothReplyStateShared),
+    ConnectDevice {
+        peripheral_uuid: Uuid,
+        future: CoreBluetoothReplyStateShared,
+    },
+    DisconnectDevice {
+        peripheral_uuid: Uuid,
+        future: CoreBluetoothReplyStateShared,
+    },
+    ReadValue {
+        peripheral_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        future: CoreBluetoothReplyStateShared,
+    },
+    WriteValue {
+        peripheral_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        data: Vec<u8>,
+        write_type: WriteType,
+        future: CoreBluetoothReplyStateShared,
+    },
+    Subscribe {
+        peripheral_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        future: CoreBluetoothReplyStateShared,
+    },
+    Unsubscribe {
+        peripheral_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        future: CoreBluetoothReplyStateShared,
+    },
+    IsConnected {
+        peripheral_uuid: Uuid,
+        future: CoreBluetoothReplyStateShared,
+    },
 }
 
 #[derive(Debug)]
@@ -599,46 +616,46 @@ impl CoreBluetoothInternal {
                     CentralDelegateEvent::DidUpdateState => {
                         self.dispatch_event(CoreBluetoothEvent::AdapterConnected).await
                     }
-                    CentralDelegateEvent::DiscoveredPeripheral(peripheral) => {
-                        self.on_discovered_peripheral(peripheral).await
+                    CentralDelegateEvent::DiscoveredPeripheral{cbperipheral} => {
+                        self.on_discovered_peripheral(cbperipheral).await
                     }
-                    CentralDelegateEvent::DiscoveredServices(peripheral_id, service_map) => {
-                        self.on_discovered_services(peripheral_id, service_map)
+                    CentralDelegateEvent::DiscoveredServices{peripheral_uuid, services} => {
+                        self.on_discovered_services(peripheral_uuid, services)
                     }
-                    CentralDelegateEvent::DiscoveredCharacteristics(peripheral_id, char_map) => {
-                        self.on_discovered_characteristics(peripheral_id, char_map)
+                    CentralDelegateEvent::DiscoveredCharacteristics{peripheral_uuid, characteristics} => {
+                        self.on_discovered_characteristics(peripheral_uuid, characteristics)
                     }
-                    CentralDelegateEvent::ConnectedDevice(peripheral_id) => {
-                        self.on_peripheral_connect(peripheral_id)
+                    CentralDelegateEvent::ConnectedDevice{peripheral_uuid} => {
+                        self.on_peripheral_connect(peripheral_uuid)
                     }
-                    CentralDelegateEvent::DisconnectedDevice(peripheral_id) => {
-                        self.on_peripheral_disconnect(peripheral_id).await
+                    CentralDelegateEvent::DisconnectedDevice{peripheral_uuid} => {
+                        self.on_peripheral_disconnect(peripheral_uuid).await
                     }
-                    CentralDelegateEvent::CharacteristicSubscribed(
-                        peripheral_id,
-                        characteristic_id,
-                    ) => self.on_characteristic_subscribed(peripheral_id, characteristic_id),
-                    CentralDelegateEvent::CharacteristicUnsubscribed(
-                        peripheral_id,
-                        characteristic_id,
-                    ) => self.on_characteristic_unsubscribed(peripheral_id, characteristic_id),
-                    CentralDelegateEvent::CharacteristicNotified(
-                        peripheral_id,
-                        characteristic_id,
+                    CentralDelegateEvent::CharacteristicSubscribed{
+                        peripheral_uuid,
+                        characteristic_uuid,
+                     } => self.on_characteristic_subscribed(peripheral_uuid, characteristic_uuid),
+                    CentralDelegateEvent::CharacteristicUnsubscribed{
+                        peripheral_uuid,
+                        characteristic_uuid,
+                     } => self.on_characteristic_unsubscribed(peripheral_uuid, characteristic_uuid),
+                    CentralDelegateEvent::CharacteristicNotified{
+                        peripheral_uuid,
+                        characteristic_uuid,
                         data,
-                    ) => self.on_characteristic_read(peripheral_id, characteristic_id, data).await,
-                    CentralDelegateEvent::CharacteristicWritten(
-                        peripheral_id,
-                        characteristic_id,
-                    ) => self.on_characteristic_written(peripheral_id, characteristic_id),
-                    CentralDelegateEvent::ManufacturerData(peripheral_id, manufacturer_id, manufacturer_data) => {
-                        self.on_manufacturer_data(peripheral_id, manufacturer_id, manufacturer_data).await
+                     } => self.on_characteristic_read(peripheral_uuid, characteristic_uuid, data).await,
+                    CentralDelegateEvent::CharacteristicWritten{
+                        peripheral_uuid,
+                        characteristic_uuid,
+                    } => self.on_characteristic_written(peripheral_uuid, characteristic_uuid),
+                    CentralDelegateEvent::ManufacturerData{peripheral_uuid, manufacturer_id, data} => {
+                        self.on_manufacturer_data(peripheral_uuid, manufacturer_id, data).await
                     },
-                    CentralDelegateEvent::ServiceData(peripheral_id, service_data) => {
-                        self.on_service_data(peripheral_id, service_data).await
+                    CentralDelegateEvent::ServiceData{peripheral_uuid, service_data} => {
+                        self.on_service_data(peripheral_uuid, service_data).await
                     },
-                    CentralDelegateEvent::Services(peripheral_id, services) => {
-                        self.on_services(peripheral_id, services).await
+                    CentralDelegateEvent::Services{peripheral_uuid, service_uuids} => {
+                        self.on_services(peripheral_uuid, service_uuids).await
                     },
                 };
             }
@@ -647,29 +664,29 @@ impl CoreBluetoothInternal {
                 match adapter_msg {
                     CoreBluetoothMessage::StartScanning => self.start_discovery(),
                     CoreBluetoothMessage::StopScanning => self.stop_discovery(),
-                    CoreBluetoothMessage::ConnectDevice(peripheral_uuid, fut) => {
+                    CoreBluetoothMessage::ConnectDevice{peripheral_uuid, future} => {
                         trace!("got connectdevice msg!");
-                        self.connect_peripheral(peripheral_uuid, fut);
+                        self.connect_peripheral(peripheral_uuid, future);
                     }
-                    CoreBluetoothMessage::DisconnectDevice(_peripheral_uuid, _fut) => {}
-                    CoreBluetoothMessage::ReadValue(peripheral_uuid, char_uuid, fut) => {
-                        self.read_value(peripheral_uuid, char_uuid, fut)
+                    CoreBluetoothMessage::DisconnectDevice{peripheral_uuid:_, future:_} => {}
+                    CoreBluetoothMessage::ReadValue{peripheral_uuid, characteristic_uuid, future} => {
+                        self.read_value(peripheral_uuid, characteristic_uuid, future)
                     }
-                    CoreBluetoothMessage::WriteValue(
+                    CoreBluetoothMessage::WriteValue{
                         peripheral_uuid,
-                        char_uuid,
+                        characteristic_uuid,
                         data,
-                        kind,
-                        fut,
-                    ) => self.write_value(peripheral_uuid, char_uuid, data, kind, fut),
-                    CoreBluetoothMessage::Subscribe(peripheral_uuid, char_uuid, fut) => {
-                        self.subscribe(peripheral_uuid, char_uuid, fut)
+                        write_type,
+                        future,
+                    } => self.write_value(peripheral_uuid, characteristic_uuid, data, write_type, future),
+                    CoreBluetoothMessage::Subscribe{peripheral_uuid, characteristic_uuid, future} => {
+                        self.subscribe(peripheral_uuid, characteristic_uuid, future)
                     }
-                    CoreBluetoothMessage::Unsubscribe(peripheral_uuid, char_uuid, fut) => {
-                        self.unsubscribe(peripheral_uuid, char_uuid, fut)
+                    CoreBluetoothMessage::Unsubscribe{peripheral_uuid, characteristic_uuid, future} => {
+                        self.unsubscribe(peripheral_uuid, characteristic_uuid, future)
                     }
-                    CoreBluetoothMessage::IsConnected(peripheral_uuid, fut) => {
-                        self.is_connected(peripheral_uuid, fut);
+                    CoreBluetoothMessage::IsConnected{peripheral_uuid, future} => {
+                        self.is_connected(peripheral_uuid, future);
                     }
                 };
             }

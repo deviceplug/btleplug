@@ -264,7 +264,7 @@ pub enum CoreBluetoothEvent {
     DeviceDiscovered(Uuid, Option<String>, Receiver<CBPeripheralEvent>),
     DeviceUpdated(Uuid, String),
     // identifier
-    DeviceLost(Uuid),
+    DeviceDisconnected(Uuid),
 }
 
 impl CoreBluetoothInternal {
@@ -407,7 +407,7 @@ impl CoreBluetoothInternal {
     async fn on_peripheral_disconnect(&mut self, peripheral_uuid: Uuid) {
         trace!("Got disconnect event!");
         self.peripherals.remove(&peripheral_uuid);
-        self.dispatch_event(CoreBluetoothEvent::DeviceLost(peripheral_uuid))
+        self.dispatch_event(CoreBluetoothEvent::DeviceDisconnected(peripheral_uuid))
             .await;
     }
 

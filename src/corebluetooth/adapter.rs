@@ -71,7 +71,7 @@ impl Adapter {
                             manager_clone.emit(CentralEvent::DeviceUpdated(id));
                         }
                     }
-                    CoreBluetoothEvent::DeviceLost(uuid) => {
+                    CoreBluetoothEvent::DeviceDisconnected(uuid) => {
                         let id = uuid_to_bdaddr(&uuid.to_string());
                         manager_clone.emit(CentralEvent::DeviceDisconnected(id));
                     }

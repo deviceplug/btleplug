@@ -74,11 +74,6 @@ where
         }))
     }
 
-    #[allow(dead_code)]
-    pub fn has_peripheral(&self, addr: &BDAddr) -> bool {
-        self.shared.peripherals.contains_key(addr)
-    }
-
     pub fn add_peripheral(&self, addr: BDAddr, peripheral: PeripheralType) {
         assert!(
             !self.shared.peripherals.contains_key(&addr),

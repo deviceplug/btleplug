@@ -48,7 +48,11 @@ impl Adapter {
         task::spawn(async move {
             while let Some(msg) = receiver.next().await {
                 match msg {
-                    CoreBluetoothEvent::DeviceDiscovered(uuid, name, event_receiver) => {
+                    CoreBluetoothEvent::DeviceDiscovered {
+                        uuid,
+                        name,
+                        event_receiver,
+                    } => {
                         // TODO Gotta change uuid into a BDAddr for now. Expand
                         // library identifier type. :(
                         let id = uuid_to_bdaddr(&uuid.to_string());
@@ -64,14 +68,14 @@ impl Adapter {
                         );
                         manager_clone.emit(CentralEvent::DeviceDiscovered(id));
                     }
-                    CoreBluetoothEvent::DeviceUpdated(uuid, name) => {
+                    CoreBluetoothEvent::DeviceUpdated { uuid, name } => {
                         let id = uuid_to_bdaddr(&uuid.to_string());
                         if let Some(mut entry) = manager_clone.peripheral_mut(id) {
                             entry.value().update_name(&name);
                             manager_clone.emit(CentralEvent::DeviceUpdated(id));
                         }
                     }
-                    CoreBluetoothEvent::DeviceDisconnected(uuid) => {
+                    CoreBluetoothEvent::DeviceDisconnected { uuid } => {
                         let id = uuid_to_bdaddr(&uuid.to_string());
                         manager_clone.emit(CentralEvent::DeviceDisconnected(id));
                     }

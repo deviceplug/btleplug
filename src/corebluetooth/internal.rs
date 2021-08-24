@@ -260,11 +260,18 @@ pub enum CoreBluetoothMessage {
 #[derive(Debug)]
 pub enum CoreBluetoothEvent {
     AdapterConnected,
-    // name, identifier, event receiver, message sender
-    DeviceDiscovered(Uuid, Option<String>, Receiver<CBPeripheralEvent>),
-    DeviceUpdated(Uuid, String),
-    // identifier
-    DeviceDisconnected(Uuid),
+    DeviceDiscovered {
+        uuid: Uuid,
+        name: Option<String>,
+        event_receiver: Receiver<CBPeripheralEvent>,
+    },
+    DeviceUpdated {
+        uuid: Uuid,
+        name: String,
+    },
+    DeviceDisconnected {
+        uuid: Uuid,
+    },
 }
 
 impl CoreBluetoothInternal {
@@ -354,7 +361,7 @@ impl CoreBluetoothInternal {
         let name = nsstring_to_string(cb::peripheral_name(*peripheral));
         if self.peripherals.contains_key(&uuid) {
             if let Some(name) = name {
-                self.dispatch_event(CoreBluetoothEvent::DeviceUpdated(uuid, name))
+                self.dispatch_event(CoreBluetoothEvent::DeviceUpdated { uuid, name })
                     .await;
             }
         } else {
@@ -362,11 +369,11 @@ impl CoreBluetoothInternal {
             let (event_sender, event_receiver) = mpsc::channel(256);
             self.peripherals
                 .insert(uuid, CBPeripheral::new(peripheral, event_sender));
-            self.dispatch_event(CoreBluetoothEvent::DeviceDiscovered(
+            self.dispatch_event(CoreBluetoothEvent::DeviceDiscovered {
                 uuid,
                 name,
                 event_receiver,
-            ))
+            })
             .await;
         }
     }
@@ -404,10 +411,10 @@ impl CoreBluetoothInternal {
         // itself when it receives all of its service/characteristic info.
     }
 
-    async fn on_peripheral_disconnect(&mut self, peripheral_uuid: Uuid) {
+    async fn on_peripheral_disconnect(&mut self, uuid: Uuid) {
         trace!("Got disconnect event!");
-        self.peripherals.remove(&peripheral_uuid);
-        self.dispatch_event(CoreBluetoothEvent::DeviceDisconnected(peripheral_uuid))
+        self.peripherals.remove(&uuid);
+        self.dispatch_event(CoreBluetoothEvent::DeviceDisconnected { uuid })
             .await;
     }
 

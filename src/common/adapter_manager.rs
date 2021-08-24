@@ -55,9 +55,6 @@ where
             CentralEvent::DeviceDisconnected(addr) => {
                 self.shared.peripherals.remove(&addr);
             }
-            CentralEvent::DeviceLost(addr) => {
-                self.shared.peripherals.remove(&addr);
-            }
             _ => {}
         }
 

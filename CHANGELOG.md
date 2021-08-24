@@ -1,3 +1,9 @@
+# Unreleased
+
+## Breaking changes
+
+- Removed `CentralEvent::DeviceLost`. It wasn't emitted anywhere.
+
 # 0.8.1 (2021-08-14)
 
 ## Bugfixes

@@ -1,19 +1,26 @@
 use async_trait::async_trait;
 use bluez_async::{
-    BluetoothEvent, BluetoothSession, CharacteristicEvent, CharacteristicFlags, CharacteristicInfo,
-    DeviceId, DeviceInfo, MacAddress, WriteOptions,
+    BluetoothEvent, BluetoothSession, CharacteristicEvent, CharacteristicFlags, CharacteristicId,
+    CharacteristicInfo, DeviceId, DeviceInfo, MacAddress, ServiceInfo, WriteOptions,
 };
 use futures::future::ready;
 use futures::stream::{Stream, StreamExt};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use uuid::Uuid;
 
 use crate::api::{
-    self, AddressType, BDAddr, CharPropFlags, Characteristic, PeripheralProperties,
+    self, AddressType, BDAddr, CharPropFlags, Characteristic, PeripheralProperties, Service,
     ValueNotification, WriteType,
 };
 use crate::{Error, Result};
+
+#[derive(Clone, Debug)]
+struct ServiceInternal {
+    info: ServiceInfo,
+    characteristics: HashMap<Uuid, CharacteristicInfo>,
+}
 
 /// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone, Debug)]
@@ -21,7 +28,7 @@ pub struct Peripheral {
     session: BluetoothSession,
     device: DeviceId,
     mac_address: BDAddr,
-    characteristics: Arc<Mutex<Vec<CharacteristicInfo>>>,
+    services: Arc<Mutex<HashMap<Uuid, ServiceInternal>>>,
 }
 
 impl Peripheral {
@@ -30,15 +37,25 @@ impl Peripheral {
             session,
             device: device.id,
             mac_address: (&device.mac_address).into(),
-            characteristics: Arc::new(Mutex::new(vec![])),
+            services: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
     fn characteristic_info(&self, characteristic: &Characteristic) -> Result<CharacteristicInfo> {
-        let characteristics = self.characteristics.lock().unwrap();
-        characteristics
-            .iter()
-            .find(|info| info.uuid == characteristic.uuid)
+        let services = self.services.lock().unwrap();
+        services
+            .get(&characteristic.service_uuid)
+            .ok_or_else(|| {
+                Error::Other(
+                    format!(
+                        "Service with UUID {} not found.",
+                        characteristic.service_uuid
+                    )
+                    .into(),
+                )
+            })?
+            .characteristics
+            .get(&characteristic.uuid)
             .cloned()
             .ok_or_else(|| {
                 Error::Other(
@@ -76,9 +93,27 @@ impl api::Peripheral for Peripheral {
         }))
     }
 
+    fn services(&self) -> BTreeSet<Service> {
+        self.services
+            .lock()
+            .unwrap()
+            .values()
+            .map(|service| service.into())
+            .collect()
+    }
+
     fn characteristics(&self) -> BTreeSet<Characteristic> {
-        let characteristics = &*self.characteristics.lock().unwrap();
-        characteristics.iter().map(Characteristic::from).collect()
+        let services = &*self.services.lock().unwrap();
+        services
+            .values()
+            .flat_map(|service| {
+                service
+                    .characteristics
+                    .values()
+                    .map(|characteristic| make_characteristic(characteristic, service.info.uuid))
+                    .collect::<Vec<_>>()
+            })
+            .collect()
     }
 
     async fn is_connected(&self) -> Result<bool> {
@@ -97,14 +132,29 @@ impl api::Peripheral for Peripheral {
     }
 
     async fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
-        let mut characteristics = vec![];
+        let mut services_internal = HashMap::new();
+        let mut converted_characteristics = vec![];
         let services = self.session.get_services(&self.device).await?;
         for service in services {
-            characteristics.extend(self.session.get_characteristics(&service.id).await?);
+            let characteristics = self.session.get_characteristics(&service.id).await?;
+            converted_characteristics.extend(
+                characteristics
+                    .iter()
+                    .map(|characteristic| make_characteristic(characteristic, service.uuid)),
+            );
+            services_internal.insert(
+                service.uuid,
+                ServiceInternal {
+                    info: service,
+                    characteristics: characteristics
+                        .into_iter()
+                        .map(|characteristic| (characteristic.uuid, characteristic))
+                        .collect(),
+                },
+            );
         }
-        let converted = characteristics.iter().map(Characteristic::from).collect();
-        *self.characteristics.lock().unwrap() = characteristics;
-        Ok(converted)
+        *self.services.lock().unwrap() = services_internal;
+        Ok(converted_characteristics)
     }
 
     async fn write(
@@ -145,13 +195,9 @@ impl api::Peripheral for Peripheral {
     async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
         let device_id = self.device.clone();
         let events = self.session.device_event_stream(&device_id).await?;
-        let characteristics = self.characteristics.clone();
+        let services = self.services.clone();
         Ok(Box::pin(events.filter_map(move |event| {
-            ready(value_notification(
-                event,
-                &device_id,
-                characteristics.clone(),
-            ))
+            ready(value_notification(event, &device_id, services.clone()))
         })))
     }
 }
@@ -159,22 +205,33 @@ impl api::Peripheral for Peripheral {
 fn value_notification(
     event: BluetoothEvent,
     device_id: &DeviceId,
-    characteristics: Arc<Mutex<Vec<CharacteristicInfo>>>,
+    services: Arc<Mutex<HashMap<Uuid, ServiceInternal>>>,
 ) -> Option<ValueNotification> {
     match event {
         BluetoothEvent::Characteristic {
             id,
             event: CharacteristicEvent::Value { value },
         } if id.service().device() == *device_id => {
-            let characteristics = characteristics.lock().unwrap();
-            let uuid = characteristics
-                .iter()
-                .find(|characteristic| characteristic.id == id)?
-                .uuid;
+            let services = services.lock().unwrap();
+            let uuid = find_characteristic_by_id(&services, id)?.uuid;
             Some(ValueNotification { uuid, value })
         }
         _ => None,
     }
+}
+
+fn find_characteristic_by_id(
+    services: &HashMap<Uuid, ServiceInternal>,
+    characteristic_id: CharacteristicId,
+) -> Option<&CharacteristicInfo> {
+    for service in services.values() {
+        for characteristic in service.characteristics.values() {
+            if characteristic.id == characteristic_id {
+                return Some(characteristic);
+            }
+        }
+    }
+    None
 }
 
 impl From<WriteType> for bluez_async::WriteType {
@@ -201,11 +258,24 @@ impl From<bluez_async::AddressType> for AddressType {
     }
 }
 
-impl From<&CharacteristicInfo> for Characteristic {
-    fn from(characteristic: &CharacteristicInfo) -> Self {
-        Characteristic {
-            uuid: characteristic.uuid,
-            properties: characteristic.flags.into(),
+fn make_characteristic(info: &CharacteristicInfo, service_uuid: Uuid) -> Characteristic {
+    Characteristic {
+        uuid: info.uuid,
+        properties: info.flags.into(),
+        service_uuid,
+    }
+}
+
+impl From<&ServiceInternal> for Service {
+    fn from(service: &ServiceInternal) -> Self {
+        Service {
+            uuid: service.info.uuid,
+            primary: service.info.primary,
+            characteristics: service
+                .characteristics
+                .iter()
+                .map(|(_, characteristic)| make_characteristic(characteristic, service.info.uuid))
+                .collect(),
         }
     }
 }

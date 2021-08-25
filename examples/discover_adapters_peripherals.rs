@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .start_scan()
             .await
             .expect("Can't scan BLE adapter for connected devices...");
-        time::sleep(Duration::from_secs(2)).await;
+        time::sleep(Duration::from_secs(10)).await;
         let peripherals = adapter.peripherals().await?;
         if peripherals.is_empty() {
             eprintln!("->>> BLE peripheral devices were not found, sorry. Exiting...");
@@ -53,12 +53,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     "Now connected ({:?}) to peripheral {:?}...",
                     is_connected, &local_name
                 );
-                let chars = peripheral.discover_characteristics().await?;
-                if is_connected {
-                    println!("Discover peripheral {:?} characteristics...", &local_name);
-                    for characteristic in chars.into_iter() {
-                        println!("{:?}", characteristic);
+                peripheral.discover_characteristics().await?;
+                println!("Discover peripheral {:?} characteristics...", &local_name);
+                for service in peripheral.services() {
+                    println!(
+                        "Service UUID {}, primary: {}",
+                        service.uuid, service.primary
+                    );
+                    for characteristic in service.characteristics {
+                        println!("  {:?}", characteristic);
                     }
+                }
+                if is_connected {
                     println!("Disconnecting from peripheral {:?}...", &local_name);
                     peripheral
                         .disconnect()

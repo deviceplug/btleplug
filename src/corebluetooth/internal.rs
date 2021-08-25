@@ -435,23 +435,33 @@ impl CoreBluetoothInternal {
             .await;
     }
 
+    /// Get the CBCharacteristic for the given characteristic of the given peripheral, if it exists.
+    fn get_characteristic(
+        &mut self,
+        peripheral_uuid: Uuid,
+        characteristic_uuid: Uuid,
+    ) -> Option<&mut CBCharacteristic> {
+        self.peripherals
+            .get_mut(&peripheral_uuid)?
+            .characteristics
+            .get_mut(&characteristic_uuid)
+    }
+
     fn on_characteristic_subscribed(&mut self, peripheral_uuid: Uuid, characteristic_uuid: Uuid) {
-        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
-                trace!("Got subscribed event!");
-                let state = c.subscribe_future_state.pop_back().unwrap();
-                state.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
-            }
+        if let Some(characteristic) = self.get_characteristic(peripheral_uuid, characteristic_uuid)
+        {
+            trace!("Got subscribed event!");
+            let state = characteristic.subscribe_future_state.pop_back().unwrap();
+            state.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
         }
     }
 
     fn on_characteristic_unsubscribed(&mut self, peripheral_uuid: Uuid, characteristic_uuid: Uuid) {
-        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
-                trace!("Got unsubscribed event!");
-                let state = c.unsubscribe_future_state.pop_back().unwrap();
-                state.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
-            }
+        if let Some(characteristic) = self.get_characteristic(peripheral_uuid, characteristic_uuid)
+        {
+            trace!("Got unsubscribed event!");
+            let state = characteristic.unsubscribe_future_state.pop_back().unwrap();
+            state.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
         }
     }
 
@@ -491,12 +501,11 @@ impl CoreBluetoothInternal {
     }
 
     fn on_characteristic_written(&mut self, peripheral_uuid: Uuid, characteristic_uuid: Uuid) {
-        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
-                trace!("Got written event!");
-                let state = c.write_future_state.pop_back().unwrap();
-                state.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
-            }
+        if let Some(characteristic) = self.get_characteristic(peripheral_uuid, characteristic_uuid)
+        {
+            trace!("Got written event!");
+            let state = characteristic.write_future_state.pop_back().unwrap();
+            state.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
         }
     }
 

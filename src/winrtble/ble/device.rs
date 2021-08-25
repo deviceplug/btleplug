@@ -18,7 +18,7 @@ use bindings::Windows::Devices::Bluetooth::GenericAttributeProfile::{
 };
 use bindings::Windows::Devices::Bluetooth::{BluetoothConnectionStatus, BluetoothLEDevice};
 use bindings::Windows::Foundation::{EventRegistrationToken, TypedEventHandler};
-use log::{debug, error, trace};
+use log::{debug, trace};
 
 pub type ConnectedEventHandler = Box<dyn Fn(bool) + Send>;
 
@@ -71,8 +71,7 @@ impl BLEDevice {
         utils::to_error(status)
     }
 
-    async fn get_characteristics(
-        &self,
+    pub async fn get_characteristics(
         service: &GattDeviceService,
     ) -> std::result::Result<Vec<GattCharacteristic>, windows::Error> {
         let async_result = service.GetCharacteristicsAsync()?.await?;
@@ -87,12 +86,11 @@ impl BLEDevice {
         }
     }
 
-    pub async fn discover_characteristics(&self) -> Result<Vec<GattCharacteristic>> {
+    pub async fn discover_services(&self) -> Result<Vec<GattDeviceService>> {
         let winrt_error = |e| Error::Other(format!("{:?}", e).into());
         let service_result = self.get_gatt_services().await?;
         let status = service_result.Status().map_err(winrt_error)?;
         if status == GattCommunicationStatus::Success {
-            let mut characteristics = Vec::new();
             // We need to convert the IVectorView to a Vec, because IVectorView is not Send and so
             // can't be help past the await point below.
             let services: Vec<_> = service_result
@@ -101,17 +99,7 @@ impl BLEDevice {
                 .into_iter()
                 .collect();
             debug!("services {:?}", services.len());
-            for service in &services {
-                match self.get_characteristics(&service).await {
-                    Ok(mut service_characteristics) => {
-                        characteristics.append(&mut service_characteristics);
-                    }
-                    Err(e) => {
-                        error!("get_characteristics_async {:?}", e);
-                    }
-                }
-            }
-            return Ok(characteristics);
+            return Ok(services);
         }
         Ok(Vec::new())
     }

@@ -13,13 +13,13 @@
 
 use super::{
     advertisement_data_type, bindings, ble::characteristic::BLECharacteristic,
-    ble::device::BLEDevice, utils,
+    ble::device::BLEDevice, ble::service::BLEService, utils,
 };
 use crate::{
     api::{
         bleuuid::{uuid_from_u16, uuid_from_u32},
         AddressType, BDAddr, CentralEvent, Characteristic, Peripheral as ApiPeripheral,
-        PeripheralProperties, ValueNotification, WriteType,
+        PeripheralProperties, Service, ValueNotification, WriteType,
     },
     common::{adapter_manager::AdapterManager, util::notifications_stream_from_broadcast_receiver},
     Error, Result,
@@ -27,6 +27,7 @@ use crate::{
 use async_trait::async_trait;
 use dashmap::DashMap;
 use futures::stream::Stream;
+use log::error;
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     convert::TryInto,
@@ -52,7 +53,7 @@ struct Shared {
     adapter: AdapterManager<Peripheral>,
     address: BDAddr,
     connected: AtomicBool,
-    ble_characteristics: DashMap<Uuid, BLECharacteristic>,
+    ble_services: DashMap<Uuid, BLEService>,
     notifications_channel: broadcast::Sender<ValueNotification>,
 
     // Mutable, advertised, state...
@@ -74,7 +75,7 @@ impl Peripheral {
                 device: tokio::sync::Mutex::new(None),
                 address: address,
                 connected: AtomicBool::new(false),
-                ble_characteristics: DashMap::new(),
+                ble_services: DashMap::new(),
                 notifications_channel: broadcast_sender,
                 address_type: RwLock::new(None),
                 local_name: RwLock::new(None),
@@ -298,8 +299,8 @@ impl Debug for Peripheral {
         let properties = self.derive_properties();
         write!(
             f,
-            "{} properties: {:?}, characteristics: {:?} {}",
-            self.shared.address, properties, self.shared.ble_characteristics, connected
+            "{} properties: {:?}, services: {:?} {}",
+            self.shared.address, properties, self.shared.ble_services, connected
         )
     }
 }
@@ -317,13 +318,11 @@ impl ApiPeripheral for Peripheral {
         Ok(Some(self.derive_properties()))
     }
 
-    /// The set of characteristics we've discovered for this device. This will be empty until
-    /// `discover_characteristics` is called.
-    fn characteristics(&self) -> BTreeSet<Characteristic> {
+    fn services(&self) -> BTreeSet<Service> {
         self.shared
-            .ble_characteristics
+            .ble_services
             .iter()
-            .map(|item| item.value().to_characteristic())
+            .map(|item| item.value().to_service())
             .collect()
     }
 
@@ -372,21 +371,35 @@ impl ApiPeripheral for Peripheral {
     }
 
     /// Discovers all characteristics for the device. This is a synchronous operation.
-    async fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
+    async fn discover_services(&self) -> Result<()> {
         let device = self.shared.device.lock().await;
         if let Some(ref device) = *device {
-            let mut characteristics_result = vec![];
-            let characteristics = device.discover_characteristics().await?;
-            for gatt_characteristic in characteristics {
-                let ble_characteristic = BLECharacteristic::new(gatt_characteristic);
-                let characteristic = ble_characteristic.to_characteristic();
-                self.shared
-                    .ble_characteristics
-                    .entry(characteristic.uuid.clone())
-                    .or_insert_with(|| ble_characteristic);
-                characteristics_result.push(characteristic);
+            let gatt_services = device.discover_services().await?;
+            for service in &gatt_services {
+                let uuid = utils::to_uuid(&service.Uuid().unwrap());
+                match BLEDevice::get_characteristics(&service).await {
+                    Ok(characteristics) => {
+                        let characteristics = characteristics
+                            .into_iter()
+                            .map(|gatt_characteristic| {
+                                let characteristic = BLECharacteristic::new(gatt_characteristic);
+                                (characteristic.uuid(), characteristic)
+                            })
+                            .collect();
+                        self.shared.ble_services.insert(
+                            uuid,
+                            BLEService {
+                                uuid,
+                                characteristics,
+                            },
+                        );
+                    }
+                    Err(e) => {
+                        error!("get_characteristics_async {:?}", e);
+                    }
+                }
             }
-            return Ok(characteristics_result);
+            return Ok(());
         }
         Err(Error::NotConnected)
     }
@@ -399,58 +412,70 @@ impl ApiPeripheral for Peripheral {
         data: &[u8],
         write_type: WriteType,
     ) -> Result<()> {
-        if let Some(ble_characteristic) = self.shared.ble_characteristics.get(&characteristic.uuid)
-        {
-            ble_characteristic.write_value(data, write_type).await
-        } else {
-            Err(Error::NotSupported("write".into()))
-        }
+        let ble_service = &*self
+            .shared
+            .ble_services
+            .get(&characteristic.service_uuid)
+            .ok_or_else(|| Error::NotSupported("Service not found for write".into()))?;
+        let ble_characteristic = ble_service
+            .characteristics
+            .get(&characteristic.uuid)
+            .ok_or_else(|| Error::NotSupported("Characteristic not found for write".into()))?;
+        ble_characteristic.write_value(data, write_type).await
     }
 
     /// Enables either notify or indicate (depending on support) for the specified characteristic.
     /// This is a synchronous call.
     async fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
-        if let Some(mut ble_characteristic) = self
+        let ble_service = &mut *self
             .shared
-            .ble_characteristics
+            .ble_services
+            .get_mut(&characteristic.service_uuid)
+            .ok_or_else(|| Error::NotSupported("Service not found for subscribe".into()))?;
+        let ble_characteristic = ble_service
+            .characteristics
             .get_mut(&characteristic.uuid)
-        {
-            let notifications_sender = self.shared.notifications_channel.clone();
-            let uuid = characteristic.uuid;
-            ble_characteristic
-                .subscribe(Box::new(move |value| {
-                    let notification = ValueNotification { uuid: uuid, value };
-                    // Note: we ignore send errors here which may happen while there are no
-                    // receivers...
-                    let _ = notifications_sender.send(notification);
-                }))
-                .await
-        } else {
-            Err(Error::NotSupported("subscribe".into()))
-        }
+            .ok_or_else(|| Error::NotSupported("Characteristic not found for subscribe".into()))?;
+        let notifications_sender = self.shared.notifications_channel.clone();
+        let uuid = characteristic.uuid;
+        ble_characteristic
+            .subscribe(Box::new(move |value| {
+                let notification = ValueNotification { uuid: uuid, value };
+                // Note: we ignore send errors here which may happen while there are no
+                // receivers...
+                let _ = notifications_sender.send(notification);
+            }))
+            .await
     }
 
     /// Disables either notify or indicate (depending on support) for the specified characteristic.
     /// This is a synchronous call.
     async fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
-        if let Some(mut ble_characteristic) = self
+        let ble_service = &mut *self
             .shared
-            .ble_characteristics
+            .ble_services
+            .get_mut(&characteristic.service_uuid)
+            .ok_or_else(|| Error::NotSupported("Service not found for unsubscribe".into()))?;
+        let ble_characteristic = ble_service
+            .characteristics
             .get_mut(&characteristic.uuid)
-        {
-            ble_characteristic.unsubscribe().await
-        } else {
-            Err(Error::NotSupported("unsubscribe".into()))
-        }
+            .ok_or_else(|| {
+                Error::NotSupported("Characteristic not found for unsubscribe".into())
+            })?;
+        ble_characteristic.unsubscribe().await
     }
 
     async fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
-        if let Some(ble_characteristic) = self.shared.ble_characteristics.get(&characteristic.uuid)
-        {
-            ble_characteristic.read_value().await
-        } else {
-            Err(Error::NotSupported("read".into()))
-        }
+        let ble_service = &*self
+            .shared
+            .ble_services
+            .get(&characteristic.service_uuid)
+            .ok_or_else(|| Error::NotSupported("Service not found for read".into()))?;
+        let ble_characteristic = ble_service
+            .characteristics
+            .get(&characteristic.uuid)
+            .ok_or_else(|| Error::NotSupported("Characteristic not found for read".into()))?;
+        ble_characteristic.read_value().await
     }
 
     async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {

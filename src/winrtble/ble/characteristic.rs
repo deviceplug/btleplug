@@ -27,6 +27,7 @@ use bindings::Windows::Devices::Bluetooth::GenericAttributeProfile::{
 use bindings::Windows::Foundation::{EventRegistrationToken, TypedEventHandler};
 use bindings::Windows::Storage::Streams::{DataReader, DataWriter};
 use log::{debug, trace};
+use uuid::Uuid;
 
 pub type NotifiyEventHandler = Box<dyn Fn(Vec<u8>) + Send>;
 
@@ -161,11 +162,19 @@ impl BLECharacteristic {
         }
     }
 
-    pub fn to_characteristic(&self) -> Characteristic {
-        let uuid = utils::to_uuid(&self.characteristic.Uuid().unwrap());
+    pub fn uuid(&self) -> Uuid {
+        utils::to_uuid(&self.characteristic.Uuid().unwrap())
+    }
+
+    pub fn to_characteristic(&self, service_uuid: Uuid) -> Characteristic {
+        let uuid = self.uuid();
         let properties =
             utils::to_char_props(&self.characteristic.CharacteristicProperties().unwrap());
-        Characteristic { uuid, properties }
+        Characteristic {
+            uuid,
+            service_uuid,
+            properties,
+        }
     }
 }
 

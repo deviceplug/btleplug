@@ -414,6 +414,10 @@ pub mod cb {
         unsafe { msg_send![cbcharacteristic, properties] }
     }
 
+    pub fn characteristic_service(cbcharacteristic: *mut Object) -> *mut Object /* CBService* */ {
+        unsafe { msg_send![cbcharacteristic, service] }
+    }
+
     // CBCharacteristicProperties = NSUInteger from CBCharacteristic.h
 
     pub const CHARACTERISTICPROPERTY_BROADCAST: c_uint = 0x01; // CBCharacteristicPropertyBroadcast

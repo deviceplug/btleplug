@@ -14,7 +14,7 @@ use super::{
 };
 use crate::{
     api::{
-        self, BDAddr, CentralEvent, CharPropFlags, Characteristic, PeripheralProperties,
+        self, BDAddr, CentralEvent, CharPropFlags, Characteristic, PeripheralProperties, Service,
         ValueNotification, WriteType,
     },
     common::{adapter_manager::AdapterManager, util::notifications_stream_from_broadcast_receiver},
@@ -45,7 +45,7 @@ struct Shared {
     notifications_channel: broadcast::Sender<ValueNotification>,
     manager: AdapterManager<Peripheral>,
     uuid: Uuid,
-    characteristics: Mutex<BTreeSet<Characteristic>>,
+    services: Mutex<BTreeSet<Service>>,
     properties: Mutex<PeripheralProperties>,
     message_sender: Sender<CoreBluetoothMessage>,
     // We're not actually holding a peripheral object here, that's held out in
@@ -81,7 +81,7 @@ impl Peripheral {
         let shared = Arc::new(Shared {
             properties,
             manager,
-            characteristics: Mutex::new(BTreeSet::new()),
+            services: Mutex::new(BTreeSet::new()),
             notifications_channel,
             uuid,
             message_sender,
@@ -160,7 +160,7 @@ impl Debug for Peripheral {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         f.debug_struct("Peripheral")
             .field("uuid", &self.shared.uuid)
-            .field("characteristics", &self.shared.characteristics)
+            .field("services", &self.shared.services)
             .field("properties", &self.shared.properties)
             .field("message_sender", &self.shared.message_sender)
             .finish()
@@ -179,8 +179,18 @@ impl api::Peripheral for Peripheral {
         Ok(Some(self.shared.properties.lock().unwrap().clone()))
     }
 
+    fn services(&self) -> BTreeSet<Service> {
+        self.shared.services.lock().unwrap().clone()
+    }
+
     fn characteristics(&self) -> BTreeSet<Characteristic> {
-        self.shared.characteristics.lock().unwrap().clone()
+        self.shared
+            .services
+            .lock()
+            .unwrap()
+            .iter()
+            .flat_map(|service| service.characteristics.clone().into_iter())
+            .collect()
     }
 
     async fn is_connected(&self) -> Result<bool> {
@@ -213,8 +223,8 @@ impl api::Peripheral for Peripheral {
             })
             .await?;
         match fut.await {
-            CoreBluetoothReply::Connected(chars) => {
-                *(self.shared.characteristics.lock().unwrap()) = chars;
+            CoreBluetoothReply::Connected(services) => {
+                *(self.shared.services.lock().unwrap()) = services;
                 self.shared.manager.emit(CentralEvent::DeviceConnected(
                     // TODO: look at moving/copying address out of properties so we don't have to
                     // take a lock here! (the address for the peripheral won't ever change)
@@ -233,7 +243,7 @@ impl api::Peripheral for Peripheral {
     }
 
     async fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
-        let characteristics = self.shared.characteristics.lock().unwrap().clone();
+        let characteristics = self.characteristics();
         Ok(characteristics.into_iter().collect())
     }
 
@@ -259,6 +269,7 @@ impl api::Peripheral for Peripheral {
             .to_owned()
             .send(CoreBluetoothMessage::WriteValue {
                 peripheral_uuid: self.shared.uuid,
+                service_uuid: characteristic.service_uuid,
                 characteristic_uuid: characteristic.uuid,
                 data: Vec::from(data),
                 write_type,
@@ -279,6 +290,7 @@ impl api::Peripheral for Peripheral {
             .to_owned()
             .send(CoreBluetoothMessage::ReadValue {
                 peripheral_uuid: self.shared.uuid,
+                service_uuid: characteristic.service_uuid,
                 characteristic_uuid: characteristic.uuid,
                 future: fut.get_state_clone(),
             })
@@ -298,6 +310,7 @@ impl api::Peripheral for Peripheral {
             .to_owned()
             .send(CoreBluetoothMessage::Subscribe {
                 peripheral_uuid: self.shared.uuid,
+                service_uuid: characteristic.service_uuid,
                 characteristic_uuid: characteristic.uuid,
                 future: fut.get_state_clone(),
             })
@@ -316,6 +329,7 @@ impl api::Peripheral for Peripheral {
             .to_owned()
             .send(CoreBluetoothMessage::Unsubscribe {
                 peripheral_uuid: self.shared.uuid,
+                service_uuid: characteristic.service_uuid,
                 characteristic_uuid: characteristic.uuid,
                 future: fut.get_state_clone(),
             })

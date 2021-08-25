@@ -112,6 +112,18 @@ impl Default for CharPropFlags {
     }
 }
 
+/// A GATT service. Services are groups of characteristics, which may be standard or
+/// device-specific.
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
+pub struct Service {
+    /// The UUID for this service.
+    pub uuid: Uuid,
+    /// Whether this is a primary service.
+    pub primary: bool,
+    /// The characteristics of this service.
+    pub characteristics: BTreeSet<Characteristic>,
+}
+
 /// A Bluetooth characteristic. Characteristics are the main way you will interact with other
 /// bluetooth devices. Characteristics are identified by a UUID which may be standardized
 /// (like 0x2803, which identifies a characteristic for reading heart rate measurements) but more
@@ -124,6 +136,8 @@ impl Default for CharPropFlags {
 pub struct Characteristic {
     /// The UUID for this characteristic. This uniquely identifies its behavior.
     pub uuid: Uuid,
+    /// The UUID of the service this characteristic belongs to.
+    pub service_uuid: Uuid,
     /// The set of properties for this characteristic, which indicate what functionality it
     /// supports. If you attempt an operation that is not supported by the characteristics (for
     /// example setting notify on one without the NOTIFY flag), that operation will fail.
@@ -185,6 +199,10 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     /// Returns the set of properties associated with the peripheral. These may be updated over time
     /// as additional advertising reports are received.
     async fn properties(&self) -> Result<Option<PeripheralProperties>>;
+
+    /// The set of services we've discovered for this device. This will be empty until
+    /// `discover_characteristics` is called.
+    fn services(&self) -> BTreeSet<Service>;
 
     /// The set of characteristics we've discovered for this device. This will be empty until
     /// `discover_characteristics` is called.

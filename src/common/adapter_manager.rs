@@ -21,7 +21,7 @@ use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 
 #[derive(Clone, Debug)]
-pub struct AdapterManager<PeripheralType>
+pub(crate) struct AdapterManager<PeripheralType>
 where
     PeripheralType: Peripheral,
 {

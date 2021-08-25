@@ -81,8 +81,6 @@ impl Peripheral {
         });
         let advertisement = args.Advertisement().unwrap();
 
-        properties.discovery_count += 1;
-
         // Advertisements are cumulative: set/replace data only if it's set
         if let Ok(name) = advertisement.LocalName() {
             if !name.is_empty() {

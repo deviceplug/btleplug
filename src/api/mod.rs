@@ -160,8 +160,6 @@ pub struct PeripheralProperties {
     pub service_data: HashMap<Uuid, Vec<u8>>,
     /// Advertised services for this device
     pub services: Vec<Uuid>,
-    /// Number of times we've seen advertising reports for this device
-    pub discovery_count: u32,
 }
 
 /// The type of write operation to use.

@@ -151,7 +151,9 @@ pub struct PeripheralProperties {
     /// The local name. This is generally a human-readable string that identifies the type of device.
     pub local_name: Option<String>,
     /// The transmission power level for the device
-    pub tx_power_level: Option<i8>,
+    pub tx_power_level: Option<i16>,
+    /// The most recent Received Signal Strength Indicator for the device
+    pub rssi: Option<i16>,
     /// Advertisement data specific to the device manufacturer. The keys of this map are
     /// 'manufacturer IDs', while the values are arbitrary data.
     pub manufacturer_data: HashMap<u16, Vec<u8>>,

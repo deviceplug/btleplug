@@ -170,8 +170,11 @@ impl Peripheral {
             // all panic here without returning a Result as documented.
             // Value() is apparently the _right_ way to extract something from an IReference<T>...
             if let Ok(tx) = tx_reference.Value() {
-                properties.tx_power_level = Some(tx as i8);
+                properties.tx_power_level = Some(tx);
             }
+        }
+        if let Ok(rssi) = args.RawSignalStrengthInDBm() {
+            properties.rssi = Some(rssi);
         }
     }
 }

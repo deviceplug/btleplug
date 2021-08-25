@@ -71,6 +71,7 @@ impl Peripheral {
             address_type: None,
             local_name,
             tx_power_level: None,
+            rssi: None,
             manufacturer_data: HashMap::new(),
             service_data: HashMap::new(),
             services: Vec::new(),

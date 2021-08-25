@@ -1,8 +1,13 @@
 # Unreleased
 
+## Features
+
+- Added Received Signal Strength Indicator (RSSI) peripheral property
+
 ## Breaking changes
 
 - Removed `CentralEvent::DeviceLost`. It wasn't emitted anywhere.
+- Changed tx_power_level type from i8 to i16
 
 # 0.8.1 (2021-08-14)
 

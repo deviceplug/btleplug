@@ -28,12 +28,12 @@ use async_trait::async_trait;
 use dashmap::DashMap;
 use futures::stream::Stream;
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, HashMap, HashSet},
     convert::TryInto,
     fmt::{self, Debug, Display, Formatter},
     pin::Pin,
     sync::atomic::{AtomicBool, Ordering},
-    sync::{Arc, Mutex},
+    sync::{Arc, RwLock},
 };
 use tokio::sync::broadcast;
 use uuid::Uuid;
@@ -51,10 +51,18 @@ struct Shared {
     device: tokio::sync::Mutex<Option<BLEDevice>>,
     adapter: AdapterManager<Peripheral>,
     address: BDAddr,
-    properties: Mutex<Option<PeripheralProperties>>,
     connected: AtomicBool,
     ble_characteristics: DashMap<Uuid, BLECharacteristic>,
     notifications_channel: broadcast::Sender<ValueNotification>,
+
+    // Mutable, advertised, state...
+    address_type: RwLock<Option<AddressType>>,
+    local_name: RwLock<Option<String>>,
+    last_tx_power_level: RwLock<Option<i16>>, // XXX: would be nice to avoid lock here!
+    last_rssi: RwLock<Option<i16>>,           // XXX: would be nice to avoid lock here!
+    latest_manufacturer_data: RwLock<HashMap<u16, Vec<u8>>>,
+    latest_service_data: RwLock<HashMap<Uuid, Vec<u8>>>,
+    services: RwLock<HashSet<Uuid>>,
 }
 
 impl Peripheral {
@@ -65,31 +73,60 @@ impl Peripheral {
                 adapter: adapter,
                 device: tokio::sync::Mutex::new(None),
                 address: address,
-                properties: Mutex::new(None),
                 connected: AtomicBool::new(false),
                 ble_characteristics: DashMap::new(),
                 notifications_channel: broadcast_sender,
+                address_type: RwLock::new(None),
+                local_name: RwLock::new(None),
+                last_tx_power_level: RwLock::new(None),
+                last_rssi: RwLock::new(None),
+                latest_manufacturer_data: RwLock::new(HashMap::new()),
+                latest_service_data: RwLock::new(HashMap::new()),
+                services: RwLock::new(HashSet::new()),
             }),
         }
     }
 
+    // TODO: see if the other backends can also be similarly decoupled from PeripheralProperties
+    // so it can potentially be replaced by individial state getters
+    fn derive_properties(&self) -> PeripheralProperties {
+        PeripheralProperties {
+            address: self.address(),
+            address_type: *self.shared.address_type.read().unwrap(),
+            local_name: self.shared.local_name.read().unwrap().clone(),
+            tx_power_level: *self.shared.last_tx_power_level.read().unwrap(),
+            rssi: *self.shared.last_rssi.read().unwrap(),
+            manufacturer_data: self.shared.latest_manufacturer_data.read().unwrap().clone(),
+            service_data: self.shared.latest_service_data.read().unwrap().clone(),
+            services: self
+                .shared
+                .services
+                .read()
+                .unwrap()
+                .iter()
+                .map(|uuid| *uuid)
+                .collect(),
+        }
+    }
+
     pub(crate) fn update_properties(&self, args: &BluetoothLEAdvertisementReceivedEventArgs) {
-        let mut maybe_properties = self.shared.properties.lock().unwrap();
-        let properties = maybe_properties.get_or_insert_with(|| {
-            let mut new_properties = PeripheralProperties::default();
-            new_properties.address = self.shared.address;
-            new_properties
-        });
         let advertisement = args.Advertisement().unwrap();
 
         // Advertisements are cumulative: set/replace data only if it's set
         if let Ok(name) = advertisement.LocalName() {
             if !name.is_empty() {
-                properties.local_name = Some(name.to_string());
+                // XXX: we could probably also assume that we've seen the
+                // advertisement before and speculatively take a read lock
+                // to confirm that the name hasn't changed...
+
+                let mut local_name_guard = self.shared.local_name.write().unwrap();
+                *local_name_guard = Some(name.to_string());
             }
         }
         if let Ok(manufacturer_data) = advertisement.ManufacturerData() {
-            properties.manufacturer_data = manufacturer_data
+            let mut manufacturer_data_guard = self.shared.latest_manufacturer_data.write().unwrap();
+
+            *manufacturer_data_guard = manufacturer_data
                 .into_iter()
                 .map(|d| {
                     let manufacturer_id = d.CompanyId().unwrap();
@@ -104,80 +141,127 @@ impl Peripheral {
                 .adapter
                 .emit(CentralEvent::ManufacturerDataAdvertisement {
                     address: self.shared.address,
-                    manufacturer_data: properties.manufacturer_data.clone(),
+                    manufacturer_data: manufacturer_data_guard.clone(),
                 });
         }
 
         // The Windows Runtime API (as of 19041) does not directly expose Service Data as a friendly API (like Manufacturer Data above)
         // Instead they provide data sections for access to raw advertising data. That is processed here.
         if let Ok(data_sections) = advertisement.DataSections() {
-            properties.service_data = data_sections
-                .into_iter()
-                .filter_map(|d| {
-                    let data = utils::to_vec(&d.Data().unwrap());
-
-                    match d.DataType().unwrap() {
-                        advertisement_data_type::SERVICE_DATA_16_BIT_UUID => {
-                            let (uuid, data) = data.split_at(2);
-                            let uuid = uuid_from_u16(u16::from_le_bytes(uuid.try_into().unwrap()));
-                            Some((uuid, data.to_owned()))
-                        }
-                        advertisement_data_type::SERVICE_DATA_32_BIT_UUID => {
-                            let (uuid, data) = data.split_at(4);
-                            let uuid = uuid_from_u32(u32::from_le_bytes(uuid.try_into().unwrap()));
-                            Some((uuid, data.to_owned()))
-                        }
-                        advertisement_data_type::SERVICE_DATA_128_BIT_UUID => {
-                            let (uuid, data) = data.split_at(16);
-                            let uuid = Uuid::from_slice(uuid).unwrap();
-                            Some((uuid, data.to_owned()))
-                        }
-                        _ => None,
+            // See if we have any advertised service data before taking a lock to update...
+            let mut found_service_data = false;
+            for section in &data_sections {
+                match section.DataType().unwrap() {
+                    advertisement_data_type::SERVICE_DATA_16_BIT_UUID
+                    | advertisement_data_type::SERVICE_DATA_32_BIT_UUID
+                    | advertisement_data_type::SERVICE_DATA_128_BIT_UUID => {
+                        found_service_data = true;
+                        break;
                     }
-                })
-                .collect();
+                    _ => {}
+                }
+            }
+            if found_service_data {
+                let mut service_data_guard = self.shared.latest_service_data.write().unwrap();
 
-            // Emit event of newly received advertisement
-            self.shared
-                .adapter
-                .emit(CentralEvent::ServiceDataAdvertisement {
-                    address: self.shared.address,
-                    service_data: properties.service_data.clone(),
-                });
+                *service_data_guard = data_sections
+                    .into_iter()
+                    .filter_map(|d| {
+                        let data = utils::to_vec(&d.Data().unwrap());
+
+                        match d.DataType().unwrap() {
+                            advertisement_data_type::SERVICE_DATA_16_BIT_UUID => {
+                                let (uuid, data) = data.split_at(2);
+                                let uuid =
+                                    uuid_from_u16(u16::from_le_bytes(uuid.try_into().unwrap()));
+                                Some((uuid, data.to_owned()))
+                            }
+                            advertisement_data_type::SERVICE_DATA_32_BIT_UUID => {
+                                let (uuid, data) = data.split_at(4);
+                                let uuid =
+                                    uuid_from_u32(u32::from_le_bytes(uuid.try_into().unwrap()));
+                                Some((uuid, data.to_owned()))
+                            }
+                            advertisement_data_type::SERVICE_DATA_128_BIT_UUID => {
+                                let (uuid, data) = data.split_at(16);
+                                let uuid = Uuid::from_slice(uuid).unwrap();
+                                Some((uuid, data.to_owned()))
+                            }
+                            _ => None,
+                        }
+                    })
+                    .collect();
+
+                // Emit event of newly received advertisement
+                self.shared
+                    .adapter
+                    .emit(CentralEvent::ServiceDataAdvertisement {
+                        address: self.shared.address,
+                        service_data: service_data_guard.clone(),
+                    });
+            }
         }
 
         if let Ok(services) = advertisement.ServiceUuids() {
-            properties.services = services
-                .into_iter()
-                .map(|uuid| utils::to_uuid(&uuid))
-                .collect();
+            let mut found_new_service = false;
 
-            self.shared
-                .adapter
-                .emit(CentralEvent::ServicesAdvertisement {
-                    address: self.shared.address,
-                    services: properties.services.clone(),
-                });
+            // Limited scope for read-only lock...
+            {
+                let services_guard_ro = self.shared.services.read().unwrap();
+
+                // In all likelihood we've already seen all the advertised services before so lets
+                // check to see if we can avoid taking the write lock and emitting an event...
+                for uuid in &services {
+                    if !services_guard_ro.contains(&utils::to_uuid(&uuid)) {
+                        found_new_service = true;
+                        break;
+                    }
+                }
+            }
+
+            if found_new_service {
+                let mut services_guard = self.shared.services.write().unwrap();
+
+                // ServicesUuids combines all the 16, 32 and 128 bit, 'complete' and 'incomplete'
+                // service IDs that may be part of this advertisement into one single list with
+                // a consistent (128bit) format. Considering that we don't practically know
+                // whether the aggregate list is ever complete we always union the IDs with the
+                // IDs already tracked.
+                for uuid in services {
+                    services_guard.insert(utils::to_uuid(&uuid));
+                }
+
+                self.shared
+                    .adapter
+                    .emit(CentralEvent::ServicesAdvertisement {
+                        address: self.shared.address,
+                        services: services_guard.iter().map(|uuid| *uuid).collect(),
+                    });
+            }
         }
 
         if let Ok(address_type) = args.BluetoothAddressType() {
-            properties.address_type = match address_type {
+            let mut address_type_guard = self.shared.address_type.write().unwrap();
+            *address_type_guard = match address_type {
                 BluetoothAddressType::Public => Some(AddressType::Public),
                 BluetoothAddressType::Random => Some(AddressType::Random),
                 _ => None,
             };
         }
+
         if let Ok(tx_reference) = args.TransmitPowerLevelInDBm() {
             // IReference is (ironically) a crazy foot gun in Rust since it very easily
             // panics if you look at it wrong. Calling GetInt16(), IsNumericScalar() or Type()
             // all panic here without returning a Result as documented.
             // Value() is apparently the _right_ way to extract something from an IReference<T>...
             if let Ok(tx) = tx_reference.Value() {
-                properties.tx_power_level = Some(tx);
+                let mut tx_power_level_guard = self.shared.last_tx_power_level.write().unwrap();
+                *tx_power_level_guard = Some(tx);
             }
         }
         if let Ok(rssi) = args.RawSignalStrengthInDBm() {
-            properties.rssi = Some(rssi);
+            let mut rssi_guard = self.shared.last_rssi.write().unwrap();
+            *rssi_guard = Some(rssi);
         }
     }
 }
@@ -189,15 +273,14 @@ impl Display for Peripheral {
         } else {
             ""
         };
-        let properties = self.shared.properties.lock().unwrap();
         write!(
             f,
             "{} {}{}",
             self.shared.address,
-            properties
-                .clone()
-                .unwrap()
+            self.shared
                 .local_name
+                .read()
+                .unwrap()
                 .clone()
                 .unwrap_or_else(|| "(unknown)".to_string()),
             connected
@@ -212,11 +295,11 @@ impl Debug for Peripheral {
         } else {
             ""
         };
-        let properties = self.shared.properties.lock().unwrap();
+        let properties = self.derive_properties();
         write!(
             f,
             "{} properties: {:?}, characteristics: {:?} {}",
-            self.shared.address, *properties, self.shared.ble_characteristics, connected
+            self.shared.address, properties, self.shared.ble_characteristics, connected
         )
     }
 }
@@ -231,8 +314,7 @@ impl ApiPeripheral for Peripheral {
     /// Returns the set of properties associated with the peripheral. These may be updated over time
     /// as additional advertising reports are received.
     async fn properties(&self) -> Result<Option<PeripheralProperties>> {
-        let l = self.shared.properties.lock().unwrap();
-        Ok(l.clone())
+        Ok(Some(self.derive_properties()))
     }
 
     /// The set of characteristics we've discovered for this device. This will be empty until

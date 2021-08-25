@@ -233,6 +233,7 @@ impl api::Peripheral for Peripheral {
     }
 
     async fn discover_services(&self) -> Result<()> {
+        // TODO: Actually discover on this, rather than on connection
         Ok(())
     }
 

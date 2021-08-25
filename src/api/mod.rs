@@ -201,12 +201,17 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     async fn properties(&self) -> Result<Option<PeripheralProperties>>;
 
     /// The set of services we've discovered for this device. This will be empty until
-    /// `discover_characteristics` is called.
+    /// `discover_services` is called.
     fn services(&self) -> BTreeSet<Service>;
 
     /// The set of characteristics we've discovered for this device. This will be empty until
-    /// `discover_characteristics` is called.
-    fn characteristics(&self) -> BTreeSet<Characteristic>;
+    /// `discover_services` is called.
+    fn characteristics(&self) -> BTreeSet<Characteristic> {
+        self.services()
+            .iter()
+            .flat_map(|service| service.characteristics.clone().into_iter())
+            .collect()
+    }
 
     /// Returns true iff we are currently connected to the device.
     async fn is_connected(&self) -> Result<bool>;
@@ -219,8 +224,8 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     /// Terminates a connection to the device.
     async fn disconnect(&self) -> Result<()>;
 
-    /// Discovers all characteristics for the device.
-    async fn discover_characteristics(&self) -> Result<Vec<Characteristic>>;
+    /// Discovers all services for the device, including their characteristics.
+    async fn discover_services(&self) -> Result<()>;
 
     /// Write some data to the characteristic. Returns an error if the write couldn't be sent or (in
     /// the case of a write-with-response) if the device returns an error.

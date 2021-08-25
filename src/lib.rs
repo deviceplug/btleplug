@@ -51,8 +51,8 @@
 //!     // connect to the device
 //!     light.connect().await?;
 //!
-//!     // discover characteristics
-//!     light.discover_characteristics().await?;
+//!     // discover services and characteristics
+//!     light.discover_services().await?;
 //!
 //!     // find the characteristic we want
 //!     let chars = light.characteristics();

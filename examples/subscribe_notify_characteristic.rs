@@ -62,10 +62,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         "Now connected ({:?}) to peripheral {:?}.",
                         is_connected, &local_name
                     );
-                    let chars = peripheral.discover_characteristics().await?;
+                    println!("Discover peripheral {:?} services...", local_name);
+                    peripheral.discover_services().await?;
                     if is_connected {
-                        println!("Discover peripheral {:?} characteristics...", local_name);
-                        for characteristic in chars.into_iter() {
+                        for characteristic in peripheral.characteristics() {
                             println!("Checking characteristic {:?}", characteristic);
                             // Subscribe to notifications from the characteristic with the selected
                             // UUID.

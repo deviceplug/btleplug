@@ -102,20 +102,6 @@ impl api::Peripheral for Peripheral {
             .collect()
     }
 
-    fn characteristics(&self) -> BTreeSet<Characteristic> {
-        let services = &*self.services.lock().unwrap();
-        services
-            .values()
-            .flat_map(|service| {
-                service
-                    .characteristics
-                    .values()
-                    .map(|characteristic| make_characteristic(characteristic, service.info.uuid))
-                    .collect::<Vec<_>>()
-            })
-            .collect()
-    }
-
     async fn is_connected(&self) -> Result<bool> {
         let device_info = self.device_info().await?;
         Ok(device_info.connected)
@@ -131,17 +117,11 @@ impl api::Peripheral for Peripheral {
         Ok(())
     }
 
-    async fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
+    async fn discover_services(&self) -> Result<()> {
         let mut services_internal = HashMap::new();
-        let mut converted_characteristics = vec![];
         let services = self.session.get_services(&self.device).await?;
         for service in services {
             let characteristics = self.session.get_characteristics(&service.id).await?;
-            converted_characteristics.extend(
-                characteristics
-                    .iter()
-                    .map(|characteristic| make_characteristic(characteristic, service.uuid)),
-            );
             services_internal.insert(
                 service.uuid,
                 ServiceInternal {
@@ -154,7 +134,7 @@ impl api::Peripheral for Peripheral {
             );
         }
         *self.services.lock().unwrap() = services_internal;
-        Ok(converted_characteristics)
+        Ok(())
     }
 
     async fn write(

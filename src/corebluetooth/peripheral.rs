@@ -183,16 +183,6 @@ impl api::Peripheral for Peripheral {
         self.shared.services.lock().unwrap().clone()
     }
 
-    fn characteristics(&self) -> BTreeSet<Characteristic> {
-        self.shared
-            .services
-            .lock()
-            .unwrap()
-            .iter()
-            .flat_map(|service| service.characteristics.clone().into_iter())
-            .collect()
-    }
-
     async fn is_connected(&self) -> Result<bool> {
         let fut = CoreBluetoothReplyFuture::default();
         self.shared
@@ -242,9 +232,8 @@ impl api::Peripheral for Peripheral {
         Ok(())
     }
 
-    async fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
-        let characteristics = self.characteristics();
-        Ok(characteristics.into_iter().collect())
+    async fn discover_services(&self) -> Result<()> {
+        Ok(())
     }
 
     async fn write(

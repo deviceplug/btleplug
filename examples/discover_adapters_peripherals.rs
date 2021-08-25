@@ -53,8 +53,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     "Now connected ({:?}) to peripheral {:?}...",
                     is_connected, &local_name
                 );
-                peripheral.discover_characteristics().await?;
-                println!("Discover peripheral {:?} characteristics...", &local_name);
+                peripheral.discover_services().await?;
+                println!("Discover peripheral {:?} services...", &local_name);
                 for service in peripheral.services() {
                     println!(
                         "Service UUID {}, primary: {}",

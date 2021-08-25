@@ -164,7 +164,15 @@ impl Peripheral {
         // windows does not provide the address type in the advertisement event args but only in the device object
         // https://social.msdn.microsoft.com/Forums/en-US/c71d51a2-56a1-425a-9063-de44fda48766/bluetooth-address-public-or-random?forum=wdk
         properties.address_type = None;
-        properties.tx_power_level = args.RawSignalStrengthInDBm().ok().map(|rssi| rssi as i8);
+        if let Ok(tx_reference) = args.TransmitPowerLevelInDBm() {
+            // IReference is (ironically) a crazy foot gun in Rust since it very easily
+            // panics if you look at it wrong. Calling GetInt16(), IsNumericScalar() or Type()
+            // all panic here without returning a Result as documented.
+            // Value() is apparently the _right_ way to extract something from an IReference<T>...
+            if let Ok(tx) = tx_reference.Value() {
+                properties.tx_power_level = Some(tx as i8);
+            }
+        }
     }
 }
 

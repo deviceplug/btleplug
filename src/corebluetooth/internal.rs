@@ -127,11 +127,14 @@ pub enum CBPeripheralEvent {
 pub type CoreBluetoothReplyStateShared = BtlePlugFutureStateShared<CoreBluetoothReply>;
 pub type CoreBluetoothReplyFuture = BtlePlugFuture<CoreBluetoothReply>;
 
+struct ServiceInternal {
+    cbservice: StrongPtr,
+    characteristics: HashMap<Uuid, CBCharacteristic>,
+}
+
 struct CBPeripheral {
     pub peripheral: StrongPtr,
-    services: HashMap<Uuid, StrongPtr>,
-    /// Top level keys are service UUIDs, inner keys are characteristic UUIDs.
-    pub characteristics: HashMap<Uuid, HashMap<Uuid, CBCharacteristic>>,
+    services: HashMap<Uuid, ServiceInternal>,
     pub event_sender: Sender<CBPeripheralEvent>,
     pub connected_future_state: Option<CoreBluetoothReplyStateShared>,
 }
@@ -140,8 +143,14 @@ impl Debug for CBPeripheral {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         f.debug_struct("CBPeripheral")
             .field("peripheral", self.peripheral.deref())
-            .field("services", &self.services.keys().collect::<Vec<_>>())
-            .field("characteristics", &self.characteristics)
+            .field(
+                "services",
+                &self
+                    .services
+                    .iter()
+                    .map(|(service_uuid, service)| (service_uuid, service.characteristics.len()))
+                    .collect::<HashMap<_, _>>(),
+            )
             .field("event_sender", &self.event_sender)
             .field("connected_future_state", &self.connected_future_state)
             .finish()
@@ -153,14 +162,9 @@ impl CBPeripheral {
         Self {
             peripheral,
             services: HashMap::new(),
-            characteristics: HashMap::new(),
             event_sender,
             connected_future_state: None,
         }
-    }
-
-    pub fn set_services(&mut self, services: HashMap<Uuid, StrongPtr>) {
-        self.services = services;
     }
 
     pub fn set_characteristics(
@@ -174,7 +178,11 @@ impl CBPeripheral {
                 (characteristic_uuid, CBCharacteristic::new(characteristic))
             })
             .collect();
-        self.characteristics.insert(service_uuid, characteristics);
+        let service = self
+            .services
+            .get_mut(&service_uuid)
+            .expect("Got characteristics for a service we don't know about");
+        service.characteristics = characteristics;
 
         // It's time for QUESTIONABLE ASSUMPTIONS.
         //
@@ -184,17 +192,22 @@ impl CBPeripheral {
         // service map. Once that's done, we're filled out enough and can send
         // back a Connected reply to the waiting future with all of the
         // characteristic info in it.
-        if self.characteristics.len() == self.services.len() {
+        if !self
+            .services
+            .values()
+            .any(|service| service.characteristics.is_empty())
+        {
             if self.connected_future_state.is_none() {
                 panic!("We should still have a future at this point!");
             }
             let services = self
-                .characteristics
+                .services
                 .iter()
-                .map(|(&service_uuid, characteristics)| Service {
+                .map(|(&service_uuid, service)| Service {
                     uuid: service_uuid,
-                    primary: true, //TODO
-                    characteristics: characteristics
+                    primary: cb::service_isprimary(*service.cbservice) != objc::runtime::NO,
+                    characteristics: service
+                        .characteristics
                         .iter()
                         .map(|(&characteristic_uuid, characteristic)| Characteristic {
                             uuid: characteristic_uuid,
@@ -418,7 +431,19 @@ impl CoreBluetoothInternal {
             trace!("{}", id);
         }
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
-            p.set_services(service_map);
+            let services = service_map
+                .into_iter()
+                .map(|(service_uuid, cbservice)| {
+                    (
+                        service_uuid,
+                        ServiceInternal {
+                            cbservice,
+                            characteristics: HashMap::new(),
+                        },
+                    )
+                })
+                .collect();
+            p.services = services;
         }
     }
 
@@ -462,8 +487,9 @@ impl CoreBluetoothInternal {
     ) -> Option<&mut CBCharacteristic> {
         self.peripherals
             .get_mut(&peripheral_uuid)?
-            .characteristics
+            .services
             .get_mut(&service_uuid)?
+            .characteristics
             .get_mut(&characteristic_uuid)
     }
 
@@ -505,8 +531,9 @@ impl CoreBluetoothInternal {
         data: Vec<u8>,
     ) {
         if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Some(service) = peripheral.characteristics.get_mut(&service_uuid) {
-                if let Some(characteristic) = service.get_mut(&characteristic_uuid) {
+            if let Some(service) = peripheral.services.get_mut(&service_uuid) {
+                if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
+                {
                     trace!("Got read event!");
 
                     let mut data_clone = Vec::new();
@@ -579,8 +606,9 @@ impl CoreBluetoothInternal {
         fut: CoreBluetoothReplyStateShared,
     ) {
         if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Some(service) = peripheral.characteristics.get_mut(&service_uuid) {
-                if let Some(characteristic) = service.get_mut(&characteristic_uuid) {
+            if let Some(service) = peripheral.services.get_mut(&service_uuid) {
+                if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
+                {
                     trace!("Writing value! With kind {:?}", kind);
                     cb::peripheral_writevalue_forcharacteristic(
                         *peripheral.peripheral,
@@ -611,8 +639,9 @@ impl CoreBluetoothInternal {
         fut: CoreBluetoothReplyStateShared,
     ) {
         if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Some(service) = peripheral.characteristics.get_mut(&service_uuid) {
-                if let Some(characteristic) = service.get_mut(&characteristic_uuid) {
+            if let Some(service) = peripheral.services.get_mut(&service_uuid) {
+                if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
+                {
                     trace!("Reading value!");
                     cb::peripheral_readvalue_forcharacteristic(
                         *peripheral.peripheral,
@@ -632,8 +661,9 @@ impl CoreBluetoothInternal {
         fut: CoreBluetoothReplyStateShared,
     ) {
         if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Some(service) = peripheral.characteristics.get_mut(&service_uuid) {
-                if let Some(characteristic) = service.get_mut(&characteristic_uuid) {
+            if let Some(service) = peripheral.services.get_mut(&service_uuid) {
+                if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
+                {
                     trace!("Setting subscribe!");
                     cb::peripheral_setnotifyvalue_forcharacteristic(
                         *peripheral.peripheral,
@@ -654,8 +684,9 @@ impl CoreBluetoothInternal {
         fut: CoreBluetoothReplyStateShared,
     ) {
         if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Some(service) = peripheral.characteristics.get_mut(&service_uuid) {
-                if let Some(characteristic) = service.get_mut(&characteristic_uuid) {
+            if let Some(service) = peripheral.services.get_mut(&service_uuid) {
+                if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
+                {
                     trace!("Setting subscribe!");
                     cb::peripheral_setnotifyvalue_forcharacteristic(
                         *peripheral.peripheral,

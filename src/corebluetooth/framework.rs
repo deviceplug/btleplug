@@ -383,12 +383,9 @@ pub mod cb {
 
     // CBService : CBAttribute
 
-    // pub fn service_isprimary(cbservice: *mut Object) -> BOOL {
-    //     unsafe {
-    //         let isprimary: BOOL = msg_send![cbservice, isPrimary];
-    //         isprimary
-    //     }
-    // }
+    pub fn service_isprimary(cbservice: *mut Object) -> BOOL {
+        unsafe { msg_send![cbservice, isPrimary] }
+    }
 
     pub fn service_includedservices(cbservice: *mut Object) -> *mut Object /* NSArray<CBService*>* */
     {

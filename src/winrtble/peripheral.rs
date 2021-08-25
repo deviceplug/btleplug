@@ -18,8 +18,8 @@ use super::{
 use crate::{
     api::{
         bleuuid::{uuid_from_u16, uuid_from_u32},
-        BDAddr, CentralEvent, Characteristic, Peripheral as ApiPeripheral, PeripheralProperties,
-        ValueNotification, WriteType,
+        AddressType, BDAddr, CentralEvent, Characteristic, Peripheral as ApiPeripheral,
+        PeripheralProperties, ValueNotification, WriteType,
     },
     common::{adapter_manager::AdapterManager, util::notifications_stream_from_broadcast_receiver},
     Error, Result,
@@ -39,6 +39,7 @@ use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use bindings::Windows::Devices::Bluetooth::Advertisement::*;
+use bindings::Windows::Devices::Bluetooth::BluetoothAddressType;
 
 /// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone)]
@@ -161,9 +162,13 @@ impl Peripheral {
                 });
         }
 
-        // windows does not provide the address type in the advertisement event args but only in the device object
-        // https://social.msdn.microsoft.com/Forums/en-US/c71d51a2-56a1-425a-9063-de44fda48766/bluetooth-address-public-or-random?forum=wdk
-        properties.address_type = None;
+        if let Ok(address_type) = args.BluetoothAddressType() {
+            properties.address_type = match address_type {
+                BluetoothAddressType::Public => Some(AddressType::Public),
+                BluetoothAddressType::Random => Some(AddressType::Random),
+                _ => None,
+            };
+        }
         if let Ok(tx_reference) = args.TransmitPowerLevelInDBm() {
             // IReference is (ironically) a crazy foot gun in Rust since it very easily
             // panics if you look at it wrong. Calling GetInt16(), IsNumericScalar() or Type()

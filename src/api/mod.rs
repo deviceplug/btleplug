@@ -46,7 +46,7 @@ pub use self::bdaddr::{BDAddr, ParseBDAddrError};
     derive(Serialize, Deserialize),
     serde(crate = "serde_cr")
 )]
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum AddressType {
     Random,
     Public,

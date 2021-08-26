@@ -52,8 +52,8 @@ where
 {
     pub fn emit(&self, event: CentralEvent) {
         match event {
-            CentralEvent::DeviceDisconnected(addr) => {
-                self.shared.peripherals.remove(&addr);
+            CentralEvent::DeviceDisconnected(ref addr) => {
+                self.shared.peripherals.remove(addr);
             }
             _ => {}
         }

@@ -3,6 +3,8 @@
 ## Features
 
 - Added Received Signal Strength Indicator (RSSI) peripheral property
+- Peripheral `notifications()` streams can now be queried before any
+  connection and remain valid independent of any re-connections.
 
 ## Breaking changes
 

@@ -224,8 +224,9 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     async fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()>;
 
     /// Returns a stream of notifications for characteristic value updates. The stream will receive
-    /// a notification when a value notification or indication is received from the device. This
-    /// method should only be used after a connection has been established.
+    /// a notification when a value notification or indication is received from the device.
+    /// The stream will remain valid across connections and can be queried before any connection
+    /// is made.
     async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>>;
 }
 

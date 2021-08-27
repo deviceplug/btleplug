@@ -40,37 +40,31 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // thread (not task, as this library does not yet use async channels).
     while let Some(event) = events.next().await {
         match event {
-            CentralEvent::DeviceDiscovered(bd_addr) => {
-                println!("DeviceDiscovered: {:?}", bd_addr);
+            CentralEvent::DeviceDiscovered(id) => {
+                println!("DeviceDiscovered: {:?}", id);
             }
-            CentralEvent::DeviceConnected(bd_addr) => {
-                println!("DeviceConnected: {:?}", bd_addr);
+            CentralEvent::DeviceConnected(id) => {
+                println!("DeviceConnected: {:?}", id);
             }
-            CentralEvent::DeviceDisconnected(bd_addr) => {
-                println!("DeviceDisconnected: {:?}", bd_addr);
+            CentralEvent::DeviceDisconnected(id) => {
+                println!("DeviceDisconnected: {:?}", id);
             }
             CentralEvent::ManufacturerDataAdvertisement {
-                address,
+                id,
                 manufacturer_data,
             } => {
                 println!(
                     "ManufacturerDataAdvertisement: {:?}, {:?}",
-                    address, manufacturer_data
+                    id, manufacturer_data
                 );
             }
-            CentralEvent::ServiceDataAdvertisement {
-                address,
-                service_data,
-            } => {
-                println!(
-                    "ServiceDataAdvertisement: {:?}, {:?}",
-                    address, service_data
-                );
+            CentralEvent::ServiceDataAdvertisement { id, service_data } => {
+                println!("ServiceDataAdvertisement: {:?}, {:?}", id, service_data);
             }
-            CentralEvent::ServicesAdvertisement { address, services } => {
+            CentralEvent::ServicesAdvertisement { id, services } => {
                 let services: Vec<String> =
                     services.into_iter().map(|s| s.to_short_string()).collect();
-                println!("ServicesAdvertisement: {:?}, {:?}", address, services);
+                println!("ServicesAdvertisement: {:?}, {:?}", id, services);
             }
             _ => {}
         }

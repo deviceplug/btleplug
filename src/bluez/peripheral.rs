@@ -5,6 +5,10 @@ use bluez_async::{
 };
 use futures::future::ready;
 use futures::stream::{Stream, StreamExt};
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "serde")]
+use serde_cr as serde;
 use std::collections::{BTreeSet, HashMap};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
@@ -21,6 +25,14 @@ struct ServiceInternal {
     info: ServiceInfo,
     characteristics: HashMap<Uuid, CharacteristicInfo>,
 }
+
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(crate = "serde_cr")
+)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct PeripheralId(BDAddr);
 
 /// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone, Debug)]
@@ -75,6 +87,10 @@ impl Peripheral {
 
 #[async_trait]
 impl api::Peripheral for Peripheral {
+    fn id(&self) -> PeripheralId {
+        PeripheralId(self.address())
+    }
+
     fn address(&self) -> BDAddr {
         self.mac_address
     }
@@ -226,6 +242,12 @@ impl From<WriteType> for bluez_async::WriteType {
 impl From<&MacAddress> for BDAddr {
     fn from(mac_address: &MacAddress) -> Self {
         mac_address.to_string().parse().unwrap()
+    }
+}
+
+impl From<&MacAddress> for PeripheralId {
+    fn from(mac_address: &MacAddress) -> Self {
+        PeripheralId(BDAddr::from(mac_address))
     }
 }
 

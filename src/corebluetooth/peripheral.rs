@@ -6,7 +6,6 @@
 // for full license information.
 
 use super::{
-    adapter::uuid_to_bdaddr,
     framework::cb::CBPeripheralState,
     internal::{
         CBPeripheralEvent, CoreBluetoothMessage, CoreBluetoothReply, CoreBluetoothReplyFuture,
@@ -25,6 +24,10 @@ use futures::channel::mpsc::{Receiver, SendError, Sender};
 use futures::sink::SinkExt;
 use futures::stream::{Stream, StreamExt};
 use log::*;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "serde")]
+use serde_cr as serde;
 use std::{
     collections::{BTreeSet, HashMap},
     fmt::{self, Debug, Display, Formatter},
@@ -34,6 +37,14 @@ use std::{
 use tokio::sync::broadcast;
 use tokio::task;
 use uuid::Uuid;
+
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(crate = "serde_cr")
+)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct PeripheralId(Uuid);
 
 /// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone)]
@@ -65,9 +76,7 @@ impl Peripheral {
         // Since we're building the object, we have an active advertisement.
         // Build properties now.
         let properties = Mutex::from(PeripheralProperties {
-            // Rumble required ONLY a BDAddr, not something you can get from
-            // MacOS, so we make it up for now. This sucks.
-            address: uuid_to_bdaddr(&uuid.to_string()),
+            address: BDAddr::default(),
             address_type: None,
             local_name,
             tx_power_level: None,
@@ -108,7 +117,7 @@ impl Peripheral {
                         shared
                             .manager
                             .emit(CentralEvent::ManufacturerDataAdvertisement {
-                                address: properties.address,
+                                id: shared.uuid.into(),
                                 manufacturer_data: properties.manufacturer_data.clone(),
                             });
                     }
@@ -117,7 +126,7 @@ impl Peripheral {
                         properties.service_data.extend(service_data.clone());
 
                         shared.manager.emit(CentralEvent::ServiceDataAdvertisement {
-                            address: properties.address,
+                            id: shared.uuid.into(),
                             service_data,
                         });
                     }
@@ -126,7 +135,7 @@ impl Peripheral {
                         properties.services = services.clone();
 
                         shared.manager.emit(CentralEvent::ServicesAdvertisement {
-                            address: properties.address,
+                            id: shared.uuid.into(),
                             services,
                         });
                     }
@@ -169,10 +178,12 @@ impl Debug for Peripheral {
 
 #[async_trait]
 impl api::Peripheral for Peripheral {
+    fn id(&self) -> PeripheralId {
+        PeripheralId(self.shared.uuid)
+    }
+
     fn address(&self) -> BDAddr {
-        // TODO: look at moving/copying address out of properties so we don't have to
-        // take a lock here! (the address for the peripheral won't ever change)
-        self.shared.properties.lock().unwrap().address
+        BDAddr::default()
     }
 
     async fn properties(&self) -> Result<Option<PeripheralProperties>> {
@@ -215,11 +226,9 @@ impl api::Peripheral for Peripheral {
         match fut.await {
             CoreBluetoothReply::Connected(services) => {
                 *(self.shared.services.lock().unwrap()) = services;
-                self.shared.manager.emit(CentralEvent::DeviceConnected(
-                    // TODO: look at moving/copying address out of properties so we don't have to
-                    // take a lock here! (the address for the peripheral won't ever change)
-                    self.shared.properties.lock().unwrap().address,
-                ));
+                self.shared
+                    .manager
+                    .emit(CentralEvent::DeviceConnected(self.shared.uuid.into()));
             }
             _ => panic!("Shouldn't get anything but connected!"),
         }
@@ -334,6 +343,12 @@ impl api::Peripheral for Peripheral {
     async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
         let receiver = self.shared.notifications_channel.subscribe();
         Ok(notifications_stream_from_broadcast_receiver(receiver))
+    }
+}
+
+impl From<Uuid> for PeripheralId {
+    fn from(uuid: Uuid) -> Self {
+        PeripheralId(uuid)
     }
 }
 

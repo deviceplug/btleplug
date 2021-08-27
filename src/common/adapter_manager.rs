@@ -11,7 +11,8 @@
 // following copyright:
 //
 // Copyright (c) 2014 The Rust Project Developers
-use crate::api::{BDAddr, CentralEvent, Peripheral};
+use crate::api::{CentralEvent, Peripheral};
+use crate::platform::PeripheralId;
 use dashmap::{mapref::one::RefMut, DashMap};
 use futures::stream::{Stream, StreamExt};
 use log::trace;
@@ -30,7 +31,7 @@ where
 
 #[derive(Debug)]
 struct Shared<PeripheralType> {
-    peripherals: DashMap<BDAddr, PeripheralType>,
+    peripherals: DashMap<PeripheralId, PeripheralType>,
     events_channel: broadcast::Sender<CentralEvent>,
 }
 
@@ -52,8 +53,8 @@ where
 {
     pub fn emit(&self, event: CentralEvent) {
         match event {
-            CentralEvent::DeviceDisconnected(ref addr) => {
-                self.shared.peripherals.remove(addr);
+            CentralEvent::DeviceDisconnected(ref id) => {
+                self.shared.peripherals.remove(id);
             }
             _ => {}
         }
@@ -74,13 +75,12 @@ where
         }))
     }
 
-    pub fn add_peripheral(&self, addr: BDAddr, peripheral: PeripheralType) {
+    pub fn add_peripheral(&self, peripheral: PeripheralType) {
         assert!(
-            !self.shared.peripherals.contains_key(&addr),
+            !self.shared.peripherals.contains_key(&peripheral.id()),
             "Adding a peripheral that's already in the map."
         );
-        assert_eq!(peripheral.address(), addr, "Device has unexpected address."); // TODO remove addr argument
-        self.shared.peripherals.insert(addr, peripheral);
+        self.shared.peripherals.insert(peripheral.id(), peripheral);
     }
 
     pub fn peripherals(&self) -> Vec<PeripheralType> {
@@ -91,14 +91,17 @@ where
             .collect()
     }
 
-    pub fn peripheral_mut(&self, address: BDAddr) -> Option<RefMut<BDAddr, PeripheralType>> {
-        self.shared.peripherals.get_mut(&address)
+    pub fn peripheral_mut(
+        &self,
+        id: &PeripheralId,
+    ) -> Option<RefMut<PeripheralId, PeripheralType>> {
+        self.shared.peripherals.get_mut(id)
     }
 
-    pub fn peripheral(&self, address: BDAddr) -> Option<PeripheralType> {
+    pub fn peripheral(&self, id: &PeripheralId) -> Option<PeripheralType> {
         self.shared
             .peripherals
-            .get(&address)
+            .get(id)
             .map(|val| val.value().clone())
     }
 }

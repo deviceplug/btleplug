@@ -1,4 +1,4 @@
-use super::peripheral::Peripheral;
+use super::peripheral::{Peripheral, PeripheralId};
 use crate::api::{BDAddr, Central, CentralEvent};
 use crate::{Error, Result};
 use async_trait::async_trait;
@@ -37,7 +37,7 @@ impl Central for Adapter {
         let initial_events = stream::iter(
             devices
                 .into_iter()
-                .map(|device| CentralEvent::DeviceDiscovered(BDAddr::from(&device.mac_address))),
+                .map(|device| CentralEvent::DeviceDiscovered((&device.mac_address).into())),
         );
 
         let session = self.session.clone();
@@ -68,12 +68,12 @@ impl Central for Adapter {
             .collect())
     }
 
-    async fn peripheral(&self, address: BDAddr) -> Result<Peripheral> {
+    async fn peripheral(&self, id: &PeripheralId) -> Result<Peripheral> {
         let devices = self.session.get_devices().await?;
         devices
             .into_iter()
             .find_map(|device| {
-                if BDAddr::from(&device.mac_address) == address {
+                if PeripheralId::from(&device.mac_address) == *id {
                     Some(Peripheral::new(self.session.clone(), device))
                 } else {
                     None
@@ -130,7 +130,7 @@ async fn central_event(event: BluetoothEvent, session: BluetoothSession) -> Opti
         } => {
             let device = session.get_device_info(&id).await.ok()?;
             Some(CentralEvent::ManufacturerDataAdvertisement {
-                address: (&device.mac_address).into(),
+                id: (&device.mac_address).into(),
                 manufacturer_data,
             })
         }
@@ -140,7 +140,7 @@ async fn central_event(event: BluetoothEvent, session: BluetoothSession) -> Opti
         } => {
             let device = session.get_device_info(&id).await.ok()?;
             Some(CentralEvent::ServiceDataAdvertisement {
-                address: (&device.mac_address).into(),
+                id: (&device.mac_address).into(),
                 service_data,
             })
         }
@@ -150,7 +150,7 @@ async fn central_event(event: BluetoothEvent, session: BluetoothSession) -> Opti
         } => {
             let device = session.get_device_info(&id).await.ok()?;
             Some(CentralEvent::ServicesAdvertisement {
-                address: (&device.mac_address).into(),
+                id: (&device.mac_address).into(),
                 services,
             })
         }

@@ -1,5 +1,5 @@
 use super::internal::{run_corebluetooth_thread, CoreBluetoothEvent, CoreBluetoothMessage};
-use super::peripheral::Peripheral;
+use super::peripheral::{Peripheral, PeripheralId};
 use crate::api::{BDAddr, Central, CentralEvent};
 use crate::common::adapter_manager::AdapterManager;
 use crate::{Error, Result};
@@ -17,11 +17,6 @@ use tokio::task;
 pub struct Adapter {
     manager: AdapterManager<Peripheral>,
     sender: Sender<CoreBluetoothMessage>,
-}
-
-pub(crate) fn uuid_to_bdaddr(uuid: &str) -> BDAddr {
-    let b: [u8; 6] = uuid.as_bytes()[0..6].try_into().unwrap();
-    BDAddr::try_from(b).unwrap()
 }
 
 impl Adapter {
@@ -53,31 +48,24 @@ impl Adapter {
                         name,
                         event_receiver,
                     } => {
-                        // TODO Gotta change uuid into a BDAddr for now. Expand
-                        // library identifier type. :(
-                        let id = uuid_to_bdaddr(&uuid.to_string());
-                        manager_clone.add_peripheral(
-                            id,
-                            Peripheral::new(
-                                uuid,
-                                name,
-                                manager_clone.clone(),
-                                event_receiver,
-                                adapter_sender_clone.clone(),
-                            ),
-                        );
-                        manager_clone.emit(CentralEvent::DeviceDiscovered(id));
+                        manager_clone.add_peripheral(Peripheral::new(
+                            uuid,
+                            name,
+                            manager_clone.clone(),
+                            event_receiver,
+                            adapter_sender_clone.clone(),
+                        ));
+                        manager_clone.emit(CentralEvent::DeviceDiscovered(uuid.into()));
                     }
                     CoreBluetoothEvent::DeviceUpdated { uuid, name } => {
-                        let id = uuid_to_bdaddr(&uuid.to_string());
-                        if let Some(entry) = manager_clone.peripheral_mut(id) {
+                        let id = uuid.into();
+                        if let Some(entry) = manager_clone.peripheral_mut(&id) {
                             entry.value().update_name(&name);
                             manager_clone.emit(CentralEvent::DeviceUpdated(id));
                         }
                     }
                     CoreBluetoothEvent::DeviceDisconnected { uuid } => {
-                        let id = uuid_to_bdaddr(&uuid.to_string());
-                        manager_clone.emit(CentralEvent::DeviceDisconnected(id));
+                        manager_clone.emit(CentralEvent::DeviceDisconnected(uuid.into()));
                     }
                     _ => {}
                 }
@@ -119,10 +107,8 @@ impl Central for Adapter {
         Ok(self.manager.peripherals())
     }
 
-    async fn peripheral(&self, address: BDAddr) -> Result<Peripheral> {
-        self.manager
-            .peripheral(address)
-            .ok_or(Error::DeviceNotFound)
+    async fn peripheral(&self, id: &PeripheralId) -> Result<Peripheral> {
+        self.manager.peripheral(id).ok_or(Error::DeviceNotFound)
     }
 
     async fn add_peripheral(&self, _address: BDAddr) -> Result<Peripheral> {

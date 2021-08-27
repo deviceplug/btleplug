@@ -28,6 +28,10 @@ use async_trait::async_trait;
 use dashmap::DashMap;
 use futures::stream::Stream;
 use log::error;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "serde")]
+use serde_cr as serde;
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     convert::TryInto,
@@ -41,6 +45,14 @@ use uuid::Uuid;
 
 use bindings::Windows::Devices::Bluetooth::Advertisement::*;
 use bindings::Windows::Devices::Bluetooth::BluetoothAddressType;
+
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(crate = "serde_cr")
+)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct PeripheralId(BDAddr);
 
 /// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone)]
@@ -141,7 +153,7 @@ impl Peripheral {
             self.shared
                 .adapter
                 .emit(CentralEvent::ManufacturerDataAdvertisement {
-                    address: self.shared.address,
+                    id: self.shared.address.into(),
                     manufacturer_data: manufacturer_data_guard.clone(),
                 });
         }
@@ -197,7 +209,7 @@ impl Peripheral {
                 self.shared
                     .adapter
                     .emit(CentralEvent::ServiceDataAdvertisement {
-                        address: self.shared.address,
+                        id: self.shared.address.into(),
                         service_data: service_data_guard.clone(),
                     });
             }
@@ -235,7 +247,7 @@ impl Peripheral {
                 self.shared
                     .adapter
                     .emit(CentralEvent::ServicesAdvertisement {
-                        address: self.shared.address,
+                        id: self.shared.address.into(),
                         services: services_guard.iter().map(|uuid| *uuid).collect(),
                     });
             }
@@ -307,6 +319,10 @@ impl Debug for Peripheral {
 
 #[async_trait]
 impl ApiPeripheral for Peripheral {
+    fn id(&self) -> PeripheralId {
+        PeripheralId(self.shared.address)
+    }
+
     /// Returns the address of the peripheral.
     fn address(&self) -> BDAddr {
         self.shared.address
@@ -345,7 +361,7 @@ impl ApiPeripheral for Peripheral {
                     .connected
                     .store(is_connected, Ordering::Relaxed);
                 if !is_connected {
-                    adapter_clone.emit(CentralEvent::DeviceDisconnected(address));
+                    adapter_clone.emit(CentralEvent::DeviceDisconnected(address.into()));
                 }
             }),
         )
@@ -356,7 +372,7 @@ impl ApiPeripheral for Peripheral {
         *d = Some(device);
         self.shared
             .adapter
-            .emit(CentralEvent::DeviceConnected(self.shared.address));
+            .emit(CentralEvent::DeviceConnected(self.shared.address.into()));
         Ok(())
     }
 
@@ -366,7 +382,7 @@ impl ApiPeripheral for Peripheral {
         *device = None;
         self.shared
             .adapter
-            .emit(CentralEvent::DeviceDisconnected(self.shared.address));
+            .emit(CentralEvent::DeviceDisconnected(self.shared.address.into()));
         Ok(())
     }
 
@@ -481,5 +497,11 @@ impl ApiPeripheral for Peripheral {
     async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
         let receiver = self.shared.notifications_channel.subscribe();
         Ok(notifications_stream_from_broadcast_receiver(receiver))
+    }
+}
+
+impl From<BDAddr> for PeripheralId {
+    fn from(address: BDAddr) -> Self {
+        PeripheralId(address)
     }
 }

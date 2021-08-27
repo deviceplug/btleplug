@@ -11,7 +11,7 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use super::{ble::watcher::BLEWatcher, peripheral::Peripheral};
+use super::{ble::watcher::BLEWatcher, peripheral::Peripheral, peripheral::PeripheralId};
 use crate::{
     api::{BDAddr, Central, CentralEvent},
     common::adapter_manager::AdapterManager,
@@ -60,15 +60,15 @@ impl Central for Adapter {
         let manager = self.manager.clone();
         watcher.start(Box::new(move |args| {
             let bluetooth_address = args.BluetoothAddress().unwrap();
-            let address = bluetooth_address.try_into().unwrap();
-            if let Some(mut entry) = manager.peripheral_mut(address) {
+            let address: BDAddr = bluetooth_address.try_into().unwrap();
+            if let Some(mut entry) = manager.peripheral_mut(&address.into()) {
                 entry.value_mut().update_properties(args);
-                manager.emit(CentralEvent::DeviceUpdated(address));
+                manager.emit(CentralEvent::DeviceUpdated(address.into()));
             } else {
                 let peripheral = Peripheral::new(manager.clone(), address);
                 peripheral.update_properties(args);
-                manager.add_peripheral(address, peripheral);
-                manager.emit(CentralEvent::DeviceDiscovered(address));
+                manager.add_peripheral(peripheral);
+                manager.emit(CentralEvent::DeviceDiscovered(address.into()));
             }
         }))
     }
@@ -83,10 +83,8 @@ impl Central for Adapter {
         Ok(self.manager.peripherals())
     }
 
-    async fn peripheral(&self, address: BDAddr) -> Result<Peripheral> {
-        self.manager
-            .peripheral(address)
-            .ok_or(Error::DeviceNotFound)
+    async fn peripheral(&self, id: &PeripheralId) -> Result<Peripheral> {
+        self.manager.peripheral(id).ok_or(Error::DeviceNotFound)
     }
 
     async fn add_peripheral(&self, _address: BDAddr) -> Result<Peripheral> {

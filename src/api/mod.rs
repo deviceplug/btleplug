@@ -41,6 +41,8 @@ use uuid::Uuid;
 
 pub use self::bdaddr::{BDAddr, ParseBDAddrError};
 
+use crate::platform::PeripheralId;
+
 #[cfg_attr(
     feature = "serde",
     derive(Serialize, Deserialize),
@@ -193,6 +195,9 @@ pub enum WriteType {
 /// as well as functions for communication.
 #[async_trait]
 pub trait Peripheral: Send + Sync + Clone + Debug {
+    /// Returns the unique identifier of the peripheral.
+    fn id(&self) -> PeripheralId;
+
     /// Returns the MAC address of the peripheral.
     fn address(&self) -> BDAddr;
 
@@ -260,23 +265,23 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
 )]
 #[derive(Debug, Clone)]
 pub enum CentralEvent {
-    DeviceDiscovered(BDAddr),
-    DeviceUpdated(BDAddr),
-    DeviceConnected(BDAddr),
-    DeviceDisconnected(BDAddr),
+    DeviceDiscovered(PeripheralId),
+    DeviceUpdated(PeripheralId),
+    DeviceConnected(PeripheralId),
+    DeviceDisconnected(PeripheralId),
     /// Emitted when a Manufacturer Data advertisement has been received from a device
     ManufacturerDataAdvertisement {
-        address: BDAddr,
+        id: PeripheralId,
         manufacturer_data: HashMap<u16, Vec<u8>>,
     },
     /// Emitted when a Service Data advertisement has been received from a device
     ServiceDataAdvertisement {
-        address: BDAddr,
+        id: PeripheralId,
         service_data: HashMap<Uuid, Vec<u8>>,
     },
     /// Emitted when the advertised services for a device has been updated
     ServicesAdvertisement {
-        address: BDAddr,
+        id: PeripheralId,
         services: Vec<Uuid>,
     },
 }
@@ -304,7 +309,7 @@ pub trait Central: Send + Sync + Clone {
     async fn peripherals(&self) -> Result<Vec<Self::Peripheral>>;
 
     /// Returns a particular [`Peripheral`] by its address if it has been discovered.
-    async fn peripheral(&self, address: BDAddr) -> Result<Self::Peripheral>;
+    async fn peripheral(&self, id: &PeripheralId) -> Result<Self::Peripheral>;
 
     /// Add a [`Peripheral`] from a MAC address without a scan result. Not supported on all Bluetooth systems.
     async fn add_peripheral(&self, address: BDAddr) -> Result<Self::Peripheral>;

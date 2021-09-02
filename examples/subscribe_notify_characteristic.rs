@@ -89,10 +89,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             }
                         }
                         println!("Disconnecting from peripheral {:?}...", local_name);
-                        peripheral
-                            .disconnect()
-                            .await
-                            .expect("Error disconnecting from BLE peripheral");
+                        peripheral.disconnect().await?;
                     }
                 } else {
                     println!("Skipping unknown peripheral {:?}", peripheral);

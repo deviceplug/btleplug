@@ -17,6 +17,8 @@ const NOTIFY_CHARACTERISTIC_UUID: Uuid = Uuid::from_u128(0x6e400002_b534_f393_67
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    pretty_env_logger::init();
+
     let manager = Manager::new().await?;
     let adapter_list = manager.adapters().await?;
     if adapter_list.is_empty() {

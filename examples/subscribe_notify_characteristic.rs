@@ -76,7 +76,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             {
                                 println!("Subscribing to characteristic {:?}", characteristic.uuid);
                                 peripheral.subscribe(&characteristic).await?;
-                                let mut notification_stream = peripheral.notifications().await?;
+                                // Print the first 4 notifications received.
+                                let mut notification_stream =
+                                    peripheral.notifications().await?.take(4);
                                 // Process while the BLE connection is not broken or stopped.
                                 while let Some(data) = notification_stream.next().await {
                                     println!(

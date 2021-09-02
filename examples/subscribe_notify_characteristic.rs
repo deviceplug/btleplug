@@ -64,9 +64,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         "Now connected ({:?}) to peripheral {:?}.",
                         is_connected, &local_name
                     );
-                    println!("Discover peripheral {:?} services...", local_name);
-                    peripheral.discover_services().await?;
                     if is_connected {
+                        println!("Discover peripheral {:?} services...", local_name);
+                        peripheral.discover_services().await?;
                         for characteristic in peripheral.characteristics() {
                             println!("Checking characteristic {:?}", characteristic);
                             // Subscribe to notifications from the characteristic with the selected

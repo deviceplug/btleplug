@@ -5,7 +5,7 @@ use std::error::Error;
 use std::time::Duration;
 use tokio::time;
 
-use btleplug::api::{Central, Manager as _, Peripheral};
+use btleplug::api::{Central, Manager as _, Peripheral, ScanFilter};
 use btleplug::platform::Manager;
 
 #[tokio::main]
@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     for adapter in adapter_list.iter() {
         println!("Starting scan...");
         adapter
-            .start_scan()
+            .start_scan(ScanFilter::default())
             .await
             .expect("Can't scan BLE adapter for connected devices...");
         time::sleep(Duration::from_secs(10)).await;

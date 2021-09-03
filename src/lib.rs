@@ -20,7 +20,7 @@
 //! An example of how to use the library to control some BLE smart lights:
 //!
 //! ```rust,no_run
-//! use btleplug::api::{bleuuid::uuid_from_u16, Central, Manager as _, Peripheral as _, WriteType};
+//! use btleplug::api::{bleuuid::uuid_from_u16, Central, Manager as _, Peripheral as _, ScanFilter, WriteType};
 //! use btleplug::platform::{Adapter, Manager, Peripheral};
 //! use rand::{Rng, thread_rng};
 //! use std::error::Error;
@@ -40,7 +40,7 @@
 //!     let central = adapters.into_iter().nth(0).unwrap();
 //!
 //!     // start scanning for devices
-//!     central.start_scan().await?;
+//!     central.start_scan(ScanFilter::default()).await?;
 //!     // instead of waiting, you can use central.event_receiver() to fetch a channel and
 //!     // be notified of new devices
 //!     time::sleep(Duration::from_secs(2)).await;

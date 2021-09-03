@@ -1,5 +1,5 @@
 use super::peripheral::{Peripheral, PeripheralId};
-use crate::api::{BDAddr, Central, CentralEvent};
+use crate::api::{BDAddr, Central, CentralEvent, ScanFilter};
 use crate::{Error, Result};
 use async_trait::async_trait;
 use bluez_async::{
@@ -46,8 +46,9 @@ impl Central for Adapter {
         Ok(Box::pin(initial_events.chain(events)))
     }
 
-    async fn start_scan(&self) -> Result<()> {
+    async fn start_scan(&self, filter: ScanFilter) -> Result<()> {
         let filter = DiscoveryFilter {
+            service_uuids: filter.services,
             transport: Some(Transport::Auto),
             ..Default::default()
         };

@@ -180,6 +180,14 @@ pub struct PeripheralProperties {
     pub services: Vec<Uuid>,
 }
 
+/// The filter used when scanning for BLE devices.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ScanFilter {
+    /// If the filter contains at least one service UUID, only devices supporting at least one of
+    /// the given services will be available.
+    pub services: Vec<Uuid>,
+}
+
 /// The type of write operation to use.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WriteType {
@@ -299,7 +307,11 @@ pub trait Central: Send + Sync + Clone {
     /// Starts a scan for BLE devices. This scan will generally continue until explicitly stopped,
     /// although this may depend on your Bluetooth adapter. Discovered devices will be announced
     /// to subscribers of `events` and will be available via `peripherals()`.
-    async fn start_scan(&self) -> Result<()>;
+    /// The filter can be used to scan only for specific devices. While some implementations might
+    /// ignore (parts of) the filter and make additional devices available, other implementations
+    /// might require at least one filter for security reasons. Cross-platform code should provide
+    /// a filter, but must be able to handle devices, which do not fit into the filter.
+    async fn start_scan(&self, filter: ScanFilter) -> Result<()>;
 
     /// Stops scanning for BLE devices.
     async fn stop_scan(&self) -> Result<()>;

@@ -1,7 +1,7 @@
 // See the "macOS permissions note" in README.md before running this on macOS
 // Big Sur or later.
 
-use btleplug::api::{bleuuid::BleUuid, Central, CentralEvent, Manager as _};
+use btleplug::api::{bleuuid::BleUuid, Central, CentralEvent, Manager as _, ScanFilter};
 use btleplug::platform::{Adapter, Manager};
 use futures::stream::StreamExt;
 use std::error::Error;
@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut events = central.events().await?;
 
     // start scanning for devices
-    central.start_scan().await?;
+    central.start_scan(ScanFilter::default()).await?;
 
     // Print based on whatever the event receiver outputs. Note that the event
     // receiver blocks, so in a real program, this should be run in its own

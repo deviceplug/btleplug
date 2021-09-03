@@ -1,6 +1,6 @@
 use super::internal::{run_corebluetooth_thread, CoreBluetoothEvent, CoreBluetoothMessage};
 use super::peripheral::{Peripheral, PeripheralId};
-use crate::api::{BDAddr, Central, CentralEvent};
+use crate::api::{BDAddr, Central, CentralEvent, ScanFilter};
 use crate::common::adapter_manager::AdapterManager;
 use crate::{Error, Result};
 use async_trait::async_trait;
@@ -88,10 +88,10 @@ impl Central for Adapter {
         Ok(self.manager.event_stream())
     }
 
-    async fn start_scan(&self) -> Result<()> {
+    async fn start_scan(&self, filter: ScanFilter) -> Result<()> {
         self.sender
             .to_owned()
-            .send(CoreBluetoothMessage::StartScanning)
+            .send(CoreBluetoothMessage::StartScanning { filter })
             .await?;
         Ok(())
     }

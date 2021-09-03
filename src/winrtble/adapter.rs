@@ -13,7 +13,7 @@
 
 use super::{ble::watcher::BLEWatcher, peripheral::Peripheral, peripheral::PeripheralId};
 use crate::{
-    api::{BDAddr, Central, CentralEvent},
+    api::{BDAddr, Central, CentralEvent, ScanFilter},
     common::adapter_manager::AdapterManager,
     Error, Result,
 };
@@ -55,7 +55,8 @@ impl Central for Adapter {
         Ok(self.manager.event_stream())
     }
 
-    async fn start_scan(&self) -> Result<()> {
+    async fn start_scan(&self, _filter: ScanFilter) -> Result<()> {
+        // TODO: implement filter
         let watcher = self.watcher.lock().unwrap();
         let manager = self.manager.clone();
         watcher.start(Box::new(move |args| {

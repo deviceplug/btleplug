@@ -1,8 +1,7 @@
 // See the "macOS permissions note" in README.md before running this on macOS
 // Big Sur or later.
 
-use btleplug::api::CharPropFlags;
-use btleplug::api::{Central, Manager as _, Peripheral};
+use btleplug::api::{Central, CharPropFlags, Manager as _, Peripheral, ScanFilter};
 use btleplug::platform::Manager;
 use futures::stream::StreamExt;
 use std::error::Error;
@@ -26,7 +25,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     for adapter in adapter_list.iter() {
         println!("Starting scan...");
         adapter
-            .start_scan()
+            .start_scan(ScanFilter::default())
             .await
             .expect("Can't scan BLE adapter for connected devices...");
         time::sleep(Duration::from_secs(2)).await;

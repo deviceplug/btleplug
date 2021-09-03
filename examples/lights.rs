@@ -1,7 +1,9 @@
 // See the "macOS permissions note" in README.md before running this on macOS
 // Big Sur or later.
 
-use btleplug::api::{bleuuid::uuid_from_u16, Central, Manager as _, Peripheral as _, WriteType};
+use btleplug::api::{
+    bleuuid::uuid_from_u16, Central, Manager as _, Peripheral as _, ScanFilter, WriteType,
+};
 use btleplug::platform::{Adapter, Manager, Peripheral};
 use rand::{thread_rng, Rng};
 use std::error::Error;
@@ -43,7 +45,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .expect("Unable to find adapters.");
 
     // start scanning for devices
-    central.start_scan().await?;
+    central.start_scan(ScanFilter::default()).await?;
     // instead of waiting, you can use central.event_receiver() to get a channel
     // to listen for notifications on.
     time::sleep(Duration::from_secs(2)).await;

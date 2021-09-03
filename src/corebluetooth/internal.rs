@@ -17,7 +17,7 @@ use super::{
     future::{BtlePlugFuture, BtlePlugFutureStateShared},
     utils::{core_bluetooth::cbuuid_to_uuid, nsstring::nsstring_to_string, nsuuid_to_uuid},
 };
-use crate::api::{CharPropFlags, Characteristic, Service, WriteType};
+use crate::api::{CharPropFlags, Characteristic, ScanFilter, Service, WriteType};
 use crate::Error;
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::select;
@@ -258,7 +258,9 @@ impl Debug for CoreBluetoothInternal {
 
 #[derive(Debug)]
 pub enum CoreBluetoothMessage {
-    StartScanning,
+    StartScanning {
+        filter: ScanFilter,
+    },
     StopScanning,
     ConnectDevice {
         peripheral_uuid: Uuid,
@@ -762,7 +764,7 @@ impl CoreBluetoothInternal {
             adapter_msg = self.message_receiver.select_next_some() => {
                 trace!("Adapter message!");
                 match adapter_msg {
-                    CoreBluetoothMessage::StartScanning => self.start_discovery(),
+                    CoreBluetoothMessage::StartScanning{filter} => self.start_discovery(filter),
                     CoreBluetoothMessage::StopScanning => self.stop_discovery(),
                     CoreBluetoothMessage::ConnectDevice{peripheral_uuid, future} => {
                         trace!("got connectdevice msg!");
@@ -793,7 +795,7 @@ impl CoreBluetoothInternal {
         }
     }
 
-    fn start_discovery(&mut self) {
+    fn start_discovery(&mut self, _filter: ScanFilter) {
         trace!("BluetoothAdapter::start_discovery");
         let options = ns::mutabledictionary();
         // NOTE: If duplicates are not allowed then a peripheral will not show
@@ -801,6 +803,7 @@ impl CoreBluetoothInternal {
         ns::mutabledictionary_setobject_forkey(options, ns::number_withbool(YES), unsafe {
             cb::CENTRALMANAGERSCANOPTIONALLOWDUPLICATESKEY
         });
+        // TODO: set cb::CBCENTRALMANAGERSCANOPTIONSOLICITEDSERVICEUUIDSKEY with filter.services
         cb::centralmanager_scanforperipherals_options(*self.manager, options);
     }
 

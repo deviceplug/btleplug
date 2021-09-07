@@ -110,6 +110,7 @@ impl CBCharacteristic {
 pub enum CoreBluetoothReply {
     ReadResult(Vec<u8>),
     Connected(BTreeSet<Characteristic>),
+    Disconnected,
     State(CoreBluetoothState),
     Ok,
     Err(String),
@@ -477,7 +478,6 @@ impl CoreBluetoothInternal {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
                 trace!("Got written event!");
-                dbg!(&c);
                 let state = c.write_future_state.pop_back().unwrap();
                 state.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
             }
@@ -490,6 +490,15 @@ impl CoreBluetoothInternal {
             trace!("Connecting peripheral!");
             p.connected_future_state = Some(fut);
             cb::centralmanager_connectperipheral(*self.manager, *p.peripheral);
+        }
+    }
+
+    fn disconnect_peripheral(&mut self, peripheral_uuid: Uuid, fut: CoreBluetoothReplyStateShared) {
+        trace!("Trying to disconnect peripheral!");
+        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
+            trace!("Disconnecting peripheral!");
+            p.connected_future_state = Some(fut);
+            cb::centralmanager_cancelperipheralconnection(*self.manager, *p.peripheral);
         }
     }
 
@@ -642,7 +651,9 @@ impl CoreBluetoothInternal {
                         trace!("got connectdevice msg!");
                         self.connect_peripheral(peripheral_uuid, fut);
                     }
-                    CoreBluetoothMessage::DisconnectDevice(_peripheral_uuid, _fut) => {}
+                    CoreBluetoothMessage::DisconnectDevice(peripheral_uuid, fut) => {
+                        self.disconnect_peripheral(peripheral_uuid, fut);
+                    }
                     CoreBluetoothMessage::ReadValue(peripheral_uuid, char_uuid, fut) => {
                         self.read_value(peripheral_uuid, char_uuid, fut)
                     }

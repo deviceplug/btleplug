@@ -110,8 +110,17 @@ impl CBCharacteristic {
 pub enum CoreBluetoothReply {
     ReadResult(Vec<u8>),
     Connected(BTreeSet<Characteristic>),
+    State(CoreBluetoothState),
     Ok,
     Err(String),
+}
+
+#[derive(Clone, Debug)]
+pub enum CoreBluetoothState {
+    Disconnected,
+    Connecting,
+    Connected,
+    Disconnecting,
 }
 
 #[derive(Debug)]
@@ -253,6 +262,7 @@ pub enum CoreBluetoothMessage {
     Subscribe(Uuid, Uuid, CoreBluetoothReplyStateShared),
     // device uuid, characteristic uuid, future
     Unsubscribe(Uuid, Uuid, CoreBluetoothReplyStateShared),
+    State(Uuid, CoreBluetoothReplyStateShared),
 }
 
 #[derive(Debug)]
@@ -467,6 +477,7 @@ impl CoreBluetoothInternal {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Some(c) = p.characteristics.get_mut(&characteristic_uuid) {
                 trace!("Got written event!");
+                dbg!(&c);
                 let state = c.write_future_state.pop_back().unwrap();
                 state.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
             }
@@ -647,9 +658,30 @@ impl CoreBluetoothInternal {
                     }
                     CoreBluetoothMessage::Unsubscribe(peripheral_uuid, char_uuid, fut) => {
                         self.unsubscribe(peripheral_uuid, char_uuid, fut)
+                    },
+                    CoreBluetoothMessage::State(peripheral_uuid, fut) => {
+                        self.state(peripheral_uuid, fut)
                     }
                 };
             }
+        }
+    }
+
+    fn state(&mut self, peripheral_uuid: Uuid, fut: CoreBluetoothReplyStateShared) {
+        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
+            trace!("Reading status!");
+
+            let state = match cb::peripheral_state(*p.peripheral) {
+                0 => CoreBluetoothState::Disconnected,
+                1 => CoreBluetoothState::Connecting,
+                2 => CoreBluetoothState::Connected,
+                3 => CoreBluetoothState::Disconnecting,
+                _ => CoreBluetoothState::Disconnected,
+            };
+
+            fut.lock()
+                .unwrap()
+                .set_reply(CoreBluetoothReply::State(state));
         }
     }
 

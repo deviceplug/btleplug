@@ -16,7 +16,9 @@ use crate::{api::BDAddr, winrtble::utils, Error, Result};
 use bindings::Windows::Devices::Bluetooth::GenericAttributeProfile::{
     GattCharacteristic, GattCommunicationStatus, GattDeviceService, GattDeviceServicesResult,
 };
-use bindings::Windows::Devices::Bluetooth::{BluetoothConnectionStatus, BluetoothLEDevice};
+use bindings::Windows::Devices::Bluetooth::{
+    BluetoothCacheMode, BluetoothConnectionStatus, BluetoothLEDevice,
+};
 use bindings::Windows::Foundation::{EventRegistrationToken, TypedEventHandler};
 use log::{debug, trace};
 
@@ -58,17 +60,34 @@ impl BLEDevice {
         })
     }
 
-    async fn get_gatt_services(&self) -> Result<GattDeviceServicesResult> {
+    async fn get_gatt_services(
+        &self,
+        cache_mode: BluetoothCacheMode,
+    ) -> Result<GattDeviceServicesResult> {
         let winrt_error = |e| Error::Other(format!("{:?}", e).into());
-        let async_op = self.device.GetGattServicesAsync().map_err(winrt_error)?;
+        let async_op = self
+            .device
+            .GetGattServicesWithCacheModeAsync(cache_mode)
+            .map_err(winrt_error)?;
         let service_result = async_op.await.map_err(winrt_error)?;
         Ok(service_result)
     }
 
     pub async fn connect(&self) -> Result<()> {
-        let service_result = self.get_gatt_services().await?;
+        if self.is_connected().await? {
+            return Ok(());
+        }
+
+        let service_result = self.get_gatt_services(BluetoothCacheMode::Uncached).await?;
         let status = service_result.Status().map_err(|_| Error::DeviceNotFound)?;
         utils::to_error(status)
+    }
+
+    async fn is_connected(&self) -> Result<bool> {
+        let winrt_error = |e| Error::Other(format!("{:?}", e).into());
+        let status = self.device.ConnectionStatus().map_err(winrt_error)?;
+
+        Ok(status == BluetoothConnectionStatus::Connected)
     }
 
     pub async fn get_characteristics(
@@ -88,7 +107,7 @@ impl BLEDevice {
 
     pub async fn discover_services(&self) -> Result<Vec<GattDeviceService>> {
         let winrt_error = |e| Error::Other(format!("{:?}", e).into());
-        let service_result = self.get_gatt_services().await?;
+        let service_result = self.get_gatt_services(BluetoothCacheMode::Cached).await?;
         let status = service_result.Status().map_err(winrt_error)?;
         if status == GattCommunicationStatus::Success {
             // We need to convert the IVectorView to a Vec, because IVectorView is not Send and so

@@ -370,6 +370,7 @@ impl ApiPeripheral for Peripheral {
         device.connect().await?;
         let mut d = self.shared.device.lock().await;
         *d = Some(device);
+        self.shared.connected.store(true, Ordering::Relaxed);
         self.shared
             .adapter
             .emit(CentralEvent::DeviceConnected(self.shared.address.into()));

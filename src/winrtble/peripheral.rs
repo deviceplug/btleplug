@@ -27,7 +27,7 @@ use crate::{
 use async_trait::async_trait;
 use dashmap::DashMap;
 use futures::stream::Stream;
-use log::error;
+use log::{error, trace};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
@@ -45,6 +45,7 @@ use uuid::Uuid;
 
 use bindings::Windows::Devices::Bluetooth::Advertisement::*;
 use bindings::Windows::Devices::Bluetooth::BluetoothAddressType;
+use std::sync::Weak;
 
 #[cfg_attr(
     feature = "serde",
@@ -62,7 +63,7 @@ pub struct Peripheral {
 
 struct Shared {
     device: tokio::sync::Mutex<Option<BLEDevice>>,
-    adapter: AdapterManager<Peripheral>,
+    adapter: Weak<AdapterManager<Peripheral>>,
     address: BDAddr,
     connected: AtomicBool,
     ble_services: DashMap<Uuid, BLEService>,
@@ -79,7 +80,7 @@ struct Shared {
 }
 
 impl Peripheral {
-    pub(crate) fn new(adapter: AdapterManager<Self>, address: BDAddr) -> Self {
+    pub(crate) fn new(adapter: Weak<AdapterManager<Self>>, address: BDAddr) -> Self {
         let (broadcast_sender, _) = broadcast::channel(16);
         Peripheral {
             shared: Arc::new(Shared {
@@ -150,12 +151,10 @@ impl Peripheral {
                 .collect();
 
             // Emit event of newly received advertisement
-            self.shared
-                .adapter
-                .emit(CentralEvent::ManufacturerDataAdvertisement {
-                    id: self.shared.address.into(),
-                    manufacturer_data: manufacturer_data_guard.clone(),
-                });
+            self.emit_event(CentralEvent::ManufacturerDataAdvertisement {
+                id: self.shared.address.into(),
+                manufacturer_data: manufacturer_data_guard.clone(),
+            });
         }
 
         // The Windows Runtime API (as of 19041) does not directly expose Service Data as a friendly API (like Manufacturer Data above)
@@ -206,12 +205,10 @@ impl Peripheral {
                     .collect();
 
                 // Emit event of newly received advertisement
-                self.shared
-                    .adapter
-                    .emit(CentralEvent::ServiceDataAdvertisement {
-                        id: self.shared.address.into(),
-                        service_data: service_data_guard.clone(),
-                    });
+                self.emit_event(CentralEvent::ServiceDataAdvertisement {
+                    id: self.shared.address.into(),
+                    service_data: service_data_guard.clone(),
+                });
             }
         }
 
@@ -244,12 +241,10 @@ impl Peripheral {
                     services_guard.insert(utils::to_uuid(&uuid));
                 }
 
-                self.shared
-                    .adapter
-                    .emit(CentralEvent::ServicesAdvertisement {
-                        id: self.shared.address.into(),
-                        services: services_guard.iter().map(|uuid| *uuid).collect(),
-                    });
+                self.emit_event(CentralEvent::ServicesAdvertisement {
+                    id: self.shared.address.into(),
+                    services: services_guard.iter().map(|uuid| *uuid).collect(),
+                });
             }
         }
 
@@ -275,6 +270,14 @@ impl Peripheral {
         if let Ok(rssi) = args.RawSignalStrengthInDBm() {
             let mut rssi_guard = self.shared.last_rssi.write().unwrap();
             *rssi_guard = Some(rssi);
+        }
+    }
+
+    fn emit_event(&self, event: CentralEvent) {
+        if let Some(manager) = self.shared.adapter.upgrade() {
+            manager.emit(event);
+        } else {
+            trace!("Could not emit an event. AdapterManager has been dropped");
         }
     }
 }
@@ -351,17 +354,20 @@ impl ApiPeripheral for Peripheral {
     /// Ok there has been successful connection. Note that peripherals allow only one connection at
     /// a time. Operations that attempt to communicate with a device will fail until it is connected.
     async fn connect(&self) -> Result<()> {
-        let shared_clone = self.shared.clone();
+        let shared_clone = Arc::downgrade(&self.shared);
         let adapter_clone = self.shared.adapter.clone();
         let address = self.shared.address;
         let device = BLEDevice::new(
             self.shared.address,
             Box::new(move |is_connected| {
-                shared_clone
-                    .connected
-                    .store(is_connected, Ordering::Relaxed);
+                if let Some(shared) = shared_clone.upgrade() {
+                    shared.connected.store(is_connected, Ordering::Relaxed);
+                }
+
                 if !is_connected {
-                    adapter_clone.emit(CentralEvent::DeviceDisconnected(address.into()));
+                    if let Some(adapter) = adapter_clone.upgrade() {
+                        adapter.emit(CentralEvent::DeviceDisconnected(address.into()));
+                    }
                 }
             }),
         )
@@ -371,9 +377,7 @@ impl ApiPeripheral for Peripheral {
         let mut d = self.shared.device.lock().await;
         *d = Some(device);
         self.shared.connected.store(true, Ordering::Relaxed);
-        self.shared
-            .adapter
-            .emit(CentralEvent::DeviceConnected(self.shared.address.into()));
+        self.emit_event(CentralEvent::DeviceConnected(self.shared.address.into()));
         Ok(())
     }
 
@@ -381,9 +385,7 @@ impl ApiPeripheral for Peripheral {
     async fn disconnect(&self) -> Result<()> {
         let mut device = self.shared.device.lock().await;
         *device = None;
-        self.shared
-            .adapter
-            .emit(CentralEvent::DeviceDisconnected(self.shared.address.into()));
+        self.emit_event(CentralEvent::DeviceDisconnected(self.shared.address.into()));
         Ok(())
     }
 

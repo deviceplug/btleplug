@@ -28,13 +28,13 @@ use std::sync::{Arc, Mutex};
 #[derive(Clone)]
 pub struct Adapter {
     watcher: Arc<Mutex<BLEWatcher>>,
-    manager: AdapterManager<Peripheral>,
+    manager: Arc<AdapterManager<Peripheral>>,
 }
 
 impl Adapter {
     pub(crate) fn new() -> Self {
         let watcher = Arc::new(Mutex::new(BLEWatcher::new()));
-        let manager = AdapterManager::default();
+        let manager = Arc::new(AdapterManager::default());
         Adapter { watcher, manager }
     }
 }
@@ -65,7 +65,7 @@ impl Central for Adapter {
                 entry.value_mut().update_properties(args);
                 manager.emit(CentralEvent::DeviceUpdated(address.into()));
             } else {
-                let peripheral = Peripheral::new(manager.clone(), address);
+                let peripheral = Peripheral::new(Arc::downgrade(&manager), address);
                 peripheral.update_properties(args);
                 manager.add_peripheral(peripheral);
                 manager.emit(CentralEvent::DeviceDiscovered(address.into()));

@@ -17,20 +17,14 @@ use dashmap::{mapref::one::RefMut, DashMap};
 use futures::stream::{Stream, StreamExt};
 use log::trace;
 use std::pin::Pin;
-use std::sync::Arc;
 use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct AdapterManager<PeripheralType>
 where
     PeripheralType: Peripheral,
 {
-    shared: Arc<Shared<PeripheralType>>,
-}
-
-#[derive(Debug)]
-struct Shared<PeripheralType> {
     peripherals: DashMap<PeripheralId, PeripheralType>,
     events_channel: broadcast::Sender<CentralEvent>,
 }
@@ -39,10 +33,8 @@ impl<PeripheralType: Peripheral + 'static> Default for AdapterManager<Peripheral
     fn default() -> Self {
         let (broadcast_sender, _) = broadcast::channel(16);
         AdapterManager {
-            shared: Arc::new(Shared {
-                peripherals: DashMap::new(),
-                events_channel: broadcast_sender,
-            }),
+            peripherals: DashMap::new(),
+            events_channel: broadcast_sender,
         }
     }
 }
@@ -54,18 +46,18 @@ where
     pub fn emit(&self, event: CentralEvent) {
         match event {
             CentralEvent::DeviceDisconnected(ref id) => {
-                self.shared.peripherals.remove(id);
+                self.peripherals.remove(id);
             }
             _ => {}
         }
 
-        if let Err(lost) = self.shared.events_channel.send(event) {
+        if let Err(lost) = self.events_channel.send(event) {
             trace!("Lost central event, while nothing subscribed: {:?}", lost);
         }
     }
 
     pub fn event_stream(&self) -> Pin<Box<dyn Stream<Item = CentralEvent> + Send>> {
-        let receiver = self.shared.events_channel.subscribe();
+        let receiver = self.events_channel.subscribe();
         Box::pin(BroadcastStream::new(receiver).filter_map(|x| async move {
             if x.is_ok() {
                 Some(x.unwrap())
@@ -77,15 +69,14 @@ where
 
     pub fn add_peripheral(&self, peripheral: PeripheralType) {
         assert!(
-            !self.shared.peripherals.contains_key(&peripheral.id()),
+            !self.peripherals.contains_key(&peripheral.id()),
             "Adding a peripheral that's already in the map."
         );
-        self.shared.peripherals.insert(peripheral.id(), peripheral);
+        self.peripherals.insert(peripheral.id(), peripheral);
     }
 
     pub fn peripherals(&self) -> Vec<PeripheralType> {
-        self.shared
-            .peripherals
+        self.peripherals
             .iter()
             .map(|val| val.value().clone())
             .collect()
@@ -95,13 +86,10 @@ where
         &self,
         id: &PeripheralId,
     ) -> Option<RefMut<PeripheralId, PeripheralType>> {
-        self.shared.peripherals.get_mut(id)
+        self.peripherals.get_mut(id)
     }
 
     pub fn peripheral(&self, id: &PeripheralId) -> Option<PeripheralType> {
-        self.shared
-            .peripherals
-            .get(id)
-            .map(|val| val.value().clone())
+        self.peripherals.get(id).map(|val| val.value().clone())
     }
 }

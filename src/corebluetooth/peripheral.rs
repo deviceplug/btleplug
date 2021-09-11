@@ -28,6 +28,7 @@ use log::*;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde_cr as serde;
+use std::sync::Weak;
 use std::{
     collections::{BTreeSet, HashMap},
     fmt::{self, Debug, Display, Formatter},
@@ -54,7 +55,7 @@ pub struct Peripheral {
 
 struct Shared {
     notifications_channel: broadcast::Sender<ValueNotification>,
-    manager: AdapterManager<Peripheral>,
+    manager: Weak<AdapterManager<Peripheral>>,
     uuid: Uuid,
     services: Mutex<BTreeSet<Service>>,
     properties: Mutex<PeripheralProperties>,
@@ -64,12 +65,22 @@ struct Shared {
     // receiver/sender pair.
 }
 
+impl Shared {
+    fn emit_event(&self, event: CentralEvent) {
+        if let Some(manager) = self.manager.upgrade() {
+            manager.emit(event);
+        } else {
+            trace!("Could not emit an event. AdapterManager has been dropped");
+        }
+    }
+}
+
 impl Peripheral {
     // This calls tokio::task::spawn, so it must be called from the context of a Tokio Runtime.
     pub(crate) fn new(
         uuid: Uuid,
         local_name: Option<String>,
-        manager: AdapterManager<Self>,
+        manager: Weak<AdapterManager<Self>>,
         event_receiver: Receiver<CBPeripheralEvent>,
         message_sender: Sender<CoreBluetoothMessage>,
     ) -> Self {
@@ -114,18 +125,16 @@ impl Peripheral {
                         properties
                             .manufacturer_data
                             .insert(manufacturer_id, data.clone());
-                        shared
-                            .manager
-                            .emit(CentralEvent::ManufacturerDataAdvertisement {
-                                id: shared.uuid.into(),
-                                manufacturer_data: properties.manufacturer_data.clone(),
-                            });
+                        shared.emit_event(CentralEvent::ManufacturerDataAdvertisement {
+                            id: shared.uuid.into(),
+                            manufacturer_data: properties.manufacturer_data.clone(),
+                        });
                     }
                     Some(CBPeripheralEvent::ServiceData(service_data)) => {
                         let mut properties = shared.properties.lock().unwrap();
                         properties.service_data.extend(service_data.clone());
 
-                        shared.manager.emit(CentralEvent::ServiceDataAdvertisement {
+                        shared.emit_event(CentralEvent::ServiceDataAdvertisement {
                             id: shared.uuid.into(),
                             service_data,
                         });
@@ -134,7 +143,7 @@ impl Peripheral {
                         let mut properties = shared.properties.lock().unwrap();
                         properties.services = services.clone();
 
-                        shared.manager.emit(CentralEvent::ServicesAdvertisement {
+                        shared.emit_event(CentralEvent::ServicesAdvertisement {
                             id: shared.uuid.into(),
                             services,
                         });
@@ -227,8 +236,7 @@ impl api::Peripheral for Peripheral {
             CoreBluetoothReply::Connected(services) => {
                 *(self.shared.services.lock().unwrap()) = services;
                 self.shared
-                    .manager
-                    .emit(CentralEvent::DeviceConnected(self.shared.uuid.into()));
+                    .emit_event(CentralEvent::DeviceConnected(self.shared.uuid.into()));
             }
             _ => panic!("Shouldn't get anything but connected!"),
         }

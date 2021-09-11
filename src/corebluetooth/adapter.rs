@@ -10,12 +10,13 @@ use futures::stream::{Stream, StreamExt};
 use log::*;
 use std::convert::{TryFrom, TryInto};
 use std::pin::Pin;
+use std::sync::Arc;
 use tokio::task;
 
 /// Implementation of [api::Central](crate::api::Central).
 #[derive(Clone, Debug)]
 pub struct Adapter {
-    manager: AdapterManager<Peripheral>,
+    manager: Arc<AdapterManager<Peripheral>>,
     sender: Sender<CoreBluetoothMessage>,
 }
 
@@ -36,7 +37,7 @@ impl Adapter {
             ));
         }
         debug!("Adapter connected");
-        let manager = AdapterManager::default();
+        let manager = Arc::new(AdapterManager::default());
 
         let manager_clone = manager.clone();
         let adapter_sender_clone = adapter_sender.clone();
@@ -51,7 +52,7 @@ impl Adapter {
                         manager_clone.add_peripheral(Peripheral::new(
                             uuid,
                             name,
-                            manager_clone.clone(),
+                            Arc::downgrade(&manager_clone),
                             event_receiver,
                             adapter_sender_clone.clone(),
                         ));

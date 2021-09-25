@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let light = find_light(&central).await.expect("No lights found");
 
     // connect to the device
-    light.connect().await?;
+    light.connect_with_timeout(Duration::from_secs(90)).await?;
 
     // discover services and characteristics
     light.discover_services().await?;

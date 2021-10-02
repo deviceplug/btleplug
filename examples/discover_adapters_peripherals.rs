@@ -19,7 +19,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     for adapter in adapter_list.iter() {
-        println!("Starting scan...");
+        println!("Starting scan on {}...", adapter.adapter_info().await?);
         adapter
             .start_scan(ScanFilter::default())
             .await

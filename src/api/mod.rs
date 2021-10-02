@@ -325,6 +325,12 @@ pub trait Central: Send + Sync + Clone {
 
     /// Add a [`Peripheral`] from a MAC address without a scan result. Not supported on all Bluetooth systems.
     async fn add_peripheral(&self, address: BDAddr) -> Result<Self::Peripheral>;
+
+    /// Get information about the Bluetooth adapter being used, such as the model or type.
+    ///
+    /// The details of this are platform-specific andyou should not attempt to parse it, but it may
+    /// be useful for debug logs.
+    async fn adapter_info(&self) -> Result<String>;
 }
 
 /// The Manager is the entry point to the library, providing access to all the Bluetooth adapters on

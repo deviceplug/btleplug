@@ -88,6 +88,11 @@ impl Central for Adapter {
             "Can't add a Peripheral from a BDAddr".to_string(),
         ))
     }
+
+    async fn adapter_info(&self) -> Result<String> {
+        let adapter_info = self.session.get_adapter_info(&self.adapter).await?;
+        Ok(format!("{} ({})", adapter_info.id, adapter_info.modalias))
+    }
 }
 
 impl From<BluetoothError> for Error {

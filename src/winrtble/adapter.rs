@@ -93,4 +93,9 @@ impl Central for Adapter {
             "Can't add a Peripheral from a BDAddr".to_string(),
         ))
     }
+
+    async fn adapter_info(&self) -> Result<String> {
+        // TODO: Get information about the adapter.
+        Ok("WinRT".to_string())
+    }
 }

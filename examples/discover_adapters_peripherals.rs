@@ -43,8 +43,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 );
                 if !is_connected {
                     println!("Connecting to peripheral {:?}...", &local_name);
-                    if let Err(err) = peripheral.connect().await {
-                        eprintln!("Error connecting to peripheral, skipping: {}", err);
+                    if let Err(err) = peripheral
+                        .connect_with_timeout(Duration::from_secs(20))
+                        .await
+                    {
+                        eprintln!("Error connecting to peripheral, skipping: {:?}", err);
                         continue;
                     }
                 }

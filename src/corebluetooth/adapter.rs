@@ -8,7 +8,6 @@ use futures::channel::mpsc::{self, Sender};
 use futures::sink::SinkExt;
 use futures::stream::{Stream, StreamExt};
 use log::*;
-use std::convert::{TryFrom, TryInto};
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::task;

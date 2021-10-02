@@ -120,7 +120,7 @@ async fn central_event(event: BluetoothEvent, session: BluetoothSession) -> Opti
         }
         BluetoothEvent::Device {
             id,
-            event: DeviceEvent::RSSI { rssi: _ },
+            event: DeviceEvent::Rssi { rssi: _ },
         } => {
             let device = session.get_device_info(&id).await.ok()?;
             Some(CentralEvent::DeviceUpdated((&device.mac_address).into()))

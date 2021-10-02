@@ -42,7 +42,7 @@ dbus = "0.9.3"
 displaydoc = "0.2.3"
 parking_lot = "0.11.1"
 tokio = { version = "1.10.0", features = ["rt"] }
-bluez-async = "0.3.1"
+bluez-async = "0.5.0"
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 cocoa = "0.24.0"

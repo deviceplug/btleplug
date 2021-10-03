@@ -39,6 +39,7 @@ use std::{
     pin::Pin,
     sync::atomic::{AtomicBool, Ordering},
     sync::{Arc, RwLock},
+    time::Duration
 };
 use tokio::sync::broadcast;
 use uuid::Uuid;
@@ -379,6 +380,10 @@ impl ApiPeripheral for Peripheral {
         self.shared.connected.store(true, Ordering::Relaxed);
         self.emit_event(CentralEvent::DeviceConnected(self.shared.address.into()));
         Ok(())
+    }
+
+    async fn connect_with_timeout(&self, timeout: Duration) -> Result<()> {
+        Err(Error::NotConnected)
     }
 
     /// Terminates a connection to the device. This is a synchronous operation.

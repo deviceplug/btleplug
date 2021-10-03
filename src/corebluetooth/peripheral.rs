@@ -34,6 +34,7 @@ use std::{
     fmt::{self, Debug, Display, Formatter},
     pin::Pin,
     sync::{Arc, Mutex},
+    time::Duration
 };
 use tokio::sync::broadcast;
 use tokio::task;
@@ -242,6 +243,10 @@ impl api::Peripheral for Peripheral {
         }
         trace!("Device connected!");
         Ok(())
+    }
+
+    async fn connect_with_timeout(&self, timeout: Duration) -> Result<()> {
+        Err(Error::NotConnected)
     }
 
     async fn disconnect(&self) -> Result<()> {

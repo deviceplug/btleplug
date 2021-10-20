@@ -40,10 +40,9 @@ impl Central for Adapter {
                 .into_iter()
                 .filter(move |device| device.id.adapter() == adapter_id)
                 .flat_map(|device| {
-                    let id: PeripheralId = device.mac_address.into();
-                    let mut events = vec![CentralEvent::DeviceDiscovered(id.clone())];
+                    let mut events = vec![CentralEvent::DeviceDiscovered(device.id.clone().into())];
                     if device.connected {
-                        events.push(CentralEvent::DeviceConnected(id));
+                        events.push(CentralEvent::DeviceConnected(device.id.clone().into()));
                     }
                     events.into_iter()
                 }),
@@ -89,7 +88,7 @@ impl Central for Adapter {
         devices
             .into_iter()
             .find_map(|device| {
-                if PeripheralId::from(device.mac_address) == *id {
+                if device.id == id.0 {
                     Some(Peripheral::new(self.session.clone(), device))
                 } else {
                     None
@@ -128,38 +127,38 @@ async fn central_event(
         } if id.adapter() == adapter_id => match device_event {
             DeviceEvent::Discovered => {
                 let device = session.get_device_info(&id).await.ok()?;
-                Some(CentralEvent::DeviceDiscovered(device.mac_address.into()))
+                Some(CentralEvent::DeviceDiscovered(device.id.into()))
             }
             DeviceEvent::Connected { connected } => {
                 let device = session.get_device_info(&id).await.ok()?;
                 if connected {
-                    Some(CentralEvent::DeviceConnected(device.mac_address.into()))
+                    Some(CentralEvent::DeviceConnected(device.id.into()))
                 } else {
-                    Some(CentralEvent::DeviceDisconnected(device.mac_address.into()))
+                    Some(CentralEvent::DeviceDisconnected(device.id.into()))
                 }
             }
             DeviceEvent::Rssi { rssi: _ } => {
                 let device = session.get_device_info(&id).await.ok()?;
-                Some(CentralEvent::DeviceUpdated(device.mac_address.into()))
+                Some(CentralEvent::DeviceUpdated(device.id.into()))
             }
             DeviceEvent::ManufacturerData { manufacturer_data } => {
                 let device = session.get_device_info(&id).await.ok()?;
                 Some(CentralEvent::ManufacturerDataAdvertisement {
-                    id: device.mac_address.into(),
+                    id: device.id.into(),
                     manufacturer_data,
                 })
             }
             DeviceEvent::ServiceData { service_data } => {
                 let device = session.get_device_info(&id).await.ok()?;
                 Some(CentralEvent::ServiceDataAdvertisement {
-                    id: device.mac_address.into(),
+                    id: device.id.into(),
                     service_data,
                 })
             }
             DeviceEvent::Services { services } => {
                 let device = session.get_device_info(&id).await.ok()?;
                 Some(CentralEvent::ServicesAdvertisement {
-                    id: device.mac_address.into(),
+                    id: device.id.into(),
                     services,
                 })
             }

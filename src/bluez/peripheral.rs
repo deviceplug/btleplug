@@ -48,7 +48,7 @@ impl Peripheral {
         Peripheral {
             session,
             device: device.id,
-            mac_address: (&device.mac_address).into(),
+            mac_address: device.mac_address.into(),
             services: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -98,7 +98,7 @@ impl api::Peripheral for Peripheral {
     async fn properties(&self) -> Result<Option<PeripheralProperties>> {
         let device_info = self.device_info().await?;
         Ok(Some(PeripheralProperties {
-            address: (&device_info.mac_address).into(),
+            address: device_info.mac_address.into(),
             address_type: Some(device_info.address_type.into()),
             local_name: device_info.name,
             tx_power_level: device_info.tx_power,
@@ -239,15 +239,15 @@ impl From<WriteType> for bluez_async::WriteType {
     }
 }
 
-impl From<&MacAddress> for BDAddr {
-    fn from(mac_address: &MacAddress) -> Self {
-        mac_address.to_string().parse().unwrap()
+impl From<MacAddress> for BDAddr {
+    fn from(mac_address: MacAddress) -> Self {
+        <[u8; 6]>::into(mac_address.into())
     }
 }
 
-impl From<&MacAddress> for PeripheralId {
-    fn from(mac_address: &MacAddress) -> Self {
-        PeripheralId(BDAddr::from(mac_address))
+impl From<MacAddress> for PeripheralId {
+    fn from(mac_address: MacAddress) -> Self {
+        PeripheralId(mac_address.into())
     }
 }
 

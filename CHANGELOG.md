@@ -2,14 +2,33 @@
 
 ## Features
 
-- Added Received Signal Strength Indicator (RSSI) peripheral property
+- Added Received Signal Strength Indicator (RSSI) peripheral property.
 - Peripheral `notifications()` streams can now be queried before any
   connection and remain valid independent of any re-connections.
+- Characteristics are now grouped by service, and infomation about services is available. The old
+  API to access characteristics without specifying a service UUIDs is retained for backwards
+  compatibility.
+- Better logging and other minor improvements in examples.
+- Added method to get adapter information. For now it only works on Linux.
 
 ## Breaking changes
 
 - Removed `CentralEvent::DeviceLost`. It wasn't emitted anywhere.
-- Changed tx_power_level type from i8 to i16
+- Changed tx_power_level type from i8 to i16.
+- Removed `PeripheralProperties::discovery_count`.
+- New `PeripheralId` type is used as an opaque ID for peripherals, as the MAC address is not
+  available on all platforms.
+- Added optional `ScanFilter` parameter to `Central::start_scan` to filter by service UUIDs.
+
+## Bugfixes
+
+- `Peripheral::is_connected` now works on Mac OS, and works better on Windows.
+- Fixed bug on Windows where RSSI was reported as TX power.
+- Report address type on Windows.
+- Report all advertised service UUIDs on Windows, rather than only those in the most recent
+  advertisement.
+- Fixed bug with service caching on Windows.
+- Fixed bug with concurrent streams not working on Linux.
 
 # 0.8.1 (2021-08-14)
 

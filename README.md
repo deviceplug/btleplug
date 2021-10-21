@@ -88,29 +88,29 @@ Privacy_ → _Privacy_ → _Bluetooth_, clicking the '+' button, and selecting
 - O: In development
 - Blank: Not started
 
-| Feature                               | Windows | MacOS | Linux                                                 |
-| ------------------------------------- | ------- | ----- | ----------------------------------------------------- |
-| Bring Up Adapter                      | X       | X     | X                                                     |
-| Handle Multiple Adapters              |         |       | X                                                     |
-| Discover Devices                      | X       | X     | X                                                     |
-| └ Discover Services                   |         |       | [O](https://github.com/deviceplug/btleplug/issues/11) |
-| └ Discover Characteristics            | X       | X     | X                                                     |
-| └ Discover Descriptors                |         |       |                                                       |
-| └ Discover Name                       | X       | X     | X                                                     |
-| └ Discover Manufacturer Data          | X       | X     | X                                                     |
-| └ Discover Service Data               | X       | X     | X                                                     |
-| └ Discover MAC address                | X       |       | X                                                     |
-| GATT Server Connect                   | X       | X     | X                                                     |
-| GATT Server Connect Event             | X       | X     | X                                                     |
-| GATT Server Disconnect                | X       | X     | X                                                     |
-| GATT Server Disconnect Event          | X       | X     | X                                                     |
-| Write to Characteristic               | X       | X     | X                                                     |
-| Read from Characteristic              | X       | X     | X                                                     |
-| Subscribe to Characteristic           | X       | X     | X                                                     |
-| Unsubscribe from Characteristic       | X       | X     | X                                                     |
-| Get Characteristic Notification Event | X       | X     | X                                                     |
-| Read Descriptor                       |         |       |                                                       |
-| Write Descriptor                      |         |       |                                                       |
+| Feature                               | Windows | MacOS | Linux |
+| ------------------------------------- | ------- | ----- | ----- |
+| Bring Up Adapter                      | X       | X     | X     |
+| Handle Multiple Adapters              |         |       | X     |
+| Discover Devices                      | X       | X     | X     |
+| └ Discover Services                   | X       | X     | X     |
+| └ Discover Characteristics            | X       | X     | X     |
+| └ Discover Descriptors                |         |       |       |
+| └ Discover Name                       | X       | X     | X     |
+| └ Discover Manufacturer Data          | X       | X     | X     |
+| └ Discover Service Data               | X       | X     | X     |
+| └ Discover MAC address                | X       |       | X     |
+| GATT Server Connect                   | X       | X     | X     |
+| GATT Server Connect Event             | X       | X     | X     |
+| GATT Server Disconnect                | X       | X     | X     |
+| GATT Server Disconnect Event          | X       | X     | X     |
+| Write to Characteristic               | X       | X     | X     |
+| Read from Characteristic              | X       | X     | X     |
+| Subscribe to Characteristic           | X       | X     | X     |
+| Unsubscribe from Characteristic       | X       | X     | X     |
+| Get Characteristic Notification Event | X       | X     | X     |
+| Read Descriptor                       |         |       |       |
+| Write Descriptor                      |         |       |       |
 
 ## Library Features
 

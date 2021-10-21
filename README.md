@@ -72,11 +72,6 @@ Beyond that, some of our other goals are:
   - Please hold off on filing more issues until base implementation is
     landed.
 
-### Linux Device Discovery Cavaet
-
-Note that using Event Based Discovery on Bluez (Linux) can cause very odd issues with service
-discovery, timeouts, and general weirdness. See [Issue 165](https://github.com/deviceplug/btleplug/issues/165) for more info, but for now it's recommended to use polling on linux (as seen in the `subscribe_notify_characteristic` example) instead of event driven device discovery (as seen in the `event_driven_discovery` example).
-
 ### macOS permissions note
 
 To use Bluetooth on macOS Big Sur (11) or later, you need to either package your

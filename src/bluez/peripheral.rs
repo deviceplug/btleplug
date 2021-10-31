@@ -241,7 +241,8 @@ impl From<WriteType> for bluez_async::WriteType {
 
 impl From<&MacAddress> for BDAddr {
     fn from(mac_address: &MacAddress) -> Self {
-        mac_address.to_string().parse().unwrap()
+        let bytes: [u8; 6] = (*mac_address).into();
+        bytes.into()
     }
 }
 

@@ -50,11 +50,7 @@ objc = "0.2.7"
 libc = "0.2.99"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-tokio = { version = "1.10.0", features = ["rt", "sync"] }
-windows = "0.18.0"
-
-[target.'cfg(target_os = "windows")'.build-dependencies]
-windows = "0.18.0"
+windows = { version = "0.28.0", features = ["std", "Devices_Bluetooth", "Devices_Bluetooth_GenericAttributeProfile", "Devices_Bluetooth_Advertisement", "Devices_Radios", "Foundation_Collections", "Foundation", "Storage_Streams"] }
 
 [dev-dependencies]
 rand = "0.8.4"

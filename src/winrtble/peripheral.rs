@@ -12,7 +12,7 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use super::{
-    advertisement_data_type, bindings, ble::characteristic::BLECharacteristic,
+    advertisement_data_type, ble::characteristic::BLECharacteristic,
     ble::device::BLEDevice, ble::service::BLEService, utils,
 };
 use crate::{
@@ -43,8 +43,7 @@ use std::{
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
-use bindings::Windows::Devices::Bluetooth::Advertisement::*;
-use bindings::Windows::Devices::Bluetooth::BluetoothAddressType;
+use windows::Devices::Bluetooth::{Advertisement::*, BluetoothAddressType};
 use std::sync::Weak;
 
 #[cfg_attr(

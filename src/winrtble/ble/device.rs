@@ -11,15 +11,14 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use super::super::bindings;
 use crate::{api::BDAddr, winrtble::utils, Error, Result};
-use bindings::Windows::Devices::Bluetooth::GenericAttributeProfile::{
+use windows::{Devices::Bluetooth::{GenericAttributeProfile::{
     GattCharacteristic, GattCommunicationStatus, GattDeviceService, GattDeviceServicesResult,
-};
-use bindings::Windows::Devices::Bluetooth::{
+    },
     BluetoothCacheMode, BluetoothConnectionStatus, BluetoothLEDevice,
+    },
+    Foundation::{EventRegistrationToken, TypedEventHandler}
 };
-use bindings::Windows::Foundation::{EventRegistrationToken, TypedEventHandler};
 use log::{debug, trace};
 
 pub type ConnectedEventHandler = Box<dyn Fn(bool) + Send>;
@@ -92,7 +91,7 @@ impl BLEDevice {
 
     pub async fn get_characteristics(
         service: &GattDeviceService,
-    ) -> std::result::Result<Vec<GattCharacteristic>, windows::Error> {
+    ) -> std::result::Result<Vec<GattCharacteristic>, windows::core::Error> {
         let async_result = service.GetCharacteristicsAsync()?.await?;
         let status = async_result.Status();
         if status == Ok(GattCommunicationStatus::Success) {

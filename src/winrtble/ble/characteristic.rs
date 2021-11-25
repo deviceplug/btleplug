@@ -11,21 +11,22 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use super::super::bindings;
+use super::super::utils::to_descriptor_value;
 use crate::{
     api::{Characteristic, WriteType},
     winrtble::utils,
     Error, Result,
 };
 
-use bindings::Windows::Devices::Bluetooth::BluetoothCacheMode;
-use bindings::Windows::Devices::Bluetooth::GenericAttributeProfile::{
-    GattCharacteristic, GattCharacteristicProperties,
-    GattClientCharacteristicConfigurationDescriptorValue, GattCommunicationStatus,
-    GattValueChangedEventArgs, GattWriteOption,
+use windows::{
+    Devices::Bluetooth::{BluetoothCacheMode, GenericAttributeProfile::{
+        GattCharacteristic,
+        GattClientCharacteristicConfigurationDescriptorValue, GattCommunicationStatus,
+        GattValueChangedEventArgs, GattWriteOption,
+    }},  
+    Foundation::{EventRegistrationToken, TypedEventHandler},
+    Storage::Streams::{DataReader, DataWriter}
 };
-use bindings::Windows::Foundation::{EventRegistrationToken, TypedEventHandler};
-use bindings::Windows::Storage::Streams::{DataReader, DataWriter};
 use log::{debug, trace};
 use uuid::Uuid;
 
@@ -36,21 +37,6 @@ impl Into<GattWriteOption> for WriteType {
         match self {
             WriteType::WithoutResponse => GattWriteOption::WriteWithoutResponse,
             WriteType::WithResponse => GattWriteOption::WriteWithResponse,
-        }
-    }
-}
-
-impl From<GattCharacteristicProperties> for GattClientCharacteristicConfigurationDescriptorValue {
-    fn from(properties: GattCharacteristicProperties) -> Self {
-        let notify = GattCharacteristicProperties::Notify;
-        let indicate = GattCharacteristicProperties::Indicate;
-
-        if properties & indicate == indicate {
-            GattClientCharacteristicConfigurationDescriptorValue::Indicate
-        } else if properties & notify == notify {
-            GattClientCharacteristicConfigurationDescriptorValue::Notify
-        } else {
-            GattClientCharacteristicConfigurationDescriptorValue::None
         }
     }
 }
@@ -123,7 +109,7 @@ impl BLECharacteristic {
             let token = self.characteristic.ValueChanged(&value_handler)?;
             self.notify_token = Some(token);
         }
-        let config = self.characteristic.CharacteristicProperties()?.into();
+        let config = to_descriptor_value(self.characteristic.CharacteristicProperties()?);
         if config == GattClientCharacteristicConfigurationDescriptorValue::None {
             return Err(Error::NotSupported("Can not subscribe to attribute".into()));
         }

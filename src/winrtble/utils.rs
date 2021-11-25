@@ -11,17 +11,16 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use super::bindings;
 use crate::{api::CharPropFlags, Error, Result};
-use bindings::Windows::{
+use windows::{
     Devices::Bluetooth::GenericAttributeProfile::{
-        GattCharacteristicProperties, GattCommunicationStatus,
+        GattCharacteristicProperties, GattCommunicationStatus, GattClientCharacteristicConfigurationDescriptorValue
     },
     Storage::Streams::{DataReader, IBuffer},
 };
 use std::str::FromStr;
 use uuid::Uuid;
-use windows::Guid;
+use windows::core::GUID;
 
 pub fn to_error(status: GattCommunicationStatus) -> Result<()> {
     if status == GattCommunicationStatus::AccessDenied {
@@ -37,7 +36,19 @@ pub fn to_error(status: GattCommunicationStatus) -> Result<()> {
     }
 }
 
-pub fn to_uuid(uuid: &Guid) -> Uuid {
+pub fn to_descriptor_value(properties: GattCharacteristicProperties) -> GattClientCharacteristicConfigurationDescriptorValue {
+    let notify = GattCharacteristicProperties::Notify;
+    let indicate = GattCharacteristicProperties::Indicate;
+    if properties & indicate == indicate {
+        GattClientCharacteristicConfigurationDescriptorValue::Indicate
+    } else if properties & notify == notify {
+        GattClientCharacteristicConfigurationDescriptorValue::Notify
+    } else {
+        GattClientCharacteristicConfigurationDescriptorValue::None
+    }
+}
+
+pub fn to_uuid(uuid: &GUID) -> Uuid {
     let guid_s = format!("{:?}", uuid);
     Uuid::from_str(&guid_s).unwrap()
 }
@@ -51,9 +62,9 @@ pub fn to_vec(buffer: &IBuffer) -> Vec<u8> {
 }
 
 #[allow(dead_code)]
-pub fn to_guid(uuid: &Uuid) -> Guid {
+pub fn to_guid(uuid: &Uuid) -> GUID {
     let (data1, data2, data3, data4) = uuid.as_fields();
-    Guid::from_values(data1, data2, data3, data4.to_owned())
+    GUID::from_values(data1, data2, data3, data4.to_owned())
 }
 
 pub fn to_char_props(props: &GattCharacteristicProperties) -> CharPropFlags {
@@ -102,14 +113,14 @@ mod tests {
 
         let guid_converted = to_guid(&uuid);
 
-        let guid_expected = Guid::from(uuid_str);
+        let guid_expected = GUID::from(uuid_str);
         assert_eq!(guid_converted, guid_expected);
     }
 
     #[test]
     fn check_guid_to_uuid_conversion() {
         let uuid_str = "10B201FF-5B3B-45A1-9508-CF3EFCD7BBAF";
-        let guid = Guid::from(uuid_str);
+        let guid = GUID::from(uuid_str);
 
         let uuid_converted = to_uuid(&guid);
 

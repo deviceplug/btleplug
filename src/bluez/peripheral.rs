@@ -251,6 +251,18 @@ impl From<&MacAddress> for PeripheralId {
     }
 }
 
+impl From<BDAddr> for PeripheralId {
+    fn from(address: BDAddr) -> Self {
+        PeripheralId(address)
+    }
+}
+
+impl Into<BDAddr> for PeripheralId {
+    fn into(self) -> BDAddr {
+        self.0
+    }
+}
+
 impl From<bluez_async::AddressType> for AddressType {
     fn from(address_type: bluez_async::AddressType) -> Self {
         match address_type {

@@ -508,3 +508,9 @@ impl From<BDAddr> for PeripheralId {
         PeripheralId(address)
     }
 }
+
+impl Into<BDAddr> for PeripheralId {
+    fn into(self) -> BDAddr {
+        self.0
+    }
+}

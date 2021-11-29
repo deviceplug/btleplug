@@ -365,3 +365,16 @@ impl From<SendError> for Error {
         Error::Other("Channel closed".to_string().into())
     }
 }
+
+impl From<BDAddr> for PeripheralId {
+    fn from(address: BDAddr) -> Self {
+        PeripheralId(address)
+    }
+}
+
+impl Into<BDAddr> for PeripheralId {
+    fn into(self) -> BDAddr {
+        self.0
+    }
+}
+

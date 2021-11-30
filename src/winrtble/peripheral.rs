@@ -505,7 +505,7 @@ impl ApiPeripheral for Peripheral {
 
 impl From<BDAddr> for PeripheralId {
     fn from(address: BDAddr) -> Self {
-        PeripheralId(address)
+        Self(address)
     }
 }
 

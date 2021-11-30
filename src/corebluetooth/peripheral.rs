@@ -31,6 +31,7 @@ use serde_cr as serde;
 use std::sync::Weak;
 use std::{
     collections::{BTreeSet, HashMap},
+    convert::{TryFrom, TryInto},
     fmt::{self, Debug, Display, Formatter},
     pin::Pin,
     sync::{Arc, Mutex},
@@ -366,15 +367,24 @@ impl From<SendError> for Error {
     }
 }
 
-impl From<BDAddr> for PeripheralId {
-    fn from(address: BDAddr) -> Self {
-        PeripheralId(address)
+impl TryFrom<BDAddr> for PeripheralId {
+    type Error = crate::Error;
+
+    fn try_from(_: BDAddr) -> Result<Self> {
+        // TODO: Is there a way to convert from a BDAddr to a Uuid in osx?
+        Err(Error::InvalidBDAddr(
+            crate::ParseBDAddrError::IncorrectByteCount,
+        ))
     }
 }
 
-impl Into<BDAddr> for PeripheralId {
-    fn into(self) -> BDAddr {
-        self.0
+impl TryInto<BDAddr> for PeripheralId {
+    type Error = crate::Error;
+
+    fn try_into(self) -> Result<BDAddr> {
+        // TODO: Is there a way to convert from a Uuid to a BDAddr in osx?
+        Err(Error::InvalidBDAddr(
+            crate::ParseBDAddrError::IncorrectByteCount,
+        ))
     }
 }
-

@@ -803,7 +803,7 @@ impl CoreBluetoothInternal {
 
         //TODO: translation to string? Or a better type?
         let fstrings = filter.services.into_iter().map(|s| s.to_string()).collect();
-        let services = ns::init_with_array(fstrings);
+        let services = ns::filter_nsarray(fstrings);
         ns::mutabledictionary_setobject_forkey(options, ns::number_withbool(YES), unsafe {
             cb::CENTRALMANAGERSCANOPTIONALLOWDUPLICATESKEY
         });

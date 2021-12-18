@@ -20,6 +20,7 @@ use objc::runtime::{Class, Object, BOOL};
 use objc::{msg_send, sel, sel_impl};
 use std::os::raw::{c_char, c_int, c_uint};
 
+//TODO: cargo check told me to do this but I feel like it's not right.
 use crate::corebluetooth::utils::nsstring::str_to_nsstring;
 
 #[allow(non_upper_case_globals)]
@@ -69,7 +70,6 @@ pub mod ns {
     }
 
     pub fn string_to_cbuuid(s: *mut Object /* NSString */) -> *mut Object /* CBUUID */ {
-        println!("s to cbuuid: {:?}", s);
         unsafe {
             msg_send![Class::get("CBUUID").unwrap(), UUIDWithString:s]
         }
@@ -85,7 +85,7 @@ pub mod ns {
         unsafe { msg_send![nsarray, objectAtIndex: index] }
     }
 
-    pub fn init_with_array(arr: Vec<String>) -> *mut Object /* NSArray */ {
+    pub fn filter_nsarray(arr: Vec<String>) -> *mut Object /* NSArray */ {
         let mut s = arr.iter().map(|a| {
             string_to_cbuuid(str_to_nsstring(a))
         }).collect::<Vec<*mut Object>>();

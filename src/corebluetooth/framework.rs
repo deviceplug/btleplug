@@ -20,6 +20,8 @@ use objc::runtime::{Class, Object, BOOL};
 use objc::{msg_send, sel, sel_impl};
 use std::os::raw::{c_char, c_int, c_uint};
 
+use crate::corebluetooth::utils::nsstring::str_to_nsstring;
+
 #[allow(non_upper_case_globals)]
 pub const nil: *mut Object = 0 as *mut Object;
 
@@ -66,6 +68,13 @@ pub mod ns {
         unsafe { msg_send![nsstring, UTF8String] }
     }
 
+    pub fn string_to_cbuuid(s: *mut Object /* NSString */) -> *mut Object /* CBUUID */ {
+        println!("s to cbuuid: {:?}", s);
+        unsafe {
+            msg_send![Class::get("CBUUID").unwrap(), UUIDWithString:s]
+        }
+    }
+
     // NSArray
 
     pub fn array_count(nsarray: *mut Object) -> c_uint {
@@ -74,6 +83,19 @@ pub mod ns {
 
     pub fn array_objectatindex(nsarray: *mut Object, index: c_uint) -> *mut Object {
         unsafe { msg_send![nsarray, objectAtIndex: index] }
+    }
+
+    pub fn init_with_array(arr: Vec<String>) -> *mut Object /* NSArray */ {
+        let mut s = arr.iter().map(|a| {
+            string_to_cbuuid(str_to_nsstring(a))
+        }).collect::<Vec<*mut Object>>();
+        s.shrink_to_fit();
+        let len = s.len();
+        let ptr = s.as_mut_ptr();
+        unsafe { 
+            let nsarray: *mut Object = msg_send![Class::get("NSArray").unwrap(), alloc];
+            msg_send![nsarray, initWithObjects: ptr count: len]
+        }
     }
 
     // NSDictionary
@@ -240,9 +262,10 @@ pub mod cb {
 
     pub fn centralmanager_scanforperipherals_options(
         cbcentralmanager: *mut Object,
+        filters: *mut Object, /* NSArray<UUID> */
         options: *mut Object, /* NSDictionary<NSString*,id> */
     ) {
-        unsafe { msg_send![cbcentralmanager, scanForPeripheralsWithServices:nil options:options] }
+        unsafe { msg_send![cbcentralmanager, scanForPeripheralsWithServices:filters options:options] }
     }
 
     pub fn centralmanager_stopscan(cbcentralmanager: *mut Object) {

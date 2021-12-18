@@ -795,16 +795,20 @@ impl CoreBluetoothInternal {
         }
     }
 
-    fn start_discovery(&mut self, _filter: ScanFilter) {
+    fn start_discovery(&mut self, filter: ScanFilter) {
         trace!("BluetoothAdapter::start_discovery");
         let options = ns::mutabledictionary();
         // NOTE: If duplicates are not allowed then a peripheral will not show
         // up again once connected and then disconnected.
+
+        //TODO: translation to string? Or a better type?
+        let fstrings = filter.services.into_iter().map(|s| s.to_string()).collect();
+        let services = ns::init_with_array(fstrings);
         ns::mutabledictionary_setobject_forkey(options, ns::number_withbool(YES), unsafe {
             cb::CENTRALMANAGERSCANOPTIONALLOWDUPLICATESKEY
         });
         // TODO: set cb::CBCENTRALMANAGERSCANOPTIONSOLICITEDSERVICEUUIDSKEY with filter.services
-        cb::centralmanager_scanforperipherals_options(*self.manager, options);
+        cb::centralmanager_scanforperipherals_options(*self.manager, services, options);
     }
 
     fn stop_discovery(&mut self) {

@@ -807,6 +807,7 @@ impl CoreBluetoothInternal {
             cb::CENTRALMANAGERSCANOPTIONALLOWDUPLICATESKEY
         });
         // TODO: set cb::CBCENTRALMANAGERSCANOPTIONSOLICITEDSERVICEUUIDSKEY with filter.services
+        // TODO: behavoir when filter.services is empty? call with nil services?
         cb::centralmanager_scanforperipherals_options(*self.manager, services, options);
     }
 

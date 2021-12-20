@@ -70,9 +70,7 @@ pub mod ns {
     }
 
     pub fn string_to_cbuuid(s: *mut Object /* NSString */) -> *mut Object /* CBUUID */ {
-        unsafe {
-            msg_send![Class::get("CBUUID").unwrap(), UUIDWithString:s]
-        }
+        unsafe { msg_send![Class::get("CBUUID").unwrap(), UUIDWithString: s] }
     }
 
     // NSArray
@@ -85,14 +83,16 @@ pub mod ns {
         unsafe { msg_send![nsarray, objectAtIndex: index] }
     }
 
-    pub fn filter_nsarray(arr: Vec<String>) -> *mut Object /* NSArray */ {
-        let mut s = arr.iter().map(|a| {
-            string_to_cbuuid(str_to_nsstring(a))
-        }).collect::<Vec<*mut Object>>();
-        s.shrink_to_fit();
-        let len = s.len();
-        let ptr = s.as_mut_ptr();
-        unsafe { 
+    pub fn filter_nsarray(filters: Vec<String>) -> *mut Object /* NSArray */ {
+        let mut filter_cbuuids = filters
+            .iter()
+            .map(|a| string_to_cbuuid(str_to_nsstring(a)))
+            .collect::<Vec<*mut Object>>();
+        filter_cbuuids.shrink_to_fit();
+        let len = filter_cbuuids.len();
+        let ptr = filter_cbuuids.as_mut_ptr();
+
+        unsafe {
             let nsarray: *mut Object = msg_send![Class::get("NSArray").unwrap(), alloc];
             msg_send![nsarray, initWithObjects: ptr count: len]
         }
@@ -265,7 +265,9 @@ pub mod cb {
         filters: *mut Object, /* NSArray<UUID> */
         options: *mut Object, /* NSDictionary<NSString*,id> */
     ) {
-        unsafe { msg_send![cbcentralmanager, scanForPeripheralsWithServices:filters options:options] }
+        unsafe {
+            msg_send![cbcentralmanager, scanForPeripheralsWithServices:filters options:options]
+        }
     }
 
     pub fn centralmanager_stopscan(cbcentralmanager: *mut Object) {

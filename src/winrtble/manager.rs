@@ -14,7 +14,7 @@
 use super::adapter::Adapter;
 use crate::{api, Result};
 use async_trait::async_trait;
-use windows::Devices::{Radios::{Radio, RadioKind}};
+use windows::Devices::Radios::{Radio, RadioKind};
 
 /// Implementation of [api::Manager](crate::api::Manager).
 #[derive(Clone, Debug)]

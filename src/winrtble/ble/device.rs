@@ -12,14 +12,17 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use crate::{api::BDAddr, winrtble::utils, Error, Result};
-use windows::{Devices::Bluetooth::{GenericAttributeProfile::{
-    GattCharacteristic, GattCommunicationStatus, GattDeviceService, GattDeviceServicesResult,
-    },
-    BluetoothCacheMode, BluetoothConnectionStatus, BluetoothLEDevice,
-    },
-    Foundation::{EventRegistrationToken, TypedEventHandler}
-};
 use log::{debug, trace};
+use windows::{
+    Devices::Bluetooth::{
+        BluetoothCacheMode, BluetoothConnectionStatus, BluetoothLEDevice,
+        GenericAttributeProfile::{
+            GattCharacteristic, GattCommunicationStatus, GattDeviceService,
+            GattDeviceServicesResult,
+        },
+    },
+    Foundation::{EventRegistrationToken, TypedEventHandler},
+};
 
 pub type ConnectedEventHandler = Box<dyn Fn(bool) + Send>;
 

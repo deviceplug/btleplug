@@ -18,17 +18,19 @@ use crate::{
     Error, Result,
 };
 
-use windows::{
-    Devices::Bluetooth::{BluetoothCacheMode, GenericAttributeProfile::{
-        GattCharacteristic,
-        GattClientCharacteristicConfigurationDescriptorValue, GattCommunicationStatus,
-        GattValueChangedEventArgs, GattWriteOption,
-    }},  
-    Foundation::{EventRegistrationToken, TypedEventHandler},
-    Storage::Streams::{DataReader, DataWriter}
-};
 use log::{debug, trace};
 use uuid::Uuid;
+use windows::{
+    Devices::Bluetooth::{
+        BluetoothCacheMode,
+        GenericAttributeProfile::{
+            GattCharacteristic, GattClientCharacteristicConfigurationDescriptorValue,
+            GattCommunicationStatus, GattValueChangedEventArgs, GattWriteOption,
+        },
+    },
+    Foundation::{EventRegistrationToken, TypedEventHandler},
+    Storage::Streams::{DataReader, DataWriter},
+};
 
 pub type NotifiyEventHandler = Box<dyn Fn(Vec<u8>) + Send>;
 

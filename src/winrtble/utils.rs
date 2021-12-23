@@ -12,15 +12,16 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use crate::{api::CharPropFlags, Error, Result};
-use windows::{
-    Devices::Bluetooth::GenericAttributeProfile::{
-        GattCharacteristicProperties, GattCommunicationStatus, GattClientCharacteristicConfigurationDescriptorValue
-    },
-    Storage::Streams::{DataReader, IBuffer},
-};
 use std::str::FromStr;
 use uuid::Uuid;
 use windows::core::GUID;
+use windows::{
+    Devices::Bluetooth::GenericAttributeProfile::{
+        GattCharacteristicProperties, GattClientCharacteristicConfigurationDescriptorValue,
+        GattCommunicationStatus,
+    },
+    Storage::Streams::{DataReader, IBuffer},
+};
 
 pub fn to_error(status: GattCommunicationStatus) -> Result<()> {
     if status == GattCommunicationStatus::AccessDenied {
@@ -36,7 +37,9 @@ pub fn to_error(status: GattCommunicationStatus) -> Result<()> {
     }
 }
 
-pub fn to_descriptor_value(properties: GattCharacteristicProperties) -> GattClientCharacteristicConfigurationDescriptorValue {
+pub fn to_descriptor_value(
+    properties: GattCharacteristicProperties,
+) -> GattClientCharacteristicConfigurationDescriptorValue {
     let notify = GattCharacteristicProperties::Notify;
     let indicate = GattCharacteristicProperties::Indicate;
     if properties & indicate == indicate {

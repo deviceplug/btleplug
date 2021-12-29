@@ -16,12 +16,10 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
+use cocoa::foundation::NSUInteger;
 use objc::runtime::{Class, Object, BOOL};
 use objc::{msg_send, sel, sel_impl};
 use std::os::raw::{c_char, c_int, c_uint};
-
-//TODO: cargo check told me to do this but I feel like it's not right.
-use crate::corebluetooth::utils::nsstring::str_to_nsstring;
 
 #[allow(non_upper_case_globals)]
 pub const nil: *mut Object = 0 as *mut Object;
@@ -83,18 +81,13 @@ pub mod ns {
         unsafe { msg_send![nsarray, objectAtIndex: index] }
     }
 
-    pub fn filter_nsarray(filters: Vec<String>) -> *mut Object /* NSArray */ {
-        let mut filter_cbuuids = filters
-            .iter()
-            .map(|a| string_to_cbuuid(str_to_nsstring(a)))
-            .collect::<Vec<*mut Object>>();
-        filter_cbuuids.shrink_to_fit();
-        let len = filter_cbuuids.len();
-        let ptr = filter_cbuuids.as_mut_ptr();
-
+    pub fn arraywithobjects_count(objects: *const *mut Object, count: NSUInteger) -> *mut Object {
         unsafe {
-            let nsarray: *mut Object = msg_send![Class::get("NSArray").unwrap(), alloc];
-            msg_send![nsarray, initWithObjects: ptr count: len]
+            msg_send![
+                Class::get("NSArray").unwrap(),
+                arrayWithObjects: objects
+                count: count
+            ]
         }
     }
 
@@ -260,13 +253,13 @@ pub mod cb {
         }
     }
 
-    pub fn centralmanager_scanforperipherals_options(
+    pub fn centralmanager_scanforperipheralswithservices_options(
         cbcentralmanager: *mut Object,
-        filters: *mut Object, /* NSArray<UUID> */
-        options: *mut Object, /* NSDictionary<NSString*,id> */
+        service_uuids: *mut Object, /* NSArray<CBUUID *> */
+        options: *mut Object,       /* NSDictionary<NSString*,id> */
     ) {
         unsafe {
-            msg_send![cbcentralmanager, scanForPeripheralsWithServices:filters options:options]
+            msg_send![cbcentralmanager, scanForPeripheralsWithServices:service_uuids options:options]
         }
     }
 

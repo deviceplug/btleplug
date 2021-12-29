@@ -20,7 +20,7 @@ use objc::runtime::Object;
 use uuid::Uuid;
 
 use super::super::framework::{cb, nil, ns};
-use super::nsstring::nsstring_to_string;
+use super::nsstring::{nsstring_to_string, str_to_nsstring};
 
 /// Convert a CBUUID object to the standard Uuid type.
 pub fn cbuuid_to_uuid(cbuuid: *mut Object) -> Uuid {
@@ -37,6 +37,11 @@ pub fn cbuuid_to_uuid(cbuuid: *mut Object) -> Uuid {
     };
     let uuid_string = long.to_lowercase();
     uuid_string.parse().unwrap()
+}
+
+/// Convert a `Uuid` to a `CBUUID`.
+pub fn uuid_to_cbuuid(uuid: Uuid) -> *mut Object {
+    ns::string_to_cbuuid(str_to_nsstring(&uuid.to_string()))
 }
 
 pub fn peripheral_debug(peripheral: *mut Object) -> String {
@@ -99,5 +104,16 @@ mod tests {
             uuid,
             Uuid::from_u128(0x12345678_0000_1111_2222_333344445555)
         );
+    }
+
+    #[test]
+    fn cbuuid_roundtrip() {
+        for uuid in [
+            Uuid::from_u128(0x00001234_0000_1000_8000_00805f9b34fb),
+            Uuid::from_u128(0xabcd1234_0000_1000_8000_00805f9b34fb),
+            Uuid::from_u128(0x12345678_0000_1111_2222_333344445555),
+        ] {
+            assert_eq!(cbuuid_to_uuid(uuid_to_cbuuid(uuid)), uuid);
+        }
     }
 }

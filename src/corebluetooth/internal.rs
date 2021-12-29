@@ -12,13 +12,18 @@ use super::{
     central_delegate::{CentralDelegate, CentralDelegateEvent},
     framework::{
         cb::{self, CBManagerAuthorization, CBPeripheralState},
-        ns,
+        nil, ns,
     },
     future::{BtlePlugFuture, BtlePlugFutureStateShared},
-    utils::{core_bluetooth::cbuuid_to_uuid, nsstring::nsstring_to_string, nsuuid_to_uuid},
+    utils::{
+        core_bluetooth::{cbuuid_to_uuid, uuid_to_cbuuid},
+        nsstring::nsstring_to_string,
+        nsuuid_to_uuid,
+    },
 };
 use crate::api::{CharPropFlags, Characteristic, ScanFilter, Service, WriteType};
 use crate::Error;
+use cocoa::foundation::NSUInteger;
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::select;
 use futures::sink::SinkExt;
@@ -797,9 +802,7 @@ impl CoreBluetoothInternal {
 
     fn start_discovery(&mut self, filter: ScanFilter) {
         trace!("BluetoothAdapter::start_discovery");
-        //TODO: translation to string? Or a better type?
-        let fstrings = filter.services.into_iter().map(|s| s.to_string()).collect();
-        let services = ns::filter_nsarray(fstrings);
+        let service_uuids = scan_filter_to_service_uuids(filter);
         let options = ns::mutabledictionary();
         // NOTE: If duplicates are not allowed then a peripheral will not show
         // up again once connected and then disconnected.
@@ -807,13 +810,31 @@ impl CoreBluetoothInternal {
             cb::CENTRALMANAGERSCANOPTIONALLOWDUPLICATESKEY
         });
         // TODO: set cb::CBCENTRALMANAGERSCANOPTIONSOLICITEDSERVICEUUIDSKEY with filter.services
-        // TODO: behavoir when filter.services is empty? call with nil services?
-        cb::centralmanager_scanforperipherals_options(*self.manager, services, options);
+        cb::centralmanager_scanforperipheralswithservices_options(
+            *self.manager,
+            service_uuids,
+            options,
+        );
     }
 
     fn stop_discovery(&mut self) {
         trace!("BluetoothAdapter::stop_discovery");
         cb::centralmanager_stopscan(*self.manager);
+    }
+}
+
+/// Convert a `ScanFilter` to the appropriate `NSArray<CBUUID *> *` to use for discovery. If the
+/// filter has an empty list of services then this will return `nil`, to discover all devices.
+fn scan_filter_to_service_uuids(filter: ScanFilter) -> *mut Object {
+    if filter.services.is_empty() {
+        nil
+    } else {
+        let service_uuids = filter
+            .services
+            .into_iter()
+            .map(uuid_to_cbuuid)
+            .collect::<Vec<_>>();
+        ns::arraywithobjects_count(service_uuids.as_ptr(), service_uuids.len() as NSUInteger)
     }
 }
 

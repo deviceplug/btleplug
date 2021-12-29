@@ -67,10 +67,6 @@ pub mod ns {
         unsafe { msg_send![nsstring, UTF8String] }
     }
 
-    pub fn string_to_cbuuid(s: *mut Object /* NSString */) -> *mut Object /* CBUUID */ {
-        unsafe { msg_send![Class::get("CBUUID").unwrap(), UUIDWithString: s] }
-    }
-
     // NSArray
 
     pub fn array_count(nsarray: *mut Object) -> c_uint {
@@ -447,6 +443,10 @@ pub mod cb {
 
     pub fn uuid_uuidstring(cbuuid: *mut Object) -> *mut Object /* NSString* */ {
         unsafe { msg_send![cbuuid, UUIDString] }
+    }
+
+    pub fn uuid_uuidwithstring(s: *mut Object /* NSString */) -> *mut Object /* CBUUID */ {
+        unsafe { msg_send![Class::get("CBUUID").unwrap(), UUIDWithString: s] }
     }
 
     // CBCentralManagerScanOption...Key

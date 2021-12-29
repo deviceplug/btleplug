@@ -41,7 +41,7 @@ pub fn cbuuid_to_uuid(cbuuid: *mut Object) -> Uuid {
 
 /// Convert a `Uuid` to a `CBUUID`.
 pub fn uuid_to_cbuuid(uuid: Uuid) -> *mut Object {
-    ns::string_to_cbuuid(str_to_nsstring(&uuid.to_string()))
+    cb::uuid_uuidwithstring(str_to_nsstring(&uuid.to_string()))
 }
 
 pub fn peripheral_debug(peripheral: *mut Object) -> String {

@@ -37,7 +37,6 @@ use std::{
     collections::{BTreeSet, HashMap, VecDeque},
     fmt::{self, Debug, Formatter},
     ops::Deref,
-    os::raw::c_uint,
     thread,
 };
 use tokio::runtime;
@@ -619,7 +618,7 @@ impl CoreBluetoothInternal {
                     trace!("Writing value! With kind {:?}", kind);
                     cb::peripheral_writevalue_forcharacteristic(
                         *peripheral.peripheral,
-                        ns::data(data.as_ptr(), data.len() as c_uint),
+                        ns::data(&data),
                         *characteristic.characteristic,
                         match kind {
                             WriteType::WithResponse => 0,

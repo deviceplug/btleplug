@@ -85,8 +85,10 @@ pub mod ns {
 
     // NSData
 
-    pub fn data(bytes: *const u8, length: c_uint) -> id /* NSData* */ {
-        unsafe { msg_send![class!(NSData), dataWithBytes:bytes length:length] }
+    pub fn data(bytes: &[u8]) -> id /* NSData* */ {
+        unsafe {
+            msg_send![class!(NSData), dataWithBytes:bytes.as_ptr() length:bytes.len() as NSUInteger]
+        }
     }
 
     pub fn data_length(nsdata: id) -> c_uint {

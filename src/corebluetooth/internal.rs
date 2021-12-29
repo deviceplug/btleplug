@@ -25,7 +25,7 @@ use crate::api::{CharPropFlags, Characteristic, ScanFilter, Service, WriteType};
 use crate::Error;
 use cocoa::{
     base::{id, nil},
-    foundation::NSUInteger,
+    foundation::NSArray,
 };
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::select;
@@ -833,7 +833,7 @@ fn scan_filter_to_service_uuids(filter: ScanFilter) -> id {
             .into_iter()
             .map(uuid_to_cbuuid)
             .collect::<Vec<_>>();
-        ns::arraywithobjects_count(service_uuids.as_ptr(), service_uuids.len() as NSUInteger)
+        unsafe { NSArray::arrayWithObjects(nil, &service_uuids) }
     }
 }
 

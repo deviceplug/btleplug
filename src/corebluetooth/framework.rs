@@ -18,7 +18,7 @@
 
 use cocoa::{
     base::{id, nil},
-    foundation::NSUInteger,
+    foundation::{NSArray, NSData, NSDictionary, NSString, NSUInteger},
 };
 use objc::runtime::BOOL;
 use objc::{class, msg_send, sel, sel_impl};
@@ -35,32 +35,22 @@ pub mod ns {
 
     // NSArray
 
-    pub fn array_count(nsarray: id) -> c_uint {
-        unsafe { msg_send![nsarray, count] }
+    pub fn array_count(nsarray: impl NSArray) -> NSUInteger {
+        unsafe { nsarray.count() }
     }
 
-    pub fn array_objectatindex(nsarray: id, index: c_uint) -> id {
-        unsafe { msg_send![nsarray, objectAtIndex: index] }
-    }
-
-    pub fn arraywithobjects_count(objects: *const id, count: NSUInteger) -> id {
-        unsafe {
-            msg_send![
-                class!(NSArray),
-                arrayWithObjects: objects
-                count: count
-            ]
-        }
+    pub fn array_objectatindex(nsarray: impl NSArray, index: NSUInteger) -> id {
+        unsafe { nsarray.objectAtIndex(index) }
     }
 
     // NSDictionary
 
-    pub fn dictionary_allkeys(nsdict: id) -> id /* NSArray* */ {
-        unsafe { msg_send![nsdict, allKeys] }
+    pub fn dictionary_allkeys(nsdict: impl NSDictionary) -> id /* NSArray* */ {
+        unsafe { nsdict.allKeys() }
     }
 
-    pub fn dictionary_objectforkey(nsdict: id, key: id) -> id {
-        unsafe { msg_send![nsdict, objectForKey: key] }
+    pub fn dictionary_objectforkey(nsdict: impl NSDictionary, key: id) -> id {
+        unsafe { nsdict.objectForKey_(key) }
     }
 
     // NSMutableDictionary : NSDictionary
@@ -81,8 +71,8 @@ pub mod ns {
         }
     }
 
-    pub fn data_length(nsdata: id) -> c_uint {
-        unsafe { msg_send![nsdata, length] }
+    pub fn data_length(nsdata: impl NSData) -> NSUInteger {
+        unsafe { nsdata.length() }
     }
 
     pub fn data_bytes(nsdata: id) -> *const u8 {

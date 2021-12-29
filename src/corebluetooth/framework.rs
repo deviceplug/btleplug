@@ -33,16 +33,6 @@ pub mod ns {
         unsafe { msg_send![class!(NSNumber), numberWithBool: value] }
     }
 
-    // NSString
-
-    pub fn string(cstring: *const c_char) -> id /* NSString* */ {
-        unsafe { msg_send![class!(NSString), stringWithUTF8String: cstring] }
-    }
-
-    pub fn string_utf8string(nsstring: id) -> *const c_char {
-        unsafe { msg_send![nsstring, UTF8String] }
-    }
-
     // NSArray
 
     pub fn array_count(nsarray: id) -> c_uint {

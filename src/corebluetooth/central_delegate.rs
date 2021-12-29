@@ -20,13 +20,15 @@ use super::{
     framework::{cb, ns},
     utils::{
         core_bluetooth::{cbuuid_to_uuid, characteristic_debug, peripheral_debug, service_debug},
-        nsdata_to_vec, nsuuid_to_uuid,
+        nsdata_to_vec,
+        nsstring::nsstring_to_string,
+        nsuuid_to_uuid,
     },
 };
 use cocoa::base::{id, nil};
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::sink::SinkExt;
-use libc::{c_char, c_void};
+use libc::c_void;
 use log::{error, trace};
 use objc::{
     class,
@@ -35,7 +37,7 @@ use objc::{
     runtime::{Class, Object, Protocol, Sel},
 };
 use objc::{msg_send, sel, sel_impl};
-use std::ffi::CStr;
+use std::convert::TryInto;
 use std::{
     collections::HashMap,
     fmt::{self, Debug, Formatter},
@@ -216,8 +218,6 @@ impl Debug for CentralDelegateEvent {
 }
 
 pub mod CentralDelegate {
-    use std::convert::TryInto;
-
     use super::*;
 
     pub fn delegate() -> (id, Receiver<CentralDelegateEvent>) {
@@ -301,13 +301,8 @@ pub mod CentralDelegate {
         if error == nil {
             "".to_string()
         } else {
-            unsafe {
-                let nsstring: id = msg_send![error, localizedDescription];
-                let c_string: *const c_char = msg_send![nsstring, UTF8String];
-                let c_str: &CStr = CStr::from_ptr(c_string);
-                let str_slice: &str = c_str.to_str().unwrap();
-                str_slice.to_owned()
-            }
+            let nsstring = unsafe { msg_send![error, localizedDescription] };
+            nsstring_to_string(nsstring).unwrap_or_else(|| "".to_string())
         }
     }
 

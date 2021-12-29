@@ -76,8 +76,7 @@ pub fn characteristic_debug(characteristic: *mut Object) -> String {
 #[cfg(test)]
 mod tests {
     use super::super::nsstring::str_to_nsstring;
-    use objc::runtime::Class;
-    use objc::{msg_send, sel, sel_impl};
+    use objc::{class, msg_send, sel, sel_impl};
 
     use super::*;
 
@@ -86,7 +85,7 @@ mod tests {
         let uuid_string = "1234";
         let uuid_nsstring = str_to_nsstring(uuid_string);
         let cbuuid: *mut Object =
-            unsafe { msg_send![Class::get("CBUUID").unwrap(), UUIDWithString: uuid_nsstring] };
+            unsafe { msg_send![class!(CBUUID), UUIDWithString: uuid_nsstring] };
         let uuid = cbuuid_to_uuid(cbuuid);
         assert_eq!(
             uuid,
@@ -98,7 +97,7 @@ mod tests {
     fn parse_uuid_long() {
         let uuid_nsstring = str_to_nsstring("12345678-0000-1111-2222-333344445555");
         let cbuuid: *mut Object =
-            unsafe { msg_send![Class::get("CBUUID").unwrap(), UUIDWithString: uuid_nsstring] };
+            unsafe { msg_send![class!(CBUUID), UUIDWithString: uuid_nsstring] };
         let uuid = cbuuid_to_uuid(cbuuid);
         assert_eq!(
             uuid,

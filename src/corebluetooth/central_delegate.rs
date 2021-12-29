@@ -28,6 +28,7 @@ use futures::sink::SinkExt;
 use libc::{c_char, c_void};
 use log::{error, trace};
 use objc::{
+    class,
     declare::ClassDecl,
     rc::StrongPtr,
     runtime::{Class, Object, Protocol, Sel},
@@ -244,11 +245,7 @@ pub mod CentralDelegate {
     fn delegate_class() -> &'static Class {
         trace!("delegate_class");
         static REGISTER_DELEGATE_CLASS: Once = Once::new();
-        let mut decl = ClassDecl::new(
-            "BtlePlugCentralManagerDelegate",
-            Class::get("NSObject").unwrap(),
-        )
-        .unwrap();
+        let mut decl = ClassDecl::new("BtlePlugCentralManagerDelegate", class!(NSObject)).unwrap();
 
         REGISTER_DELEGATE_CLASS.call_once(|| {
             decl.add_protocol(Protocol::get("CBCentralManagerDelegate").unwrap());
@@ -296,7 +293,7 @@ pub mod CentralDelegate {
             decl.register();
         });
 
-        Class::get("BtlePlugCentralManagerDelegate").unwrap()
+        class!(BtlePlugCentralManagerDelegate)
     }
 
     fn localized_description(error: *mut Object) -> String {

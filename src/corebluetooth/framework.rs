@@ -17,8 +17,8 @@
 // according to those terms.
 
 use cocoa::foundation::NSUInteger;
-use objc::runtime::{Class, Object, BOOL};
-use objc::{msg_send, sel, sel_impl};
+use objc::runtime::{Object, BOOL};
+use objc::{class, msg_send, sel, sel_impl};
 use std::os::raw::{c_char, c_int, c_uint};
 
 #[allow(non_upper_case_globals)]
@@ -30,18 +30,13 @@ pub mod ns {
     // NSNumber
 
     pub fn number_withbool(value: BOOL) -> *mut Object {
-        unsafe { msg_send![Class::get("NSNumber").unwrap(), numberWithBool: value] }
+        unsafe { msg_send![class!(NSNumber), numberWithBool: value] }
     }
 
     // NSString
 
     pub fn string(cstring: *const c_char) -> *mut Object /* NSString* */ {
-        unsafe {
-            msg_send![
-                Class::get("NSString").unwrap(),
-                stringWithUTF8String: cstring
-            ]
-        }
+        unsafe { msg_send![class!(NSString), stringWithUTF8String: cstring] }
     }
 
     pub fn string_utf8string(nsstring: *mut Object) -> *const c_char {
@@ -61,7 +56,7 @@ pub mod ns {
     pub fn arraywithobjects_count(objects: *const *mut Object, count: NSUInteger) -> *mut Object {
         unsafe {
             msg_send![
-                Class::get("NSArray").unwrap(),
+                class!(NSArray),
                 arrayWithObjects: objects
                 count: count
             ]
@@ -81,7 +76,7 @@ pub mod ns {
     // NSMutableDictionary : NSDictionary
 
     pub fn mutabledictionary() -> *mut Object {
-        unsafe { msg_send![Class::get("NSMutableDictionary").unwrap(), dictionaryWithCapacity:0] }
+        unsafe { msg_send![class!(NSMutableDictionary), dictionaryWithCapacity:0] }
     }
 
     pub fn mutabledictionary_setobject_forkey(
@@ -95,7 +90,7 @@ pub mod ns {
     // NSData
 
     pub fn data(bytes: *const u8, length: c_uint) -> *mut Object /* NSData* */ {
-        unsafe { msg_send![Class::get("NSData").unwrap(), dataWithBytes:bytes length:length] }
+        unsafe { msg_send![class!(NSData), dataWithBytes:bytes length:length] }
     }
 
     pub fn data_length(nsdata: *mut Object) -> c_uint {
@@ -157,8 +152,7 @@ pub mod cb {
     {
         let label = CString::new("CBqueue").unwrap();
         unsafe {
-            let cbcentralmanager: *mut Object =
-                msg_send![Class::get("CBCentralManager").unwrap(), alloc];
+            let cbcentralmanager: *mut Object = msg_send![class!(CBCentralManager), alloc];
             let queue = dispatch_queue_create(label.as_ptr(), DISPATCH_QUEUE_SERIAL);
 
             msg_send![cbcentralmanager, initWithDelegate:delegate queue:queue]
@@ -195,7 +189,7 @@ pub mod cb {
 
     // CBManager
     pub fn manager_authorization() -> CBManagerAuthorization {
-        unsafe { msg_send![Class::get("CBManager").unwrap(), authorization] }
+        unsafe { msg_send![class!(CBManager), authorization] }
     }
 
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -362,7 +356,7 @@ pub mod cb {
     }
 
     pub fn uuid_uuidwithstring(s: *mut Object /* NSString */) -> *mut Object /* CBUUID */ {
-        unsafe { msg_send![Class::get("CBUUID").unwrap(), UUIDWithString: s] }
+        unsafe { msg_send![class!(CBUUID), UUIDWithString: s] }
     }
 
     // CBCentralManagerScanOption...Key

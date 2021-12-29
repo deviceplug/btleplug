@@ -75,8 +75,8 @@ pub fn characteristic_debug(characteristic: id) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::super::super::framework::cb::uuid_uuidwithstring;
     use super::super::nsstring::str_to_nsstring;
-    use objc::{class, msg_send, sel, sel_impl};
 
     use super::*;
 
@@ -84,7 +84,7 @@ mod tests {
     fn parse_uuid_short() {
         let uuid_string = "1234";
         let uuid_nsstring = str_to_nsstring(uuid_string);
-        let cbuuid: id = unsafe { msg_send![class!(CBUUID), UUIDWithString: uuid_nsstring] };
+        let cbuuid = uuid_uuidwithstring(uuid_nsstring);
         let uuid = cbuuid_to_uuid(cbuuid);
         assert_eq!(
             uuid,
@@ -95,7 +95,7 @@ mod tests {
     #[test]
     fn parse_uuid_long() {
         let uuid_nsstring = str_to_nsstring("12345678-0000-1111-2222-333344445555");
-        let cbuuid: id = unsafe { msg_send![class!(CBUUID), UUIDWithString: uuid_nsstring] };
+        let cbuuid = uuid_uuidwithstring(uuid_nsstring);
         let uuid = cbuuid_to_uuid(cbuuid);
         assert_eq!(
             uuid,

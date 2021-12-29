@@ -16,13 +16,13 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use cocoa::{base::id, foundation::NSUInteger};
+use cocoa::{
+    base::{id, nil},
+    foundation::NSUInteger,
+};
 use objc::runtime::BOOL;
 use objc::{class, msg_send, sel, sel_impl};
 use std::os::raw::{c_char, c_int, c_uint};
-
-#[allow(non_upper_case_globals)]
-pub const nil: id = 0 as id;
 
 pub mod ns {
     use super::*;

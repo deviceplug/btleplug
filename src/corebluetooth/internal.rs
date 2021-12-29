@@ -12,7 +12,7 @@ use super::{
     central_delegate::{CentralDelegate, CentralDelegateEvent},
     framework::{
         cb::{self, CBManagerAuthorization, CBPeripheralState},
-        nil, ns,
+        ns,
     },
     future::{BtlePlugFuture, BtlePlugFutureStateShared},
     utils::{
@@ -23,7 +23,10 @@ use super::{
 };
 use crate::api::{CharPropFlags, Characteristic, ScanFilter, Service, WriteType};
 use crate::Error;
-use cocoa::{base::id, foundation::NSUInteger};
+use cocoa::{
+    base::{id, nil},
+    foundation::NSUInteger,
+};
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::select;
 use futures::sink::SinkExt;

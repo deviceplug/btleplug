@@ -16,10 +16,10 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use cocoa::base::id;
+use cocoa::base::{id, nil};
 use uuid::Uuid;
 
-use super::super::framework::{cb, nil, ns};
+use super::super::framework::{cb, ns};
 use super::nsstring::{nsstring_to_string, str_to_nsstring};
 
 /// Convert a CBUUID object to the standard Uuid type.

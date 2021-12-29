@@ -16,10 +16,10 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use cocoa::base::id;
+use cocoa::base::{id, nil};
 use std::ffi::{CStr, CString};
 
-use super::super::framework::{nil, ns};
+use super::super::framework::ns;
 
 /// Convert the given `NSString` to a Rust `String`, or `None` if it is `nil`.
 pub fn nsstring_to_string(nsstring: id) -> Option<String> {

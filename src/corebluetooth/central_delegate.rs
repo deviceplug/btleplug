@@ -17,13 +17,13 @@
 // according to those terms.
 
 use super::{
-    framework::{cb, nil, ns},
+    framework::{cb, ns},
     utils::{
         core_bluetooth::{cbuuid_to_uuid, characteristic_debug, peripheral_debug, service_debug},
         nsdata_to_vec, nsuuid_to_uuid,
     },
 };
-use cocoa::base::id;
+use cocoa::base::{id, nil};
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::sink::SinkExt;
 use libc::{c_char, c_void};

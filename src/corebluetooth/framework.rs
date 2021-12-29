@@ -27,29 +27,10 @@ pub const nil: *mut Object = 0 as *mut Object;
 pub mod ns {
     use super::*;
 
-    // NSObject
-
-    pub fn object_copy(nsobject: *mut Object) -> *mut Object {
-        unsafe { msg_send![nsobject, copy] }
-    }
-
     // NSNumber
 
     pub fn number_withbool(value: BOOL) -> *mut Object {
         unsafe { msg_send![Class::get("NSNumber").unwrap(), numberWithBool: value] }
-    }
-
-    pub fn number_withunsignedlonglong(value: u64) -> *mut Object {
-        unsafe {
-            msg_send![
-                Class::get("NSNumber").unwrap(),
-                numberWithUnsignedLongLong: value
-            ]
-        }
-    }
-
-    pub fn number_unsignedlonglongvalue(nsnumber: *mut Object) -> u64 {
-        unsafe { msg_send![nsnumber, unsignedLongLongValue] }
     }
 
     // NSString
@@ -103,10 +84,6 @@ pub mod ns {
         unsafe { msg_send![Class::get("NSMutableDictionary").unwrap(), dictionaryWithCapacity:0] }
     }
 
-    pub fn mutabledictionary_removeobjectforkey(nsmutdict: *mut Object, key: *mut Object) {
-        unsafe { msg_send![nsmutdict, removeObjectForKey: key] }
-    }
-
     pub fn mutabledictionary_setobject_forkey(
         nsmutdict: *mut Object,
         object: *mut Object,
@@ -135,67 +112,6 @@ pub mod ns {
         unsafe {
             let uuidstring: *mut Object = msg_send![nsuuid, UUIDString];
             uuidstring
-        }
-    }
-}
-
-pub mod io {
-    use super::*;
-
-    #[link(name = "IOBluetooth", kind = "framework")]
-    extern "C" {
-        pub fn IOBluetoothPreferenceGetControllerPowerState() -> c_int;
-        pub fn IOBluetoothPreferenceSetControllerPowerState(state: c_int);
-
-        pub fn IOBluetoothPreferenceGetDiscoverableState() -> c_int;
-        pub fn IOBluetoothPreferenceSetDiscoverableState(state: c_int);
-    }
-
-    // IOBluetoothHostController
-
-    pub fn bluetoothhostcontroller_defaultcontroller() -> *mut Object /* IOBluetoothHostController* */
-    {
-        unsafe {
-            msg_send![
-                Class::get("IOBluetoothHostController").unwrap(),
-                defaultController
-            ]
-        }
-    }
-
-    pub fn bluetoothhostcontroller_nameasstring(iobthc: *mut Object) -> *mut Object /* NSString* */
-    {
-        unsafe { msg_send![iobthc, nameAsString] }
-    }
-
-    pub fn bluetoothhostcontroller_addressasstring(iobthc: *mut Object) -> *mut Object /* NSString* */
-    {
-        unsafe { msg_send![iobthc, addressAsString] }
-    }
-
-    pub fn bluetoothhostcontroller_classofdevice(iobthc: *mut Object) -> u32 {
-        unsafe { msg_send![iobthc, classOfDevice] }
-    }
-
-    // IOBluetoothPreference...
-
-    pub fn bluetoothpreferencegetcontrollerpowerstate() -> c_int {
-        unsafe { IOBluetoothPreferenceGetControllerPowerState() }
-    }
-
-    pub fn bluetoothpreferencesetcontrollerpowerstate(state: c_int) {
-        unsafe {
-            IOBluetoothPreferenceSetControllerPowerState(state);
-        }
-    }
-
-    pub fn bluetoothpreferencegetdiscoverablestate() -> c_int {
-        unsafe { IOBluetoothPreferenceGetDiscoverableState() }
-    }
-
-    pub fn bluetoothpreferencesetdiscoverablestate(state: c_int) {
-        unsafe {
-            IOBluetoothPreferenceSetDiscoverableState(state);
         }
     }
 }

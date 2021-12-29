@@ -327,7 +327,7 @@ pub mod cb {
         unsafe { msg_send![cbuuid, UUIDString] }
     }
 
-    pub fn uuid_uuidwithstring(s: id /* NSString */) -> id /* CBUUID */ {
+    pub fn uuid_uuidwithstring(s: impl NSString) -> id /* CBUUID */ {
         unsafe { msg_send![class!(CBUUID), UUIDWithString: s] }
     }
 

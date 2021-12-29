@@ -23,6 +23,7 @@ use super::{
         nsdata_to_vec, nsuuid_to_uuid,
     },
 };
+use cocoa::base::id;
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::sink::SinkExt;
 use libc::{c_char, c_void};
@@ -219,11 +220,11 @@ pub mod CentralDelegate {
 
     use super::*;
 
-    pub fn delegate() -> (*mut Object, Receiver<CentralDelegateEvent>) {
+    pub fn delegate() -> (id, Receiver<CentralDelegateEvent>) {
         let (sender, receiver) = mpsc::channel::<CentralDelegateEvent>(256);
         let sendbox = Box::new(sender);
         let delegate = unsafe {
-            let mut delegate: *mut Object = msg_send![delegate_class(), alloc];
+            let mut delegate: id = msg_send![delegate_class(), alloc];
             delegate = msg_send![
                 delegate,
                 initWithSender: Box::into_raw(sendbox) as *mut c_void
@@ -233,7 +234,7 @@ pub mod CentralDelegate {
         (delegate, receiver)
     }
 
-    pub fn delegate_drop_channel(delegate: *mut Object) {
+    pub fn delegate_drop_channel(delegate: id) {
         unsafe {
             let _ = Box::from_raw(*(&*delegate).get_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR)
                 as *mut Sender<CentralDelegateEvent>);
@@ -254,40 +255,40 @@ pub mod CentralDelegate {
             unsafe {
                 // Initialization
                 decl.add_method(sel!(initWithSender:),
-                                delegate_init as extern fn(&mut Object, Sel, *mut c_void) -> *mut Object);
+                                delegate_init as extern fn(&mut Object, Sel, *mut c_void) -> id);
 
                 // CentralManager Events
                 decl.add_method(sel!(centralManagerDidUpdateState:),
-                                delegate_centralmanagerdidupdatestate as extern fn(&mut Object, Sel, *mut Object));
+                                delegate_centralmanagerdidupdatestate as extern fn(&mut Object, Sel, id));
                 // decl.add_method(sel!(centralManager:willRestoreState:),
-                //                 delegate_centralmanager_willrestorestate as extern fn(&mut Object, Sel, *mut Object, *mut Object));
+                //                 delegate_centralmanager_willrestorestate as extern fn(&mut Object, Sel, id, id));
                 decl.add_method(sel!(centralManager:didConnectPeripheral:),
-                                delegate_centralmanager_didconnectperipheral as extern fn(&mut Object, Sel, *mut Object, *mut Object));
+                                delegate_centralmanager_didconnectperipheral as extern fn(&mut Object, Sel, id, id));
                 decl.add_method(sel!(centralManager:didDisconnectPeripheral:error:),
-                                delegate_centralmanager_diddisconnectperipheral_error as extern fn(&mut Object, Sel, *mut Object, *mut Object, *mut Object));
+                                delegate_centralmanager_diddisconnectperipheral_error as extern fn(&mut Object, Sel, id, id, id));
                 // decl.add_method(sel!(centralManager:didFailToConnectPeripheral:error:),
-                //                 delegate_centralmanager_didfailtoconnectperipheral_error as extern fn(&mut Object, Sel, *mut Object, *mut Object, *mut Object));
+                //                 delegate_centralmanager_didfailtoconnectperipheral_error as extern fn(&mut Object, Sel, id, id, id));
                 decl.add_method(sel!(centralManager:didDiscoverPeripheral:advertisementData:RSSI:),
-                                delegate_centralmanager_diddiscoverperipheral_advertisementdata_rssi as extern fn(&mut Object, Sel, *mut Object, *mut Object, *mut Object, *mut Object));
+                                delegate_centralmanager_diddiscoverperipheral_advertisementdata_rssi as extern fn(&mut Object, Sel, id, id, id, id));
 
                 // Peripheral events
                 decl.add_method(sel!(peripheral:didDiscoverServices:),
-                                delegate_peripheral_diddiscoverservices as extern fn(&mut Object, Sel, *mut Object, *mut Object));
+                                delegate_peripheral_diddiscoverservices as extern fn(&mut Object, Sel, id, id));
                 decl.add_method(sel!(peripheral:didDiscoverIncludedServicesForService:error:),
-                                delegate_peripheral_diddiscoverincludedservicesforservice_error as extern fn(&mut Object, Sel, *mut Object, *mut Object, *mut Object));
+                                delegate_peripheral_diddiscoverincludedservicesforservice_error as extern fn(&mut Object, Sel, id, id, id));
                 decl.add_method(sel!(peripheral:didDiscoverCharacteristicsForService:error:),
-                                delegate_peripheral_diddiscovercharacteristicsforservice_error as extern fn(&mut Object, Sel, *mut Object, *mut Object, *mut Object));
+                                delegate_peripheral_diddiscovercharacteristicsforservice_error as extern fn(&mut Object, Sel, id, id, id));
                 // TODO Finish implementing this.
                 // decl.add_method(sel!(peripheral:didDiscoverDescriptorsForCharacteristic:error:),
-                //                 delegate_peripheral_diddiscoverdescriptorsforcharacteristic_error as extern fn(&mut Object, Sel, *mut Object, *mut Object, *mut Object));
+                //                 delegate_peripheral_diddiscoverdescriptorsforcharacteristic_error as extern fn(&mut Object, Sel, id, id, id));
                 decl.add_method(sel!(peripheral:didUpdateValueForCharacteristic:error:),
-                                delegate_peripheral_didupdatevalueforcharacteristic_error as extern fn(&mut Object, Sel, *mut Object, *mut Object, *mut Object));
+                                delegate_peripheral_didupdatevalueforcharacteristic_error as extern fn(&mut Object, Sel, id, id, id));
                 decl.add_method(sel!(peripheral:didUpdateNotificationStateForCharacteristic:error:),
-                                delegate_peripheral_didupdatenotificationstateforcharacteristic_error as extern fn(&mut Object, Sel, *mut Object, *mut Object, *mut Object));
+                                delegate_peripheral_didupdatenotificationstateforcharacteristic_error as extern fn(&mut Object, Sel, id, id, id));
                 decl.add_method(sel!(peripheral:didWriteValueForCharacteristic:error:),
-                                delegate_peripheral_didwritevalueforcharacteristic_error as extern fn(&mut Object, Sel, *mut Object, *mut Object, *mut Object));
+                                delegate_peripheral_didwritevalueforcharacteristic_error as extern fn(&mut Object, Sel, id, id, id));
                 decl.add_method(sel!(peripheral:didReadRSSI:error:),
-                                delegate_peripheral_didreadrssi_error as extern fn(&mut Object, Sel, *mut Object, *mut Object, *mut Object));
+                                delegate_peripheral_didreadrssi_error as extern fn(&mut Object, Sel, id, id, id));
             }
 
             decl.register();
@@ -296,12 +297,12 @@ pub mod CentralDelegate {
         class!(BtlePlugCentralManagerDelegate)
     }
 
-    fn localized_description(error: *mut Object) -> String {
+    fn localized_description(error: id) -> String {
         if error == nil {
             "".to_string()
         } else {
             unsafe {
-                let nsstring: *mut Object = msg_send![error, localizedDescription];
+                let nsstring: id = msg_send![error, localizedDescription];
                 let c_string: *const c_char = msg_send![nsstring, UTF8String];
                 let c_str: &CStr = CStr::from_ptr(c_string);
                 let str_slice: &str = c_str.to_str().unwrap();
@@ -333,11 +334,7 @@ pub mod CentralDelegate {
         });
     }
 
-    extern "C" fn delegate_init(
-        delegate: &mut Object,
-        _cmd: Sel,
-        sender: *mut c_void,
-    ) -> *mut Object {
+    extern "C" fn delegate_init(delegate: &mut Object, _cmd: Sel, sender: *mut c_void) -> id {
         trace!("delegate_init");
         // TODO Should these maybe be Option<T>, so we can denote when we've
         // dropped? Not quite sure how delegate lifetime works here.
@@ -348,7 +345,7 @@ pub mod CentralDelegate {
         delegate
     }
 
-    fn get_characteristic_value(characteristic: *mut Object) -> Vec<u8> {
+    fn get_characteristic_value(characteristic: id) -> Vec<u8> {
         trace!("Getting data!");
         let value = cb::characteristic_value(characteristic);
         let v = nsdata_to_vec(value);
@@ -365,21 +362,21 @@ pub mod CentralDelegate {
     extern "C" fn delegate_centralmanagerdidupdatestate(
         delegate: &mut Object,
         _cmd: Sel,
-        _central: *mut Object,
+        _central: id,
     ) {
         trace!("delegate_centralmanagerdidupdatestate");
         send_delegate_event(delegate, CentralDelegateEvent::DidUpdateState);
     }
 
-    // extern fn delegate_centralmanager_willrestorestate(_delegate: &mut Object, _cmd: Sel, _central: *mut Object, _dict: *mut Object) {
+    // extern fn delegate_centralmanager_willrestorestate(_delegate: &mut Object, _cmd: Sel, _central: id, _dict: id) {
     //     trace!("delegate_centralmanager_willrestorestate");
     // }
 
     extern "C" fn delegate_centralmanager_didconnectperipheral(
         delegate: &mut Object,
         _cmd: Sel,
-        _central: *mut Object,
-        peripheral: *mut Object,
+        _central: id,
+        peripheral: id,
     ) {
         trace!(
             "delegate_centralmanager_didconnectperipheral {}",
@@ -397,9 +394,9 @@ pub mod CentralDelegate {
     extern "C" fn delegate_centralmanager_diddisconnectperipheral_error(
         delegate: &mut Object,
         _cmd: Sel,
-        _central: *mut Object,
-        peripheral: *mut Object,
-        _error: *mut Object,
+        _central: id,
+        peripheral: id,
+        _error: id,
     ) {
         trace!(
             "delegate_centralmanager_diddisconnectperipheral_error {}",
@@ -412,17 +409,17 @@ pub mod CentralDelegate {
         );
     }
 
-    // extern fn delegate_centralmanager_didfailtoconnectperipheral_error(_delegate: &mut Object, _cmd: Sel, _central: *mut Object, _peripheral: *mut Object, _error: *mut Object) {
+    // extern fn delegate_centralmanager_didfailtoconnectperipheral_error(_delegate: &mut Object, _cmd: Sel, _central: id, _peripheral: id, _error: id) {
     //     trace!("delegate_centralmanager_didfailtoconnectperipheral_error");
     // }
 
     extern "C" fn delegate_centralmanager_diddiscoverperipheral_advertisementdata_rssi(
         delegate: &mut Object,
         _cmd: Sel,
-        _central: *mut Object,
-        peripheral: *mut Object,
-        adv_data: *mut Object,
-        _rssi: *mut Object,
+        _central: id,
+        peripheral: id,
+        adv_data: id,
+        _rssi: id,
     ) {
         trace!(
             "delegate_centralmanager_diddiscoverperipheral_advertisementdata_rssi {}",
@@ -513,8 +510,8 @@ pub mod CentralDelegate {
     extern "C" fn delegate_peripheral_diddiscoverservices(
         delegate: &mut Object,
         _cmd: Sel,
-        peripheral: *mut Object,
-        error: *mut Object,
+        peripheral: id,
+        error: id,
     ) {
         trace!(
             "delegate_peripheral_diddiscoverservices {} {}",
@@ -554,9 +551,9 @@ pub mod CentralDelegate {
     extern "C" fn delegate_peripheral_diddiscoverincludedservicesforservice_error(
         _delegate: &mut Object,
         _cmd: Sel,
-        peripheral: *mut Object,
-        service: *mut Object,
-        error: *mut Object,
+        peripheral: id,
+        service: id,
+        error: id,
     ) {
         trace!(
             "delegate_peripheral_diddiscoverincludedservicesforservice_error {} {} {}",
@@ -576,9 +573,9 @@ pub mod CentralDelegate {
     extern "C" fn delegate_peripheral_diddiscovercharacteristicsforservice_error(
         delegate: &mut Object,
         _cmd: Sel,
-        peripheral: *mut Object,
-        service: *mut Object,
-        error: *mut Object,
+        peripheral: id,
+        service: id,
+        error: id,
     ) {
         trace!(
             "delegate_peripheral_diddiscovercharacteristicsforservice_error {} {} {}",
@@ -614,9 +611,9 @@ pub mod CentralDelegate {
     extern "C" fn delegate_peripheral_didupdatevalueforcharacteristic_error(
         delegate: &mut Object,
         _cmd: Sel,
-        peripheral: *mut Object,
-        characteristic: *mut Object,
-        error: *mut Object,
+        peripheral: id,
+        characteristic: id,
+        error: id,
     ) {
         trace!(
             "delegate_peripheral_didupdatevalueforcharacteristic_error {} {} {}",
@@ -642,9 +639,9 @@ pub mod CentralDelegate {
     extern "C" fn delegate_peripheral_didwritevalueforcharacteristic_error(
         delegate: &mut Object,
         _cmd: Sel,
-        peripheral: *mut Object,
-        characteristic: *mut Object,
-        error: *mut Object,
+        peripheral: id,
+        characteristic: id,
+        error: id,
     ) {
         trace!(
             "delegate_peripheral_didwritevalueforcharacteristic_error {} {} {}",
@@ -668,9 +665,9 @@ pub mod CentralDelegate {
     extern "C" fn delegate_peripheral_didupdatenotificationstateforcharacteristic_error(
         delegate: &mut Object,
         _cmd: Sel,
-        peripheral: *mut Object,
-        characteristic: *mut Object,
-        _error: *mut Object,
+        peripheral: id,
+        characteristic: id,
+        _error: id,
     ) {
         trace!("delegate_peripheral_didupdatenotificationstateforcharacteristic_error");
         // TODO check for error here
@@ -699,24 +696,24 @@ pub mod CentralDelegate {
         }
     }
 
-    // extern fn delegate_peripheral_diddiscoverdescriptorsforcharacteristic_error(_delegate: &mut Object, _cmd: Sel, _peripheral: *mut Object, _characteristic: *mut Object, _error: *mut Object) {
+    // extern fn delegate_peripheral_diddiscoverdescriptorsforcharacteristic_error(_delegate: &mut Object, _cmd: Sel, _peripheral: id, _characteristic: id, _error: id) {
     //     info!("delegate_peripheral_diddiscoverdescriptorsforcharacteristic_error");
     // }
 
-    // extern fn delegate_peripheral_didupdatevaluefordescriptor(_delegate: &mut Object, _cmd: Sel, _peripheral: *mut Object, _descriptor: *mut Object, _error: *mut Object) {
+    // extern fn delegate_peripheral_didupdatevaluefordescriptor(_delegate: &mut Object, _cmd: Sel, _peripheral: id, _descriptor: id, _error: id) {
     //     trace!("delegate_peripheral_didupdatevaluefordescriptor");
     // }
 
-    // extern fn delegate_peripheral_didwritevaluefordescriptor_error(_delegate: &mut Object, _cmd: Sel, _peripheral: *mut Object, _descriptor: *mut Object, _error: *mut Object) {
+    // extern fn delegate_peripheral_didwritevaluefordescriptor_error(_delegate: &mut Object, _cmd: Sel, _peripheral: id, _descriptor: id, _error: id) {
     //     trace!("delegate_peripheral_didwritevaluefordescriptor_error");
     // }
 
     extern "C" fn delegate_peripheral_didreadrssi_error(
         _delegate: &mut Object,
         _cmd: Sel,
-        peripheral: *mut Object,
-        _rssi: *mut Object,
-        error: *mut Object,
+        peripheral: id,
+        _rssi: id,
+        error: id,
     ) {
         trace!(
             "delegate_peripheral_didreadrssi_error {}",

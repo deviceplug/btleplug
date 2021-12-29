@@ -23,16 +23,13 @@ use super::{
 };
 use crate::api::{CharPropFlags, Characteristic, ScanFilter, Service, WriteType};
 use crate::Error;
-use cocoa::foundation::NSUInteger;
+use cocoa::{base::id, foundation::NSUInteger};
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::select;
 use futures::sink::SinkExt;
 use futures::stream::{Fuse, StreamExt};
 use log::{error, trace, warn};
-use objc::{
-    rc::StrongPtr,
-    runtime::{Object, YES},
-};
+use objc::{rc::StrongPtr, runtime::YES};
 use std::{
     collections::{BTreeSet, HashMap, VecDeque},
     fmt::{self, Debug, Formatter},
@@ -82,7 +79,7 @@ impl CBCharacteristic {
         }
     }
 
-    fn form_flags(characteristic: *mut Object) -> CharPropFlags {
+    fn form_flags(characteristic: id) -> CharPropFlags {
         let flags = cb::characteristic_properties(characteristic);
         let mut v = CharPropFlags::default();
         if (flags & cb::CHARACTERISTICPROPERTY_BROADCAST) != 0 {
@@ -825,7 +822,7 @@ impl CoreBluetoothInternal {
 
 /// Convert a `ScanFilter` to the appropriate `NSArray<CBUUID *> *` to use for discovery. If the
 /// filter has an empty list of services then this will return `nil`, to discover all devices.
-fn scan_filter_to_service_uuids(filter: ScanFilter) -> *mut Object {
+fn scan_filter_to_service_uuids(filter: ScanFilter) -> id {
     if filter.services.is_empty() {
         nil
     } else {

@@ -16,13 +16,13 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use objc::runtime::Object;
+use cocoa::base::id;
 use std::ffi::{CStr, CString};
 
 use super::super::framework::{nil, ns};
 
 /// Convert the given `NSString` to a Rust `String`, or `None` if it is `nil`.
-pub fn nsstring_to_string(nsstring: *mut Object) -> Option<String> {
+pub fn nsstring_to_string(nsstring: id) -> Option<String> {
     if nsstring == nil {
         return None;
     }
@@ -36,7 +36,7 @@ pub fn nsstring_to_string(nsstring: *mut Object) -> Option<String> {
 }
 
 #[allow(dead_code)]
-pub fn str_to_nsstring(string: &str) -> *mut Object {
+pub fn str_to_nsstring(string: &str) -> id {
     let cstring = CString::new(string).unwrap();
     ns::string(cstring.as_ptr())
 }

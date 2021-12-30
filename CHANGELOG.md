@@ -1,3 +1,10 @@
+# Unreleased
+
+## Bugfixes
+
+- Linux implementation will now synthesise `DeviceConnected` events at the start of the event stream
+  for all peripherals which were already connected at the point that the event stream was requested.
+
 # 0.9.0 (2021-10-20)
 
 ## Features

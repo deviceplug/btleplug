@@ -32,13 +32,16 @@ impl Central for Adapter {
         // event than to miss one. It's unlikely to happen in any case.
         let events = self.session.event_stream().await?;
 
-        // Synthesise `DeviceDiscovered' events for existing peripherals.
+        // Synthesise `DeviceDiscovered' and `DeviceConnected` events for existing peripherals.
         let devices = self.session.get_devices().await?;
-        let initial_events = stream::iter(
-            devices
-                .into_iter()
-                .map(|device| CentralEvent::DeviceDiscovered(device.mac_address.into())),
-        );
+        let initial_events = stream::iter(devices.into_iter().flat_map(|device| {
+            let id: PeripheralId = device.mac_address.into();
+            let mut events = vec![CentralEvent::DeviceDiscovered(id.clone())];
+            if device.connected {
+                events.push(CentralEvent::DeviceConnected(id));
+            }
+            events.into_iter()
+        }));
 
         let session = self.session.clone();
         let events = events.filter_map(move |event| central_event(event, session.clone()));

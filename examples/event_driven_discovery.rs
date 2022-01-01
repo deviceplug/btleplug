@@ -21,15 +21,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // connect to the adapter
     let central = get_central(&manager).await;
 
-    // Each adapter can only have one event receiver. We fetch it via
-    // event_receiver(), which will return an option. The first time the getter
-    // is called, it will return Some(Receiver<CentralEvent>). After that, it
-    // will only return None.
-    //
-    // While this API is awkward, is is done as not to disrupt the adapter
-    // retrieval system in btleplug v0.x while still allowing us to use event
-    // streams/channels instead of callbacks. In btleplug v1.x, we'll retrieve
-    // channels as part of adapter construction.
+    // Each adapter has an event stream, we fetch via events(),
+    // simplifying the type, this will return what is essentially a
+    // Future<Result<Stream<Item=CentralEvent>>>.
     let mut events = central.events().await?;
 
     // start scanning for devices

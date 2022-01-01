@@ -11,10 +11,10 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use super::{adapter::Adapter, bindings};
+use super::adapter::Adapter;
 use crate::{api, Result};
 use async_trait::async_trait;
-use bindings::Windows::Devices::Radios::{Radio, RadioKind};
+use windows::Devices::Radios::{Radio, RadioKind};
 
 /// Implementation of [api::Manager](crate::api::Manager).
 #[derive(Clone, Debug)]

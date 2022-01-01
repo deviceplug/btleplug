@@ -16,175 +16,75 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use objc::runtime::{Class, Object, BOOL};
-use objc::{msg_send, sel, sel_impl};
+use cocoa::{
+    base::{id, nil},
+    foundation::{NSArray, NSData, NSDictionary, NSString, NSUInteger},
+};
+use objc::runtime::BOOL;
+use objc::{class, msg_send, sel, sel_impl};
 use std::os::raw::{c_char, c_int, c_uint};
-
-#[allow(non_upper_case_globals)]
-pub const nil: *mut Object = 0 as *mut Object;
 
 pub mod ns {
     use super::*;
 
-    // NSObject
-
-    pub fn object_copy(nsobject: *mut Object) -> *mut Object {
-        unsafe { msg_send![nsobject, copy] }
-    }
-
     // NSNumber
 
-    pub fn number_withbool(value: BOOL) -> *mut Object {
-        unsafe { msg_send![Class::get("NSNumber").unwrap(), numberWithBool: value] }
-    }
-
-    pub fn number_withunsignedlonglong(value: u64) -> *mut Object {
-        unsafe {
-            msg_send![
-                Class::get("NSNumber").unwrap(),
-                numberWithUnsignedLongLong: value
-            ]
-        }
-    }
-
-    pub fn number_unsignedlonglongvalue(nsnumber: *mut Object) -> u64 {
-        unsafe { msg_send![nsnumber, unsignedLongLongValue] }
-    }
-
-    // NSString
-
-    pub fn string(cstring: *const c_char) -> *mut Object /* NSString* */ {
-        unsafe {
-            msg_send![
-                Class::get("NSString").unwrap(),
-                stringWithUTF8String: cstring
-            ]
-        }
-    }
-
-    pub fn string_utf8string(nsstring: *mut Object) -> *const c_char {
-        unsafe { msg_send![nsstring, UTF8String] }
+    pub fn number_withbool(value: BOOL) -> id {
+        unsafe { msg_send![class!(NSNumber), numberWithBool: value] }
     }
 
     // NSArray
 
-    pub fn array_count(nsarray: *mut Object) -> c_uint {
-        unsafe { msg_send![nsarray, count] }
+    pub fn array_count(nsarray: impl NSArray) -> NSUInteger {
+        unsafe { nsarray.count() }
     }
 
-    pub fn array_objectatindex(nsarray: *mut Object, index: c_uint) -> *mut Object {
-        unsafe { msg_send![nsarray, objectAtIndex: index] }
+    pub fn array_objectatindex(nsarray: impl NSArray, index: NSUInteger) -> id {
+        unsafe { nsarray.objectAtIndex(index) }
     }
 
     // NSDictionary
 
-    pub fn dictionary_allkeys(nsdict: *mut Object) -> *mut Object /* NSArray* */ {
-        unsafe { msg_send![nsdict, allKeys] }
+    pub fn dictionary_allkeys(nsdict: impl NSDictionary) -> id /* NSArray* */ {
+        unsafe { nsdict.allKeys() }
     }
 
-    pub fn dictionary_objectforkey(nsdict: *mut Object, key: *mut Object) -> *mut Object {
-        unsafe { msg_send![nsdict, objectForKey: key] }
+    pub fn dictionary_objectforkey(nsdict: impl NSDictionary, key: id) -> id {
+        unsafe { nsdict.objectForKey_(key) }
     }
 
     // NSMutableDictionary : NSDictionary
 
-    pub fn mutabledictionary() -> *mut Object {
-        unsafe { msg_send![Class::get("NSMutableDictionary").unwrap(), dictionaryWithCapacity:0] }
+    pub fn mutabledictionary() -> id {
+        unsafe { msg_send![class!(NSMutableDictionary), dictionaryWithCapacity:0] }
     }
 
-    pub fn mutabledictionary_removeobjectforkey(nsmutdict: *mut Object, key: *mut Object) {
-        unsafe { msg_send![nsmutdict, removeObjectForKey: key] }
-    }
-
-    pub fn mutabledictionary_setobject_forkey(
-        nsmutdict: *mut Object,
-        object: *mut Object,
-        key: *mut Object,
-    ) {
+    pub fn mutabledictionary_setobject_forkey(nsmutdict: id, object: id, key: id) {
         unsafe { msg_send![nsmutdict, setObject:object forKey:key] }
     }
 
     // NSData
 
-    pub fn data(bytes: *const u8, length: c_uint) -> *mut Object /* NSData* */ {
-        unsafe { msg_send![Class::get("NSData").unwrap(), dataWithBytes:bytes length:length] }
+    pub fn data(bytes: &[u8]) -> id /* NSData* */ {
+        unsafe {
+            msg_send![class!(NSData), dataWithBytes:bytes.as_ptr() length:bytes.len() as NSUInteger]
+        }
     }
 
-    pub fn data_length(nsdata: *mut Object) -> c_uint {
-        unsafe { msg_send![nsdata, length] }
+    pub fn data_length(nsdata: impl NSData) -> NSUInteger {
+        unsafe { nsdata.length() }
     }
 
-    pub fn data_bytes(nsdata: *mut Object) -> *const u8 {
+    pub fn data_bytes(nsdata: id) -> *const u8 {
         unsafe { msg_send![nsdata, bytes] }
     }
 
     // NSUUID
 
-    pub fn uuid_uuidstring(nsuuid: *mut Object) -> *mut Object /* NSString* */ {
+    pub fn uuid_uuidstring(nsuuid: id) -> id /* NSString* */ {
         unsafe {
-            let uuidstring: *mut Object = msg_send![nsuuid, UUIDString];
+            let uuidstring: id = msg_send![nsuuid, UUIDString];
             uuidstring
-        }
-    }
-}
-
-pub mod io {
-    use super::*;
-
-    #[link(name = "IOBluetooth", kind = "framework")]
-    extern "C" {
-        pub fn IOBluetoothPreferenceGetControllerPowerState() -> c_int;
-        pub fn IOBluetoothPreferenceSetControllerPowerState(state: c_int);
-
-        pub fn IOBluetoothPreferenceGetDiscoverableState() -> c_int;
-        pub fn IOBluetoothPreferenceSetDiscoverableState(state: c_int);
-    }
-
-    // IOBluetoothHostController
-
-    pub fn bluetoothhostcontroller_defaultcontroller() -> *mut Object /* IOBluetoothHostController* */
-    {
-        unsafe {
-            msg_send![
-                Class::get("IOBluetoothHostController").unwrap(),
-                defaultController
-            ]
-        }
-    }
-
-    pub fn bluetoothhostcontroller_nameasstring(iobthc: *mut Object) -> *mut Object /* NSString* */
-    {
-        unsafe { msg_send![iobthc, nameAsString] }
-    }
-
-    pub fn bluetoothhostcontroller_addressasstring(iobthc: *mut Object) -> *mut Object /* NSString* */
-    {
-        unsafe { msg_send![iobthc, addressAsString] }
-    }
-
-    pub fn bluetoothhostcontroller_classofdevice(iobthc: *mut Object) -> u32 {
-        unsafe { msg_send![iobthc, classOfDevice] }
-    }
-
-    // IOBluetoothPreference...
-
-    pub fn bluetoothpreferencegetcontrollerpowerstate() -> c_int {
-        unsafe { IOBluetoothPreferenceGetControllerPowerState() }
-    }
-
-    pub fn bluetoothpreferencesetcontrollerpowerstate(state: c_int) {
-        unsafe {
-            IOBluetoothPreferenceSetControllerPowerState(state);
-        }
-    }
-
-    pub fn bluetoothpreferencegetdiscoverablestate() -> c_int {
-        unsafe { IOBluetoothPreferenceGetDiscoverableState() }
-    }
-
-    pub fn bluetoothpreferencesetdiscoverablestate(state: c_int) {
-        unsafe {
-            IOBluetoothPreferenceSetDiscoverableState(state);
         }
     }
 }
@@ -216,56 +116,58 @@ pub mod cb {
 
         #[link(name = "CoreBluetooth", kind = "framework")]
         extern "C" {
-            pub static CBAdvertisementDataManufacturerDataKey: *mut Object;
-            pub static CBAdvertisementDataServiceDataKey: *mut Object;
-            pub static CBAdvertisementDataServiceUUIDsKey: *mut Object;
+            pub static CBAdvertisementDataManufacturerDataKey: id;
+            pub static CBAdvertisementDataServiceDataKey: id;
+            pub static CBAdvertisementDataServiceUUIDsKey: id;
 
-            pub static CBCentralManagerScanOptionAllowDuplicatesKey: *mut Object;
+            pub static CBCentralManagerScanOptionAllowDuplicatesKey: id;
         }
     }
 
     // CBCentralManager
 
-    pub fn centralmanager(delegate: *mut Object, /*CBCentralManagerDelegate* */) -> *mut Object /*CBCentralManager* */
+    pub fn centralmanager(delegate: id /*CBCentralManagerDelegate* */) -> id /*CBCentralManager* */
     {
         let label = CString::new("CBqueue").unwrap();
         unsafe {
-            let cbcentralmanager: *mut Object =
-                msg_send![Class::get("CBCentralManager").unwrap(), alloc];
+            let cbcentralmanager: id = msg_send![class!(CBCentralManager), alloc];
             let queue = dispatch_queue_create(label.as_ptr(), DISPATCH_QUEUE_SERIAL);
 
             msg_send![cbcentralmanager, initWithDelegate:delegate queue:queue]
         }
     }
 
-    pub fn centralmanager_scanforperipherals_options(
-        cbcentralmanager: *mut Object,
-        options: *mut Object, /* NSDictionary<NSString*,id> */
+    pub fn centralmanager_scanforperipheralswithservices_options(
+        cbcentralmanager: id,
+        service_uuids: id, /* NSArray<CBUUID *> */
+        options: id,       /* NSDictionary<NSString*,id> */
     ) {
-        unsafe { msg_send![cbcentralmanager, scanForPeripheralsWithServices:nil options:options] }
+        unsafe {
+            msg_send![cbcentralmanager, scanForPeripheralsWithServices:service_uuids options:options]
+        }
     }
 
-    pub fn centralmanager_stopscan(cbcentralmanager: *mut Object) {
+    pub fn centralmanager_stopscan(cbcentralmanager: id) {
         unsafe { msg_send![cbcentralmanager, stopScan] }
     }
 
     pub fn centralmanager_connectperipheral(
-        cbcentralmanager: *mut Object,
-        peripheral: *mut Object, /* CBPeripheral* */
+        cbcentralmanager: id,
+        peripheral: id, /* CBPeripheral* */
     ) {
         unsafe { msg_send![cbcentralmanager, connectPeripheral:peripheral options:nil] }
     }
 
     pub fn centralmanager_cancelperipheralconnection(
-        cbcentralmanager: *mut Object,
-        peripheral: *mut Object, /* CBPeripheral* */
+        cbcentralmanager: id,
+        peripheral: id, /* CBPeripheral* */
     ) {
         unsafe { msg_send![cbcentralmanager, cancelPeripheralConnection: peripheral] }
     }
 
     // CBManager
     pub fn manager_authorization() -> CBManagerAuthorization {
-        unsafe { msg_send![Class::get("CBManager").unwrap(), authorization] }
+        unsafe { msg_send![class!(CBManager), authorization] }
     }
 
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -279,13 +181,13 @@ pub mod cb {
 
     // CBPeer
 
-    pub fn peer_identifier(cbpeer: *mut Object) -> *mut Object /* NSUUID* */ {
+    pub fn peer_identifier(cbpeer: id) -> id /* NSUUID* */ {
         unsafe { msg_send![cbpeer, identifier] }
     }
 
     // CBPeripheral : CBPeer
 
-    pub fn peripheral_name(cbperipheral: *mut Object) -> *mut Object /* NSString* */ {
+    pub fn peripheral_name(cbperipheral: id) -> id /* NSString* */ {
         unsafe { msg_send![cbperipheral, name] }
     }
 
@@ -298,51 +200,47 @@ pub mod cb {
         Disconnecting = 3,
     }
 
-    pub fn peripheral_state(cbperipheral: *mut Object) -> CBPeripheralState {
+    pub fn peripheral_state(cbperipheral: id) -> CBPeripheralState {
         unsafe { msg_send![cbperipheral, state] }
     }
 
-    pub fn peripheral_setdelegate(
-        cbperipheral: *mut Object,
-        delegate: *mut Object, /* CBPeripheralDelegate* */
-    ) {
+    pub fn peripheral_setdelegate(cbperipheral: id, delegate: id /* CBPeripheralDelegate* */) {
         unsafe { msg_send![cbperipheral, setDelegate: delegate] }
     }
 
-    pub fn peripheral_discoverservices(cbperipheral: *mut Object) {
+    pub fn peripheral_discoverservices(cbperipheral: id) {
         unsafe { msg_send![cbperipheral, discoverServices: nil] }
     }
 
     pub fn peripheral_discoverincludedservicesforservice(
-        cbperipheral: *mut Object,
-        service: *mut Object, /* CBService* */
+        cbperipheral: id,
+        service: id, /* CBService* */
     ) {
         unsafe { msg_send![cbperipheral, discoverIncludedServices:nil forService:service] }
     }
 
-    pub fn peripheral_services(cbperipheral: *mut Object) -> *mut Object /* NSArray<CBService*>* */
-    {
+    pub fn peripheral_services(cbperipheral: id) -> id /* NSArray<CBService*>* */ {
         unsafe { msg_send![cbperipheral, services] }
     }
 
     pub fn peripheral_discovercharacteristicsforservice(
-        cbperipheral: *mut Object,
-        service: *mut Object, /* CBService* */
+        cbperipheral: id,
+        service: id, /* CBService* */
     ) {
         unsafe { msg_send![cbperipheral, discoverCharacteristics:nil forService:service] }
     }
 
     pub fn peripheral_readvalue_forcharacteristic(
-        cbperipheral: *mut Object,
-        characteristic: *mut Object, /* CBCharacteristic* */
+        cbperipheral: id,
+        characteristic: id, /* CBCharacteristic* */
     ) {
         unsafe { msg_send![cbperipheral, readValueForCharacteristic: characteristic] }
     }
 
     pub fn peripheral_writevalue_forcharacteristic(
-        cbperipheral: *mut Object,
-        value: *mut Object,          /* NSData* */
-        characteristic: *mut Object, /* CBCharacteristic* */
+        cbperipheral: id,
+        value: id,          /* NSData* */
+        characteristic: id, /* CBCharacteristic* */
         write_type: usize,
     ) {
         unsafe {
@@ -352,16 +250,16 @@ pub mod cb {
     }
 
     pub fn peripheral_setnotifyvalue_forcharacteristic(
-        cbperipheral: *mut Object,
+        cbperipheral: id,
         value: BOOL,
-        characteristic: *mut Object, /* CBCharacteristic* */
+        characteristic: id, /* CBCharacteristic* */
     ) {
         unsafe { msg_send![cbperipheral, setNotifyValue:value forCharacteristic:characteristic] }
     }
 
     pub fn peripheral_discoverdescriptorsforcharacteristic(
-        cbperipheral: *mut Object,
-        characteristic: *mut Object, /* CBCharacteristic* */
+        cbperipheral: id,
+        characteristic: id, /* CBCharacteristic* */
     ) {
         unsafe {
             msg_send![
@@ -377,41 +275,39 @@ pub mod cb {
 
     // CBAttribute
 
-    pub fn attribute_uuid(cbattribute: *mut Object) -> *mut Object /* CBUUID* */ {
+    pub fn attribute_uuid(cbattribute: id) -> id /* CBUUID* */ {
         unsafe { msg_send![cbattribute, UUID] }
     }
 
     // CBService : CBAttribute
 
-    pub fn service_isprimary(cbservice: *mut Object) -> BOOL {
+    pub fn service_isprimary(cbservice: id) -> BOOL {
         unsafe { msg_send![cbservice, isPrimary] }
     }
 
-    pub fn service_includedservices(cbservice: *mut Object) -> *mut Object /* NSArray<CBService*>* */
-    {
+    pub fn service_includedservices(cbservice: id) -> id /* NSArray<CBService*>* */ {
         unsafe { msg_send![cbservice, includedServices] }
     }
 
-    pub fn service_characteristics(cbservice: *mut Object) -> *mut Object /* NSArray<CBCharacteristic*>* */
-    {
+    pub fn service_characteristics(cbservice: id) -> id /* NSArray<CBCharacteristic*>* */ {
         unsafe { msg_send![cbservice, characteristics] }
     }
 
     // CBCharacteristic : CBAttribute
 
-    pub fn characteristic_isnotifying(cbcharacteristic: *mut Object) -> BOOL {
+    pub fn characteristic_isnotifying(cbcharacteristic: id) -> BOOL {
         unsafe { msg_send![cbcharacteristic, isNotifying] }
     }
 
-    pub fn characteristic_value(cbcharacteristic: *mut Object) -> *mut Object /* NSData* */ {
+    pub fn characteristic_value(cbcharacteristic: id) -> id /* NSData* */ {
         unsafe { msg_send![cbcharacteristic, value] }
     }
 
-    pub fn characteristic_properties(cbcharacteristic: *mut Object) -> c_uint {
+    pub fn characteristic_properties(cbcharacteristic: id) -> c_uint {
         unsafe { msg_send![cbcharacteristic, properties] }
     }
 
-    pub fn characteristic_service(cbcharacteristic: *mut Object) -> *mut Object /* CBService* */ {
+    pub fn characteristic_service(cbcharacteristic: id) -> id /* CBService* */ {
         unsafe { msg_send![cbcharacteristic, service] }
     }
 
@@ -427,8 +323,12 @@ pub mod cb {
 
     // CBUUID
 
-    pub fn uuid_uuidstring(cbuuid: *mut Object) -> *mut Object /* NSString* */ {
+    pub fn uuid_uuidstring(cbuuid: id) -> id /* NSString* */ {
         unsafe { msg_send![cbuuid, UUIDString] }
+    }
+
+    pub fn uuid_uuidwithstring(s: impl NSString) -> id /* CBUUID */ {
+        unsafe { msg_send![class!(CBUUID), UUIDWithString: s] }
     }
 
     // CBCentralManagerScanOption...Key

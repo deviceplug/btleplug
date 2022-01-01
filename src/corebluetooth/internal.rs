@@ -15,24 +15,28 @@ use super::{
         ns,
     },
     future::{BtlePlugFuture, BtlePlugFutureStateShared},
-    utils::{core_bluetooth::cbuuid_to_uuid, nsstring::nsstring_to_string, nsuuid_to_uuid},
+    utils::{
+        core_bluetooth::{cbuuid_to_uuid, uuid_to_cbuuid},
+        nsstring::nsstring_to_string,
+        nsuuid_to_uuid,
+    },
 };
 use crate::api::{CharPropFlags, Characteristic, ScanFilter, Service, WriteType};
 use crate::Error;
+use cocoa::{
+    base::{id, nil},
+    foundation::NSArray,
+};
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::select;
 use futures::sink::SinkExt;
 use futures::stream::{Fuse, StreamExt};
 use log::{error, trace, warn};
-use objc::{
-    rc::StrongPtr,
-    runtime::{Object, YES},
-};
+use objc::{rc::StrongPtr, runtime::YES};
 use std::{
     collections::{BTreeSet, HashMap, VecDeque},
     fmt::{self, Debug, Formatter},
     ops::Deref,
-    os::raw::c_uint,
     thread,
 };
 use tokio::runtime;
@@ -77,7 +81,7 @@ impl CBCharacteristic {
         }
     }
 
-    fn form_flags(characteristic: *mut Object) -> CharPropFlags {
+    fn form_flags(characteristic: id) -> CharPropFlags {
         let flags = cb::characteristic_properties(characteristic);
         let mut v = CharPropFlags::default();
         if (flags & cb::CHARACTERISTICPROPERTY_BROADCAST) != 0 {
@@ -614,7 +618,7 @@ impl CoreBluetoothInternal {
                     trace!("Writing value! With kind {:?}", kind);
                     cb::peripheral_writevalue_forcharacteristic(
                         *peripheral.peripheral,
-                        ns::data(data.as_ptr(), data.len() as c_uint),
+                        ns::data(&data),
                         *characteristic.characteristic,
                         match kind {
                             WriteType::WithResponse => 0,
@@ -795,8 +799,9 @@ impl CoreBluetoothInternal {
         }
     }
 
-    fn start_discovery(&mut self, _filter: ScanFilter) {
+    fn start_discovery(&mut self, filter: ScanFilter) {
         trace!("BluetoothAdapter::start_discovery");
+        let service_uuids = scan_filter_to_service_uuids(filter);
         let options = ns::mutabledictionary();
         // NOTE: If duplicates are not allowed then a peripheral will not show
         // up again once connected and then disconnected.
@@ -804,12 +809,31 @@ impl CoreBluetoothInternal {
             cb::CENTRALMANAGERSCANOPTIONALLOWDUPLICATESKEY
         });
         // TODO: set cb::CBCENTRALMANAGERSCANOPTIONSOLICITEDSERVICEUUIDSKEY with filter.services
-        cb::centralmanager_scanforperipherals_options(*self.manager, options);
+        cb::centralmanager_scanforperipheralswithservices_options(
+            *self.manager,
+            service_uuids,
+            options,
+        );
     }
 
     fn stop_discovery(&mut self) {
         trace!("BluetoothAdapter::stop_discovery");
         cb::centralmanager_stopscan(*self.manager);
+    }
+}
+
+/// Convert a `ScanFilter` to the appropriate `NSArray<CBUUID *> *` to use for discovery. If the
+/// filter has an empty list of services then this will return `nil`, to discover all devices.
+fn scan_filter_to_service_uuids(filter: ScanFilter) -> id {
+    if filter.services.is_empty() {
+        nil
+    } else {
+        let service_uuids = filter
+            .services
+            .into_iter()
+            .map(uuid_to_cbuuid)
+            .collect::<Vec<_>>();
+        unsafe { NSArray::arrayWithObjects(nil, &service_uuids) }
     }
 }
 

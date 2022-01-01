@@ -12,8 +12,6 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 pub mod adapter;
-#[allow(dead_code)]
-mod bindings;
 mod ble;
 pub mod manager;
 pub mod peripheral;

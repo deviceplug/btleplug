@@ -12,8 +12,8 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use super::{
-    advertisement_data_type, bindings, ble::characteristic::BLECharacteristic,
-    ble::device::BLEDevice, ble::service::BLEService, utils,
+    advertisement_data_type, ble::characteristic::BLECharacteristic, ble::device::BLEDevice,
+    ble::service::BLEService, utils,
 };
 use crate::{
     api::{
@@ -44,9 +44,8 @@ use std::{
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
-use bindings::Windows::Devices::Bluetooth::Advertisement::*;
-use bindings::Windows::Devices::Bluetooth::BluetoothAddressType;
 use std::sync::Weak;
+use windows::Devices::Bluetooth::{Advertisement::*, BluetoothAddressType};
 
 #[cfg_attr(
     feature = "serde",

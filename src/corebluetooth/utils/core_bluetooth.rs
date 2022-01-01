@@ -16,14 +16,14 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use objc::runtime::Object;
+use cocoa::base::{id, nil};
 use uuid::Uuid;
 
-use super::super::framework::{cb, nil, ns};
-use super::nsstring::nsstring_to_string;
+use super::super::framework::{cb, ns};
+use super::nsstring::{nsstring_to_string, str_to_nsstring};
 
 /// Convert a CBUUID object to the standard Uuid type.
-pub fn cbuuid_to_uuid(cbuuid: *mut Object) -> Uuid {
+pub fn cbuuid_to_uuid(cbuuid: id) -> Uuid {
     // NOTE: CoreBluetooth tends to return uppercase UUID strings, and only 4
     // character long if the UUID is short (16 bits). It can also return 8
     // character strings if the rest of the UUID matches the generic UUID.
@@ -39,7 +39,12 @@ pub fn cbuuid_to_uuid(cbuuid: *mut Object) -> Uuid {
     uuid_string.parse().unwrap()
 }
 
-pub fn peripheral_debug(peripheral: *mut Object) -> String {
+/// Convert a `Uuid` to a `CBUUID`.
+pub fn uuid_to_cbuuid(uuid: Uuid) -> id {
+    cb::uuid_uuidwithstring(str_to_nsstring(&uuid.to_string()))
+}
+
+pub fn peripheral_debug(peripheral: id) -> String {
     if peripheral == nil {
         return String::from("nil");
     }
@@ -52,7 +57,7 @@ pub fn peripheral_debug(peripheral: *mut Object) -> String {
     }
 }
 
-pub fn service_debug(service: *mut Object) -> String {
+pub fn service_debug(service: id) -> String {
     if service == nil {
         return String::from("nil");
     }
@@ -60,7 +65,7 @@ pub fn service_debug(service: *mut Object) -> String {
     format!("CBService({})", nsstring_to_string(uuid).unwrap())
 }
 
-pub fn characteristic_debug(characteristic: *mut Object) -> String {
+pub fn characteristic_debug(characteristic: id) -> String {
     if characteristic == nil {
         return String::from("nil");
     }
@@ -70,9 +75,8 @@ pub fn characteristic_debug(characteristic: *mut Object) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::super::super::framework::cb::uuid_uuidwithstring;
     use super::super::nsstring::str_to_nsstring;
-    use objc::runtime::Class;
-    use objc::{msg_send, sel, sel_impl};
 
     use super::*;
 
@@ -80,8 +84,7 @@ mod tests {
     fn parse_uuid_short() {
         let uuid_string = "1234";
         let uuid_nsstring = str_to_nsstring(uuid_string);
-        let cbuuid: *mut Object =
-            unsafe { msg_send![Class::get("CBUUID").unwrap(), UUIDWithString: uuid_nsstring] };
+        let cbuuid = uuid_uuidwithstring(uuid_nsstring);
         let uuid = cbuuid_to_uuid(cbuuid);
         assert_eq!(
             uuid,
@@ -92,12 +95,22 @@ mod tests {
     #[test]
     fn parse_uuid_long() {
         let uuid_nsstring = str_to_nsstring("12345678-0000-1111-2222-333344445555");
-        let cbuuid: *mut Object =
-            unsafe { msg_send![Class::get("CBUUID").unwrap(), UUIDWithString: uuid_nsstring] };
+        let cbuuid = uuid_uuidwithstring(uuid_nsstring);
         let uuid = cbuuid_to_uuid(cbuuid);
         assert_eq!(
             uuid,
             Uuid::from_u128(0x12345678_0000_1111_2222_333344445555)
         );
+    }
+
+    #[test]
+    fn cbuuid_roundtrip() {
+        for uuid in [
+            Uuid::from_u128(0x00001234_0000_1000_8000_00805f9b34fb),
+            Uuid::from_u128(0xabcd1234_0000_1000_8000_00805f9b34fb),
+            Uuid::from_u128(0x12345678_0000_1111_2222_333344445555),
+        ] {
+            assert_eq!(cbuuid_to_uuid(uuid_to_cbuuid(uuid)), uuid);
+        }
     }
 }

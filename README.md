@@ -72,11 +72,6 @@ Beyond that, some of our other goals are:
   - Please hold off on filing more issues until base implementation is
     landed.
 
-### Linux Device Discovery Cavaet
-
-Note that using Event Based Discovery on Bluez (Linux) can cause very odd issues with service
-discovery, timeouts, and general weirdness. See [Issue 165](https://github.com/deviceplug/btleplug/issues/165) for more info, but for now it's recommended to use polling on linux (as seen in the `subscribe_notify_characteristic` example) instead of event driven device discovery (as seen in the `event_driven_discovery` example).
-
 ### macOS permissions note
 
 To use Bluetooth on macOS Big Sur (11) or later, you need to either package your
@@ -85,7 +80,7 @@ binary into an application bundle with an `Info.plist` including
 the examples included with `btleplug`) enable the Bluetooth permission for your
 terminal. You can do the latter by going to _System Preferences_ → _Security &
 Privacy_ → _Privacy_ → _Bluetooth_, clicking the '+' button, and selecting
-'Terminal' (or iTerm or whichever terminal applicatation you use).
+'Terminal' (or iTerm or whichever terminal application you use).
 
 ### Platform Feature Table
 
@@ -93,29 +88,29 @@ Privacy_ → _Privacy_ → _Bluetooth_, clicking the '+' button, and selecting
 - O: In development
 - Blank: Not started
 
-| Feature                               | Windows | MacOS | Linux                                                 |
-| ------------------------------------- | ------- | ----- | ----------------------------------------------------- |
-| Bring Up Adapter                      | X       | X     | X                                                     |
-| Handle Multiple Adapters              |         |       | X                                                     |
-| Discover Devices                      | X       | X     | X                                                     |
-| └ Discover Services                   |         |       | [O](https://github.com/deviceplug/btleplug/issues/11) |
-| └ Discover Characteristics            | X       | X     | X                                                     |
-| └ Discover Descriptors                |         |       |                                                       |
-| └ Discover Name                       | X       | X     | X                                                     |
-| └ Discover Manufacturer Data          | X       | X     | X                                                     |
-| └ Discover Service Data               | X       | X     | X                                                     |
-| └ Discover MAC address                | X       |       | X                                                     |
-| GATT Server Connect                   | X       | X     | X                                                     |
-| GATT Server Connect Event             | X       | X     | X                                                     |
-| GATT Server Disconnect                | X       | X     | X                                                     |
-| GATT Server Disconnect Event          | X       | X     | X                                                     |
-| Write to Characteristic               | X       | X     | X                                                     |
-| Read from Characteristic              | X       | X     | X                                                     |
-| Subscribe to Characteristic           | X       | X     | X                                                     |
-| Unsubscribe from Characteristic       | X       | X     | X                                                     |
-| Get Characteristic Notification Event | X       | X     | X                                                     |
-| Read Descriptor                       |         |       |                                                       |
-| Write Descriptor                      |         |       |                                                       |
+| Feature                               | Windows | MacOS | Linux |
+| ------------------------------------- | ------- | ----- | ----- |
+| Bring Up Adapter                      | X       | X     | X     |
+| Handle Multiple Adapters              |         |       | X     |
+| Discover Devices                      | X       | X     | X     |
+| └ Discover Services                   | X       | X     | X     |
+| └ Discover Characteristics            | X       | X     | X     |
+| └ Discover Descriptors                |         |       |       |
+| └ Discover Name                       | X       | X     | X     |
+| └ Discover Manufacturer Data          | X       | X     | X     |
+| └ Discover Service Data               | X       | X     | X     |
+| └ Discover MAC address                | X       |       | X     |
+| GATT Server Connect                   | X       | X     | X     |
+| GATT Server Connect Event             | X       | X     | X     |
+| GATT Server Disconnect                | X       | X     | X     |
+| GATT Server Disconnect Event          | X       | X     | X     |
+| Write to Characteristic               | X       | X     | X     |
+| Read from Characteristic              | X       | X     | X     |
+| Subscribe to Characteristic           | X       | X     | X     |
+| Unsubscribe from Characteristic       | X       | X     | X     |
+| Get Characteristic Notification Event | X       | X     | X     |
+| Read Descriptor                       |         |       |       |
+| Write Descriptor                      |         |       |       |
 
 ## Library Features
 

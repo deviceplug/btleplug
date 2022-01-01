@@ -16,27 +16,24 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use objc::runtime::Object;
-use std::ffi::{CStr, CString};
-
-use super::super::framework::{nil, ns};
+use cocoa::{
+    base::{id, nil},
+    foundation::NSString,
+};
+use std::ffi::CStr;
 
 /// Convert the given `NSString` to a Rust `String`, or `None` if it is `nil`.
-pub fn nsstring_to_string(nsstring: *mut Object) -> Option<String> {
+pub fn nsstring_to_string(nsstring: id) -> Option<String> {
     if nsstring == nil {
         return None;
     }
     unsafe {
         Some(String::from(
-            CStr::from_ptr(ns::string_utf8string(nsstring))
-                .to_str()
-                .unwrap(),
+            CStr::from_ptr(nsstring.UTF8String()).to_str().unwrap(),
         ))
     }
 }
 
-#[allow(dead_code)]
-pub fn str_to_nsstring(string: &str) -> *mut Object {
-    let cstring = CString::new(string).unwrap();
-    ns::string(cstring.as_ptr())
+pub fn str_to_nsstring(string: &str) -> id {
+    unsafe { NSString::alloc(nil).init_str(string) }
 }

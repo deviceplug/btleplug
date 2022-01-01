@@ -11,10 +11,8 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use super::super::bindings;
 use crate::{Error, Result};
-use bindings::Windows::Devices::Bluetooth::Advertisement::*;
-use bindings::Windows::Foundation::TypedEventHandler;
+use windows::{Devices::Bluetooth::Advertisement::*, Foundation::TypedEventHandler};
 
 pub type AdvertismentEventHandler = Box<dyn Fn(&BluetoothLEAdvertisementReceivedEventArgs) + Send>;
 
@@ -22,8 +20,8 @@ pub struct BLEWatcher {
     watcher: BluetoothLEAdvertisementWatcher,
 }
 
-impl From<windows::Error> for Error {
-    fn from(err: windows::Error) -> Error {
+impl From<windows::core::Error> for Error {
+    fn from(err: windows::core::Error) -> Error {
         Error::Other(format!("{:?}", err).into())
     }
 }

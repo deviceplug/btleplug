@@ -198,14 +198,19 @@ pub enum WriteType {
     WithoutResponse,
 }
 
+// A trait for getting a PeripheralId
+// Implemented by `Peripheral`, `CentralEvent`, `PeripheralIdKeyed` and `PeripheralId` for good measure.
+pub trait PeripheralIdent {
+    /// Returns the unique identifier of the peripheral.
+    fn id(&self) -> PeripheralId;
+    fn get_id(&self) -> &PeripheralId;
+}
+
 /// Peripheral is the device that you would like to communicate with (the "server" of BLE). This
 /// struct contains both the current state of the device (its properties, characteristics, etc.)
 /// as well as functions for communication.
 #[async_trait]
-pub trait Peripheral: Send + Sync + Clone + Debug {
-    /// Returns the unique identifier of the peripheral.
-    fn id(&self) -> PeripheralId;
-
+pub trait Peripheral: Send + Sync + Clone + Debug + PeripheralIdent {
     /// Returns the MAC address of the peripheral.
     fn address(&self) -> BDAddr;
 
@@ -292,6 +297,31 @@ pub enum CentralEvent {
         id: PeripheralId,
         services: Vec<Uuid>,
     },
+}
+
+impl PeripheralIdent for CentralEvent {
+    fn id(&self) -> PeripheralId {
+        match self {
+            CentralEvent::DeviceDiscovered(id)
+            | CentralEvent::DeviceUpdated(id)
+            | CentralEvent::DeviceConnected(id)
+            | CentralEvent::DeviceDisconnected(id)
+            | CentralEvent::ManufacturerDataAdvertisement { id, .. }
+            | CentralEvent::ServiceDataAdvertisement { id, .. }
+            | CentralEvent::ServicesAdvertisement { id, .. } => id.clone(),
+        }
+    }
+    fn get_id(&self) -> &PeripheralId {
+        match self {
+            CentralEvent::DeviceDiscovered(id)
+            | CentralEvent::DeviceUpdated(id)
+            | CentralEvent::DeviceConnected(id)
+            | CentralEvent::DeviceDisconnected(id)
+            | CentralEvent::ManufacturerDataAdvertisement { id, .. }
+            | CentralEvent::ServiceDataAdvertisement { id, .. }
+            | CentralEvent::ServicesAdvertisement { id, .. } => id,
+        }
+    }
 }
 
 /// Central is the "client" of BLE. It's able to scan for and establish connections to peripherals.

@@ -32,14 +32,16 @@ struct ServiceInternal {
     serde(crate = "serde_cr")
 )]
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct PeripheralId(BDAddr);
+pub struct PeripheralId {
+    mac_address: BDAddr,
+}
 
 /// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone, Debug)]
 pub struct Peripheral {
     session: BluetoothSession,
     device: DeviceId,
-    mac_address: BDAddr,
+    id: PeripheralId,
     services: Arc<Mutex<HashMap<Uuid, ServiceInternal>>>,
 }
 
@@ -48,7 +50,9 @@ impl Peripheral {
         Peripheral {
             session,
             device: device.id,
-            mac_address: device.mac_address.into(),
+            id: PeripheralId {
+                mac_address: device.mac_address.into(),
+            },
             services: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -85,14 +89,19 @@ impl Peripheral {
     }
 }
 
+impl api::PeripheralIdent for Peripheral {
+    fn id(&self) -> PeripheralId {
+        self.id.clone()
+    }
+    fn get_id(&self) -> &PeripheralId {
+        &self.id
+    }
+}
+
 #[async_trait]
 impl api::Peripheral for Peripheral {
-    fn id(&self) -> PeripheralId {
-        PeripheralId(self.address())
-    }
-
     fn address(&self) -> BDAddr {
-        self.mac_address
+        self.id.mac_address
     }
 
     async fn properties(&self) -> Result<Option<PeripheralProperties>> {
@@ -247,7 +256,9 @@ impl From<MacAddress> for BDAddr {
 
 impl From<MacAddress> for PeripheralId {
     fn from(mac_address: MacAddress) -> Self {
-        PeripheralId(mac_address.into())
+        PeripheralId {
+            mac_address: mac_address.into(),
+        }
     }
 }
 

@@ -44,7 +44,7 @@ use uuid::Uuid;
     derive(Serialize, Deserialize),
     serde(crate = "serde_cr")
 )]
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PeripheralId(Uuid);
 
 /// Implementation of [api::Peripheral](crate::api::Peripheral).

@@ -1,5 +1,10 @@
 # Unreleased
 
+## Features
+
+- `BDAddr` and `PeripheralId` are now guaranteed to implement `Hash`, `Ord` and `PartialOrd` on all
+  platforms.
+
 ## Bugfixes
 
 - Linux implementation will now synthesise `DeviceConnected` events at the start of the event stream

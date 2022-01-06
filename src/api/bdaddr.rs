@@ -5,7 +5,7 @@ use std::fmt::{self, Debug, Display, Formatter, LowerHex, UpperHex};
 use std::str::FromStr;
 
 /// Stores the 6 byte address used to identify Bluetooth devices.
-#[derive(Copy, Clone, Hash, Eq, PartialEq, Default)]
+#[derive(Copy, Clone, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct BDAddr {
     address: [u8; 6],
 }

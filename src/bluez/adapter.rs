@@ -77,10 +77,9 @@ impl Central for Adapter {
     }
 
     async fn peripherals(&self) -> Result<Vec<Peripheral>> {
-        let devices = self.session.get_devices().await?;
+        let devices = self.session.get_devices_on_adapter(&self.adapter).await?;
         Ok(devices
             .into_iter()
-            .filter(|device| device.id.adapter() == self.adapter)
             .map(|device| Peripheral::new(self.session.clone(), device))
             .collect())
     }

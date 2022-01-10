@@ -34,17 +34,25 @@ impl Central for Adapter {
 
         // Synthesise `DeviceDiscovered' and `DeviceConnected` events for existing peripherals.
         let devices = self.session.get_devices().await?;
-        let initial_events = stream::iter(devices.into_iter().flat_map(|device| {
-            let id: PeripheralId = device.mac_address.into();
-            let mut events = vec![CentralEvent::DeviceDiscovered(id.clone())];
-            if device.connected {
-                events.push(CentralEvent::DeviceConnected(id));
-            }
-            events.into_iter()
-        }));
+        let adapter_id = self.adapter.clone();
+        let initial_events = stream::iter(
+            devices
+                .into_iter()
+                .filter(move |device| device.id.adapter() == adapter_id)
+                .flat_map(|device| {
+                    let id: PeripheralId = device.mac_address.into();
+                    let mut events = vec![CentralEvent::DeviceDiscovered(id.clone())];
+                    if device.connected {
+                        events.push(CentralEvent::DeviceConnected(id));
+                    }
+                    events.into_iter()
+                }),
+        );
 
         let session = self.session.clone();
-        let events = events.filter_map(move |event| central_event(event, session.clone()));
+        let adapter_id = self.adapter.clone();
+        let events = events
+            .filter_map(move |event| central_event(event, session.clone(), adapter_id.clone()));
 
         Ok(Box::pin(initial_events.chain(events)))
     }
@@ -55,12 +63,16 @@ impl Central for Adapter {
             transport: Some(Transport::Auto),
             ..Default::default()
         };
-        self.session.start_discovery_with_filter(&filter).await?;
+        self.session
+            .start_discovery_on_adapter_with_filter(&self.adapter, &filter)
+            .await?;
         Ok(())
     }
 
     async fn stop_scan(&self) -> Result<()> {
-        self.session.stop_discovery().await?;
+        self.session
+            .stop_discovery_on_adapter(&self.adapter)
+            .await?;
         Ok(())
     }
 
@@ -68,6 +80,7 @@ impl Central for Adapter {
         let devices = self.session.get_devices().await?;
         Ok(devices
             .into_iter()
+            .filter(|device| device.id.adapter() == self.adapter)
             .map(|device| Peripheral::new(self.session.clone(), device))
             .collect())
     }
@@ -104,12 +117,16 @@ impl From<BluetoothError> for Error {
     }
 }
 
-async fn central_event(event: BluetoothEvent, session: BluetoothSession) -> Option<CentralEvent> {
+async fn central_event(
+    event: BluetoothEvent,
+    session: BluetoothSession,
+    adapter_id: AdapterId,
+) -> Option<CentralEvent> {
     match event {
         BluetoothEvent::Device {
             id,
             event: device_event,
-        } => match device_event {
+        } if id.adapter() == adapter_id => match device_event {
             DeviceEvent::Discovered => {
                 let device = session.get_device_info(&id).await.ok()?;
                 Some(CentralEvent::DeviceDiscovered(device.mac_address.into()))

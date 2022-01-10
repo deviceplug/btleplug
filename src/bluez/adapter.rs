@@ -108,59 +108,47 @@ async fn central_event(event: BluetoothEvent, session: BluetoothSession) -> Opti
     match event {
         BluetoothEvent::Device {
             id,
-            event: DeviceEvent::Discovered,
-        } => {
-            let device = session.get_device_info(&id).await.ok()?;
-            Some(CentralEvent::DeviceDiscovered(device.mac_address.into()))
-        }
-        BluetoothEvent::Device {
-            id,
-            event: DeviceEvent::Connected { connected },
-        } => {
-            let device = session.get_device_info(&id).await.ok()?;
-            if connected {
-                Some(CentralEvent::DeviceConnected(device.mac_address.into()))
-            } else {
-                Some(CentralEvent::DeviceDisconnected(device.mac_address.into()))
+            event: device_event,
+        } => match device_event {
+            DeviceEvent::Discovered => {
+                let device = session.get_device_info(&id).await.ok()?;
+                Some(CentralEvent::DeviceDiscovered(device.mac_address.into()))
             }
-        }
-        BluetoothEvent::Device {
-            id,
-            event: DeviceEvent::Rssi { rssi: _ },
-        } => {
-            let device = session.get_device_info(&id).await.ok()?;
-            Some(CentralEvent::DeviceUpdated(device.mac_address.into()))
-        }
-        BluetoothEvent::Device {
-            id,
-            event: DeviceEvent::ManufacturerData { manufacturer_data },
-        } => {
-            let device = session.get_device_info(&id).await.ok()?;
-            Some(CentralEvent::ManufacturerDataAdvertisement {
-                id: device.mac_address.into(),
-                manufacturer_data,
-            })
-        }
-        BluetoothEvent::Device {
-            id,
-            event: DeviceEvent::ServiceData { service_data },
-        } => {
-            let device = session.get_device_info(&id).await.ok()?;
-            Some(CentralEvent::ServiceDataAdvertisement {
-                id: device.mac_address.into(),
-                service_data,
-            })
-        }
-        BluetoothEvent::Device {
-            id,
-            event: DeviceEvent::Services { services },
-        } => {
-            let device = session.get_device_info(&id).await.ok()?;
-            Some(CentralEvent::ServicesAdvertisement {
-                id: device.mac_address.into(),
-                services,
-            })
-        }
+            DeviceEvent::Connected { connected } => {
+                let device = session.get_device_info(&id).await.ok()?;
+                if connected {
+                    Some(CentralEvent::DeviceConnected(device.mac_address.into()))
+                } else {
+                    Some(CentralEvent::DeviceDisconnected(device.mac_address.into()))
+                }
+            }
+            DeviceEvent::Rssi { rssi: _ } => {
+                let device = session.get_device_info(&id).await.ok()?;
+                Some(CentralEvent::DeviceUpdated(device.mac_address.into()))
+            }
+            DeviceEvent::ManufacturerData { manufacturer_data } => {
+                let device = session.get_device_info(&id).await.ok()?;
+                Some(CentralEvent::ManufacturerDataAdvertisement {
+                    id: device.mac_address.into(),
+                    manufacturer_data,
+                })
+            }
+            DeviceEvent::ServiceData { service_data } => {
+                let device = session.get_device_info(&id).await.ok()?;
+                Some(CentralEvent::ServiceDataAdvertisement {
+                    id: device.mac_address.into(),
+                    service_data,
+                })
+            }
+            DeviceEvent::Services { services } => {
+                let device = session.get_device_info(&id).await.ok()?;
+                Some(CentralEvent::ServicesAdvertisement {
+                    id: device.mac_address.into(),
+                    services,
+                })
+            }
+            _ => None,
+        },
         _ => None,
     }
 }

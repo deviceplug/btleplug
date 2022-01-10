@@ -30,7 +30,7 @@ impl Central for Adapter {
         // There's a race between getting this event stream and getting the current set of devices.
         // Get the stream first, on the basis that it's better to have a duplicate DeviceDiscovered
         // event than to miss one. It's unlikely to happen in any case.
-        let events = self.session.event_stream().await?;
+        let events = self.session.adapter_event_stream(&self.adapter).await?;
 
         // Synthesise `DeviceDiscovered' and `DeviceConnected` events for existing peripherals.
         let devices = self.session.get_devices().await?;

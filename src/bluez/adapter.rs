@@ -84,17 +84,14 @@ impl Central for Adapter {
     }
 
     async fn peripheral(&self, id: &PeripheralId) -> Result<Peripheral> {
-        let devices = self.session.get_devices().await?;
-        devices
-            .into_iter()
-            .find_map(|device| {
-                if device.id == id.0 {
-                    Some(Peripheral::new(self.session.clone(), device))
-                } else {
-                    None
-                }
-            })
-            .ok_or(Error::DeviceNotFound)
+        let device = self.session.get_device_info(&id.0).await.map_err(|e| {
+            if let BluetoothError::DbusError(_) = e {
+                Error::DeviceNotFound
+            } else {
+                e.into()
+            }
+        })?;
+        Ok(Peripheral::new(self.session.clone(), device))
     }
 
     async fn add_peripheral(&self, _address: BDAddr) -> Result<Peripheral> {

@@ -42,7 +42,7 @@ impl Central for Adapter {
                 .flat_map(|device| {
                     let mut events = vec![CentralEvent::DeviceDiscovered(device.id.clone().into())];
                     if device.connected {
-                        events.push(CentralEvent::DeviceConnected(device.id.clone().into()));
+                        events.push(CentralEvent::DeviceConnected(device.id.into()));
                     }
                     events.into_iter()
                 }),

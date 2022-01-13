@@ -1,4 +1,4 @@
-# Unreleased
+# 0.9.1 (2022-01-12)
 
 ## Features
 
@@ -11,6 +11,7 @@
   for all peripherals which were already connected at the point that the event stream was requested.
 - `Central` methods on Linux will now correctly only affect the correct Bluetooth adapter, rather
   than all adapters on the system.
+- Filters are now supported for macOS, allowing the library to work on macOS >= 12.
 
 # 0.9.0 (2021-10-20)
 

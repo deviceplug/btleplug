@@ -9,11 +9,11 @@
 
 [![Github donate button](https://img.shields.io/badge/github-donate-ff69b4.svg)](https://www.github.com/sponsors/qdot)
 
-btleplug is an async Rust BLE library, supporting Windows 10, macOS, Linux, and possibly iOS and
-Android. It grew out of several earlier abandoned libraries for various platforms
+btleplug is an async Rust BLE library, supporting Windows 10, macOS, Linux, and iOS. It grew out of
+several earlier abandoned libraries for various platforms
 ([rumble](https://github.com/mwylde/rumble), [blurmac](https://github.com/servo/devices), etc...),
 with the goal of building a fully cross platform library. Adding support for other platforms such as
-Android is also planned.
+Android is planned.
 
 btleplug is meant to be _host/central mode only_. If you are interested in peripheral BTLE (i.e.
 acting like a Bluetooth LE device instead of connecting to one), check out
@@ -30,44 +30,19 @@ it did before.
 
 While we've done our best to test it, we expect there will be issues with this release. [Please file issues as you find them](https://github.com/deviceplug/btleplug/issues/) and we will address them as soon as possible.
 
-## Development Goals
-
-The issues in this repo reflect the development goals of the project. First and foremost is getting
-as many platforms as possible up and running enough to support [our main usage of this
-library](https://github.com/buttplugio/buttplug-rs).
-
-Beyond that, some of our other goals are:
-
-- Add Android (now happening in v0.9)
-- Add FFI so this library can be used from C (and maybe C++ using
-  [cxx](https://github.com/dtolnay/cxx).
-- Possibly create a WASM compatible layer using
-  [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen) and
-  [WebBluetooth](https://webbluetoothcg.github.io/web-bluetooth/).
-
 ## Platform Status
 
-- **Linux / Windows / macOS**
-  - Device enumeration and characteristic/services implemented, works
-    ok.
-  - Please file bugs and missing features if you find them.
-- **iOS**
-  - Trying to figure out if the macOS implementation will translate,
-    minus things having to do with background processing. Might just
-    work already?
-  - [Tracking issue here](https://github.com/deviceplug/btleplug/issues/12)
+- **Linux / Windows / macOS / iOS**
+  - Device enumeration and characteristic/services implemented and working.
   - Please file bugs and missing features if you find them.
 - **Android**
-  - Android implementation is in testing now, should be released soon (probably as 0.9).
+  - Android implementation is in development.
   - Tracking issue
     [here](https://github.com/deviceplug/btleplug/issues/8).
   - Please hold off on filing more issues until base implementation is
     landed.
 - **WASM/WebBluetooth**
-  - WebBluetooth has been added to wasm-bindgen's web-sys by @qdot, and a full
-    implementation has been done in other libraries that could easily be ported
-    here. This is now definitely in the works, once the new API surface is
-    solidified.
+  - WebBluetooth is possible, and some work has happened.
   - [Tracking issue here](https://github.com/deviceplug/btleplug/issues/13)
   - Please hold off on filing more issues until base implementation is
     landed.
@@ -88,29 +63,29 @@ Privacy_ → _Privacy_ → _Bluetooth_, clicking the '+' button, and selecting
 - O: In development
 - Blank: Not started
 
-| Feature                               | Windows | MacOS | Linux |
-| ------------------------------------- | ------- | ----- | ----- |
-| Bring Up Adapter                      | X       | X     | X     |
-| Handle Multiple Adapters              |         |       | X     |
-| Discover Devices                      | X       | X     | X     |
-| └ Discover Services                   | X       | X     | X     |
-| └ Discover Characteristics            | X       | X     | X     |
-| └ Discover Descriptors                |         |       |       |
-| └ Discover Name                       | X       | X     | X     |
-| └ Discover Manufacturer Data          | X       | X     | X     |
-| └ Discover Service Data               | X       | X     | X     |
-| └ Discover MAC address                | X       |       | X     |
-| GATT Server Connect                   | X       | X     | X     |
-| GATT Server Connect Event             | X       | X     | X     |
-| GATT Server Disconnect                | X       | X     | X     |
-| GATT Server Disconnect Event          | X       | X     | X     |
-| Write to Characteristic               | X       | X     | X     |
-| Read from Characteristic              | X       | X     | X     |
-| Subscribe to Characteristic           | X       | X     | X     |
-| Unsubscribe from Characteristic       | X       | X     | X     |
-| Get Characteristic Notification Event | X       | X     | X     |
-| Read Descriptor                       |         |       |       |
-| Write Descriptor                      |         |       |       |
+| Feature                               | Windows | MacOS / iOS | Linux |
+| ------------------------------------- | ------- | ----------- | ----- |
+| Bring Up Adapter                      | X       | X           | X     |
+| Handle Multiple Adapters              |         |             | X     |
+| Discover Devices                      | X       | X           | X     |
+| └ Discover Services                   | X       | X           | X     |
+| └ Discover Characteristics            | X       | X           | X     |
+| └ Discover Descriptors                |         |             |       |
+| └ Discover Name                       | X       | X           | X     |
+| └ Discover Manufacturer Data          | X       | X           | X     |
+| └ Discover Service Data               | X       | X           | X     |
+| └ Discover MAC address                | X       |             | X     |
+| GATT Server Connect                   | X       | X           | X     |
+| GATT Server Connect Event             | X       | X           | X     |
+| GATT Server Disconnect                | X       | X           | X     |
+| GATT Server Disconnect Event          | X       | X           | X     |
+| Write to Characteristic               | X       | X           | X     |
+| Read from Characteristic              | X       | X           | X     |
+| Subscribe to Characteristic           | X       | X           | X     |
+| Unsubscribe from Characteristic       | X       | X           | X     |
+| Get Characteristic Notification Event | X       | X           | X     |
+| Read Descriptor                       |         |             |       |
+| Write Descriptor                      |         |             |       |
 
 ## Library Features
 

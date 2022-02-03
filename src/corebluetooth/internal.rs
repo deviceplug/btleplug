@@ -808,7 +808,6 @@ impl CoreBluetoothInternal {
         ns::mutabledictionary_setobject_forkey(options, ns::number_withbool(YES), unsafe {
             cb::CENTRALMANAGERSCANOPTIONALLOWDUPLICATESKEY
         });
-        // TODO: set cb::CBCENTRALMANAGERSCANOPTIONSOLICITEDSERVICEUUIDSKEY with filter.services
         cb::centralmanager_scanforperipheralswithservices_options(
             *self.manager,
             service_uuids,

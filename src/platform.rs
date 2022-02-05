@@ -9,6 +9,10 @@ pub use crate::bluez::{
 pub use crate::corebluetooth::{
     adapter::Adapter, manager::Manager, peripheral::Peripheral, peripheral::PeripheralId,
 };
+#[cfg(target_arch = "wasm32")]
+pub use crate::wasm::{
+    adapter::Adapter, manager::Manager, peripheral::Peripheral, peripheral::PeripheralId,
+};
 #[cfg(target_os = "windows")]
 pub use crate::winrtble::{
     adapter::Adapter, manager::Manager, peripheral::Peripheral, peripheral::PeripheralId,

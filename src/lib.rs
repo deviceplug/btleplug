@@ -105,6 +105,8 @@ mod corebluetooth;
 pub mod platform;
 #[cfg(feature = "serde")]
 pub mod serde;
+#[cfg(target_arch = "wasm32")]
+mod wasm;
 #[cfg(target_os = "windows")]
 mod winrtble;
 
@@ -131,6 +133,9 @@ pub enum Error {
 
     #[error("Invalid Bluetooth address: {0}")]
     InvalidBDAddr(#[from] ParseBDAddrError),
+
+    #[error("JavaScript {:?}", _0)]
+    JavaScript(String),
 
     #[error("{}", _0)]
     Other(Box<dyn std::error::Error + Send + Sync>),

@@ -94,16 +94,19 @@ impl BLEDevice {
 
     pub async fn get_characteristics(
         service: &GattDeviceService,
-    ) -> std::result::Result<Vec<GattCharacteristic>, windows::core::Error> {
-        let async_result = service.GetCharacteristicsAsync()?.await?;
+    ) -> Result<Vec<GattCharacteristic>> {
+        let async_result = service
+            .GetCharacteristicsWithCacheModeAsync(BluetoothCacheMode::Uncached)?
+            .await?;
         let status = async_result.Status();
         if status == Ok(GattCommunicationStatus::Success) {
             let results = async_result.Characteristics()?;
             debug!("characteristics {:?}", results.Size());
             Ok(results.into_iter().collect())
         } else {
-            trace!("get_status {:?}", status);
-            Ok(vec![])
+            Err(Error::Other(
+                format!("get_characteristics for {:?} failed: {:?}", service, status).into(),
+            ))
         }
     }
 

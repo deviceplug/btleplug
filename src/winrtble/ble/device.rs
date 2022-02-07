@@ -134,5 +134,10 @@ impl Drop for BLEDevice {
         if let Err(err) = result {
             debug!("Drop:remove_connection_status_changed {:?}", err);
         }
+
+        let result = self.device.Close();
+        if let Err(err) = result {
+            debug!("Drop:close {:?}", err);
+        }
     }
 }

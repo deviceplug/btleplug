@@ -246,9 +246,8 @@ pub mod CentralDelegate {
     fn delegate_class() -> &'static Class {
         trace!("delegate_class");
         static REGISTER_DELEGATE_CLASS: Once = Once::new();
-        let mut decl = ClassDecl::new("BtlePlugCentralManagerDelegate", class!(NSObject)).unwrap();
-
         REGISTER_DELEGATE_CLASS.call_once(|| {
+            let mut decl = ClassDecl::new("BtlePlugCentralManagerDelegate", class!(NSObject)).unwrap();
             decl.add_protocol(Protocol::get("CBCentralManagerDelegate").unwrap());
 
             decl.add_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR); /* crossbeam_channel::Sender<DelegateMessage>* */

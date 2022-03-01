@@ -47,7 +47,7 @@ objc = "0.2.7"
 libc = "0.2.112"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.28.0", features = ["std", "Devices_Bluetooth", "Devices_Bluetooth_GenericAttributeProfile", "Devices_Bluetooth_Advertisement", "Devices_Radios", "Foundation_Collections", "Foundation", "Storage_Streams"] }
+windows = { version = "0.33.0", features = ["Devices_Bluetooth", "Devices_Bluetooth_GenericAttributeProfile", "Devices_Bluetooth_Advertisement", "Devices_Radios", "Foundation_Collections", "Foundation", "Storage_Streams"] }
 
 [dev-dependencies]
 rand = "0.8.4"

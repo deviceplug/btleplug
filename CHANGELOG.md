@@ -1,3 +1,17 @@
+# 0.9.2 (2022-03-05)
+
+## Features
+
+- UWP (Windows) devices now disconnect on drop or calls to disconnect
+- Improve characteristic finding resilience on UWP (Windows)
+
+## Bugfixes
+
+- Update to windows-rs 0.33
+  - Should fix issues with COM casting panics in older versions of windows
+- Fix panic when multiple discovery calls are made on corebluetooth (macOS)
+- Update Dashmap version to resolve RUSTSEC-2022-0002
+
 # 0.9.1 (2022-01-12)
 
 ## Features

@@ -29,12 +29,12 @@ log = "0.4.14"
 bitflags = "1.3.2"
 thiserror = "1.0.30"
 uuid = "0.8.2"
-serde_cr = { package = "serde", version = "1.0.133", features = ["derive"], default-features = false, optional = true }
+serde_cr = { package = "serde", version = "1.0.136", features = ["derive"], default-features = false, optional = true }
 serde_bytes = { version = "0.11.5", optional = true }
 dashmap = "5.1.0"
-futures = "0.3.19"
+futures = "0.3.21"
 static_assertions = "1.1.0"
-tokio = { version = "1.15.0", features = ["rt", "sync"] }
+tokio = { version = "1.17.0", features = ["rt", "sync"] }
 tokio-stream = { version = "0.1.8", features = ["sync"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -44,13 +44,13 @@ bluez-async = "0.5.5"
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 cocoa = "0.24.0"
 objc = "0.2.7"
-libc = "0.2.112"
+libc = "0.2.119"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.33.0", features = ["Devices_Bluetooth", "Devices_Bluetooth_GenericAttributeProfile", "Devices_Bluetooth_Advertisement", "Devices_Radios", "Foundation_Collections", "Foundation", "Storage_Streams"] }
 
 [dev-dependencies]
-rand = "0.8.4"
+rand = "0.8.5"
 pretty_env_logger = "0.4.0"
-tokio = { version = "1.15.0", features = ["macros", "rt", "rt-multi-thread"] }
-serde_json = "1.0.74"
+tokio = { version = "1.17.0", features = ["macros", "rt", "rt-multi-thread"] }
+serde_json = "1.0.79"

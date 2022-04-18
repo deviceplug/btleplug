@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde_cr as serde;
 use std::collections::{BTreeSet, HashMap};
+use std::fmt;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
@@ -34,6 +35,16 @@ struct ServiceInternal {
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PeripheralId(pub(crate) DeviceId);
 
+impl fmt::Display for PeripheralId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+impl From<PeripheralId> for DeviceId {
+    fn from(id: PeripheralId) -> Self {
+        id.0
+    }
+}
 /// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone, Debug)]
 pub struct Peripheral {

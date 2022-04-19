@@ -17,7 +17,7 @@ pub struct JPeripheral<'a: 'b, 'b> {
     connect: JMethodID<'a>,
     disconnect: JMethodID<'a>,
     is_connected: JMethodID<'a>,
-    discover_characteristics: JMethodID<'a>,
+    discover_services: JMethodID<'a>,
     read: JMethodID<'a>,
     write: JMethodID<'a>,
     set_characteristic_notification: JMethodID<'a>,
@@ -59,9 +59,9 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             "()Lio/github/gedgygedgy/rust/future/Future;",
         )?;
         let is_connected = env.get_method_id(&class, "isConnected", "()Z")?;
-        let discover_characteristics = env.get_method_id(
+        let discover_services = env.get_method_id(
             &class,
-            "discoverCharacteristics",
+            "discoverServices",
             "()Lio/github/gedgygedgy/rust/future/Future;",
         )?;
         let read = env.get_method_id(
@@ -89,7 +89,7 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             connect,
             disconnect,
             is_connected,
-            discover_characteristics,
+            discover_services,
             read,
             write,
             set_characteristic_notification,
@@ -146,12 +146,12 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             .z()
     }
 
-    pub fn discover_characteristics(&self) -> Result<JFuture<'a, 'b>> {
+    pub fn discover_services(&self) -> Result<JFuture<'a, 'b>> {
         let future_obj = self
             .env
             .call_method_unchecked(
                 self.internal,
-                self.discover_characteristics,
+                self.discover_services,
                 JavaType::Object("Lio/github/gedgygedgy/rust/future/Future;".to_string()),
                 &[],
             )?
@@ -218,6 +218,78 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             )?
             .l()?;
         JStream::from_env(self.env, stream_obj)
+    }
+}
+
+pub struct JBluetoothGattService<'a: 'b, 'b> {
+    internal: JObject<'a>,
+    get_uuid: JMethodID<'a>,
+    is_primary: JMethodID<'a>,
+    get_characteristics: JMethodID<'a>,
+    env: &'b JNIEnv<'a>,
+}
+
+impl<'a: 'b, 'b> JBluetoothGattService<'a, 'b> {
+    pub fn from_env(env: &'b JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+        let class =
+            env.auto_local(env.find_class("android/bluetooth/BluetoothGattService")?);
+
+        let get_uuid = env.get_method_id(&class, "getUuid", "()Ljava/util/UUID;")?;
+        let is_primary = env.get_method_id(&class, "isPrimary", "()Z;")?;
+        let get_characteristics = env.get_method_id(&class, "getCharacteristics", "()Ljava/util/List;")?;
+        Ok(Self {
+            internal: obj,
+            get_uuid,
+            is_primary,
+            get_characteristics,
+            env,
+        })
+    }
+
+    pub fn is_primary(&self) -> Result<bool> {
+        /*
+        self.env
+        .call_method_unchecked(
+            self.internal,
+            self.is_primary,
+            JavaType::Primitive(Primitive::Boolean),
+            &[],
+        )?
+        .z()
+        */
+        Ok(true)
+    }
+
+    pub fn get_uuid(&self) -> Result<Uuid> {
+        let obj = self
+            .env
+            .call_method_unchecked(
+                self.internal,
+                self.get_uuid,
+                JavaType::Object("Ljava/util/UUID;".to_string()),
+                &[],
+            )?
+            .l()?;
+        let uuid_obj = JUuid::from_env(self.env, obj)?;
+        Ok(uuid_obj.as_uuid()?)
+    }
+
+    pub fn get_characteristics(&self) -> Result<Vec<JBluetoothGattCharacteristic>> {
+        let obj = self
+            .env
+            .call_method_unchecked(
+                self.internal,
+                self.get_characteristics,
+                JavaType::Object("Ljava/util/List;".to_string()),
+                &[],
+            )?
+            .l()?;
+        let chr_list = JList::from_env(self.env, obj)?;
+        let mut chr_vec = vec!();
+        for chr in chr_list.iter()? {
+            chr_vec.push(JBluetoothGattCharacteristic::from_env(self.env, chr)?);
+        }
+        Ok(chr_vec)
     }
 }
 
@@ -431,7 +503,7 @@ impl<'a: 'b, 'b> TryFrom<JScanResult<'a, 'b>> for (BDAddr, Option<PeripheralProp
             let tx_power_level = if tx_power_level == TX_POWER_NOT_PRESENT {
                 None
             } else {
-                Some(tx_power_level as i8)
+                Some(tx_power_level as i16)
             };
 
             let manufacturer_specific_data_array = record.get_manufacturer_specific_data()?;
@@ -490,7 +562,7 @@ impl<'a: 'b, 'b> TryFrom<JScanResult<'a, 'b>> for (BDAddr, Option<PeripheralProp
                 manufacturer_data,
                 service_data,
                 services,
-                discovery_count: 1,
+                rssi: None
             })
         };
         Ok((addr, properties))

@@ -2,7 +2,7 @@ use super::adapter::Adapter;
 use crate::{api, Result};
 use async_trait::async_trait;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Manager;
 
 impl Manager {

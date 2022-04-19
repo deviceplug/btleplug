@@ -1,9 +1,9 @@
 use super::{
     jni::{global_jvm, objects::JScanResult},
-    peripheral::Peripheral,
+    peripheral::{Peripheral, PeripheralId}
 };
 use crate::{
-    api::{BDAddr, Central, CentralEvent, PeripheralProperties},
+    api::{BDAddr, Central, CentralEvent, PeripheralProperties, ScanFilter},
     common::adapter_manager::AdapterManager,
     Error, Result,
 };
@@ -15,12 +15,20 @@ use jni::{
     sys::jboolean,
     JNIEnv,
 };
-use std::{pin::Pin, str::FromStr};
+use std::{pin::Pin, str::FromStr, sync::Arc, fmt::{Debug, Formatter}};
 
 #[derive(Clone)]
 pub struct Adapter {
-    manager: AdapterManager<Peripheral>,
+    manager: Arc<AdapterManager<Peripheral>>,
     internal: GlobalRef,
+}
+
+impl Debug for Adapter {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        f.debug_struct("Adapter")
+            .field("manager", &self.manager)
+            .finish()
+    }
 }
 
 impl Adapter {
@@ -34,7 +42,7 @@ impl Adapter {
         )?;
         let internal = env.new_global_ref(obj)?;
         let adapter = Self {
-            manager: AdapterManager::default(),
+            manager: Arc::new(AdapterManager::default()),
             internal,
         };
         env.set_rust_field(obj, "handle", adapter.clone())?;
@@ -50,14 +58,14 @@ impl Adapter {
 
         let (addr, properties): (BDAddr, Option<PeripheralProperties>) = scan_result.try_into()?;
 
-        match self.manager.peripheral(addr) {
+        match self.manager.peripheral(&PeripheralId(addr)) {
             Some(p) => match properties {
                 Some(properties) => {
                     self.report_properties(&p, properties, false);
                     Ok(p)
                 }
                 None => {
-                    self.manager.emit(CentralEvent::DeviceLost(addr));
+                    //self.manager.emit(CentralEvent::DeviceDisconnected(addr));
                     Err(Error::DeviceNotFound)
                 }
             },
@@ -75,7 +83,7 @@ impl Adapter {
     fn add(&self, address: BDAddr) -> Result<Peripheral> {
         let env = global_jvm().get_env()?;
         let peripheral = Peripheral::new(&env, self.internal.as_obj(), address)?;
-        self.manager.add_peripheral(address, peripheral.clone());
+        self.manager.add_peripheral(peripheral.clone());
         Ok(peripheral)
     }
 
@@ -87,21 +95,21 @@ impl Adapter {
     ) {
         peripheral.report_properties(properties.clone());
         self.manager.emit(if new {
-            CentralEvent::DeviceDiscovered(properties.address)
+            CentralEvent::DeviceDiscovered(PeripheralId(properties.address))
         } else {
-            CentralEvent::DeviceUpdated(properties.address)
+            CentralEvent::DeviceUpdated(PeripheralId(properties.address))
         });
         self.manager
             .emit(CentralEvent::ManufacturerDataAdvertisement {
-                address: properties.address,
+                id: PeripheralId(properties.address),
                 manufacturer_data: properties.manufacturer_data,
             });
         self.manager.emit(CentralEvent::ServiceDataAdvertisement {
-            address: properties.address,
+            id: PeripheralId(properties.address),
             service_data: properties.service_data,
         });
         self.manager.emit(CentralEvent::ServicesAdvertisement {
-            address: properties.address,
+            id: PeripheralId(properties.address),
             services: properties.services,
         });
     }
@@ -111,11 +119,16 @@ impl Adapter {
 impl Central for Adapter {
     type Peripheral = Peripheral;
 
-    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent>>>> {
+    async fn adapter_info(&self) -> Result<String> {
+        // TODO: Get information about the adapter.
+        Ok("Android".to_string())
+    }
+
+    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent> + Send>>> {
         Ok(self.manager.event_stream())
     }
 
-    async fn start_scan(&self) -> Result<()> {
+    async fn start_scan(&self, _: ScanFilter) -> Result<()> {
         let env = global_jvm().get_env()?;
         env.call_method(&self.internal, "startScan", "()V", &[])?;
         Ok(())
@@ -131,14 +144,14 @@ impl Central for Adapter {
         Ok(self.manager.peripherals())
     }
 
-    async fn peripheral(&self, address: BDAddr) -> Result<Peripheral> {
+    async fn peripheral(&self, address: &PeripheralId) -> Result<Peripheral> {
         self.manager
             .peripheral(address)
             .ok_or(Error::DeviceNotFound)
     }
 
-    async fn add_peripheral(&self, address: BDAddr) -> Result<Peripheral> {
-        self.add(address)
+    async fn add_peripheral(&self, address: &PeripheralId) -> Result<Peripheral> {
+        self.add(address.0)
     }
 }
 
@@ -163,9 +176,9 @@ pub(crate) fn adapter_on_connection_state_changed_internal(
     let addr_str = addr_str.to_str().map_err(|e| Error::Other(e.into()))?;
     let addr = BDAddr::from_str(addr_str)?;
     adapter.manager.emit(if connected != 0 {
-        CentralEvent::DeviceConnected(addr)
+        CentralEvent::DeviceConnected(PeripheralId(addr))
     } else {
-        CentralEvent::DeviceDisconnected(addr)
+        CentralEvent::DeviceDisconnected(PeripheralId(addr))
     });
     Ok(())
 }

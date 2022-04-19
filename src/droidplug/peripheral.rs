@@ -1,5 +1,5 @@
 use crate::{
-    api::{self, BDAddr, Characteristic, PeripheralProperties, ValueNotification, WriteType},
+    api::{self, BDAddr, Characteristic, PeripheralProperties, ValueNotification, WriteType, Service},
     Error, Result,
 };
 use async_trait::async_trait;
@@ -19,11 +19,22 @@ use std::{
     pin::Pin,
     sync::{Arc, Mutex},
 };
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "serde")]
+use serde_cr as serde;
 
 use super::jni::{
     global_jvm,
-    objects::{JBluetoothGattCharacteristic, JPeripheral},
+    objects::{JBluetoothGattCharacteristic, JBluetoothGattService, JPeripheral},
 };
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(crate = "serde_cr")
+)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PeripheralId(pub(super) BDAddr);
 
 fn get_poll_result<'a: 'b, 'b>(
     env: &'b JNIEnv<'a>,
@@ -53,6 +64,7 @@ fn get_poll_result<'a: 'b, 'b>(
 }
 
 struct PeripheralShared {
+    services: BTreeSet<Service>,
     characteristics: BTreeSet<Characteristic>,
     properties: Option<PeripheralProperties>,
 }
@@ -71,6 +83,7 @@ impl Peripheral {
             addr,
             internal: env.new_global_ref(obj)?,
             shared: Arc::new(Mutex::new(PeripheralShared {
+                services: BTreeSet::new(),
                 characteristics: BTreeSet::new(),
                 properties: None,
             })),
@@ -79,12 +92,6 @@ impl Peripheral {
 
     pub(crate) fn report_properties(&self, mut properties: PeripheralProperties) {
         let mut guard = self.shared.lock().unwrap();
-
-        properties.discovery_count = guard
-            .properties
-            .as_ref()
-            .map(|p| p.discovery_count + 1)
-            .unwrap_or(1);
 
         guard.properties = Some(properties);
     }
@@ -126,6 +133,11 @@ impl Debug for Peripheral {
 
 #[async_trait]
 impl api::Peripheral for Peripheral {
+    /// Returns the unique identifier of the peripheral.
+    fn id(&self) -> PeripheralId {
+        PeripheralId(self.addr)
+    }
+
     fn address(&self) -> BDAddr {
         self.addr
     }
@@ -162,9 +174,16 @@ impl api::Peripheral for Peripheral {
         })
     }
 
-    async fn discover_characteristics(&self) -> Result<Vec<Characteristic>> {
+    /// The set of services we've discovered for this device. This will be empty until
+    /// `discover_services` is called.
+    fn services(&self) -> BTreeSet<Service> {
+        let guard = self.shared.lock().unwrap();
+        (&guard.services).clone()
+    }
+
+    async fn discover_services(&self) -> Result<()> {
         let future =
-            self.with_obj(|_env, obj| JSendFuture::try_from(obj.discover_characteristics()?))?;
+            self.with_obj(|_env, obj| JSendFuture::try_from(obj.discover_services()?))?;
         let result_ref = future.await?;
         self.with_obj(|env, _obj| {
             use std::iter::FromIterator;
@@ -172,20 +191,34 @@ impl api::Peripheral for Peripheral {
             let result = JPollResult::from_env(env, result_ref.as_obj())?;
             let obj = get_poll_result(env, result)?;
             let list = JList::from_env(env, obj)?;
-            let mut result = Vec::new();
+            let mut peripheral_services = Vec::new();
+            let mut peripheral_characteristics = Vec::new();
 
-            for characteristic in list.iter()? {
-                let characteristic = JBluetoothGattCharacteristic::from_env(env, characteristic)?;
-                result.push(Characteristic {
-                    uuid: characteristic.get_uuid()?,
-                    properties: characteristic.get_properties()?,
-                });
+            for service in list.iter()? {
+                let service = JBluetoothGattService::from_env(env, service)?;
+                let mut characteristics = BTreeSet::new();
+                for characteristic in service.get_characteristics()? {
+                    characteristics.insert(Characteristic {
+                        service_uuid: service.get_uuid()?,
+                        uuid: characteristic.get_uuid()?,
+                        properties: characteristic.get_properties()?,
+                    });
+                    peripheral_characteristics.push(Characteristic {
+                        service_uuid: service.get_uuid()?,
+                        uuid: characteristic.get_uuid()?,
+                        properties: characteristic.get_properties()?,
+                    });
+                }
+                peripheral_services.push(Service {
+                    uuid: service.get_uuid()?,
+                    primary: service.is_primary()?,
+                    characteristics
+                })
             }
-
             let mut guard = self.shared.lock().unwrap();
-            guard.characteristics = BTreeSet::from_iter(result.clone());
-
-            Ok(result)
+            guard.services = BTreeSet::from_iter(peripheral_services.clone());
+            guard.characteristics = BTreeSet::from_iter(peripheral_characteristics.clone());
+            Ok(())
         })
     }
 
@@ -234,7 +267,7 @@ impl api::Peripheral for Peripheral {
             .await
     }
 
-    async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification>>>> {
+    async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
         use futures::stream::StreamExt;
         let stream = self.with_obj(|_env, obj| JSendStream::try_from(obj.get_notifications()?))?;
         let stream = stream

@@ -180,8 +180,8 @@ class Peripheral {
         return future;
     }
 
-    public Future<List<BluetoothGattCharacteristic>> discoverCharacteristics() {
-        SimpleFuture<List<BluetoothGattCharacteristic>> future = new SimpleFuture<>();
+    public Future<List<BluetoothGattService>> discoverServices() {
+        SimpleFuture<List<BluetoothGattService>> future = new SimpleFuture<>();
         synchronized (this) {
             this.queueCommand(() -> {
                 this.asyncWithFuture(future, () -> {
@@ -196,7 +196,7 @@ class Peripheral {
                                 throw new RuntimeException("Unable to discover services");
                             }
 
-                            Peripheral.this.wakeCommand(future, Peripheral.this.getCharacteristics());
+                            Peripheral.this.wakeCommand(future, gatt.getServices());
                         }
                     });
                     if (!this.gatt.discoverServices()) {

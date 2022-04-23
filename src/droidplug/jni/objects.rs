@@ -224,7 +224,7 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
 pub struct JBluetoothGattService<'a: 'b, 'b> {
     internal: JObject<'a>,
     get_uuid: JMethodID<'a>,
-    is_primary: JMethodID<'a>,
+    //is_primary: JMethodID<'a>,
     get_characteristics: JMethodID<'a>,
     env: &'b JNIEnv<'a>,
 }
@@ -235,12 +235,12 @@ impl<'a: 'b, 'b> JBluetoothGattService<'a, 'b> {
             env.auto_local(env.find_class("android/bluetooth/BluetoothGattService")?);
 
         let get_uuid = env.get_method_id(&class, "getUuid", "()Ljava/util/UUID;")?;
-        let is_primary = env.get_method_id(&class, "isPrimary", "()Z;")?;
+        //let is_primary = env.get_method_id(&class, "isPrimary", "()Z;")?;
         let get_characteristics = env.get_method_id(&class, "getCharacteristics", "()Ljava/util/List;")?;
         Ok(Self {
             internal: obj,
             get_uuid,
-            is_primary,
+            //is_primary,
             get_characteristics,
             env,
         })

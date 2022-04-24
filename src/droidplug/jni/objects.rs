@@ -41,46 +41,50 @@ impl<'a: 'b, 'b> From<JPeripheral<'a, 'b>> for JObject<'a> {
 
 impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
     pub fn from_env(env: &'b JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
-        let class = env.find_class("com/nonpolynomial/btleplug/android/impl/Peripheral")?;
-        Self::from_env_impl(env, obj, class)
+        //Self::from_env_impl(env, obj)
+        //let class = env.find_class("com/nonpolynomial/btleplug/android/impl/Peripheral")?;
+        //Self::from_env_impl(env, obj, class)
+        Self::from_env_impl(env, obj)
     }
 
-    fn from_env_impl(env: &'b JNIEnv<'a>, obj: JObject<'a>, class: JClass<'a>) -> Result<Self> {
-        let class = env.auto_local(class);
-
+    fn from_env_impl(env: &'b JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+        //let class = env.auto_local(class);
+        let class_static = jni_utils::classcache::get_class("com/nonpolynomial/btleplug/android/impl/Peripheral").unwrap();
+        let class =JClass::from(class_static.as_obj());
+        
         let connect = env.get_method_id(
-            &class,
+            class,
             "connect",
             "()Lio/github/gedgygedgy/rust/future/Future;",
         )?;
         let disconnect = env.get_method_id(
-            &class,
+            class,
             "disconnect",
             "()Lio/github/gedgygedgy/rust/future/Future;",
         )?;
-        let is_connected = env.get_method_id(&class, "isConnected", "()Z")?;
+        let is_connected = env.get_method_id(class, "isConnected", "()Z")?;
         let discover_services = env.get_method_id(
-            &class,
+            class,
             "discoverServices",
             "()Lio/github/gedgygedgy/rust/future/Future;",
         )?;
         let read = env.get_method_id(
-            &class,
+            class,
             "read",
             "(Ljava/util/UUID;)Lio/github/gedgygedgy/rust/future/Future;",
         )?;
         let write = env.get_method_id(
-            &class,
+            class,
             "write",
             "(Ljava/util/UUID;[BI)Lio/github/gedgygedgy/rust/future/Future;",
         )?;
         let set_characteristic_notification = env.get_method_id(
-            &class,
+            class,
             "setCharacteristicNotification",
             "(Ljava/util/UUID;Z)Lio/github/gedgygedgy/rust/future/Future;",
         )?;
         let get_notifications = env.get_method_id(
-            &class,
+            class,
             "getNotifications",
             "()Lio/github/gedgygedgy/rust/stream/Stream;",
         )?;
@@ -99,14 +103,16 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
     }
 
     pub fn new(env: &'b JNIEnv<'a>, adapter: JObject<'a>, addr: BDAddr) -> Result<Self> {
-        let class = env.find_class("com/nonpolynomial/btleplug/android/impl/Peripheral")?;
+        // let class = env.find_class("com/nonpolynomial/btleplug/android/impl/Peripheral")?;
         let addr_jstr = env.new_string(format!("{:X}", addr))?;
         let obj = env.new_object(
-            class,
+            JClass::from(jni_utils::classcache::get_class("com/nonpolynomial/btleplug/android/impl/Peripheral").unwrap().as_obj()),
+            //class.as_obj(),
             "(Lcom/nonpolynomial/btleplug/android/impl/Adapter;Ljava/lang/String;)V",
             &[adapter.into(), addr_jstr.into()],
         )?;
-        Self::from_env_impl(env, obj, class)
+        //Self::from_env_impl(env, obj, class)
+        Self::from_env_impl(env, obj)
     }
 
     pub fn connect(&self) -> Result<JFuture<'a, 'b>> {

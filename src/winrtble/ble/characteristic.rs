@@ -62,7 +62,7 @@ impl BLECharacteristic {
         writer.WriteBytes(data)?;
         let operation = self
             .characteristic
-            .WriteValueWithOptionAsync(writer.DetachBuffer()?, write_type.into())?;
+            .WriteValueWithOptionAsync(&writer.DetachBuffer()?, write_type.into())?;
         let result = operation.await?;
         if result == GattCommunicationStatus::Success {
             Ok(())
@@ -132,7 +132,7 @@ impl BLECharacteristic {
 
     pub async fn unsubscribe(&mut self) -> Result<()> {
         if let Some(token) = &self.notify_token {
-            self.characteristic.RemoveValueChanged(token)?;
+            self.characteristic.RemoveValueChanged(*token)?;
         }
         self.notify_token = None;
         let config = GattClientCharacteristicConfigurationDescriptorValue::None;
@@ -169,7 +169,7 @@ impl BLECharacteristic {
 impl Drop for BLECharacteristic {
     fn drop(&mut self) {
         if let Some(token) = &self.notify_token {
-            let result = self.characteristic.RemoveValueChanged(token);
+            let result = self.characteristic.RemoveValueChanged(*token);
             if let Err(err) = result {
                 debug!("Drop:remove_connection_status_changed {:?}", err);
             }

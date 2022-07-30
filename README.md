@@ -105,6 +105,18 @@ A quick overview of the build process:
 - For Rust, the build should go as normal, though we recommend using `cargo-ndk` to build. Output
   the jniLibs and make sure they end up in the right place in your app.
 
+### iOS
+
+As the Corebluetooth implemenation is shared between macOS and iOS, btleplug on iOS should "just work", and seems to be stable. How this is built can vary based on your app setup and what language you're binding to, but sample instructions are as follows ([taken from here](https://github.com/deviceplug/btleplug/issues/12#issuecomment-1007671555)):
+
+- Write a rust library (static) that uses btleplug and exposes an FFI API to C
+- Use cbindgen to generate a C header file for that API
+- Use cargo-lipo to build a universal static lib
+- Drag the header file and the library into your Xcode project
+- Add NSBluetoothAlwaysUsageDescription to your Info.plist file
+
+There are also some examples in the Flutter shim listed below.
+
 ### Flutter
 
 While we don't specifically support Flutter in this repo yet, there's a template repo available at

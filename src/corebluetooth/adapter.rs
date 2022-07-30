@@ -113,7 +113,7 @@ impl Central for Adapter {
 
     async fn add_peripheral(&self, _address: &PeripheralId) -> Result<Peripheral> {
         Err(Error::NotSupported(
-            "Can't add a Peripheral from a BDAddr".to_string(),
+            "Can't add a Peripheral from a PeripheralId".to_string(),
         ))
     }
 

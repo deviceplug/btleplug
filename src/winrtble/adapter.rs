@@ -88,7 +88,7 @@ impl Central for Adapter {
         self.manager.peripheral(id).ok_or(Error::DeviceNotFound)
     }
 
-    async fn add_peripheral(&self, _address: BDAddr) -> Result<Peripheral> {
+    async fn add_peripheral(&self, _address: &PeripheralId) -> Result<Peripheral> {
         Err(Error::NotSupported(
             "Can't add a Peripheral from a BDAddr".to_string(),
         ))

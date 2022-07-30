@@ -1,6 +1,6 @@
 use super::{
     jni::{global_jvm, objects::JScanResult},
-    peripheral::{Peripheral, PeripheralId}
+    peripheral::{Peripheral, PeripheralId},
 };
 use crate::{
     api::{BDAddr, Central, CentralEvent, PeripheralProperties, ScanFilter},
@@ -15,7 +15,12 @@ use jni::{
     sys::jboolean,
     JNIEnv,
 };
-use std::{pin::Pin, str::FromStr, sync::Arc, fmt::{Debug, Formatter}};
+use std::{
+    fmt::{Debug, Formatter},
+    pin::Pin,
+    str::FromStr,
+    sync::Arc,
+};
 
 #[derive(Clone)]
 pub struct Adapter {

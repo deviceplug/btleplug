@@ -1,5 +1,7 @@
 use crate::{
-    api::{self, BDAddr, Characteristic, PeripheralProperties, ValueNotification, WriteType, Service},
+    api::{
+        self, BDAddr, Characteristic, PeripheralProperties, Service, ValueNotification, WriteType,
+    },
     Error, Result,
 };
 use async_trait::async_trait;
@@ -12,6 +14,10 @@ use jni_utils::{
     arrays::byte_array_to_vec, exceptions::try_block, future::JSendFuture, stream::JSendStream,
     task::JPollResult, uuid::JUuid,
 };
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "serde")]
+use serde_cr as serde;
 use std::{
     collections::BTreeSet,
     convert::TryFrom,
@@ -19,10 +25,6 @@ use std::{
     pin::Pin,
     sync::{Arc, Mutex},
 };
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "serde")]
-use serde_cr as serde;
 
 use super::jni::{
     global_jvm,
@@ -182,8 +184,7 @@ impl api::Peripheral for Peripheral {
     }
 
     async fn discover_services(&self) -> Result<()> {
-        let future =
-            self.with_obj(|_env, obj| JSendFuture::try_from(obj.discover_services()?))?;
+        let future = self.with_obj(|_env, obj| JSendFuture::try_from(obj.discover_services()?))?;
         let result_ref = future.await?;
         self.with_obj(|env, _obj| {
             use std::iter::FromIterator;
@@ -212,7 +213,7 @@ impl api::Peripheral for Peripheral {
                 peripheral_services.push(Service {
                     uuid: service.get_uuid()?,
                     primary: service.is_primary()?,
-                    characteristics
+                    characteristics,
                 })
             }
             let mut guard = self.shared.lock().unwrap();

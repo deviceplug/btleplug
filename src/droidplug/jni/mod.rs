@@ -24,7 +24,10 @@ pub fn init(env: &JNIEnv) -> crate::Result<()> {
                 },
             ],
         )?;
-        jni_utils::classcache::find_add_class(env, "com/nonpolynomial/btleplug/android/impl/Peripheral");
+        jni_utils::classcache::find_add_class(
+            env,
+            "com/nonpolynomial/btleplug/android/impl/Peripheral",
+        );
     }
     Ok(())
 }

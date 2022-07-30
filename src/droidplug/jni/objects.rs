@@ -49,9 +49,11 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
 
     fn from_env_impl(env: &'b JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
         //let class = env.auto_local(class);
-        let class_static = jni_utils::classcache::get_class("com/nonpolynomial/btleplug/android/impl/Peripheral").unwrap();
-        let class =JClass::from(class_static.as_obj());
-        
+        let class_static =
+            jni_utils::classcache::get_class("com/nonpolynomial/btleplug/android/impl/Peripheral")
+                .unwrap();
+        let class = JClass::from(class_static.as_obj());
+
         let connect = env.get_method_id(
             class,
             "connect",
@@ -106,7 +108,13 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
         // let class = env.find_class("com/nonpolynomial/btleplug/android/impl/Peripheral")?;
         let addr_jstr = env.new_string(format!("{:X}", addr))?;
         let obj = env.new_object(
-            JClass::from(jni_utils::classcache::get_class("com/nonpolynomial/btleplug/android/impl/Peripheral").unwrap().as_obj()),
+            JClass::from(
+                jni_utils::classcache::get_class(
+                    "com/nonpolynomial/btleplug/android/impl/Peripheral",
+                )
+                .unwrap()
+                .as_obj(),
+            ),
             //class.as_obj(),
             "(Lcom/nonpolynomial/btleplug/android/impl/Adapter;Ljava/lang/String;)V",
             &[adapter.into(), addr_jstr.into()],
@@ -237,12 +245,12 @@ pub struct JBluetoothGattService<'a: 'b, 'b> {
 
 impl<'a: 'b, 'b> JBluetoothGattService<'a, 'b> {
     pub fn from_env(env: &'b JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
-        let class =
-            env.auto_local(env.find_class("android/bluetooth/BluetoothGattService")?);
+        let class = env.auto_local(env.find_class("android/bluetooth/BluetoothGattService")?);
 
         let get_uuid = env.get_method_id(&class, "getUuid", "()Ljava/util/UUID;")?;
         //let is_primary = env.get_method_id(&class, "isPrimary", "()Z;")?;
-        let get_characteristics = env.get_method_id(&class, "getCharacteristics", "()Ljava/util/List;")?;
+        let get_characteristics =
+            env.get_method_id(&class, "getCharacteristics", "()Ljava/util/List;")?;
         Ok(Self {
             internal: obj,
             get_uuid,
@@ -291,7 +299,7 @@ impl<'a: 'b, 'b> JBluetoothGattService<'a, 'b> {
             )?
             .l()?;
         let chr_list = JList::from_env(self.env, obj)?;
-        let mut chr_vec = vec!();
+        let mut chr_vec = vec![];
         for chr in chr_list.iter()? {
             chr_vec.push(JBluetoothGattCharacteristic::from_env(self.env, chr)?);
         }
@@ -568,7 +576,7 @@ impl<'a: 'b, 'b> TryFrom<JScanResult<'a, 'b>> for (BDAddr, Option<PeripheralProp
                 manufacturer_data,
                 service_data,
                 services,
-                rssi: None
+                rssi: None,
             })
         };
         Ok((addr, properties))

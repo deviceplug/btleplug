@@ -1,3 +1,13 @@
+# 0.10.0 (2022-07-30)
+
+## Features
+
+- Add Android Support
+
+## Breaking Changes
+
+- Update to Uuid v1, which is incompatible with Uuid v0.x. This may cause issues in upgrades.
+
 # 0.9.2 (2022-03-05)
 
 ## Features

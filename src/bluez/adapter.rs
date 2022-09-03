@@ -30,21 +30,28 @@ impl Central for Adapter {
         // There's a race between getting this event stream and getting the current set of devices.
         // Get the stream first, on the basis that it's better to have a duplicate DeviceDiscovered
         // event than to miss one. It's unlikely to happen in any case.
-        let events = self.session.event_stream().await?;
+        let events = self.session.adapter_event_stream(&self.adapter).await?;
 
         // Synthesise `DeviceDiscovered' and `DeviceConnected` events for existing peripherals.
         let devices = self.session.get_devices().await?;
-        let initial_events = stream::iter(devices.into_iter().flat_map(|device| {
-            let id: PeripheralId = device.mac_address.into();
-            let mut events = vec![CentralEvent::DeviceDiscovered(id.clone())];
-            if device.connected {
-                events.push(CentralEvent::DeviceConnected(id));
-            }
-            events.into_iter()
-        }));
+        let adapter_id = self.adapter.clone();
+        let initial_events = stream::iter(
+            devices
+                .into_iter()
+                .filter(move |device| device.id.adapter() == adapter_id)
+                .flat_map(|device| {
+                    let mut events = vec![CentralEvent::DeviceDiscovered(device.id.clone().into())];
+                    if device.connected {
+                        events.push(CentralEvent::DeviceConnected(device.id.into()));
+                    }
+                    events.into_iter()
+                }),
+        );
 
         let session = self.session.clone();
-        let events = events.filter_map(move |event| central_event(event, session.clone()));
+        let adapter_id = self.adapter.clone();
+        let events = events
+            .filter_map(move |event| central_event(event, session.clone(), adapter_id.clone()));
 
         Ok(Box::pin(initial_events.chain(events)))
     }
@@ -55,17 +62,21 @@ impl Central for Adapter {
             transport: Some(Transport::Auto),
             ..Default::default()
         };
-        self.session.start_discovery_with_filter(&filter).await?;
+        self.session
+            .start_discovery_on_adapter_with_filter(&self.adapter, &filter)
+            .await?;
         Ok(())
     }
 
     async fn stop_scan(&self) -> Result<()> {
-        self.session.stop_discovery().await?;
+        self.session
+            .stop_discovery_on_adapter(&self.adapter)
+            .await?;
         Ok(())
     }
 
     async fn peripherals(&self) -> Result<Vec<Peripheral>> {
-        let devices = self.session.get_devices().await?;
+        let devices = self.session.get_devices_on_adapter(&self.adapter).await?;
         Ok(devices
             .into_iter()
             .map(|device| Peripheral::new(self.session.clone(), device))
@@ -73,22 +84,19 @@ impl Central for Adapter {
     }
 
     async fn peripheral(&self, id: &PeripheralId) -> Result<Peripheral> {
-        let devices = self.session.get_devices().await?;
-        devices
-            .into_iter()
-            .find_map(|device| {
-                if PeripheralId::from(device.mac_address) == *id {
-                    Some(Peripheral::new(self.session.clone(), device))
-                } else {
-                    None
-                }
-            })
-            .ok_or(Error::DeviceNotFound)
+        let device = self.session.get_device_info(&id.0).await.map_err(|e| {
+            if let BluetoothError::DbusError(_) = e {
+                Error::DeviceNotFound
+            } else {
+                e.into()
+            }
+        })?;
+        Ok(Peripheral::new(self.session.clone(), device))
     }
 
-    async fn add_peripheral(&self, _address: BDAddr) -> Result<Peripheral> {
+    async fn add_peripheral(&self, _address: &PeripheralId) -> Result<Peripheral> {
         Err(Error::NotSupported(
-            "Can't add a Peripheral from a BDAddr".to_string(),
+            "Can't add a Peripheral from a PeripheralId".to_string(),
         ))
     }
 
@@ -104,63 +112,55 @@ impl From<BluetoothError> for Error {
     }
 }
 
-async fn central_event(event: BluetoothEvent, session: BluetoothSession) -> Option<CentralEvent> {
+async fn central_event(
+    event: BluetoothEvent,
+    session: BluetoothSession,
+    adapter_id: AdapterId,
+) -> Option<CentralEvent> {
     match event {
         BluetoothEvent::Device {
             id,
-            event: DeviceEvent::Discovered,
-        } => {
-            let device = session.get_device_info(&id).await.ok()?;
-            Some(CentralEvent::DeviceDiscovered(device.mac_address.into()))
-        }
-        BluetoothEvent::Device {
-            id,
-            event: DeviceEvent::Connected { connected },
-        } => {
-            let device = session.get_device_info(&id).await.ok()?;
-            if connected {
-                Some(CentralEvent::DeviceConnected(device.mac_address.into()))
-            } else {
-                Some(CentralEvent::DeviceDisconnected(device.mac_address.into()))
+            event: device_event,
+        } if id.adapter() == adapter_id => match device_event {
+            DeviceEvent::Discovered => {
+                let device = session.get_device_info(&id).await.ok()?;
+                Some(CentralEvent::DeviceDiscovered(device.id.into()))
             }
-        }
-        BluetoothEvent::Device {
-            id,
-            event: DeviceEvent::Rssi { rssi: _ },
-        } => {
-            let device = session.get_device_info(&id).await.ok()?;
-            Some(CentralEvent::DeviceUpdated(device.mac_address.into()))
-        }
-        BluetoothEvent::Device {
-            id,
-            event: DeviceEvent::ManufacturerData { manufacturer_data },
-        } => {
-            let device = session.get_device_info(&id).await.ok()?;
-            Some(CentralEvent::ManufacturerDataAdvertisement {
-                id: device.mac_address.into(),
-                manufacturer_data,
-            })
-        }
-        BluetoothEvent::Device {
-            id,
-            event: DeviceEvent::ServiceData { service_data },
-        } => {
-            let device = session.get_device_info(&id).await.ok()?;
-            Some(CentralEvent::ServiceDataAdvertisement {
-                id: device.mac_address.into(),
-                service_data,
-            })
-        }
-        BluetoothEvent::Device {
-            id,
-            event: DeviceEvent::Services { services },
-        } => {
-            let device = session.get_device_info(&id).await.ok()?;
-            Some(CentralEvent::ServicesAdvertisement {
-                id: device.mac_address.into(),
-                services,
-            })
-        }
+            DeviceEvent::Connected { connected } => {
+                let device = session.get_device_info(&id).await.ok()?;
+                if connected {
+                    Some(CentralEvent::DeviceConnected(device.id.into()))
+                } else {
+                    Some(CentralEvent::DeviceDisconnected(device.id.into()))
+                }
+            }
+            DeviceEvent::Rssi { rssi: _ } => {
+                let device = session.get_device_info(&id).await.ok()?;
+                Some(CentralEvent::DeviceUpdated(device.id.into()))
+            }
+            DeviceEvent::ManufacturerData { manufacturer_data } => {
+                let device = session.get_device_info(&id).await.ok()?;
+                Some(CentralEvent::ManufacturerDataAdvertisement {
+                    id: device.id.into(),
+                    manufacturer_data,
+                })
+            }
+            DeviceEvent::ServiceData { service_data } => {
+                let device = session.get_device_info(&id).await.ok()?;
+                Some(CentralEvent::ServiceDataAdvertisement {
+                    id: device.id.into(),
+                    service_data,
+                })
+            }
+            DeviceEvent::Services { services } => {
+                let device = session.get_device_info(&id).await.ok()?;
+                Some(CentralEvent::ServicesAdvertisement {
+                    id: device.id.into(),
+                    services,
+                })
+            }
+            _ => None,
+        },
         _ => None,
     }
 }

@@ -52,7 +52,7 @@ use windows::Devices::Bluetooth::{Advertisement::*, BluetoothAddressType};
     derive(Serialize, Deserialize),
     serde(crate = "serde_cr")
 )]
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PeripheralId(BDAddr);
 
 /// Implementation of [api::Peripheral](crate::api::Peripheral).
@@ -400,25 +400,29 @@ impl ApiPeripheral for Peripheral {
             let gatt_services = device.discover_services().await?;
             for service in &gatt_services {
                 let uuid = utils::to_uuid(&service.Uuid().unwrap());
-                match BLEDevice::get_characteristics(&service).await {
-                    Ok(characteristics) => {
-                        let characteristics = characteristics
-                            .into_iter()
-                            .map(|gatt_characteristic| {
-                                let characteristic = BLECharacteristic::new(gatt_characteristic);
-                                (characteristic.uuid(), characteristic)
-                            })
-                            .collect();
-                        self.shared.ble_services.insert(
-                            uuid,
-                            BLEService {
+                if !self.shared.ble_services.contains_key(&uuid) {
+                    match BLEDevice::get_characteristics(&service).await {
+                        Ok(characteristics) => {
+                            let characteristics = characteristics
+                                .into_iter()
+                                .map(|gatt_characteristic| {
+                                    let characteristic =
+                                        BLECharacteristic::new(gatt_characteristic);
+                                    (characteristic.uuid(), characteristic)
+                                })
+                                .collect();
+
+                            self.shared.ble_services.insert(
                                 uuid,
-                                characteristics,
-                            },
-                        );
-                    }
-                    Err(e) => {
-                        error!("get_characteristics_async {:?}", e);
+                                BLEService {
+                                    uuid,
+                                    characteristics,
+                                },
+                            );
+                        }
+                        Err(e) => {
+                            error!("get_characteristics_async {:?}", e);
+                        }
                     }
                 }
             }

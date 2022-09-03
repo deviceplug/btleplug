@@ -1,9 +1,41 @@
-# Unreleased
+# 0.10.0 (2022-07-30)
+
+## Features
+
+- Add Android Support
+
+## Breaking Changes
+
+- Update to Uuid v1, which is incompatible with Uuid v0.x. This may cause issues in upgrades.
+
+# 0.9.2 (2022-03-05)
+
+## Features
+
+- UWP (Windows) devices now disconnect on drop or calls to disconnect
+- Improve characteristic finding resilience on UWP (Windows)
+
+## Bugfixes
+
+- Update to windows-rs 0.33
+  - Should fix issues with COM casting panics in older versions of windows
+- Fix panic when multiple discovery calls are made on corebluetooth (macOS)
+- Update Dashmap version to resolve RUSTSEC-2022-0002
+
+# 0.9.1 (2022-01-12)
+
+## Features
+
+- `BDAddr` and `PeripheralId` are now guaranteed to implement `Hash`, `Ord` and `PartialOrd` on all
+  platforms.
 
 ## Bugfixes
 
 - Linux implementation will now synthesise `DeviceConnected` events at the start of the event stream
   for all peripherals which were already connected at the point that the event stream was requested.
+- `Central` methods on Linux will now correctly only affect the correct Bluetooth adapter, rather
+  than all adapters on the system.
+- Filters are now supported for macOS, allowing the library to work on macOS >= 12.
 
 # 0.9.0 (2021-10-20)
 

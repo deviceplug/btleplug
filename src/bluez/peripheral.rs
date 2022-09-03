@@ -32,8 +32,8 @@ struct ServiceInternal {
     derive(Serialize, Deserialize),
     serde(crate = "serde_cr")
 )]
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct PeripheralId(BDAddr);
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PeripheralId(pub(crate) DeviceId);
 
 /// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone, Debug)]
@@ -89,7 +89,7 @@ impl Peripheral {
 #[async_trait]
 impl api::Peripheral for Peripheral {
     fn id(&self) -> PeripheralId {
-        PeripheralId(self.address())
+        PeripheralId(self.device.to_owned())
     }
 
     fn address(&self) -> BDAddr {
@@ -253,9 +253,9 @@ impl From<MacAddress> for BDAddr {
     }
 }
 
-impl From<MacAddress> for PeripheralId {
-    fn from(mac_address: MacAddress) -> Self {
-        PeripheralId(mac_address.into())
+impl From<DeviceId> for PeripheralId {
+    fn from(device_id: DeviceId) -> Self {
+        PeripheralId(device_id)
     }
 }
 

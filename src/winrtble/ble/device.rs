@@ -94,16 +94,19 @@ impl BLEDevice {
 
     pub async fn get_characteristics(
         service: &GattDeviceService,
-    ) -> std::result::Result<Vec<GattCharacteristic>, windows::core::Error> {
-        let async_result = service.GetCharacteristicsAsync()?.await?;
+    ) -> Result<Vec<GattCharacteristic>> {
+        let async_result = service
+            .GetCharacteristicsWithCacheModeAsync(BluetoothCacheMode::Uncached)?
+            .await?;
         let status = async_result.Status();
         if status == Ok(GattCommunicationStatus::Success) {
             let results = async_result.Characteristics()?;
             debug!("characteristics {:?}", results.Size());
             Ok(results.into_iter().collect())
         } else {
-            trace!("get_status {:?}", status);
-            Ok(vec![])
+            Err(Error::Other(
+                format!("get_characteristics for {:?} failed: {:?}", service, status).into(),
+            ))
         }
     }
 
@@ -130,9 +133,14 @@ impl Drop for BLEDevice {
     fn drop(&mut self) {
         let result = self
             .device
-            .RemoveConnectionStatusChanged(&self.connection_token);
+            .RemoveConnectionStatusChanged(self.connection_token);
         if let Err(err) = result {
             debug!("Drop:remove_connection_status_changed {:?}", err);
+        }
+
+        let result = self.device.Close();
+        if let Err(err) = result {
+            debug!("Drop:close {:?}", err);
         }
     }
 }

@@ -107,7 +107,10 @@ A quick overview of the build process:
 
 ### iOS
 
-As the Corebluetooth implemenation is shared between macOS and iOS, btleplug on iOS should "just work", and seems to be stable. How this is built can vary based on your app setup and what language you're binding to, but sample instructions are as follows ([taken from here](https://github.com/deviceplug/btleplug/issues/12#issuecomment-1007671555)):
+As the Corebluetooth implementation is shared between macOS and iOS, btleplug on iOS should "just
+work", and seems to be stable. How this is built can vary based on your app setup and what language
+you're binding to, but sample instructions are as follows ([taken from
+here](https://github.com/deviceplug/btleplug/issues/12#issuecomment-1007671555)):
 
 - Write a rust library (static) that uses btleplug and exposes an FFI API to C
 - Use cbindgen to generate a C header file for that API

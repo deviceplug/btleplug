@@ -245,7 +245,23 @@ impl api::Peripheral for Peripheral {
     }
 
     async fn disconnect(&self) -> Result<()> {
-        // TODO
+        let fut = CoreBluetoothReplyFuture::default();
+        self.shared
+            .message_sender
+            .to_owned()
+            .send(CoreBluetoothMessage::DisconnectDevice {
+                peripheral_uuid: self.shared.uuid,
+                future: fut.get_state_clone(),
+            })
+            .await?;
+        match fut.await {
+            CoreBluetoothReply::Ok => {
+                self.shared
+                    .emit_event(CentralEvent::DeviceDisconnected(self.shared.uuid.into()));
+                trace!("Device disconnected!");                    
+            }
+            _ => error!("Shouldn't get anything but Ok!"),
+        }
         Ok(())
     }
 

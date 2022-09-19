@@ -1,3 +1,9 @@
+# 0.10.1 (2022-09-18)
+
+## Features
+
+- Add ability to disconnect devices on macOS/iOS
+
 # 0.10.0 (2022-07-30)
 
 ## Features

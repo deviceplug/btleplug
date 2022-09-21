@@ -52,7 +52,7 @@ use windows::Devices::Bluetooth::{Advertisement::*, BluetoothAddressType};
     serde(crate = "serde_cr")
 )]
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct PeripheralId(BDAddr);
+pub struct PeripheralId(pub BDAddr);
 
 /// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone)]

@@ -32,7 +32,7 @@ struct ServiceInternal {
     serde(crate = "serde_cr")
 )]
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct PeripheralId(pub(crate) DeviceId);
+pub struct PeripheralId(pub DeviceId);
 
 /// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone, Debug)]

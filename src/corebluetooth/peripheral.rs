@@ -258,7 +258,7 @@ impl api::Peripheral for Peripheral {
             CoreBluetoothReply::Ok => {
                 self.shared
                     .emit_event(CentralEvent::DeviceDisconnected(self.shared.uuid.into()));
-                trace!("Device disconnected!");                    
+                trace!("Device disconnected!");
             }
             _ => error!("Shouldn't get anything but Ok!"),
         }

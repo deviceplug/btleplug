@@ -491,7 +491,8 @@ impl CoreBluetoothInternal {
     async fn on_peripheral_disconnect(&mut self, peripheral_uuid: Uuid) {
         trace!("Got disconnect event!");
         if self.peripherals.contains_key(&peripheral_uuid) {
-            if let Err(e) = self.peripherals
+            if let Err(e) = self
+                .peripherals
                 .get_mut(&peripheral_uuid)
                 .expect("If we're here we should have an ID")
                 .event_sender

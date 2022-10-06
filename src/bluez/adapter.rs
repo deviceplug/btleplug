@@ -1,5 +1,5 @@
 use super::peripheral::{Peripheral, PeripheralId};
-use crate::api::{BDAddr, Central, CentralEvent, ScanFilter};
+use crate::api::{Central, CentralEvent, ScanFilter};
 use crate::{Error, Result};
 use async_trait::async_trait;
 use bluez_async::{

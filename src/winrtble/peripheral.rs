@@ -26,7 +26,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use dashmap::DashMap;
-use futures::stream::Stream;
+use futures::{executor::block_on, stream::Stream};
 use log::{error, trace};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -44,6 +44,7 @@ use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use std::sync::Weak;
+use windows::Devices::Bluetooth::BluetoothLEDevice;
 use windows::Devices::Bluetooth::{Advertisement::*, BluetoothAddressType};
 
 #[cfg_attr(
@@ -123,17 +124,36 @@ impl Peripheral {
     }
 
     pub(crate) fn update_properties(&self, args: &BluetoothLEAdvertisementReceivedEventArgs) {
-        let advertisement = args.Advertisement().unwrap();
+        let advertisement: BluetoothLEAdvertisement = args.Advertisement().unwrap();
 
-        // Advertisements are cumulative: set/replace data only if it's set
-        if let Ok(name) = advertisement.LocalName() {
-            if !name.is_empty() {
-                // XXX: we could probably also assume that we've seen the
-                // advertisement before and speculatively take a read lock
-                // to confirm that the name hasn't changed...
+        // For some reason, advertisements received on Windows do not reliably include the local_name property
+        // We have to manually create a BluetoothLEDevice from supplied WinRT functionality, and then manually
+        // get the name from that.
 
-                let mut local_name_guard = self.shared.local_name.write().unwrap();
-                *local_name_guard = Some(name.to_string());
+        // Because update_properties is sync and is implemented on other platforms, this blocks the thread temporarily
+        // while the name is retrieved, and unblocks once the name is retrieved. Failures are ignored, and no name
+        // is assigned in that case.
+
+        let future_name =
+            BluetoothLEDevice::FromBluetoothAddressAsync(args.BluetoothAddress().unwrap()).unwrap();
+
+        let result = block_on(future_name);
+ 
+        match result {
+            Ok(device) => {
+                match device.Name()
+                {
+                    Ok(d) => {
+                        let mut local_name_guard = self.shared.local_name.write().unwrap();
+                        *local_name_guard = Some(d.to_string());
+                    },
+                    _ => {
+                        // could not get device name
+                    }
+                }
+            }
+            Err(r) => {
+                // could not get device name
             }
         }
         if let Ok(manufacturer_data) = advertisement.ManufacturerData() {

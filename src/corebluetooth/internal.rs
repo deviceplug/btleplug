@@ -233,12 +233,14 @@ impl CBPeripheral {
     }
 
     pub fn confirm_disconnect(&mut self) {
-        self.disconnected_future_state
-            .take()
-            .unwrap()
-            .lock()
-            .unwrap()
-            .set_reply(CoreBluetoothReply::Ok);
+        // Fulfill the disconnected future, if there is one.
+        // There might not be a future if the device disconnects unexpectedly.
+        if let Some(future) = self.disconnected_future_state.take() {
+            future
+                .lock()
+                .unwrap()
+                .set_reply(CoreBluetoothReply::Ok)
+        }
     }
 }
 

@@ -236,10 +236,7 @@ impl CBPeripheral {
         // Fulfill the disconnected future, if there is one.
         // There might not be a future if the device disconnects unexpectedly.
         if let Some(future) = self.disconnected_future_state.take() {
-            future
-                .lock()
-                .unwrap()
-                .set_reply(CoreBluetoothReply::Ok)
+            future.lock().unwrap().set_reply(CoreBluetoothReply::Ok)
         }
     }
 }

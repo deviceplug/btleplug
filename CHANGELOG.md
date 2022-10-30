@@ -1,3 +1,13 @@
+# 0.10.2 (2022-10-30)
+
+## Features
+
+- Implement Display on PeripheralId
+
+## Bugfixes
+
+- Fix issues with panics on device disconnect on macOS
+
 # 0.10.1 (2022-09-23)
 
 ## Features

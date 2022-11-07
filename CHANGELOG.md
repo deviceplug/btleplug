@@ -1,3 +1,9 @@
+# 0.10.3 (2022-11-05)
+
+## Bugfixes
+
+- Add PeripheralId Display implementation for Android PeripheralId
+
 # 0.10.2 (2022-10-30)
 
 ## Features

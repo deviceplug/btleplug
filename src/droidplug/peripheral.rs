@@ -21,7 +21,7 @@ use serde_cr as serde;
 use std::{
     collections::BTreeSet,
     convert::TryFrom,
-    fmt::{Debug, Formatter},
+    fmt::{self, Display, Debug, Formatter},
     pin::Pin,
     sync::{Arc, Mutex},
 };
@@ -37,6 +37,11 @@ use super::jni::{
 )]
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PeripheralId(pub(super) BDAddr);
+impl Display for PeripheralId {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
 
 fn get_poll_result<'a: 'b, 'b>(
     env: &'b JNIEnv<'a>,

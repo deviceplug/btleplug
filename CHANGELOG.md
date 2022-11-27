@@ -1,3 +1,9 @@
+# 0.10.4 (2022-11-27)
+
+## Bugfixes
+
+- Change common CoreBluetooth log message from error to info level
+
 # 0.10.3 (2022-11-05)
 
 ## Bugfixes

@@ -34,8 +34,7 @@ impl api::Manager for Manager {
         let radios = Radio::GetRadiosAsync()?.await?;
         Ok(radios
             .into_iter()
-            .filter_map(|radio| radio.Kind().ok())
-            .filter(|&kind| kind == RadioKind::Bluetooth)
+            .filter(|radio| radio.Kind() == Ok(RadioKind::Bluetooth))
             .map(|_| Adapter::new())
             .collect())
     }

@@ -226,7 +226,7 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
             .collect()
     }
 
-    /// Returns true iff we are currently connected to the device.
+    /// Returns true if we are currently connected to the device.
     async fn is_connected(&self) -> Result<bool>;
 
     /// Creates a connection to the device. If this method returns Ok there has been successful

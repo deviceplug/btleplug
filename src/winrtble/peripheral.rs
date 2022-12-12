@@ -390,6 +390,7 @@ impl ApiPeripheral for Peripheral {
     async fn disconnect(&self) -> Result<()> {
         let mut device = self.shared.device.lock().await;
         *device = None;
+        self.shared.connected.store(false, Ordering::Relaxed);
         self.emit_event(CentralEvent::DeviceDisconnected(self.shared.address.into()));
         Ok(())
     }

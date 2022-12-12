@@ -350,7 +350,7 @@ impl ApiPeripheral for Peripheral {
             .collect()
     }
 
-    /// Returns true iff we are currently connected to the device.
+    /// Returns true if we are currently connected to the device.
     async fn is_connected(&self) -> Result<bool> {
         Ok(self.shared.connected.load(Ordering::Relaxed))
     }

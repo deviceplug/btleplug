@@ -31,15 +31,12 @@ impl api::Manager for Manager {
     type Adapter = Adapter;
 
     async fn adapters(&self) -> Result<Vec<Adapter>> {
-        let mut result: Vec<Adapter> = vec![];
-        let radios = Radio::GetRadiosAsync().unwrap().await.unwrap();
-
-        for radio in &radios {
-            let kind = radio.Kind().unwrap();
-            if kind == RadioKind::Bluetooth {
-                result.push(Adapter::new());
-            }
-        }
-        return Ok(result);
+        let radios = Radio::GetRadiosAsync()?.await?;
+        Ok(radios
+            .into_iter()
+            .filter_map(|radio| radio.Kind().ok())
+            .filter(|&kind| kind == RadioKind::Bluetooth)
+            .map(|_| Adapter::new())
+            .collect())
     }
 }

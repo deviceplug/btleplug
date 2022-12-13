@@ -21,7 +21,7 @@ use serde_cr as serde;
 use std::{
     collections::BTreeSet,
     convert::TryFrom,
-    fmt::{self, Display, Debug, Formatter},
+    fmt::{self, Debug, Display, Formatter},
     pin::Pin,
     sync::{Arc, Mutex},
 };

@@ -59,6 +59,7 @@ impl Central for Adapter {
     async fn start_scan(&self, filter: ScanFilter) -> Result<()> {
         let filter = DiscoveryFilter {
             service_uuids: filter.services,
+            duplicate_data: Some(true),
             transport: Some(Transport::Auto),
             ..Default::default()
         };

@@ -159,7 +159,7 @@ There are also some examples in the Flutter shim listed below.
 ### Flutter
 
 While we don't specifically support Flutter in this repo yet, there's a template repo available at
-[https://github.com/trobanga/btleplugtest](https://github.com/trobanga/btleplugtest). This template has builds for both Android and iOS using btleplug.
+[https://github.com/trobanga/flutter_btleplug](https://github.com/trobanga/flutter_btleplug). This template has builds for both Android and iOS using btleplug.
 
 ## Alternative Libraries
 

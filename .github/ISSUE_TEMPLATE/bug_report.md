@@ -3,7 +3,6 @@ name: Bug report
 about: Problems with btleplug modules
 title: ''
 labels: bug
-assignees: 'qdot'
 
 ---
 

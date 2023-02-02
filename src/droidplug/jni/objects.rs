@@ -410,6 +410,7 @@ pub struct JScanResult<'a: 'b, 'b> {
     get_device: JMethodID<'a>,
     get_scan_record: JMethodID<'a>,
     get_tx_power: JMethodID<'a>,
+    get_rssi: JMethodID<'a>,
     env: &'b JNIEnv<'a>,
 }
 
@@ -425,11 +426,13 @@ impl<'a: 'b, 'b> JScanResult<'a, 'b> {
             "()Landroid/bluetooth/le/ScanRecord;",
         )?;
         let get_tx_power = env.get_method_id(&class, "getTxPower", "()I")?;
+        let get_rssi = env.get_method_id(&class, "getRssi", "()I")?;
         Ok(Self {
             internal: obj,
             get_device,
             get_scan_record,
             get_tx_power,
+            get_rssi,
             env,
         })
     }
@@ -465,6 +468,17 @@ impl<'a: 'b, 'b> JScanResult<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.get_tx_power,
+                JavaType::Primitive(Primitive::Int),
+                &[],
+            )?
+            .i()
+    }
+
+    pub fn get_rssi(&self) -> Result<jint> {
+        self.env
+            .call_method_unchecked(
+                self.internal,
+                self.get_rssi,
                 JavaType::Primitive(Primitive::Int),
                 &[],
             )?
@@ -519,6 +533,8 @@ impl<'a: 'b, 'b> TryFrom<JScanResult<'a, 'b>> for (BDAddr, Option<PeripheralProp
             } else {
                 Some(tx_power_level as i16)
             };
+
+            let rssi = Some(result.get_rssi()? as i16);
 
             let manufacturer_specific_data_array = record.get_manufacturer_specific_data()?;
             let manufacturer_specific_data_obj: &JObject = &manufacturer_specific_data_array;
@@ -576,7 +592,7 @@ impl<'a: 'b, 'b> TryFrom<JScanResult<'a, 'b>> for (BDAddr, Option<PeripheralProp
                 manufacturer_data,
                 service_data,
                 services,
-                rssi: None,
+                rssi,
             })
         };
         Ok((addr, properties))

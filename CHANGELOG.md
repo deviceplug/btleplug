@@ -1,3 +1,16 @@
+# 0.10.5 (2023-04-13)
+
+## Features
+
+- Add RSSI readings for Android
+
+## Bugfixes
+
+- Link conditionally against macOS AppKit based on platform
+- Improve error propagation on Windows
+- Reset connected state to false on disconnect on windows
+- Set DuplicateData = true for bluez
+
 # 0.10.4 (2022-11-27)
 
 ## Bugfixes

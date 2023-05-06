@@ -18,27 +18,36 @@ use windows::{
         BluetoothCacheMode, BluetoothConnectionStatus, BluetoothLEDevice,
         GenericAttributeProfile::{
             GattCharacteristic, GattCommunicationStatus, GattDeviceService,
-            GattDeviceServicesResult,
+            GattDeviceServicesResult, GattSession,
         },
     },
     Foundation::{EventRegistrationToken, TypedEventHandler},
 };
 
 pub type ConnectedEventHandler = Box<dyn Fn(bool) + Send>;
+pub type MaxPduSizeChangedEventHandler = Box<dyn Fn(u16) + Send>;
 
 pub struct BLEDevice {
     device: BluetoothLEDevice,
+    gatt_session: GattSession,
     connection_token: EventRegistrationToken,
+    pdu_change_token: EventRegistrationToken,
 }
 
 impl BLEDevice {
     pub async fn new(
         address: BDAddr,
         connection_status_changed: ConnectedEventHandler,
+        max_pdu_size_changed: MaxPduSizeChangedEventHandler,
     ) -> Result<Self> {
         let async_op = BluetoothLEDevice::FromBluetoothAddressAsync(address.into())
             .map_err(|_| Error::DeviceNotFound)?;
         let device = async_op.await.map_err(|_| Error::DeviceNotFound)?;
+
+        let async_op = GattSession::FromDeviceIdAsync(&device.BluetoothDeviceId()?)
+            .map_err(|_| Error::DeviceNotFound)?;
+        let gatt_session = async_op.await.map_err(|_| Error::DeviceNotFound)?;
+
         let connection_status_handler =
             TypedEventHandler::new(move |sender: &Option<BluetoothLEDevice>, _| {
                 if let Some(sender) = sender {
@@ -56,9 +65,21 @@ impl BLEDevice {
             .ConnectionStatusChanged(&connection_status_handler)
             .map_err(|_| Error::Other("Could not add connection status handler".into()))?;
 
+        let max_pdu_size_changed_handler = TypedEventHandler::new(move |sender: &Option<GattSession>, _| {
+            if let Some(sender) = sender {
+                max_pdu_size_changed(sender.MaxPduSize().unwrap());
+            }
+            Ok(())
+        });
+        let pdu_change_token = gatt_session
+            .MaxPduSizeChanged(&max_pdu_size_changed_handler)
+            .map_err(|_| Error::Other("Could not add max pdu size changed handler".into()))?;
+
         Ok(BLEDevice {
             device,
+            gatt_session,
             connection_token,
+            pdu_change_token,
         })
     }
 
@@ -136,6 +157,13 @@ impl Drop for BLEDevice {
             .RemoveConnectionStatusChanged(self.connection_token);
         if let Err(err) = result {
             debug!("Drop:remove_connection_status_changed {:?}", err);
+        }
+
+        let result = self
+            .gatt_session
+            .RemoveMaxPduSizeChanged(self.pdu_change_token);
+        if let Err(err) = result {
+            debug!("Drop:remove_max_pdu_size_changed {:?}", err);
         }
 
         let result = self.device.Close();

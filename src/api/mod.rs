@@ -209,6 +209,9 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     /// Returns the MAC address of the peripheral.
     fn address(&self) -> BDAddr;
 
+    /// Returns the currently negotiated mtu size
+    fn mtu(&self) -> u16;
+
     /// Returns the set of properties associated with the peripheral. These may be updated over time
     /// as additional advertising reports are received.
     async fn properties(&self) -> Result<Option<PeripheralProperties>>;

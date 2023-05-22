@@ -126,8 +126,9 @@ impl Peripheral {
                         // receivers...
                         let _ = shared.notifications_channel.send(notification);
                     }
-                    Some(CBPeripheralEvent::ManufacturerData(manufacturer_id, data)) => {
+                    Some(CBPeripheralEvent::ManufacturerData(manufacturer_id, data, rssi)) => {
                         let mut properties = shared.properties.lock().unwrap();
+                        properties.rssi = Some(rssi);
                         properties
                             .manufacturer_data
                             .insert(manufacturer_id, data.clone());
@@ -136,8 +137,9 @@ impl Peripheral {
                             manufacturer_data: properties.manufacturer_data.clone(),
                         });
                     }
-                    Some(CBPeripheralEvent::ServiceData(service_data)) => {
+                    Some(CBPeripheralEvent::ServiceData(service_data, rssi)) => {
                         let mut properties = shared.properties.lock().unwrap();
+                        properties.rssi = Some(rssi);
                         properties.service_data.extend(service_data.clone());
 
                         shared.emit_event(CentralEvent::ServiceDataAdvertisement {
@@ -145,8 +147,9 @@ impl Peripheral {
                             service_data,
                         });
                     }
-                    Some(CBPeripheralEvent::Services(services)) => {
+                    Some(CBPeripheralEvent::Services(services, rssi)) => {
                         let mut properties = shared.properties.lock().unwrap();
+                        properties.rssi = Some(rssi);
                         properties.services = services.clone();
 
                         shared.emit_event(CentralEvent::ServicesAdvertisement {

@@ -61,14 +61,17 @@ pub enum CentralDelegateEvent {
         peripheral_uuid: Uuid,
         manufacturer_id: u16,
         data: Vec<u8>,
+        rssi: i16,
     },
     ServiceData {
         peripheral_uuid: Uuid,
         service_data: HashMap<Uuid, Vec<u8>>,
+        rssi: i16,
     },
     Services {
         peripheral_uuid: Uuid,
         service_uuids: Vec<Uuid>,
+        rssi: i16,
     },
     // DiscoveredIncludedServices(Uuid, HashMap<Uuid, StrongPtr>),
     DiscoveredCharacteristics {
@@ -191,33 +194,41 @@ impl Debug for CentralDelegateEvent {
                 peripheral_uuid,
                 manufacturer_id,
                 data,
+                rssi,
             } => f
                 .debug_struct("ManufacturerData")
                 .field("peripheral_uuid", peripheral_uuid)
                 .field("manufacturer_id", manufacturer_id)
                 .field("data", data)
+                .field("rssi", rssi)
                 .finish(),
             CentralDelegateEvent::ServiceData {
                 peripheral_uuid,
                 service_data,
+                rssi,
             } => f
                 .debug_struct("ServiceData")
                 .field("peripheral_uuid", peripheral_uuid)
                 .field("service_data", service_data)
+                .field("rssi", rssi)
                 .finish(),
             CentralDelegateEvent::Services {
                 peripheral_uuid,
                 service_uuids,
+                rssi,
             } => f
                 .debug_struct("Services")
                 .field("peripheral_uuid", peripheral_uuid)
                 .field("service_uuids", service_uuids)
+                .field("rssi", rssi)
                 .finish(),
         }
     }
 }
 
 pub mod CentralDelegate {
+    use crate::corebluetooth::framework::ns::number_as_i64;
+
     use super::*;
 
     pub fn delegate() -> (id, Receiver<CentralDelegateEvent>) {
@@ -413,7 +424,7 @@ pub mod CentralDelegate {
         _central: id,
         peripheral: id,
         adv_data: id,
-        _rssi: id,
+        rssi: id,
     ) {
         trace!(
             "delegate_centralmanager_diddiscoverperipheral_advertisementdata_rssi {}",
@@ -427,6 +438,8 @@ pub mod CentralDelegate {
                 cbperipheral: held_peripheral,
             },
         );
+
+        let rssi_value = number_as_i64(rssi) as i16;
 
         let peripheral_uuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
 
@@ -447,6 +460,7 @@ pub mod CentralDelegate {
                         peripheral_uuid,
                         manufacturer_id: u16::from_le_bytes(manufacturer_id.try_into().unwrap()),
                         data: Vec::from(manufacturer_data),
+                        rssi: rssi_value,
                     },
                 );
             }
@@ -470,6 +484,7 @@ pub mod CentralDelegate {
                 CentralDelegateEvent::ServiceData {
                     peripheral_uuid,
                     service_data: result,
+                    rssi: rssi_value,
                 },
             );
         }
@@ -490,6 +505,7 @@ pub mod CentralDelegate {
                 CentralDelegateEvent::Services {
                     peripheral_uuid,
                     service_uuids,
+                    rssi: rssi_value,
                 },
             );
         }

@@ -33,6 +33,13 @@ pub mod ns {
         unsafe { msg_send![class!(NSNumber), numberWithBool: value] }
     }
 
+    pub fn number_as_i64(value: id) -> i64 {
+        unsafe {
+            let i: cocoa::foundation::NSInteger = msg_send![&*value, integerValue];
+            i as i64
+        }
+    }
+
     // NSArray
 
     pub fn array_count(nsarray: impl NSArray) -> NSUInteger {

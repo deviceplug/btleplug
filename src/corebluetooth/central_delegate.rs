@@ -51,6 +51,7 @@ pub enum CentralDelegateEvent {
     DidUpdateState,
     DiscoveredPeripheral {
         cbperipheral: StrongPtr,
+        rssi: i16,
     },
     DiscoveredServices {
         peripheral_uuid: Uuid,
@@ -112,9 +113,10 @@ impl Debug for CentralDelegateEvent {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             CentralDelegateEvent::DidUpdateState => f.debug_tuple("DidUpdateState").finish(),
-            CentralDelegateEvent::DiscoveredPeripheral { cbperipheral } => f
+            CentralDelegateEvent::DiscoveredPeripheral { cbperipheral, rssi } => f
                 .debug_struct("CentralDelegateEvent")
                 .field("cbperipheral", cbperipheral.deref())
+                .field("rssi", rssi)
                 .finish(),
             CentralDelegateEvent::DiscoveredServices {
                 peripheral_uuid,
@@ -413,7 +415,7 @@ pub mod CentralDelegate {
         _central: id,
         peripheral: id,
         adv_data: id,
-        _rssi: id,
+        rssi: id,
     ) {
         trace!(
             "delegate_centralmanager_diddiscoverperipheral_advertisementdata_rssi {}",
@@ -425,6 +427,7 @@ pub mod CentralDelegate {
             delegate,
             CentralDelegateEvent::DiscoveredPeripheral {
                 cbperipheral: held_peripheral,
+                rssi: ns::nsnumber_i16(rssi),
             },
         );
 

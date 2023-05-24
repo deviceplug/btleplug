@@ -89,6 +89,7 @@ impl Peripheral {
         manager: Weak<AdapterManager<Self>>,
         event_receiver: Receiver<CBPeripheralEvent>,
         message_sender: Sender<CoreBluetoothMessage>,
+        rssi: Option<i16>,
     ) -> Self {
         // Since we're building the object, we have an active advertisement.
         // Build properties now.
@@ -97,7 +98,7 @@ impl Peripheral {
             address_type: None,
             local_name,
             tx_power_level: None,
-            rssi: None,
+            rssi,
             manufacturer_data: HashMap::new(),
             service_data: HashMap::new(),
             services: Vec::new(),

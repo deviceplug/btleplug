@@ -323,6 +323,7 @@ pub enum CoreBluetoothEvent {
         uuid: Uuid,
         name: Option<String>,
         event_receiver: Receiver<CBPeripheralEvent>,
+        rssi: i16,
     },
     DeviceUpdated {
         uuid: Uuid,
@@ -415,7 +416,7 @@ impl CoreBluetoothInternal {
         }
     }
 
-    async fn on_discovered_peripheral(&mut self, peripheral: StrongPtr) {
+    async fn on_discovered_peripheral(&mut self, peripheral: StrongPtr, rssi: i16) {
         let uuid = nsuuid_to_uuid(cb::peer_identifier(*peripheral));
         let name = nsstring_to_string(cb::peripheral_name(*peripheral));
         if self.peripherals.contains_key(&uuid) {
@@ -432,6 +433,7 @@ impl CoreBluetoothInternal {
                 uuid,
                 name,
                 event_receiver,
+                rssi,
             })
             .await;
         }
@@ -757,8 +759,8 @@ impl CoreBluetoothInternal {
                     CentralDelegateEvent::DidUpdateState => {
                         self.dispatch_event(CoreBluetoothEvent::AdapterConnected).await
                     }
-                    CentralDelegateEvent::DiscoveredPeripheral{cbperipheral} => {
-                        self.on_discovered_peripheral(cbperipheral).await
+                    CentralDelegateEvent::DiscoveredPeripheral{cbperipheral, rssi} => {
+                        self.on_discovered_peripheral(cbperipheral, rssi).await
                     }
                     CentralDelegateEvent::DiscoveredServices{peripheral_uuid, services} => {
                         self.on_discovered_services(peripheral_uuid, services)

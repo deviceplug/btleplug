@@ -47,6 +47,7 @@ impl Adapter {
                         uuid,
                         name,
                         event_receiver,
+                        rssi,
                     } => {
                         manager_clone.add_peripheral(Peripheral::new(
                             uuid,
@@ -54,6 +55,7 @@ impl Adapter {
                             Arc::downgrade(&manager_clone),
                             event_receiver,
                             adapter_sender_clone.clone(),
+                            Some(rssi),
                         ));
                         manager_clone.emit(CentralEvent::DeviceDiscovered(uuid.into()));
                     }

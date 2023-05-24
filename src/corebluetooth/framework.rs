@@ -33,6 +33,14 @@ pub mod ns {
         unsafe { msg_send![class!(NSNumber), numberWithBool: value] }
     }
 
+    pub fn nsnumber_i32(nsnumber: id) -> i32 {
+        unsafe { msg_send![nsnumber, intValue] }
+    }
+
+    pub fn nsnumber_i16(nsnumber: id) -> i16 {
+        ns::nsnumber_i32(nsnumber) as i16
+    }
+
     // NSArray
 
     pub fn array_count(nsarray: impl NSArray) -> NSUInteger {

@@ -382,6 +382,12 @@ impl From<Uuid> for PeripheralId {
     }
 }
 
+impl From<PeripheralId> for Uuid {
+		fn from(id: PeripheralId) -> Self {
+				id.0
+		}
+}
+
 impl From<SendError> for Error {
     fn from(_: SendError) -> Self {
         Error::Other("Channel closed".to_string().into())

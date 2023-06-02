@@ -20,7 +20,10 @@ pub use crate::winrtble::{
 
 use crate::api::{self, Central};
 use static_assertions::assert_impl_all;
-use std::{fmt::Debug, hash::Hash};
+use std::{
+    fmt::{Debug, Display},
+    hash::Hash,
+};
 
 // Ensure that the exported types implement all the expected traits.
 assert_impl_all!(Adapter: Central, Clone, Debug, Send, Sized, Sync);
@@ -29,6 +32,7 @@ assert_impl_all!(Peripheral: api::Peripheral, Clone, Debug, Send, Sized, Sync);
 assert_impl_all!(
     PeripheralId: Clone,
     Debug,
+    Display,
     Hash,
     Eq,
     Ord,

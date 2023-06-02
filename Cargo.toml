@@ -1,6 +1,6 @@
 [package]
 name = "btleplug"
-version = "0.10.0"
+version = "0.10.5"
 authors = ["Nonpolynomial, LLC <kyle@nonpolynomial.com>"]
 license = "MIT/Apache-2.0/BSD-3-Clause"
 repository = "https://github.com/deviceplug/btleplug"
@@ -23,38 +23,38 @@ path = "src/lib.rs"
 serde = ["uuid/serde", "serde_cr", "serde_bytes"]
 
 [dependencies]
-async-trait = "0.1.56"
+async-trait = "0.1.68"
 log = "0.4.17"
 bitflags = "1.3.2"
-thiserror = "1.0.31"
-uuid = "1.1.2"
-serde_cr = { package = "serde", version = "1.0.140", features = ["derive"], default-features = false, optional = true }
-serde_bytes = { version = "0.11.6", optional = true }
-dashmap = "5.3.4"
-futures = "0.3.21"
+thiserror = "1.0.40"
+uuid = "1.3.1"
+serde_cr = { package = "serde", version = "1.0.160", features = ["derive"], default-features = false, optional = true }
+serde_bytes = { version = "0.11.9", optional = true }
+dashmap = "5.4.0"
+futures = "0.3.28"
 static_assertions = "1.1.0"
-tokio = { version = "1.20.1", features = ["rt", "sync"] }
-tokio-stream = { version = "0.1.9", features = ["sync"] }
+tokio = { version = "1.27.0", features = ["rt", "sync"] }
+tokio-stream = { version = "0.1.12", features = ["sync"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-dbus = "0.9.6"
-bluez-async = "0.6.0"
+dbus = "0.9.7"
+bluez-async = "0.7.1"
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.19.0"
-once_cell = "1.13.0"
+once_cell = "1.17.1"
 jni-utils = "0.1.0"
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
-cocoa = "0.24.0"
+cocoa = "0.24.1"
 objc = "0.2.7"
-libc = "0.2.126"
+libc = "0.2.141"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.39.0", features = ["Devices_Bluetooth", "Devices_Bluetooth_GenericAttributeProfile", "Devices_Bluetooth_Advertisement", "Devices_Radios", "Foundation_Collections", "Foundation", "Storage_Streams"] }
+windows = { version = "0.48.0", features = ["Devices_Bluetooth", "Devices_Bluetooth_GenericAttributeProfile", "Devices_Bluetooth_Advertisement", "Devices_Radios", "Foundation_Collections", "Foundation", "Storage_Streams"] }
 
 [dev-dependencies]
 rand = "0.8.5"
 pretty_env_logger = "0.4.0"
-tokio = { version = "1.20.1", features = ["macros", "rt", "rt-multi-thread"] }
-serde_json = "1.0.82"
+tokio = { version = "1.27.0", features = ["macros", "rt", "rt-multi-thread"] }
+serde_json = "1.0.96"

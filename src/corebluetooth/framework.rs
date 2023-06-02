@@ -101,7 +101,7 @@ pub mod cb {
     pub type dispatch_queue_attr_t = *const dispatch_object_s;
     pub const DISPATCH_QUEUE_SERIAL: dispatch_queue_attr_t = 0 as dispatch_queue_attr_t;
 
-    #[link(name = "AppKit", kind = "framework")]
+    #[cfg_attr(target_os = "macos", link(name = "AppKit", kind = "framework"))]
     #[link(name = "Foundation", kind = "framework")]
     #[link(name = "CoreBluetooth", kind = "framework")]
     extern "C" {

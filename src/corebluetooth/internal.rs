@@ -140,6 +140,7 @@ struct CBPeripheral {
     pub peripheral: StrongPtr,
     services: HashMap<Uuid, ServiceInternal>,
     pub event_sender: Sender<CBPeripheralEvent>,
+    pub disconnected_future_state: Option<CoreBluetoothReplyStateShared>,
     pub connected_future_state: Option<CoreBluetoothReplyStateShared>,
 }
 
@@ -168,6 +169,7 @@ impl CBPeripheral {
             services: HashMap::new(),
             event_sender,
             connected_future_state: None,
+            disconnected_future_state: None,
         }
     }
 
@@ -227,6 +229,14 @@ impl CBPeripheral {
                 .lock()
                 .unwrap()
                 .set_reply(CoreBluetoothReply::Connected(services));
+        }
+    }
+
+    pub fn confirm_disconnect(&mut self) {
+        // Fulfill the disconnected future, if there is one.
+        // There might not be a future if the device disconnects unexpectedly.
+        if let Some(future) = self.disconnected_future_state.take() {
+            future.lock().unwrap().set_reply(CoreBluetoothReply::Ok)
         }
     }
 }
@@ -477,11 +487,31 @@ impl CoreBluetoothInternal {
         // itself when it receives all of its service/characteristic info.
     }
 
-    async fn on_peripheral_disconnect(&mut self, uuid: Uuid) {
+    async fn on_peripheral_disconnect(&mut self, peripheral_uuid: Uuid) {
         trace!("Got disconnect event!");
-        self.peripherals.remove(&uuid);
-        self.dispatch_event(CoreBluetoothEvent::DeviceDisconnected { uuid })
+        if self.peripherals.contains_key(&peripheral_uuid) {
+            if let Err(e) = self
+                .peripherals
+                .get_mut(&peripheral_uuid)
+                .expect("If we're here we should have an ID")
+                .event_sender
+                .send(CBPeripheralEvent::Disconnected)
+                .await
+            {
+                error!("Error sending notification event: {}", e);
+            }
+            // Unlike connect, we'll want to fulfill our disconnect future here, which means grabbing
+            // our peripheral and having it fire, then dropping it and dispatching our event.
+            self.peripherals
+                .get_mut(&peripheral_uuid)
+                .expect("If we're here we should have an ID")
+                .confirm_disconnect();
+            self.peripherals.remove(&peripheral_uuid);
+            self.dispatch_event(CoreBluetoothEvent::DeviceDisconnected {
+                uuid: peripheral_uuid,
+            })
             .await;
+        }
     }
 
     /// Get the CBCharacteristic for the given characteristic of the given peripheral, if it exists.
@@ -589,6 +619,15 @@ impl CoreBluetoothInternal {
             trace!("Connecting peripheral!");
             p.connected_future_state = Some(fut);
             cb::centralmanager_connectperipheral(*self.manager, *p.peripheral);
+        }
+    }
+
+    fn disconnect_peripheral(&mut self, peripheral_uuid: Uuid, fut: CoreBluetoothReplyStateShared) {
+        trace!("Trying to disconnect peripheral!");
+        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
+            trace!("Disconnecting peripheral!");
+            p.disconnected_future_state = Some(fut);
+            cb::centralmanager_cancelperipheralconnection(*self.manager, *p.peripheral);
         }
     }
 
@@ -774,7 +813,9 @@ impl CoreBluetoothInternal {
                         trace!("got connectdevice msg!");
                         self.connect_peripheral(peripheral_uuid, future);
                     }
-                    CoreBluetoothMessage::DisconnectDevice{peripheral_uuid:_, future:_} => {}
+                    CoreBluetoothMessage::DisconnectDevice{peripheral_uuid, future} => {
+                        self.disconnect_peripheral(peripheral_uuid, future);
+                    }
                     CoreBluetoothMessage::ReadValue{peripheral_uuid, service_uuid,characteristic_uuid, future} => {
                         self.read_value(peripheral_uuid, service_uuid,characteristic_uuid, future)
                     }

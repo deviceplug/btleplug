@@ -3,7 +3,6 @@ name: Feature Requests
 about: Requests for features, including new modules, device support, etc...
 title: ''
 labels: Features
-assignees: 'qdot'
 
 ---
 

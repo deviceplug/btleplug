@@ -55,6 +55,12 @@ use windows::Devices::Bluetooth::{Advertisement::*, BluetoothAddressType};
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PeripheralId(BDAddr);
 
+impl Display for PeripheralId {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
 /// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone)]
 pub struct Peripheral {
@@ -389,6 +395,7 @@ impl ApiPeripheral for Peripheral {
     async fn disconnect(&self) -> Result<()> {
         let mut device = self.shared.device.lock().await;
         *device = None;
+        self.shared.connected.store(false, Ordering::Relaxed);
         self.emit_event(CentralEvent::DeviceDisconnected(self.shared.address.into()));
         Ok(())
     }

@@ -158,6 +158,11 @@ impl Display for Characteristic {
 
 /// The properties of this peripheral, as determined by the advertising reports we've received for
 /// it.
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(crate = "serde_cr")
+)]
 #[derive(Debug, Default, Clone)]
 pub struct PeripheralProperties {
     /// The address of this peripheral

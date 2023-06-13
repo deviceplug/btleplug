@@ -10,7 +10,7 @@ use jni_utils::{future::JFuture, stream::JStream, uuid::JUuid};
 use std::{collections::HashMap, convert::TryFrom, iter::Iterator};
 use uuid::Uuid;
 
-use crate::api::{BDAddr, CharPropFlags, PeripheralProperties};
+use crate::api::{BDAddr, CharPropFlags, PeripheralProperties, ScanFilter};
 
 pub struct JPeripheral<'a: 'b, 'b> {
     internal: JObject<'a>,
@@ -402,6 +402,43 @@ impl<'a: 'b, 'b> JBluetoothDevice<'a, 'b> {
             )?
             .l()?;
         Ok(obj.into())
+    }
+}
+
+pub struct JScanFilter<'a> {
+    internal: JObject<'a>,
+}
+
+impl<'a> JScanFilter<'a> {
+    pub fn new(env: &'a JNIEnv<'a>, filter: ScanFilter) -> Result<Self> {
+        let uuids = env.new_object_array(
+            filter.services.len() as i32,
+            env.find_class("java/lang/String")?,
+            JObject::null(),
+        )?;
+        for (idx, uuid) in filter.services.into_iter().enumerate() {
+            let uuid_str = env.new_string(uuid.to_string())?;
+            env.set_object_array_element(uuids, idx as i32, uuid_str)?;
+        }
+        let obj = env.new_object(
+            JClass::from(
+                jni_utils::classcache::get_class(
+                    "com/nonpolynomial/btleplug/android/impl/ScanFilter",
+                )
+                .unwrap()
+                .as_obj(),
+            ),
+            //class.as_obj(),
+            "([Ljava/lang/String;)V",
+            &[uuids.into()],
+        )?;
+        Ok(Self { internal: obj })
+    }
+}
+
+impl<'a> From<JScanFilter<'a>> for JObject<'a> {
+    fn from(value: JScanFilter<'a>) -> Self {
+        value.internal
     }
 }
 

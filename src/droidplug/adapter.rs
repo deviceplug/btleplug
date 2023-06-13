@@ -1,5 +1,8 @@
 use super::{
-    jni::{global_jvm, objects::JScanResult},
+    jni::{
+        global_jvm,
+        objects::{JScanFilter, JScanResult},
+    },
     peripheral::{Peripheral, PeripheralId},
 };
 use crate::{
@@ -133,9 +136,15 @@ impl Central for Adapter {
         Ok(self.manager.event_stream())
     }
 
-    async fn start_scan(&self, _: ScanFilter) -> Result<()> {
+    async fn start_scan(&self, filter: ScanFilter) -> Result<()> {
         let env = global_jvm().get_env()?;
-        env.call_method(&self.internal, "startScan", "()V", &[])?;
+        let filter = JScanFilter::new(&env, filter)?;
+        env.call_method(
+            &self.internal,
+            "startScan",
+            "(Lcom/nonpolynomial/btleplug/android/impl/ScanFilter;)V",
+            &[filter.into()],
+        )?;
         Ok(())
     }
 

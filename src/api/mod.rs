@@ -185,6 +185,11 @@ pub struct PeripheralProperties {
     pub services: Vec<Uuid>,
 }
 
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(crate = "serde_cr")
+)]
 /// The filter used when scanning for BLE devices.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ScanFilter {

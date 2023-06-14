@@ -32,6 +32,7 @@ use super::jni::{
     global_jvm,
     objects::{JBluetoothGattCharacteristic, JBluetoothGattService, JPeripheral},
 };
+use jni::objects::JClass;
 #[cfg_attr(
     feature = "serde",
     derive(Serialize, Deserialize),
@@ -49,29 +50,47 @@ fn get_poll_result<'a: 'b, 'b>(
     env: &'b JNIEnv<'a>,
     result: JPollResult<'a, 'b>,
 ) -> Result<JObject<'a>> {
-    let future_exc =
-        jni_utils::classcache::get_class("io/github/gedgygedgy/rust/future/FutureException")
-            .unwrap();
     try_block(env, || Ok(Ok(result.get()?)))
-        .catch(future_exc.as_obj(), |ex| {
-            let cause = env
-                .call_method(ex, "getCause", "()Ljava/lang/Throwable;", &[])?
-                .l()?;
-            if env.is_instance_of(
-                cause,
-                "com/nonpolynomial/btleplug/android/impl/NotConnectedException",
-            )? {
-                Ok(Err(Error::NotConnected))
-            } else if env.is_instance_of(
-                cause,
-                "com/nonpolynomial/btleplug/android/impl/PermissionDeniedException",
-            )? {
-                Ok(Err(Error::PermissionDenied))
-            } else {
-                env.throw(ex)?;
-                Err(jni::errors::Error::JavaException)
-            }
-        })
+        .catch(
+            JClass::from(
+                jni_utils::classcache::get_class(
+                    "io/github/gedgygedgy/rust/future/FutureException",
+                )
+                .unwrap()
+                .as_obj(),
+            ),
+            |ex| {
+                let cause = env
+                    .call_method(ex, "getCause", "()Ljava/lang/Throwable;", &[])?
+                    .l()?;
+                if env.is_instance_of(
+                    cause,
+                    JClass::from(
+                        jni_utils::classcache::get_class(
+                            "com/nonpolynomial/btleplug/android/impl/NotConnectedException",
+                        )
+                        .unwrap()
+                        .as_obj(),
+                    ),
+                )? {
+                    Ok(Err(Error::NotConnected))
+                } else if env.is_instance_of(
+                    cause,
+                    JClass::from(
+                        jni_utils::classcache::get_class(
+                            "com/nonpolynomial/btleplug/android/impl/PermissionDeniedException",
+                        )
+                        .unwrap()
+                        .as_obj(),
+                    ),
+                )? {
+                    Ok(Err(Error::PermissionDenied))
+                } else {
+                    env.throw(ex)?;
+                    Err(jni::errors::Error::JavaException)
+                }
+            },
+        )
         .result()?
 }
 

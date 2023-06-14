@@ -122,6 +122,15 @@ pub enum Error {
     #[error("Not connected")]
     NotConnected,
 
+    #[error("Unexpected callback")]
+    UnexpectedCallback,
+
+    #[error("Unexpected characteristic")]
+    UnexpectedCharacteristic,
+
+    #[error("No such characteristic")]
+    NoSuchCharacteristic,
+
     #[error("The operation is not supported: {}", _0)]
     NotSupported(String),
 

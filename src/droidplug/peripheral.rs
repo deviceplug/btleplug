@@ -85,6 +85,39 @@ fn get_poll_result<'a: 'b, 'b>(
                     ),
                 )? {
                     Ok(Err(Error::PermissionDenied))
+                } else if env.is_instance_of(
+                    cause,
+                    JClass::from(
+                        jni_utils::classcache::get_class(
+                            "com/nonpolynomial/btleplug/android/impl/UnexpectedCallbackException",
+                        )
+                        .unwrap()
+                        .as_obj(),
+                    ),
+                )? {
+                    Ok(Err(Error::UnexpectedCallback))
+                } else if env.is_instance_of(
+                    cause,
+                    JClass::from(
+                        jni_utils::classcache::get_class(
+                            "com/nonpolynomial/btleplug/android/impl/UnexpectedCharacteristicException",
+                        )
+                        .unwrap()
+                        .as_obj(),
+                    ),
+                )? {
+                    Ok(Err(Error::UnexpectedCharacteristic))
+                } else if env.is_instance_of(
+                    cause,
+                    JClass::from(
+                        jni_utils::classcache::get_class(
+                            "com/nonpolynomial/btleplug/android/impl/NoSuchCharacteristicException",
+                        )
+                        .unwrap()
+                        .as_obj(),
+                    ),
+                )? {
+                    Ok(Err(Error::NoSuchCharacteristic))
                 } else {
                     env.throw(ex)?;
                     Err(jni::errors::Error::JavaException)

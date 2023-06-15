@@ -172,7 +172,7 @@ class Peripheral {
                         }
                     });
                     if (!this.gatt.writeCharacteristic(characteristic)) {
-                        throw new RuntimeException("Unable to read characteristic");
+                        throw new RuntimeException("Unable to write characteristic");
                     }
                 });
             });

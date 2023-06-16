@@ -20,6 +20,8 @@ import io.github.gedgygedgy.rust.stream.QueueStream;
 import io.github.gedgygedgy.rust.future.SimpleFuture;
 import io.github.gedgygedgy.rust.stream.Stream;
 
+import android.util.Log;
+
 @SuppressWarnings("unused") // Native code uses this class.
 class Peripheral {
     private static final UUID CLIENT_CHARACTERISTIC_CONFIGURATION_DESCRIPTOR = new UUID(0x00002902_0000_1000L, 0x8000_00805f9b34fbL);
@@ -81,6 +83,20 @@ class Peripheral {
         }
         return future;
     }
+
+    
+    public void requestMtu() {
+        synchronized (this) {
+            if (this.gatt != null) {
+                try {
+                    this.gatt.requestMtu(517);
+                } catch (Exception e) {
+                    Log.e("Droidplug", "error requesting mtu: " + e.toString());
+                }
+            }
+        }
+    }
+                    
 
     public Future<Void> disconnect() {
         SimpleFuture<Void> future = new SimpleFuture<>();

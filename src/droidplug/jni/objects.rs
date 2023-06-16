@@ -15,6 +15,7 @@ use crate::api::{BDAddr, CharPropFlags, PeripheralProperties};
 pub struct JPeripheral<'a: 'b, 'b> {
     internal: JObject<'a>,
     connect: JMethodID<'a>,
+    request_mtu: JMethodID<'a>,
     disconnect: JMethodID<'a>,
     is_connected: JMethodID<'a>,
     discover_services: JMethodID<'a>,
@@ -59,6 +60,7 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             "connect",
             "()Lio/github/gedgygedgy/rust/future/Future;",
         )?;
+        let request_mtu = env.get_method_id(class, "requestMtu", "()V")?;
         let disconnect = env.get_method_id(
             class,
             "disconnect",
@@ -93,6 +95,7 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
         Ok(Self {
             internal: obj,
             connect,
+            request_mtu,
             disconnect,
             is_connected,
             discover_services,
@@ -134,6 +137,18 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             )?
             .l()?;
         JFuture::from_env(self.env, future_obj)
+    }
+
+    pub fn request_mtu(&self) -> Result<()> {
+        self.env
+            .call_method_unchecked(
+                self.internal,
+                self.request_mtu,
+                JavaType::Primitive(Primitive::Void),
+                &[],
+            )?
+            .v()?;
+        Ok(())
     }
 
     pub fn disconnect(&self) -> Result<JFuture<'a, 'b>> {

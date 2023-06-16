@@ -130,6 +130,10 @@ impl Peripheral {
             get_poll_result(env, result).map(|_| {})
         })
     }
+
+    pub async fn request_mtu(&self) -> Result<()> {
+        self.with_obj(|_env, obj| Ok(obj.request_mtu()?))
+    }
 }
 
 impl Debug for Peripheral {

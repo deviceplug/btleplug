@@ -48,12 +48,19 @@ use uuid::Uuid;
 struct CBDescriptor {
     pub descriptor: StrongPtr,
     pub uuid: Uuid,
+    pub read_future_state: VecDeque<CoreBluetoothReplyStateShared>,
+    pub write_future_state: VecDeque<CoreBluetoothReplyStateShared>,
 }
 
 impl CBDescriptor {
     pub fn new(descriptor: StrongPtr) -> Self {
         let uuid = cbuuid_to_uuid(cb::attribute_uuid(*descriptor));
-        Self { descriptor, uuid }
+        Self {
+            descriptor,
+            uuid,
+            read_future_state: VecDeque::with_capacity(10),
+            write_future_state: VecDeque::with_capacity(10),
+        }
     }
 }
 
@@ -386,6 +393,21 @@ pub enum CoreBluetoothMessage {
         peripheral_uuid: Uuid,
         future: CoreBluetoothReplyStateShared,
     },
+    ReadDescriptorValue {
+        peripheral_uuid: Uuid,
+        service_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        descriptor_uuid: Uuid,
+        future: CoreBluetoothReplyStateShared,
+    },
+    WriteDescriptorValue {
+        peripheral_uuid: Uuid,
+        service_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        descriptor_uuid: Uuid,
+        data: Vec<u8>,
+        future: CoreBluetoothReplyStateShared,
+    },
 }
 
 #[derive(Debug)]
@@ -643,6 +665,19 @@ impl CoreBluetoothInternal {
             .get_mut(&characteristic_uuid)
     }
 
+    /// Get the CBDescriptor for the given descriptor of the given peripheral, if it exists.
+    fn get_descriptor(
+        &mut self,
+        peripheral_uuid: Uuid,
+        service_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        descriptor_uuid: Uuid,
+    ) -> Option<&mut CBDescriptor> {
+        self.get_characteristic(peripheral_uuid, service_uuid, characteristic_uuid)?
+            .descriptors
+            .get_mut(&descriptor_uuid)
+    }
+
     fn on_characteristic_subscribed(
         &mut self,
         peripheral_uuid: Uuid,
@@ -858,6 +893,107 @@ impl CoreBluetoothInternal {
         }
     }
 
+    fn write_descriptor_value(
+        &mut self,
+        peripheral_uuid: Uuid,
+        service_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        descriptor_uuid: Uuid,
+        data: Vec<u8>,
+        fut: CoreBluetoothReplyStateShared,
+    ) {
+        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
+            if let Some(service) = peripheral.services.get_mut(&service_uuid) {
+                if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
+                {
+                    if let Some(descriptor) = characteristic.descriptors.get_mut(&descriptor_uuid) {
+                        trace!("Writing descriptor value!");
+                        cb::peripheral_writevalue_fordescriptor(
+                            *peripheral.peripheral,
+                            ns::data(&data),
+                            *descriptor.descriptor,
+                        );
+                        descriptor.write_future_state.push_front(fut);
+                    }
+                }
+            }
+        }
+    }
+
+    fn read_descriptor_value(
+        &mut self,
+        peripheral_uuid: Uuid,
+        service_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        descriptor_uuid: Uuid,
+        fut: CoreBluetoothReplyStateShared,
+    ) {
+        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
+            if let Some(service) = peripheral.services.get_mut(&service_uuid) {
+                if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
+                {
+                    if let Some(descriptor) = characteristic.descriptors.get_mut(&descriptor_uuid) {
+                        trace!("Reading descriptor value!");
+                        cb::peripheral_readvalue_fordescriptor(
+                            *peripheral.peripheral,
+                            *descriptor.descriptor,
+                        );
+                        descriptor.read_future_state.push_front(fut);
+                    }
+                }
+            }
+        }
+    }
+
+    async fn on_descriptor_read(
+        &mut self,
+        peripheral_uuid: Uuid,
+        service_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        descriptor_uuid: Uuid,
+        data: Vec<u8>,
+    ) {
+        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
+            if let Some(service) = peripheral.services.get_mut(&service_uuid) {
+                if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
+                {
+                    if let Some(descriptor) = characteristic.descriptors.get_mut(&descriptor_uuid) {
+                        trace!("Got read event!");
+
+                        let mut data_clone = Vec::new();
+                        for byte in data.iter() {
+                            data_clone.push(*byte);
+                        }
+                        let state = characteristic.read_future_state.pop_back().unwrap();
+                        state
+                            .lock()
+                            .unwrap()
+                            .set_reply(CoreBluetoothReply::ReadResult(data_clone));
+                    }
+                }
+            }
+        }
+    }
+
+    fn on_descriptor_written(
+        &mut self,
+        peripheral_uuid: Uuid,
+        service_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        descriptor_uuid: Uuid,
+    ) {
+        if let Some(descriptor) = self.get_descriptor(
+            peripheral_uuid,
+            service_uuid,
+            characteristic_uuid,
+            descriptor_uuid,
+        ) {
+            trace!("Got written event!");
+            let state = descriptor.write_future_state.pop_back().unwrap();
+            state.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
+        }
+    }
+
     async fn wait_for_message(&mut self) {
         select! {
             delegate_msg = self.delegate_receiver.select_next_some() => {
@@ -922,6 +1058,19 @@ impl CoreBluetoothInternal {
                     CentralDelegateEvent::Services{peripheral_uuid, service_uuids, rssi} => {
                         self.on_services(peripheral_uuid, service_uuids, rssi).await
                     },
+                    CentralDelegateEvent::DescriptorNotified{
+                        peripheral_uuid,
+                        service_uuid,
+                        characteristic_uuid,
+                        descriptor_uuid,
+                        data,
+                     } => self.on_descriptor_read(peripheral_uuid, service_uuid, characteristic_uuid, descriptor_uuid, data).await,
+                    CentralDelegateEvent::DescriptorWritten{
+                        peripheral_uuid,
+                        service_uuid,
+                        characteristic_uuid,
+                        descriptor_uuid,
+                    } => self.on_descriptor_written(peripheral_uuid, service_uuid, characteristic_uuid, descriptor_uuid),
                 };
             }
             adapter_msg = self.message_receiver.select_next_some() => {
@@ -954,7 +1103,17 @@ impl CoreBluetoothInternal {
                     }
                     CoreBluetoothMessage::IsConnected{peripheral_uuid, future} => {
                         self.is_connected(peripheral_uuid, future);
+                    },
+                    CoreBluetoothMessage::ReadDescriptorValue{peripheral_uuid, service_uuid, characteristic_uuid, descriptor_uuid, future} => {
+                        self.read_descriptor_value(peripheral_uuid, service_uuid, characteristic_uuid, descriptor_uuid, future)
                     }
+                    CoreBluetoothMessage::WriteDescriptorValue{
+                        peripheral_uuid,service_uuid,
+                        characteristic_uuid,
+                        descriptor_uuid,
+                        data,
+                        future,
+                    } => self.write_descriptor_value(peripheral_uuid, service_uuid, characteristic_uuid, descriptor_uuid, data, future),
                 };
             }
         }

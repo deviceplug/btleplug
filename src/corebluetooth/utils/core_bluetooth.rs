@@ -73,6 +73,14 @@ pub fn characteristic_debug(characteristic: id) -> String {
     format!("CBCharacteristic({})", nsstring_to_string(uuid).unwrap())
 }
 
+pub fn descriptor_debug(descriptor: id) -> String {
+    if descriptor == nil {
+        return String::from("nil");
+    }
+    let uuid = cb::uuid_uuidstring(cb::attribute_uuid(descriptor));
+    format!("CBDescriptor({})", nsstring_to_string(uuid).unwrap())
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::super::framework::cb::uuid_uuidwithstring;

@@ -47,7 +47,7 @@ impl Into<GattWriteOption> for WriteType {
 #[derive(Debug)]
 pub struct BLECharacteristic {
     characteristic: GattCharacteristic,
-    descriptors: HashMap<Uuid, BLEDescriptor>,
+    pub descriptors: HashMap<Uuid, BLEDescriptor>,
     notify_token: Option<EventRegistrationToken>,
 }
 

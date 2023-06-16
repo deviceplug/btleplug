@@ -276,6 +276,21 @@ pub mod cb {
         }
     }
 
+    pub fn peripheral_readvalue_fordescriptor(
+        cbperipheral: id,
+        descriptor: id, /* CBDescriptor * */
+    ) {
+        unsafe { msg_send![cbperipheral, readValueForDescriptor: descriptor] }
+    }
+
+    pub fn peripheral_writevalue_fordescriptor(
+        cbperipheral: id,
+        value: id,      /* NSData* */
+        descriptor: id, /* CBCharacteristic* */
+    ) {
+        unsafe { msg_send![cbperipheral, writeValue:value forDescriptor:descriptor] }
+    }
+
     // CBPeripheralState = NSInteger from CBPeripheral.h
 
     pub const PERIPHERALSTATE_CONNECTED: c_int = 2; // CBPeripheralStateConnected
@@ -320,6 +335,12 @@ pub mod cb {
 
     pub fn characteristic_descriptors(cbcharacteristic: id) -> id /* NSArray<CBDescriptor*>* */ {
         unsafe { msg_send![cbcharacteristic, descriptors] }
+    }
+
+    // CBDescriptor : CBAttribute
+
+    pub fn descriptor_characteristic(cbdescriptor: id) -> id /* CBCharacteristic* */ {
+        unsafe { msg_send![cbdescriptor, characteristic] }
     }
 
     // CBCharacteristicProperties = NSUInteger from CBCharacteristic.h

@@ -47,8 +47,11 @@ fn get_poll_result<'a: 'b, 'b>(
     env: &'b JNIEnv<'a>,
     result: JPollResult<'a, 'b>,
 ) -> Result<JObject<'a>> {
+    let future_exc =
+        jni_utils::classcache::get_class("io/github/gedgygedgy/rust/future/FutureException")
+            .unwrap();
     try_block(env, || Ok(Ok(result.get()?)))
-        .catch("io/github/gedgygedgy/rust/future/FutureException", |ex| {
+        .catch(future_exc.as_obj(), |ex| {
             let cause = env
                 .call_method(ex, "getCause", "()Ljava/lang/Throwable;", &[])?
                 .l()?;

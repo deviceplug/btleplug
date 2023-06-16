@@ -318,6 +318,10 @@ pub mod cb {
         unsafe { msg_send![cbcharacteristic, service] }
     }
 
+    pub fn characteristic_descriptors(cbcharacteristic: id) -> id /* NSArray<CBDescriptor*>* */ {
+        unsafe { msg_send![cbcharacteristic, descriptors] }
+    }
+
     // CBCharacteristicProperties = NSUInteger from CBCharacteristic.h
 
     pub const CHARACTERISTICPROPERTY_BROADCAST: c_uint = 0x01; // CBCharacteristicPropertyBroadcast

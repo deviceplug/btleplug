@@ -11,7 +11,7 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 
-use super::super::utils::to_descriptor_value;
+use super::{super::utils::to_descriptor_value, descriptor::BLEDescriptor};
 use crate::{
     api::{Characteristic, WriteType},
     winrtble::utils,
@@ -19,6 +19,7 @@ use crate::{
 };
 
 use log::{debug, trace};
+use std::collections::HashMap;
 use uuid::Uuid;
 use windows::{
     Devices::Bluetooth::{
@@ -46,13 +47,18 @@ impl Into<GattWriteOption> for WriteType {
 #[derive(Debug)]
 pub struct BLECharacteristic {
     characteristic: GattCharacteristic,
+    descriptors: HashMap<Uuid, BLEDescriptor>,
     notify_token: Option<EventRegistrationToken>,
 }
 
 impl BLECharacteristic {
-    pub fn new(characteristic: GattCharacteristic) -> Self {
+    pub fn new(
+        characteristic: GattCharacteristic,
+        descriptors: HashMap<Uuid, BLEDescriptor>,
+    ) -> Self {
         BLECharacteristic {
             characteristic,
+            descriptors,
             notify_token: None,
         }
     }
@@ -158,9 +164,15 @@ impl BLECharacteristic {
         let uuid = self.uuid();
         let properties =
             utils::to_char_props(&self.characteristic.CharacteristicProperties().unwrap());
+        let descriptors = self
+            .descriptors
+            .values()
+            .map(|descriptor| descriptor.to_descriptor(service_uuid, uuid))
+            .collect();
         Characteristic {
             uuid,
             service_uuid,
+            descriptors,
             properties,
         }
     }

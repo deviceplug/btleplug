@@ -17,7 +17,7 @@ use windows::{
     Devices::Bluetooth::{
         BluetoothCacheMode, BluetoothConnectionStatus, BluetoothLEDevice,
         GenericAttributeProfile::{
-            GattCharacteristic, GattCommunicationStatus, GattDeviceService,
+            GattCharacteristic, GattCommunicationStatus, GattDescriptor, GattDeviceService,
             GattDeviceServicesResult,
         },
     },
@@ -106,6 +106,28 @@ impl BLEDevice {
         } else {
             Err(Error::Other(
                 format!("get_characteristics for {:?} failed: {:?}", service, status).into(),
+            ))
+        }
+    }
+
+    pub async fn get_characteristic_descriptors(
+        characteristic: &GattCharacteristic,
+    ) -> Result<Vec<GattDescriptor>> {
+        let async_result = characteristic
+            .GetDescriptorsWithCacheModeAsync(BluetoothCacheMode::Uncached)?
+            .await?;
+        let status = async_result.Status();
+        if status == Ok(GattCommunicationStatus::Success) {
+            let results = async_result.Descriptors()?;
+            debug!("descriptors {:?}", results.Size());
+            Ok(results.into_iter().collect())
+        } else {
+            Err(Error::Other(
+                format!(
+                    "get_characteristic_descriptors for {:?} failed: {:?}",
+                    characteristic, status
+                )
+                .into(),
             ))
         }
     }

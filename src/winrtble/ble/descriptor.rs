@@ -12,10 +12,16 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use super::super::utils;
-use crate::api::Descriptor;
+use crate::{api::Descriptor, Error, Result};
 
 use uuid::Uuid;
-use windows::Devices::Bluetooth::GenericAttributeProfile::GattDescriptor;
+use windows::{
+    Devices::Bluetooth::{
+        BluetoothCacheMode,
+        GenericAttributeProfile::{GattCommunicationStatus, GattDescriptor},
+    },
+    Storage::Streams::{DataReader, DataWriter},
+};
 
 #[derive(Debug)]
 pub struct BLEDescriptor {
@@ -37,6 +43,39 @@ impl BLEDescriptor {
             uuid,
             service_uuid,
             characteristic_uuid,
+        }
+    }
+
+    pub async fn write_value(&self, data: &[u8]) -> Result<()> {
+        let writer = DataWriter::new()?;
+        writer.WriteBytes(data)?;
+        let operation = self.descriptor.WriteValueAsync(&writer.DetachBuffer()?)?;
+        let result = operation.await?;
+        if result == GattCommunicationStatus::Success {
+            Ok(())
+        } else {
+            Err(Error::Other(
+                format!("Windows UWP threw error on write descriptor: {:?}", result).into(),
+            ))
+        }
+    }
+
+    pub async fn read_value(&self) -> Result<Vec<u8>> {
+        let result = self
+            .descriptor
+            .ReadValueWithCacheModeAsync(BluetoothCacheMode::Uncached)?
+            .await?;
+        if result.Status()? == GattCommunicationStatus::Success {
+            let value = result.Value()?;
+            let reader = DataReader::FromBuffer(&value)?;
+            let len = reader.UnconsumedBufferLength()? as usize;
+            let mut input = vec![0u8; len];
+            reader.ReadBytes(&mut input[0..len])?;
+            Ok(input)
+        } else {
+            Err(Error::Other(
+                format!("Windows UWP threw error on read: {:?}", result).into(),
+            ))
         }
     }
 }

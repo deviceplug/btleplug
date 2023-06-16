@@ -303,4 +303,32 @@ impl api::Peripheral for Peripheral {
             .filter_map(|item| async { item.ok() });
         Ok(Box::pin(stream))
     }
+
+    async fn write_descriptor(&self, descriptor: &Descriptor, data: &[u8]) -> Result<()> {
+        let future = self.with_obj(|env, obj| {
+            let characteristic = JUuid::new(env, descriptor.characteristic_uuid)?;
+            let uuid = JUuid::new(env, descriptor.uuid)?;
+            let data_obj = jni_utils::arrays::slice_to_byte_array(env, data)?;
+            JSendFuture::try_from(obj.write_descriptor(characteristic, uuid, data_obj.into())?)
+        })?;
+        let result_ref = future.await?;
+        self.with_obj(|env, _obj| {
+            let result = JPollResult::from_env(env, result_ref.as_obj())?;
+            get_poll_result(env, result).map(|_| {})
+        })
+    }
+
+    async fn read_descriptor(&self, descriptor: &Descriptor) -> Result<Vec<u8>> {
+        let future = self.with_obj(|env, obj| {
+            let characteristic = JUuid::new(env, descriptor.characteristic_uuid)?;
+            let uuid = JUuid::new(env, descriptor.uuid)?;
+            JSendFuture::try_from(obj.read_descriptor(characteristic, uuid)?)
+        })?;
+        let result_ref = future.await?;
+        self.with_obj(|env, _obj| {
+            let result = JPollResult::from_env(env, result_ref.as_obj())?;
+            let bytes = get_poll_result(env, result)?;
+            Ok(byte_array_to_vec(env, bytes.into_inner())?)
+        })
+    }
 }

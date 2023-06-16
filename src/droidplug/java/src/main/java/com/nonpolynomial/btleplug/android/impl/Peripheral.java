@@ -258,6 +258,69 @@ class Peripheral {
         return stream;
     }
 
+    public Future<byte[]> readDescriptor(UUID characteristic, UUID uuid) {
+        SimpleFuture<byte[]> future = new SimpleFuture<>();
+        synchronized (this) {
+            this.queueCommand(() -> {
+                this.asyncWithFuture(future, () -> {
+                    if (!this.connected) {
+                        throw new NotConnectedException();
+                    }
+
+                    BluetoothGattDescriptor descriptor = this.getDescriptorByUuid(characteristic, uuid);
+                    this.setCommandCallback(new CommandCallback() {
+                        @Override
+                        public void onDescriptorRead(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
+                            Peripheral.this.asyncWithFuture(future, () -> {
+                                if (!descriptor.getUuid().equals(uuid)) {
+                                    throw new UnexpectedCharacteristicException();
+                                }
+
+                                Peripheral.this.wakeCommand(future, descriptor.getValue());
+                            });
+                        }
+                    });
+                    if (!this.gatt.readDescriptor(descriptor)) {
+                        throw new RuntimeException("Unable to read descriptor");
+                    }
+                });
+            });
+        }
+        return future;
+    }
+
+    public Future<Void> writeDescriptor(UUID characteristic, UUID uuid, byte[] data, int writeType) {
+        SimpleFuture<Void> future = new SimpleFuture<>();
+        synchronized (this) {
+            this.queueCommand(() -> {
+                this.asyncWithFuture(future, () -> {
+                    if (!this.connected) {
+                        throw new NotConnectedException();
+                    }
+
+                    BluetoothGattDescriptor descriptor = this.getDescriptorByUuid(characteristic, uuid);
+                    descriptor.setValue(data);
+                    this.setCommandCallback(new CommandCallback() {
+                        @Override
+                        public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
+                            Peripheral.this.asyncWithFuture(future, () -> {
+                                if (!descriptor.getUuid().equals(uuid)) {
+                                    throw new UnexpectedCharacteristicException();
+                                }
+
+                                Peripheral.this.wakeCommand(future, null);
+                            });
+                        }
+                    });
+                    if (!this.gatt.writeDescriptor(descriptor)) {
+                        throw new RuntimeException("Unable to read characteristic");
+                    }
+                });
+            });
+        }
+        return future;
+    }
+
     private List<BluetoothGattCharacteristic> getCharacteristics() {
         List<BluetoothGattCharacteristic> result = new ArrayList<>();
         if (this.gatt != null) {
@@ -272,6 +335,17 @@ class Peripheral {
         for (BluetoothGattCharacteristic characteristic : this.getCharacteristics()) {
             if (characteristic.getUuid().equals(uuid)) {
                 return characteristic;
+            }
+        }
+
+        throw new NoSuchCharacteristicException();
+    }
+
+    private BluetoothGattDescriptor getDescriptorByUuid(UUID characteristicUuid, UUID uuid) {
+        BluetoothGattCharacteristic characteristic = getCharacteristicByUuid(characteristicUuid);
+        for (BluetoothGattDescriptor descriptor : characteristic.getDescriptors()) {
+            if (descriptor.getUuid().equals(uuid)) {
+                return descriptor;
             }
         }
 
@@ -407,6 +481,12 @@ class Peripheral {
 
         @Override
         public void onCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
+            throw new UnexpectedCallbackException();
+        }
+
+        @Override
+        public void onDescriptorRead(BluetoothGatt gatt, BluetoothGattDescriptor descriptor,
+                                     int status) {
             throw new UnexpectedCallbackException();
         }
 

@@ -18,7 +18,7 @@ use super::{
 use crate::{
     api::{
         bleuuid::{uuid_from_u16, uuid_from_u32},
-        AddressType, BDAddr, CentralEvent, Characteristic, Peripheral as ApiPeripheral,
+        AddressType, BDAddr, CentralEvent, Characteristic, Descriptor, Peripheral as ApiPeripheral,
         PeripheralProperties, Service, ValueNotification, WriteType,
     },
     common::{adapter_manager::AdapterManager, util::notifications_stream_from_broadcast_receiver},
@@ -534,6 +534,40 @@ impl ApiPeripheral for Peripheral {
     async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
         let receiver = self.shared.notifications_channel.subscribe();
         Ok(notifications_stream_from_broadcast_receiver(receiver))
+    }
+
+    async fn write_descriptor(&self, descriptor: &Descriptor, data: &[u8]) -> Result<()> {
+        let ble_service = &*self
+            .shared
+            .ble_services
+            .get(&descriptor.service_uuid)
+            .ok_or_else(|| Error::NotSupported("Service not found for write".into()))?;
+        let ble_characteristic = ble_service
+            .characteristics
+            .get(&descriptor.characteristic_uuid)
+            .ok_or_else(|| Error::NotSupported("Characteristic not found for write".into()))?;
+        let ble_descriptor = ble_characteristic
+            .descriptors
+            .get(&descriptor.uuid)
+            .ok_or_else(|| Error::NotSupported("Descriptor not found for write".into()))?;
+        ble_descriptor.write_value(data).await
+    }
+
+    async fn read_descriptor(&self, descriptor: &Descriptor) -> Result<Vec<u8>> {
+        let ble_service = &*self
+            .shared
+            .ble_services
+            .get(&descriptor.service_uuid)
+            .ok_or_else(|| Error::NotSupported("Service not found for read".into()))?;
+        let ble_characteristic = ble_service
+            .characteristics
+            .get(&descriptor.uuid)
+            .ok_or_else(|| Error::NotSupported("Characteristic not found for read".into()))?;
+        let ble_descriptor = ble_characteristic
+            .descriptors
+            .get(&descriptor.uuid)
+            .ok_or_else(|| Error::NotSupported("Descriptor not found for write".into()))?;
+        ble_descriptor.read_value().await
     }
 }
 

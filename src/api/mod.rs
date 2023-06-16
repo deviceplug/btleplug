@@ -293,6 +293,14 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     /// The stream will remain valid across connections and can be queried before any connection
     /// is made.
     async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>>;
+
+    /// Write some data to the descriptor. Returns an error if the write couldn't be sent or (in
+    /// the case of a write-with-response) if the device returns an error.
+    async fn write_descriptor(&self, descriptor: &Descriptor, data: &[u8]) -> Result<()>;
+
+    /// Sends a read descriptor request to the device. Returns either an error if the request
+    /// was not accepted or the response from the device.
+    async fn read_descriptor(&self, descriptor: &Descriptor) -> Result<Vec<u8>>;
 }
 
 #[cfg_attr(

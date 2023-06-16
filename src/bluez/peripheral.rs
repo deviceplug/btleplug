@@ -63,6 +63,29 @@ pub struct Peripheral {
     services: Arc<Mutex<HashMap<Uuid, ServiceInternal>>>,
 }
 
+fn get_characteristic<'a>(
+    services: &'a HashMap<Uuid, ServiceInternal>,
+    service_uuid: &Uuid,
+    characteristic_uuid: &Uuid,
+) -> Result<&'a CharacteristicInternal> {
+    services
+        .get(service_uuid)
+        .ok_or_else(|| {
+            Error::Other(format!("Service with UUID {} not found.", service_uuid).into())
+        })?
+        .characteristics
+        .get(characteristic_uuid)
+        .ok_or_else(|| {
+            Error::Other(
+                format!(
+                    "Characteristic with UUID {} not found.",
+                    characteristic_uuid
+                )
+                .into(),
+            )
+        })
+}
+
 impl Peripheral {
     pub(crate) fn new(session: BluetoothSession, device: DeviceInfo) -> Self {
         Peripheral {
@@ -75,30 +98,29 @@ impl Peripheral {
 
     fn characteristic_info(&self, characteristic: &Characteristic) -> Result<CharacteristicInfo> {
         let services = self.services.lock().unwrap();
-        services
-            .get(&characteristic.service_uuid)
+        get_characteristic(
+            &services,
+            &characteristic.service_uuid,
+            &characteristic.uuid,
+        )
+        .map(|c| &c.info)
+        .cloned()
+    }
+
+    fn descriptor_info(&self, descriptor: &Descriptor) -> Result<DescriptorInfo> {
+        let services = self.services.lock().unwrap();
+        let characteristic = get_characteristic(
+            &services,
+            &descriptor.service_uuid,
+            &descriptor.characteristic_uuid,
+        )?;
+        characteristic
+            .descriptors
+            .get(&descriptor.uuid)
             .ok_or_else(|| {
-                Error::Other(
-                    format!(
-                        "Service with UUID {} not found.",
-                        characteristic.service_uuid
-                    )
-                    .into(),
-                )
-            })?
-            .characteristics
-            .get(&characteristic.uuid)
-            .map(|c| &c.info)
-            .cloned()
-            .ok_or_else(|| {
-                Error::Other(
-                    format!(
-                        "Characteristic with UUID {} not found.",
-                        characteristic.uuid
-                    )
-                    .into(),
-                )
+                Error::Other(format!("Descriptor with UUID {} not found.", descriptor.uuid).into())
             })
+            .cloned()
     }
 
     async fn device_info(&self) -> Result<DeviceInfo> {
@@ -229,6 +251,22 @@ impl api::Peripheral for Peripheral {
         Ok(Box::pin(events.filter_map(move |event| {
             ready(value_notification(event, &device_id, services.clone()))
         })))
+    }
+
+    async fn write_descriptor(&self, descriptor: &Descriptor, data: &[u8]) -> Result<()> {
+        let descriptor_info = self.descriptor_info(descriptor)?;
+        Ok(self
+            .session
+            .write_descriptor_value(&descriptor_info.id, data)
+            .await?)
+    }
+
+    async fn read_descriptor(&self, descriptor: &Descriptor) -> Result<Vec<u8>> {
+        let descriptor_info = self.descriptor_info(descriptor)?;
+        Ok(self
+            .session
+            .read_descriptor_value(&descriptor_info.id)
+            .await?)
     }
 }
 

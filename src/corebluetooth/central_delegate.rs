@@ -116,8 +116,19 @@ pub enum CentralDelegateEvent {
         service_uuid: Uuid,
         characteristic_uuid: Uuid,
     },
-    // TODO Deal with descriptors at some point, but not a huge worry at the moment.
-    // DiscoveredDescriptors(String, )
+    DescriptorNotified {
+        peripheral_uuid: Uuid,
+        service_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        descriptor_uuid: Uuid,
+        data: Vec<u8>,
+    },
+    DescriptorWritten {
+        peripheral_uuid: Uuid,
+        service_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        descriptor_uuid: Uuid,
+    },
 }
 
 impl Debug for CentralDelegateEvent {
@@ -247,12 +258,40 @@ impl Debug for CentralDelegateEvent {
                 .field("service_uuids", service_uuids)
                 .field("rssi", rssi)
                 .finish(),
+            CentralDelegateEvent::DescriptorNotified {
+                peripheral_uuid,
+                service_uuid,
+                characteristic_uuid,
+                descriptor_uuid,
+                data,
+            } => f
+                .debug_struct("DescriptorNotified")
+                .field("peripheral_uuid", peripheral_uuid)
+                .field("service_uuid", service_uuid)
+                .field("characteristic_uuid", characteristic_uuid)
+                .field("descriptor_uuid", descriptor_uuid)
+                .field("data", data)
+                .finish(),
+            CentralDelegateEvent::DescriptorWritten {
+                peripheral_uuid,
+                service_uuid,
+                characteristic_uuid,
+                descriptor_uuid,
+            } => f
+                .debug_struct("DescriptorWritten")
+                .field("service_uuid", service_uuid)
+                .field("peripheral_uuid", peripheral_uuid)
+                .field("characteristic_uuid", characteristic_uuid)
+                .field("descriptor_uuid", descriptor_uuid)
+                .finish(),
         }
     }
 }
 
 pub mod CentralDelegate {
-    use crate::corebluetooth::framework::ns::number_as_i64;
+    use crate::corebluetooth::{
+        framework::ns::number_as_i64, utils::core_bluetooth::descriptor_debug,
+    };
 
     use super::*;
 
@@ -323,6 +362,10 @@ pub mod CentralDelegate {
                                 delegate_peripheral_didwritevalueforcharacteristic_error as extern fn(&mut Object, Sel, id, id, id));
                 decl.add_method(sel!(peripheral:didReadRSSI:error:),
                                 delegate_peripheral_didreadrssi_error as extern fn(&mut Object, Sel, id, id, id));
+                decl.add_method(sel!(peripheral:didUpdateValueForDescriptor:error:),
+                                delegate_peripheral_didupdatevaluefordescriptor_error as extern fn(&mut Object, Sel, id, id, id));
+                decl.add_method(sel!(peripheral:didWriteValueForDescriptor:error:),
+                                delegate_peripheral_didwritevaluefordescriptor_error as extern fn(&mut Object, Sel, id, id, id));
             }
 
             decl.register();
@@ -779,18 +822,6 @@ pub mod CentralDelegate {
         }
     }
 
-    // extern fn delegate_peripheral_diddiscoverdescriptorsforcharacteristic_error(_delegate: &mut Object, _cmd: Sel, _peripheral: id, _characteristic: id, _error: id) {
-    //     info!("delegate_peripheral_diddiscoverdescriptorsforcharacteristic_error");
-    // }
-
-    // extern fn delegate_peripheral_didupdatevaluefordescriptor(_delegate: &mut Object, _cmd: Sel, _peripheral: id, _descriptor: id, _error: id) {
-    //     trace!("delegate_peripheral_didupdatevaluefordescriptor");
-    // }
-
-    // extern fn delegate_peripheral_didwritevaluefordescriptor_error(_delegate: &mut Object, _cmd: Sel, _peripheral: id, _descriptor: id, _error: id) {
-    //     trace!("delegate_peripheral_didwritevaluefordescriptor_error");
-    // }
-
     extern "C" fn delegate_peripheral_didreadrssi_error(
         _delegate: &mut Object,
         _cmd: Sel,
@@ -803,5 +834,63 @@ pub mod CentralDelegate {
             peripheral_debug(peripheral)
         );
         if error == nil {}
+    }
+
+    extern "C" fn delegate_peripheral_didupdatevaluefordescriptor_error(
+        delegate: &mut Object,
+        _cmd: Sel,
+        peripheral: id,
+        descriptor: id,
+        error: id,
+    ) {
+        trace!(
+            "delegate_peripheral_didupdatevaluefordescriptor_error {} {} {}",
+            peripheral_debug(peripheral),
+            descriptor_debug(descriptor),
+            localized_description(error)
+        );
+        if error == nil {
+            let characteristic = cb::descriptor_characteristic(descriptor);
+            let service = cb::characteristic_service(characteristic);
+            send_delegate_event(
+                delegate,
+                CentralDelegateEvent::DescriptorNotified {
+                    peripheral_uuid: nsuuid_to_uuid(cb::peer_identifier(peripheral)),
+                    service_uuid: cbuuid_to_uuid(cb::attribute_uuid(service)),
+                    characteristic_uuid: cbuuid_to_uuid(cb::attribute_uuid(characteristic)),
+                    descriptor_uuid: cbuuid_to_uuid(cb::attribute_uuid(descriptor)),
+                    data: get_characteristic_value(characteristic),
+                },
+            );
+            // Notify BluetoothGATTCharacteristic::read_value that read was successful.
+        }
+    }
+
+    extern "C" fn delegate_peripheral_didwritevaluefordescriptor_error(
+        delegate: &mut Object,
+        _cmd: Sel,
+        peripheral: id,
+        descriptor: id,
+        error: id,
+    ) {
+        trace!(
+            "delegate_peripheral_didwritevaluefordescriptor_error {} {} {}",
+            peripheral_debug(peripheral),
+            descriptor_debug(descriptor),
+            localized_description(error)
+        );
+        if error == nil {
+            let characteristic = cb::descriptor_characteristic(descriptor);
+            let service = cb::characteristic_service(characteristic);
+            send_delegate_event(
+                delegate,
+                CentralDelegateEvent::DescriptorWritten {
+                    peripheral_uuid: nsuuid_to_uuid(cb::peer_identifier(peripheral)),
+                    service_uuid: cbuuid_to_uuid(cb::attribute_uuid(service)),
+                    characteristic_uuid: cbuuid_to_uuid(cb::attribute_uuid(characteristic)),
+                    descriptor_uuid: cbuuid_to_uuid(cb::attribute_uuid(descriptor)),
+                },
+            );
+        }
     }
 }

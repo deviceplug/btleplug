@@ -22,6 +22,8 @@ pub struct JPeripheral<'a: 'b, 'b> {
     write: JMethodID<'a>,
     set_characteristic_notification: JMethodID<'a>,
     get_notifications: JMethodID<'a>,
+    read_descriptor: JMethodID<'a>,
+    write_descriptor: JMethodID<'a>,
     env: &'b JNIEnv<'a>,
 }
 
@@ -90,6 +92,16 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             "getNotifications",
             "()Lio/github/gedgygedgy/rust/stream/Stream;",
         )?;
+        let read_descriptor = env.get_method_id(
+            class,
+            "readDescriptor",
+            "(Ljava/util/UUID;Ljava/util/UUID;)Lio/github/gedgygedgy/rust/future/Future;",
+        )?;
+        let write_descriptor = env.get_method_id(
+            class,
+            "writeDescriptor",
+            "(Ljava/util/UUID;Ljava/util/UUID;[BI)Lio/github/gedgygedgy/rust/future/Future;",
+        )?;
         Ok(Self {
             internal: obj,
             connect,
@@ -100,6 +112,8 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             write,
             set_characteristic_notification,
             get_notifications,
+            read_descriptor,
+            write_descriptor,
             env,
         })
     }
@@ -232,6 +246,41 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             )?
             .l()?;
         JStream::from_env(self.env, stream_obj)
+    }
+
+    pub fn read_descriptor(
+        &self,
+        characteristic: JUuid<'a, 'b>,
+        uuid: JUuid<'a, 'b>,
+    ) -> Result<JFuture<'a, 'b>> {
+        let future_obj = self
+            .env
+            .call_method_unchecked(
+                self.internal,
+                self.read_descriptor,
+                JavaType::Object("Lio/github/gedgygedgy/rust/future/Future;".to_string()),
+                &[characteristic.into(), uuid.into()],
+            )?
+            .l()?;
+        JFuture::from_env(self.env, future_obj)
+    }
+
+    pub fn write_descriptor(
+        &self,
+        characteristic: JUuid<'a, 'b>,
+        uuid: JUuid<'a, 'b>,
+        data: JObject<'a>,
+    ) -> Result<JFuture<'a, 'b>> {
+        let future_obj = self
+            .env
+            .call_method_unchecked(
+                self.internal,
+                self.write_descriptor,
+                JavaType::Object("Lio/github/gedgygedgy/rust/future/Future;".to_string()),
+                &[characteristic.into(), uuid.into(), data.into()],
+            )?
+            .l()?;
+        JFuture::from_env(self.env, future_obj)
     }
 }
 

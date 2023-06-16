@@ -1,9 +1,10 @@
 use async_trait::async_trait;
 use bluez_async::{
     BluetoothEvent, BluetoothSession, CharacteristicEvent, CharacteristicFlags, CharacteristicId,
-    CharacteristicInfo, DeviceId, DeviceInfo, MacAddress, ServiceInfo, WriteOptions,
+    CharacteristicInfo, DescriptorInfo, DeviceId, DeviceInfo, MacAddress, ServiceInfo,
+    WriteOptions,
 };
-use futures::future::ready;
+use futures::future::{join_all, ready};
 use futures::stream::{Stream, StreamExt};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -16,15 +17,27 @@ use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 use crate::api::{
-    self, AddressType, BDAddr, CharPropFlags, Characteristic, PeripheralProperties, Service,
-    ValueNotification, WriteType,
+    self, AddressType, BDAddr, CharPropFlags, Characteristic, Descriptor, PeripheralProperties,
+    Service, ValueNotification, WriteType,
 };
 use crate::{Error, Result};
 
 #[derive(Clone, Debug)]
+struct CharacteristicInternal {
+    info: CharacteristicInfo,
+    descriptors: HashMap<Uuid, DescriptorInfo>,
+}
+
+impl CharacteristicInternal {
+    fn new(info: CharacteristicInfo, descriptors: HashMap<Uuid, DescriptorInfo>) -> Self {
+        Self { info, descriptors }
+    }
+}
+
+#[derive(Clone, Debug)]
 struct ServiceInternal {
     info: ServiceInfo,
-    characteristics: HashMap<Uuid, CharacteristicInfo>,
+    characteristics: HashMap<Uuid, CharacteristicInternal>,
 }
 
 #[cfg_attr(
@@ -75,6 +88,7 @@ impl Peripheral {
             })?
             .characteristics
             .get(&characteristic.uuid)
+            .map(|c| &c.info)
             .cloned()
             .ok_or_else(|| {
                 Error::Other(
@@ -145,13 +159,26 @@ impl api::Peripheral for Peripheral {
         let services = self.session.get_services(&self.device).await?;
         for service in services {
             let characteristics = self.session.get_characteristics(&service.id).await?;
+            let characteristics =
+                join_all(characteristics.into_iter().map(|characteristic| async {
+                    let descriptors = self
+                        .session
+                        .get_descriptors(&characteristic.id)
+                        .await
+                        .unwrap_or(Vec::new())
+                        .into_iter()
+                        .map(|descriptor| (descriptor.uuid, descriptor))
+                        .collect();
+                    CharacteristicInternal::new(characteristic, descriptors)
+                }))
+                .await;
             services_internal.insert(
                 service.uuid,
                 ServiceInternal {
                     info: service,
                     characteristics: characteristics
                         .into_iter()
-                        .map(|characteristic| (characteristic.uuid, characteristic))
+                        .map(|characteristic| (characteristic.info.uuid, characteristic))
                         .collect(),
                 },
             );
@@ -229,8 +256,8 @@ fn find_characteristic_by_id(
 ) -> Option<&CharacteristicInfo> {
     for service in services.values() {
         for characteristic in service.characteristics.values() {
-            if characteristic.id == characteristic_id {
-                return Some(characteristic);
+            if characteristic.info.id == characteristic_id {
+                return Some(&characteristic.info);
             }
         }
     }
@@ -267,10 +294,30 @@ impl From<bluez_async::AddressType> for AddressType {
     }
 }
 
-fn make_characteristic(info: &CharacteristicInfo, service_uuid: Uuid) -> Characteristic {
+fn make_descriptor(
+    info: &DescriptorInfo,
+    characteristic_uuid: Uuid,
+    service_uuid: Uuid,
+) -> Descriptor {
+    Descriptor {
+        uuid: info.uuid,
+        characteristic_uuid,
+        service_uuid,
+    }
+}
+
+fn make_characteristic(
+    characteristic: &CharacteristicInternal,
+    service_uuid: Uuid,
+) -> Characteristic {
+    let CharacteristicInternal { info, descriptors } = characteristic;
     Characteristic {
         uuid: info.uuid,
         properties: info.flags.into(),
+        descriptors: descriptors
+            .iter()
+            .map(|(_, descriptor)| make_descriptor(descriptor, info.uuid, service_uuid))
+            .collect(),
         service_uuid,
     }
 }

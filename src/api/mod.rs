@@ -144,6 +144,8 @@ pub struct Characteristic {
     /// supports. If you attempt an operation that is not supported by the characteristics (for
     /// example setting notify on one without the NOTIFY flag), that operation will fail.
     pub properties: CharPropFlags,
+    /// The descriptors of this characteristic.
+    pub descriptors: BTreeSet<Descriptor>,
 }
 
 impl Display for Characteristic {
@@ -153,6 +155,23 @@ impl Display for Characteristic {
             "uuid: {:?}, char properties: {:?}",
             self.uuid, self.properties
         )
+    }
+}
+
+/// Add doc
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
+pub struct Descriptor {
+    /// The UUID for this descriptor. This uniquely identifies its behavior.
+    pub uuid: Uuid,
+    /// The UUID of the service this descriptor belongs to.
+    pub service_uuid: Uuid,
+    /// The UUID of the characteristic this descriptor belongs to.
+    pub characteristic_uuid: Uuid,
+}
+
+impl Display for Descriptor {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "uuid: {:?}", self.uuid)
     }
 }
 

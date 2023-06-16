@@ -21,7 +21,10 @@ use super::{
         nsuuid_to_uuid,
     },
 };
-use crate::api::{CharPropFlags, Characteristic, ScanFilter, Service, WriteType};
+use crate::api::{
+    bleuuid::uuid_from_u16, CharPropFlags, Characteristic, Descriptor, ScanFilter, Service,
+    WriteType,
+};
 use crate::Error;
 use cocoa::{
     base::{id, nil},
@@ -42,14 +45,28 @@ use std::{
 use tokio::runtime;
 use uuid::Uuid;
 
+struct CBDescriptor {
+    pub descriptor: StrongPtr,
+    pub uuid: Uuid,
+}
+
+impl CBDescriptor {
+    pub fn new(descriptor: StrongPtr) -> Self {
+        let uuid = cbuuid_to_uuid(cb::attribute_uuid(*descriptor));
+        Self { descriptor, uuid }
+    }
+}
+
 struct CBCharacteristic {
     pub characteristic: StrongPtr,
     pub uuid: Uuid,
     pub properties: CharPropFlags,
+    pub descriptors: HashMap<Uuid, CBDescriptor>,
     pub read_future_state: VecDeque<CoreBluetoothReplyStateShared>,
     pub write_future_state: VecDeque<CoreBluetoothReplyStateShared>,
     pub subscribe_future_state: VecDeque<CoreBluetoothReplyStateShared>,
     pub unsubscribe_future_state: VecDeque<CoreBluetoothReplyStateShared>,
+    pub discovered: bool,
 }
 
 impl Debug for CBCharacteristic {
@@ -70,14 +87,23 @@ impl CBCharacteristic {
     pub fn new(characteristic: StrongPtr) -> Self {
         let properties = CBCharacteristic::form_flags(*characteristic);
         let uuid = cbuuid_to_uuid(cb::attribute_uuid(*characteristic));
+        let descriptors_arr = cb::characteristic_descriptors(*characteristic);
+        let mut descriptors = HashMap::new();
+        for i in 0..ns::array_count(descriptors_arr) {
+            let d = ns::array_objectatindex(descriptors_arr, i);
+            let descriptor = CBDescriptor::new(unsafe { StrongPtr::retain(d) });
+            descriptors.insert(descriptor.uuid, descriptor);
+        }
         Self {
             characteristic,
             uuid,
             properties,
+            descriptors,
             read_future_state: VecDeque::with_capacity(10),
             write_future_state: VecDeque::with_capacity(10),
             subscribe_future_state: VecDeque::with_capacity(10),
             unsubscribe_future_state: VecDeque::with_capacity(10),
+            discovered: false,
         }
     }
 
@@ -134,6 +160,7 @@ pub type CoreBluetoothReplyFuture = BtlePlugFuture<CoreBluetoothReply>;
 struct ServiceInternal {
     cbservice: StrongPtr,
     characteristics: HashMap<Uuid, CBCharacteristic>,
+    pub discovered: bool,
 }
 
 struct CBPeripheral {
@@ -189,7 +216,44 @@ impl CBPeripheral {
             .get_mut(&service_uuid)
             .expect("Got characteristics for a service we don't know about");
         service.characteristics = characteristics;
+        if service.characteristics.is_empty() {
+            service.discovered = true;
+            self.check_discovered();
+        }
+    }
 
+    pub fn set_characteristic_descriptors(
+        &mut self,
+        service_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        descriptors: HashMap<Uuid, StrongPtr>,
+    ) {
+        let descriptors = descriptors
+            .into_iter()
+            .map(|(descriptor_uuid, descriptor)| (descriptor_uuid, CBDescriptor::new(descriptor)))
+            .collect();
+        let service = self
+            .services
+            .get_mut(&service_uuid)
+            .expect("Got descriptors for a service we don't know about");
+        let characteristic = service
+            .characteristics
+            .get_mut(&characteristic_uuid)
+            .expect("Got descriptors for a characteristic we don't know about");
+        characteristic.descriptors = descriptors;
+        characteristic.discovered = true;
+
+        if !service
+            .characteristics
+            .values()
+            .any(|characteristic| !characteristic.discovered)
+        {
+            service.discovered = true;
+            self.check_discovered()
+        }
+    }
+
+    fn check_discovered(&mut self) {
         // It's time for QUESTIONABLE ASSUMPTIONS.
         //
         // For sake of being lazy, we don't want to fire device connection until
@@ -198,11 +262,7 @@ impl CBPeripheral {
         // service map. Once that's done, we're filled out enough and can send
         // back a Connected reply to the waiting future with all of the
         // characteristic info in it.
-        if !self
-            .services
-            .values()
-            .any(|service| service.characteristics.is_empty())
-        {
+        if !self.services.values().any(|service| !service.discovered) {
             if self.connected_future_state.is_none() {
                 panic!("We should still have a future at this point!");
             }
@@ -215,10 +275,22 @@ impl CBPeripheral {
                     characteristics: service
                         .characteristics
                         .iter()
-                        .map(|(&characteristic_uuid, characteristic)| Characteristic {
-                            uuid: characteristic_uuid,
-                            service_uuid,
-                            properties: characteristic.properties,
+                        .map(|(&characteristic_uuid, characteristic)| {
+                            let descriptors = characteristic
+                                .descriptors
+                                .iter()
+                                .map(|(&descriptor_uuid, _)| Descriptor {
+                                    uuid: descriptor_uuid,
+                                    service_uuid,
+                                    characteristic_uuid,
+                                })
+                                .collect();
+                            Characteristic {
+                                uuid: characteristic_uuid,
+                                service_uuid,
+                                descriptors,
+                                properties: characteristic.properties,
+                            }
                         })
                         .collect(),
                 })
@@ -458,6 +530,7 @@ impl CoreBluetoothInternal {
                         ServiceInternal {
                             cbservice,
                             characteristics: HashMap::new(),
+                            discovered: false,
                         },
                     )
                 })
@@ -485,9 +558,47 @@ impl CoreBluetoothInternal {
         }
     }
 
+    fn on_discovered_characteristic_descriptors(
+        &mut self,
+        peripheral_uuid: Uuid,
+        service_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        descriptors: HashMap<Uuid, StrongPtr>,
+    ) {
+        trace!(
+            "Found descriptors for peripheral {} service {} characteristic {}:",
+            peripheral_uuid,
+            service_uuid,
+            characteristic_uuid,
+        );
+        for id in descriptors.keys() {
+            trace!("{}", id);
+        }
+        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
+            p.set_characteristic_descriptors(service_uuid, characteristic_uuid, descriptors);
+        }
+    }
+
     fn on_peripheral_connect(&mut self, _peripheral_uuid: Uuid) {
         // Don't actually do anything here. The peripheral will fire the future
         // itself when it receives all of its service/characteristic info.
+    }
+
+    fn on_peripheral_connection_failed(&mut self, peripheral_uuid: Uuid) {
+        trace!("Got connection fail event!");
+        if self.peripherals.contains_key(&peripheral_uuid) {
+            let peripheral = self
+                .peripherals
+                .get_mut(&peripheral_uuid)
+                .expect("If we're here we should have an ID");
+            peripheral
+                .connected_future_state
+                .take()
+                .unwrap()
+                .lock()
+                .unwrap()
+                .set_reply(CoreBluetoothReply::Err(String::from("Connection failed")));
+        }
     }
 
     async fn on_peripheral_disconnect(&mut self, peripheral_uuid: Uuid) {
@@ -769,9 +880,15 @@ impl CoreBluetoothInternal {
                     CentralDelegateEvent::DiscoveredCharacteristics{peripheral_uuid, service_uuid, characteristics} => {
                         self.on_discovered_characteristics(peripheral_uuid, service_uuid, characteristics)
                     }
-                    CentralDelegateEvent::ConnectedDevice{peripheral_uuid} => {
-                        self.on_peripheral_connect(peripheral_uuid)
+                    CentralDelegateEvent::DiscoveredCharacteristicDescriptors{peripheral_uuid, service_uuid, characteristic_uuid, descriptors} => {
+                        self.on_discovered_characteristic_descriptors(peripheral_uuid, service_uuid, characteristic_uuid, descriptors)
                     }
+                    CentralDelegateEvent::ConnectedDevice{peripheral_uuid} => {
+                            self.on_peripheral_connect(peripheral_uuid)
+                    },
+                    CentralDelegateEvent::ConnectionFailed{peripheral_uuid} => {
+                        self.on_peripheral_connection_failed(peripheral_uuid)
+                    },
                     CentralDelegateEvent::DisconnectedDevice{peripheral_uuid} => {
                         self.on_peripheral_disconnect(peripheral_uuid).await
                     }

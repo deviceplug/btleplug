@@ -12,8 +12,8 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use super::{
-    advertisement_data_type, ble::characteristic::BLECharacteristic, ble::device::BLEDevice,
-    ble::service::BLEService, utils,
+    advertisement_data_type, ble::characteristic::BLECharacteristic,
+    ble::descriptor::BLEDescriptor, ble::device::BLEDevice, ble::service::BLEService, utils,
 };
 use crate::{
     api::{
@@ -405,11 +405,35 @@ impl ApiPeripheral for Peripheral {
                 if !self.shared.ble_services.contains_key(&uuid) {
                     match BLEDevice::get_characteristics(&service).await {
                         Ok(characteristics) => {
-                            let characteristics = characteristics
+                            let characteristics =
+                                characteristics.into_iter().map(|characteristic| async {
+                                    match BLEDevice::get_characteristic_descriptors(&characteristic)
+                                        .await
+                                    {
+                                        Ok(descriptors) => {
+                                            let descriptors: HashMap<Uuid, BLEDescriptor> =
+                                                descriptors
+                                                    .into_iter()
+                                                    .map(|descriptor| {
+                                                        let descriptor =
+                                                            BLEDescriptor::new(descriptor);
+                                                        (descriptor.uuid(), descriptor)
+                                                    })
+                                                    .collect();
+                                            Ok((characteristic, descriptors))
+                                        }
+                                        Err(e) => {
+                                            error!("get_characteristic_descriptors_async {:?}", e);
+                                            Err(e)
+                                        }
+                                    }
+                                });
+                            let characteristics = futures::future::try_join_all(characteristics)
+                                .await?
                                 .into_iter()
-                                .map(|gatt_characteristic| {
+                                .map(|(characteristic, descriptors)| {
                                     let characteristic =
-                                        BLECharacteristic::new(gatt_characteristic);
+                                        BLECharacteristic::new(characteristic, descriptors);
                                     (characteristic.uuid(), characteristic)
                                 })
                                 .collect();

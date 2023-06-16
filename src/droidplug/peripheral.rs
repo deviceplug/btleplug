@@ -1,12 +1,14 @@
 use crate::{
     api::{
-        self, BDAddr, Characteristic, PeripheralProperties, Service, ValueNotification, WriteType,
+        self, BDAddr, Characteristic, Descriptor, PeripheralProperties, Service, ValueNotification,
+        WriteType,
     },
     Error, Result,
 };
 use async_trait::async_trait;
 use futures::stream::Stream;
 use jni::{
+    descriptors,
     objects::{GlobalRef, JList, JObject},
     JNIEnv,
 };
@@ -204,15 +206,25 @@ impl api::Peripheral for Peripheral {
                 let service = JBluetoothGattService::from_env(env, service)?;
                 let mut characteristics = BTreeSet::new();
                 for characteristic in service.get_characteristics()? {
+                    let mut descriptors = BTreeSet::new();
+                    for descriptor in characteristic.get_descriptors()? {
+                        descriptors.insert(Descriptor {
+                            uuid: descriptor.get_uuid()?,
+                            service_uuid: service.get_uuid()?,
+                            characteristic_uuid: characteristic.get_uuid()?,
+                        });
+                    }
                     characteristics.insert(Characteristic {
                         service_uuid: service.get_uuid()?,
                         uuid: characteristic.get_uuid()?,
                         properties: characteristic.get_properties()?,
+                        descriptors: descriptors.clone(),
                     });
                     peripheral_characteristics.push(Characteristic {
                         service_uuid: service.get_uuid()?,
                         uuid: characteristic.get_uuid()?,
                         properties: characteristic.get_properties()?,
+                        descriptors: descriptors,
                     });
                 }
                 peripheral_services.push(Service {

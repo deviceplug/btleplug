@@ -312,6 +312,7 @@ pub struct JBluetoothGattCharacteristic<'a: 'b, 'b> {
     get_uuid: JMethodID<'a>,
     get_properties: JMethodID<'a>,
     get_value: JMethodID<'a>,
+    get_descriptors: JMethodID<'a>,
     env: &'b JNIEnv<'a>,
 }
 
@@ -322,12 +323,14 @@ impl<'a: 'b, 'b> JBluetoothGattCharacteristic<'a, 'b> {
 
         let get_uuid = env.get_method_id(&class, "getUuid", "()Ljava/util/UUID;")?;
         let get_properties = env.get_method_id(&class, "getProperties", "()I")?;
+        let get_descriptors = env.get_method_id(&class, "getDescriptors", "()Ljava/util/List;")?;
         let get_value = env.get_method_id(&class, "getValue", "()[B")?;
         Ok(Self {
             internal: obj,
             get_uuid,
             get_properties,
             get_value,
+            get_descriptors,
             env,
         })
     }
@@ -370,6 +373,57 @@ impl<'a: 'b, 'b> JBluetoothGattCharacteristic<'a, 'b> {
             )?
             .l()?;
         jni_utils::arrays::byte_array_to_vec(self.env, value.into_inner())
+    }
+
+    pub fn get_descriptors(&self) -> Result<Vec<JBluetoothGattDescriptor>> {
+        let obj = self
+            .env
+            .call_method_unchecked(
+                self.internal,
+                self.get_descriptors,
+                JavaType::Object("Ljava/util/List;".to_string()),
+                &[],
+            )?
+            .l()?;
+        let desc_list = JList::from_env(self.env, obj)?;
+        let mut desc_vec = vec![];
+        for desc in desc_list.iter()? {
+            desc_vec.push(JBluetoothGattDescriptor::from_env(self.env, desc)?);
+        }
+        Ok(desc_vec)
+    }
+}
+
+pub struct JBluetoothGattDescriptor<'a: 'b, 'b> {
+    internal: JObject<'a>,
+    get_uuid: JMethodID<'a>,
+    env: &'b JNIEnv<'a>,
+}
+
+impl<'a: 'b, 'b> JBluetoothGattDescriptor<'a, 'b> {
+    pub fn from_env(env: &'b JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+        let class = env.auto_local(env.find_class("android/bluetooth/BluetoothGattDescriptor")?);
+
+        let get_uuid = env.get_method_id(&class, "getUuid", "()Ljava/util/UUID;")?;
+        Ok(Self {
+            internal: obj,
+            get_uuid,
+            env,
+        })
+    }
+
+    pub fn get_uuid(&self) -> Result<Uuid> {
+        let obj = self
+            .env
+            .call_method_unchecked(
+                self.internal,
+                self.get_uuid,
+                JavaType::Object("Ljava/util/UUID;".to_string()),
+                &[],
+            )?
+            .l()?;
+        let uuid_obj = JUuid::from_env(self.env, obj)?;
+        Ok(uuid_obj.as_uuid()?)
     }
 }
 

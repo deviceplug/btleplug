@@ -12,6 +12,7 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 pub mod characteristic;
+pub mod descriptor;
 pub mod device;
 pub mod service;
 pub mod watcher;

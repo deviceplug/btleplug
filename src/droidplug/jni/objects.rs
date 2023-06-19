@@ -60,7 +60,7 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             "connect",
             "()Lio/github/gedgygedgy/rust/future/Future;",
         )?;
-        let request_mtu = env.get_method_id(class, "requestMtu", "()V")?;
+        let request_mtu = env.get_method_id(class, "requestMtu", "(I)V")?;
         let disconnect = env.get_method_id(
             class,
             "disconnect",
@@ -139,13 +139,13 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
         JFuture::from_env(self.env, future_obj)
     }
 
-    pub fn request_mtu(&self) -> Result<()> {
+    pub fn request_mtu(&self, mtu: i32) -> Result<()> {
         self.env
             .call_method_unchecked(
                 self.internal,
                 self.request_mtu,
                 JavaType::Primitive(Primitive::Void),
-                &[],
+                &[mtu.into()],
             )?
             .v()?;
         Ok(())

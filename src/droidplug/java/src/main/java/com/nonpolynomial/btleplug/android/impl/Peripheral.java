@@ -85,11 +85,11 @@ class Peripheral {
     }
 
     
-    public void requestMtu() {
+    public void requestMtu(int mtu) {
         synchronized (this) {
             if (this.gatt != null) {
                 try {
-                    this.gatt.requestMtu(517);
+                    this.gatt.requestMtu(mtu);
                 } catch (Exception e) {
                     Log.e("Droidplug", "error requesting mtu: " + e.toString());
                 }

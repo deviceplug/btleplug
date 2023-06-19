@@ -131,8 +131,8 @@ impl Peripheral {
         })
     }
 
-    pub async fn request_mtu(&self) -> Result<()> {
-        self.with_obj(|_env, obj| Ok(obj.request_mtu()?))
+    pub async fn request_mtu(&self, mtu: i32) -> Result<()> {
+        self.with_obj(|_env, obj| Ok(obj.request_mtu(mtu)?))
     }
 }
 

@@ -139,6 +139,20 @@ class Peripheral {
                                 Peripheral.this.wakeCommand(future, characteristic.getValue());
                             });
                         }
+                        @Override
+                        public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
+                            Peripheral.this.asyncWithFuture(future, () -> {
+                                if (status != BluetoothGatt.GATT_SUCCESS) {
+                                    throw new RuntimeException("Disconnected while in read operation");
+                                }
+
+                                if (newState == BluetoothGatt.STATE_DISCONNECTED) {
+                                    Peripheral.this.gatt.close();
+                                    Peripheral.this.gatt = null;
+                                    Peripheral.this.wakeCommand(future, null);
+                                }
+                            });
+                        }
                     });
                     if (!this.gatt.readCharacteristic(characteristic)) {
                         throw new RuntimeException("Unable to read characteristic");
@@ -172,6 +186,20 @@ class Peripheral {
                                 Peripheral.this.wakeCommand(future, null);
                             });
                         }
+                        @Override
+                        public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
+                            Peripheral.this.asyncWithFuture(future, () -> {
+                                if (status != BluetoothGatt.GATT_SUCCESS) {
+                                    throw new RuntimeException("Disconnected while in write operation");
+                                }
+
+                                if (newState == BluetoothGatt.STATE_DISCONNECTED) {
+                                    Peripheral.this.gatt.close();
+                                    Peripheral.this.gatt = null;
+                                    Peripheral.this.wakeCommand(future, null);
+                                }
+                            });
+                        }
                     });
                     if (!this.gatt.writeCharacteristic(characteristic)) {
                         throw new RuntimeException("Unable to write characteristic");
@@ -199,6 +227,20 @@ class Peripheral {
                             }
 
                             Peripheral.this.wakeCommand(future, gatt.getServices());
+                        }
+                        @Override
+                        public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
+                            Peripheral.this.asyncWithFuture(future, () -> {
+                                if (status != BluetoothGatt.GATT_SUCCESS) {
+                                    throw new RuntimeException("Disconnected while discovering services");
+                                }
+
+                                if (newState == BluetoothGatt.STATE_DISCONNECTED) {
+                                    Peripheral.this.gatt.close();
+                                    Peripheral.this.gatt = null;
+                                    Peripheral.this.wakeCommand(future, null);
+                                }
+                            });
                         }
                     });
                     if (!this.gatt.discoverServices()) {
@@ -243,6 +285,20 @@ class Peripheral {
                                 }
 
                                 Peripheral.this.wakeCommand(future, null);
+                            });
+                        }
+                        @Override
+                        public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
+                            Peripheral.this.asyncWithFuture(future, () -> {
+                                if (status != BluetoothGatt.GATT_SUCCESS) {
+                                    throw new RuntimeException("Disconnected while setting characteristic notification");
+                                }
+
+                                if (newState == BluetoothGatt.STATE_DISCONNECTED) {
+                                    Peripheral.this.gatt.close();
+                                    Peripheral.this.gatt = null;
+                                    Peripheral.this.wakeCommand(future, null);
+                                }
                             });
                         }
                     });

@@ -118,6 +118,17 @@ fn get_poll_result<'a: 'b, 'b>(
                     ),
                 )? {
                     Ok(Err(Error::NoSuchCharacteristic))
+                } else if env.is_instance_of(
+                    cause,
+                    "java/lang/RuntimeException",
+                )? {
+                    let msg = env
+                        .call_method(cause, "getMessage", "()Ljava/lang/String;", &[])
+                        .unwrap()
+                        .l()
+                        .unwrap();
+                    let msgstr:String = env.get_string(msg.into()).unwrap().into();
+                    Ok(Err(Error::RuntimeError(msgstr)))
                 } else {
                     env.throw(ex)?;
                     Err(jni::errors::Error::JavaException)

@@ -143,6 +143,9 @@ pub enum Error {
     #[error("Invalid Bluetooth address: {0}")]
     InvalidBDAddr(#[from] ParseBDAddrError),
 
+    #[error("Runtime Error: {}", _0)]
+    RuntimeError(String),
+
     #[error("{}", _0)]
     Other(Box<dyn std::error::Error + Send + Sync>),
 }

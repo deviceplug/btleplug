@@ -99,6 +99,8 @@ class Peripheral {
                                     }
 
                                     if (newState == BluetoothGatt.STATE_DISCONNECTED) {
+                                        Peripheral.this.gatt.close();
+                                        Peripheral.this.gatt = null;
                                         Peripheral.this.wakeCommand(future, null);
                                     }
                                 });

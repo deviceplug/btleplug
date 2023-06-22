@@ -178,7 +178,7 @@ pub struct PeripheralProperties {
     pub service_data: HashMap<Uuid, Vec<u8>>,
     /// Advertised services for this device
     pub services: Vec<Uuid>,
-    pub class: Option<u32>
+    pub class: Option<u32>,
 }
 
 /// The filter used when scanning for BLE devices.

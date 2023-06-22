@@ -593,6 +593,7 @@ impl<'a: 'b, 'b> TryFrom<JScanResult<'a, 'b>> for (BDAddr, Option<PeripheralProp
                 service_data,
                 services,
                 rssi,
+                class,
             })
         };
         Ok((addr, properties))

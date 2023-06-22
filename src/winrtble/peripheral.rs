@@ -82,6 +82,7 @@ struct Shared {
     latest_manufacturer_data: RwLock<HashMap<u16, Vec<u8>>>,
     latest_service_data: RwLock<HashMap<Uuid, Vec<u8>>>,
     services: RwLock<HashSet<Uuid>>,
+    class: RwLock<Option<u32>>,
 }
 
 impl Peripheral {
@@ -102,6 +103,7 @@ impl Peripheral {
                 latest_manufacturer_data: RwLock::new(HashMap::new()),
                 latest_service_data: RwLock::new(HashMap::new()),
                 services: RwLock::new(HashSet::new()),
+                class: RwLock::new(None),
             }),
         }
     }
@@ -125,6 +127,7 @@ impl Peripheral {
                 .iter()
                 .map(|uuid| *uuid)
                 .collect(),
+            class: self.shared.class.read().unwrap().clone(),
         }
     }
 

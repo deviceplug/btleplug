@@ -101,6 +101,7 @@ impl Peripheral {
             manufacturer_data: HashMap::new(),
             service_data: HashMap::new(),
             services: Vec::new(),
+            class: None,
         });
         let (notifications_channel, _) = broadcast::channel(16);
 

@@ -1,12 +1,14 @@
 use crate::{
     api::{
-        self, BDAddr, Characteristic, PeripheralProperties, Service, ValueNotification, WriteType,
+        self, BDAddr, Characteristic, Descriptor, PeripheralProperties, Service, ValueNotification,
+        WriteType,
     },
     Error, Result,
 };
 use async_trait::async_trait;
 use futures::stream::Stream;
 use jni::{
+    descriptors,
     objects::{GlobalRef, JList, JObject},
     JNIEnv,
 };
@@ -30,6 +32,7 @@ use super::jni::{
     global_jvm,
     objects::{JBluetoothGattCharacteristic, JBluetoothGattService, JPeripheral},
 };
+use jni::objects::JClass;
 #[cfg_attr(
     feature = "serde",
     derive(Serialize, Deserialize),
@@ -48,25 +51,90 @@ fn get_poll_result<'a: 'b, 'b>(
     result: JPollResult<'a, 'b>,
 ) -> Result<JObject<'a>> {
     try_block(env, || Ok(Ok(result.get()?)))
-        .catch("io/github/gedgygedgy/rust/future/FutureException", |ex| {
-            let cause = env
-                .call_method(ex, "getCause", "()Ljava/lang/Throwable;", &[])?
-                .l()?;
-            if env.is_instance_of(
-                cause,
-                "com/nonpolynomial/btleplug/android/impl/NotConnectedException",
-            )? {
-                Ok(Err(Error::NotConnected))
-            } else if env.is_instance_of(
-                cause,
-                "com/nonpolynomial/btleplug/android/impl/PermissionDeniedException",
-            )? {
-                Ok(Err(Error::PermissionDenied))
-            } else {
-                env.throw(ex)?;
-                Err(jni::errors::Error::JavaException)
-            }
-        })
+        .catch(
+            JClass::from(
+                jni_utils::classcache::get_class(
+                    "io/github/gedgygedgy/rust/future/FutureException",
+                )
+                .unwrap()
+                .as_obj(),
+            ),
+            |ex| {
+                let cause = env
+                    .call_method(ex, "getCause", "()Ljava/lang/Throwable;", &[])?
+                    .l()?;
+                if env.is_instance_of(
+                    cause,
+                    JClass::from(
+                        jni_utils::classcache::get_class(
+                            "com/nonpolynomial/btleplug/android/impl/NotConnectedException",
+                        )
+                        .unwrap()
+                        .as_obj(),
+                    ),
+                )? {
+                    Ok(Err(Error::NotConnected))
+                } else if env.is_instance_of(
+                    cause,
+                    JClass::from(
+                        jni_utils::classcache::get_class(
+                            "com/nonpolynomial/btleplug/android/impl/PermissionDeniedException",
+                        )
+                        .unwrap()
+                        .as_obj(),
+                    ),
+                )? {
+                    Ok(Err(Error::PermissionDenied))
+                } else if env.is_instance_of(
+                    cause,
+                    JClass::from(
+                        jni_utils::classcache::get_class(
+                            "com/nonpolynomial/btleplug/android/impl/UnexpectedCallbackException",
+                        )
+                        .unwrap()
+                        .as_obj(),
+                    ),
+                )? {
+                    Ok(Err(Error::UnexpectedCallback))
+                } else if env.is_instance_of(
+                    cause,
+                    JClass::from(
+                        jni_utils::classcache::get_class(
+                            "com/nonpolynomial/btleplug/android/impl/UnexpectedCharacteristicException",
+                        )
+                        .unwrap()
+                        .as_obj(),
+                    ),
+                )? {
+                    Ok(Err(Error::UnexpectedCharacteristic))
+                } else if env.is_instance_of(
+                    cause,
+                    JClass::from(
+                        jni_utils::classcache::get_class(
+                            "com/nonpolynomial/btleplug/android/impl/NoSuchCharacteristicException",
+                        )
+                        .unwrap()
+                        .as_obj(),
+                    ),
+                )? {
+                    Ok(Err(Error::NoSuchCharacteristic))
+                } else if env.is_instance_of(
+                    cause,
+                    "java/lang/RuntimeException",
+                )? {
+                    let msg = env
+                        .call_method(cause, "getMessage", "()Ljava/lang/String;", &[])
+                        .unwrap()
+                        .l()
+                        .unwrap();
+                    let msgstr:String = env.get_string(msg.into()).unwrap().into();
+                    Ok(Err(Error::RuntimeError(msgstr)))
+                } else {
+                    env.throw(ex)?;
+                    Err(jni::errors::Error::JavaException)
+                }
+            },
+        )
         .result()?
 }
 
@@ -208,15 +276,25 @@ impl api::Peripheral for Peripheral {
                 let service = JBluetoothGattService::from_env(env, service)?;
                 let mut characteristics = BTreeSet::new();
                 for characteristic in service.get_characteristics()? {
+                    let mut descriptors = BTreeSet::new();
+                    for descriptor in characteristic.get_descriptors()? {
+                        descriptors.insert(Descriptor {
+                            uuid: descriptor.get_uuid()?,
+                            service_uuid: service.get_uuid()?,
+                            characteristic_uuid: characteristic.get_uuid()?,
+                        });
+                    }
                     characteristics.insert(Characteristic {
                         service_uuid: service.get_uuid()?,
                         uuid: characteristic.get_uuid()?,
                         properties: characteristic.get_properties()?,
+                        descriptors: descriptors.clone(),
                     });
                     peripheral_characteristics.push(Characteristic {
                         service_uuid: service.get_uuid()?,
                         uuid: characteristic.get_uuid()?,
                         properties: characteristic.get_properties()?,
+                        descriptors: descriptors,
                     });
                 }
                 peripheral_services.push(Service {
@@ -294,5 +372,33 @@ impl api::Peripheral for Peripheral {
             })
             .filter_map(|item| async { item.ok() });
         Ok(Box::pin(stream))
+    }
+
+    async fn write_descriptor(&self, descriptor: &Descriptor, data: &[u8]) -> Result<()> {
+        let future = self.with_obj(|env, obj| {
+            let characteristic = JUuid::new(env, descriptor.characteristic_uuid)?;
+            let uuid = JUuid::new(env, descriptor.uuid)?;
+            let data_obj = jni_utils::arrays::slice_to_byte_array(env, data)?;
+            JSendFuture::try_from(obj.write_descriptor(characteristic, uuid, data_obj.into())?)
+        })?;
+        let result_ref = future.await?;
+        self.with_obj(|env, _obj| {
+            let result = JPollResult::from_env(env, result_ref.as_obj())?;
+            get_poll_result(env, result).map(|_| {})
+        })
+    }
+
+    async fn read_descriptor(&self, descriptor: &Descriptor) -> Result<Vec<u8>> {
+        let future = self.with_obj(|env, obj| {
+            let characteristic = JUuid::new(env, descriptor.characteristic_uuid)?;
+            let uuid = JUuid::new(env, descriptor.uuid)?;
+            JSendFuture::try_from(obj.read_descriptor(characteristic, uuid)?)
+        })?;
+        let result_ref = future.await?;
+        self.with_obj(|env, _obj| {
+            let result = JPollResult::from_env(env, result_ref.as_obj())?;
+            let bytes = get_poll_result(env, result)?;
+            Ok(byte_array_to_vec(env, bytes.into_inner())?)
+        })
     }
 }

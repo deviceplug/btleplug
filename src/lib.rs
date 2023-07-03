@@ -122,6 +122,15 @@ pub enum Error {
     #[error("Not connected")]
     NotConnected,
 
+    #[error("Unexpected callback")]
+    UnexpectedCallback,
+
+    #[error("Unexpected characteristic")]
+    UnexpectedCharacteristic,
+
+    #[error("No such characteristic")]
+    NoSuchCharacteristic,
+
     #[error("The operation is not supported: {}", _0)]
     NotSupported(String),
 
@@ -133,6 +142,9 @@ pub enum Error {
 
     #[error("Invalid Bluetooth address: {0}")]
     InvalidBDAddr(#[from] ParseBDAddrError),
+
+    #[error("Runtime Error: {}", _0)]
+    RuntimeError(String),
 
     #[error("{}", _0)]
     Other(Box<dyn std::error::Error + Send + Sync>),

@@ -12,13 +12,13 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use super::{
-    advertisement_data_type, ble::characteristic::BLECharacteristic, ble::device::BLEDevice,
-    ble::service::BLEService, utils,
+    advertisement_data_type, ble::characteristic::BLECharacteristic,
+    ble::descriptor::BLEDescriptor, ble::device::BLEDevice, ble::service::BLEService, utils,
 };
 use crate::{
     api::{
         bleuuid::{uuid_from_u16, uuid_from_u32},
-        AddressType, BDAddr, CentralEvent, Characteristic, Peripheral as ApiPeripheral,
+        AddressType, BDAddr, CentralEvent, Characteristic, Descriptor, Peripheral as ApiPeripheral,
         PeripheralProperties, Service, ValueNotification, WriteType,
     },
     common::{adapter_manager::AdapterManager, util::notifications_stream_from_broadcast_receiver},
@@ -82,6 +82,7 @@ struct Shared {
     latest_manufacturer_data: RwLock<HashMap<u16, Vec<u8>>>,
     latest_service_data: RwLock<HashMap<Uuid, Vec<u8>>>,
     services: RwLock<HashSet<Uuid>>,
+    class: RwLock<Option<u32>>,
 }
 
 impl Peripheral {
@@ -102,6 +103,7 @@ impl Peripheral {
                 latest_manufacturer_data: RwLock::new(HashMap::new()),
                 latest_service_data: RwLock::new(HashMap::new()),
                 services: RwLock::new(HashSet::new()),
+                class: RwLock::new(None),
             }),
         }
     }
@@ -125,6 +127,7 @@ impl Peripheral {
                 .iter()
                 .map(|uuid| *uuid)
                 .collect(),
+            class: self.shared.class.read().unwrap().clone(),
         }
     }
 
@@ -405,11 +408,35 @@ impl ApiPeripheral for Peripheral {
                 if !self.shared.ble_services.contains_key(&uuid) {
                     match BLEDevice::get_characteristics(&service).await {
                         Ok(characteristics) => {
-                            let characteristics = characteristics
+                            let characteristics =
+                                characteristics.into_iter().map(|characteristic| async {
+                                    match BLEDevice::get_characteristic_descriptors(&characteristic)
+                                        .await
+                                    {
+                                        Ok(descriptors) => {
+                                            let descriptors: HashMap<Uuid, BLEDescriptor> =
+                                                descriptors
+                                                    .into_iter()
+                                                    .map(|descriptor| {
+                                                        let descriptor =
+                                                            BLEDescriptor::new(descriptor);
+                                                        (descriptor.uuid(), descriptor)
+                                                    })
+                                                    .collect();
+                                            Ok((characteristic, descriptors))
+                                        }
+                                        Err(e) => {
+                                            error!("get_characteristic_descriptors_async {:?}", e);
+                                            Err(e)
+                                        }
+                                    }
+                                });
+                            let characteristics = futures::future::try_join_all(characteristics)
+                                .await?
                                 .into_iter()
-                                .map(|gatt_characteristic| {
+                                .map(|(characteristic, descriptors)| {
                                     let characteristic =
-                                        BLECharacteristic::new(gatt_characteristic);
+                                        BLECharacteristic::new(characteristic, descriptors);
                                     (characteristic.uuid(), characteristic)
                                 })
                                 .collect();
@@ -510,6 +537,40 @@ impl ApiPeripheral for Peripheral {
     async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
         let receiver = self.shared.notifications_channel.subscribe();
         Ok(notifications_stream_from_broadcast_receiver(receiver))
+    }
+
+    async fn write_descriptor(&self, descriptor: &Descriptor, data: &[u8]) -> Result<()> {
+        let ble_service = &*self
+            .shared
+            .ble_services
+            .get(&descriptor.service_uuid)
+            .ok_or_else(|| Error::NotSupported("Service not found for write".into()))?;
+        let ble_characteristic = ble_service
+            .characteristics
+            .get(&descriptor.characteristic_uuid)
+            .ok_or_else(|| Error::NotSupported("Characteristic not found for write".into()))?;
+        let ble_descriptor = ble_characteristic
+            .descriptors
+            .get(&descriptor.uuid)
+            .ok_or_else(|| Error::NotSupported("Descriptor not found for write".into()))?;
+        ble_descriptor.write_value(data).await
+    }
+
+    async fn read_descriptor(&self, descriptor: &Descriptor) -> Result<Vec<u8>> {
+        let ble_service = &*self
+            .shared
+            .ble_services
+            .get(&descriptor.service_uuid)
+            .ok_or_else(|| Error::NotSupported("Service not found for read".into()))?;
+        let ble_characteristic = ble_service
+            .characteristics
+            .get(&descriptor.uuid)
+            .ok_or_else(|| Error::NotSupported("Characteristic not found for read".into()))?;
+        let ble_descriptor = ble_characteristic
+            .descriptors
+            .get(&descriptor.uuid)
+            .ok_or_else(|| Error::NotSupported("Descriptor not found for write".into()))?;
+        ble_descriptor.read_value().await
     }
 }
 

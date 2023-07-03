@@ -10,7 +10,7 @@ use jni_utils::{future::JFuture, stream::JStream, uuid::JUuid};
 use std::{collections::HashMap, convert::TryFrom, iter::Iterator};
 use uuid::Uuid;
 
-use crate::api::{BDAddr, CharPropFlags, PeripheralProperties};
+use crate::api::{BDAddr, CharPropFlags, PeripheralProperties, ScanFilter};
 
 pub struct JPeripheral<'a: 'b, 'b> {
     internal: JObject<'a>,
@@ -23,6 +23,8 @@ pub struct JPeripheral<'a: 'b, 'b> {
     write: JMethodID<'a>,
     set_characteristic_notification: JMethodID<'a>,
     get_notifications: JMethodID<'a>,
+    read_descriptor: JMethodID<'a>,
+    write_descriptor: JMethodID<'a>,
     env: &'b JNIEnv<'a>,
 }
 
@@ -92,6 +94,16 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             "getNotifications",
             "()Lio/github/gedgygedgy/rust/stream/Stream;",
         )?;
+        let read_descriptor = env.get_method_id(
+            class,
+            "readDescriptor",
+            "(Ljava/util/UUID;Ljava/util/UUID;)Lio/github/gedgygedgy/rust/future/Future;",
+        )?;
+        let write_descriptor = env.get_method_id(
+            class,
+            "writeDescriptor",
+            "(Ljava/util/UUID;Ljava/util/UUID;[BI)Lio/github/gedgygedgy/rust/future/Future;",
+        )?;
         Ok(Self {
             internal: obj,
             connect,
@@ -103,6 +115,8 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             write,
             set_characteristic_notification,
             get_notifications,
+            read_descriptor,
+            write_descriptor,
             env,
         })
     }
@@ -248,6 +262,41 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             .l()?;
         JStream::from_env(self.env, stream_obj)
     }
+
+    pub fn read_descriptor(
+        &self,
+        characteristic: JUuid<'a, 'b>,
+        uuid: JUuid<'a, 'b>,
+    ) -> Result<JFuture<'a, 'b>> {
+        let future_obj = self
+            .env
+            .call_method_unchecked(
+                self.internal,
+                self.read_descriptor,
+                JavaType::Object("Lio/github/gedgygedgy/rust/future/Future;".to_string()),
+                &[characteristic.into(), uuid.into()],
+            )?
+            .l()?;
+        JFuture::from_env(self.env, future_obj)
+    }
+
+    pub fn write_descriptor(
+        &self,
+        characteristic: JUuid<'a, 'b>,
+        uuid: JUuid<'a, 'b>,
+        data: JObject<'a>,
+    ) -> Result<JFuture<'a, 'b>> {
+        let future_obj = self
+            .env
+            .call_method_unchecked(
+                self.internal,
+                self.write_descriptor,
+                JavaType::Object("Lio/github/gedgygedgy/rust/future/Future;".to_string()),
+                &[characteristic.into(), uuid.into(), data.into()],
+            )?
+            .l()?;
+        JFuture::from_env(self.env, future_obj)
+    }
 }
 
 pub struct JBluetoothGattService<'a: 'b, 'b> {
@@ -327,6 +376,7 @@ pub struct JBluetoothGattCharacteristic<'a: 'b, 'b> {
     get_uuid: JMethodID<'a>,
     get_properties: JMethodID<'a>,
     get_value: JMethodID<'a>,
+    get_descriptors: JMethodID<'a>,
     env: &'b JNIEnv<'a>,
 }
 
@@ -337,12 +387,14 @@ impl<'a: 'b, 'b> JBluetoothGattCharacteristic<'a, 'b> {
 
         let get_uuid = env.get_method_id(&class, "getUuid", "()Ljava/util/UUID;")?;
         let get_properties = env.get_method_id(&class, "getProperties", "()I")?;
+        let get_descriptors = env.get_method_id(&class, "getDescriptors", "()Ljava/util/List;")?;
         let get_value = env.get_method_id(&class, "getValue", "()[B")?;
         Ok(Self {
             internal: obj,
             get_uuid,
             get_properties,
             get_value,
+            get_descriptors,
             env,
         })
     }
@@ -386,6 +438,57 @@ impl<'a: 'b, 'b> JBluetoothGattCharacteristic<'a, 'b> {
             .l()?;
         jni_utils::arrays::byte_array_to_vec(self.env, value.into_inner())
     }
+
+    pub fn get_descriptors(&self) -> Result<Vec<JBluetoothGattDescriptor>> {
+        let obj = self
+            .env
+            .call_method_unchecked(
+                self.internal,
+                self.get_descriptors,
+                JavaType::Object("Ljava/util/List;".to_string()),
+                &[],
+            )?
+            .l()?;
+        let desc_list = JList::from_env(self.env, obj)?;
+        let mut desc_vec = vec![];
+        for desc in desc_list.iter()? {
+            desc_vec.push(JBluetoothGattDescriptor::from_env(self.env, desc)?);
+        }
+        Ok(desc_vec)
+    }
+}
+
+pub struct JBluetoothGattDescriptor<'a: 'b, 'b> {
+    internal: JObject<'a>,
+    get_uuid: JMethodID<'a>,
+    env: &'b JNIEnv<'a>,
+}
+
+impl<'a: 'b, 'b> JBluetoothGattDescriptor<'a, 'b> {
+    pub fn from_env(env: &'b JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+        let class = env.auto_local(env.find_class("android/bluetooth/BluetoothGattDescriptor")?);
+
+        let get_uuid = env.get_method_id(&class, "getUuid", "()Ljava/util/UUID;")?;
+        Ok(Self {
+            internal: obj,
+            get_uuid,
+            env,
+        })
+    }
+
+    pub fn get_uuid(&self) -> Result<Uuid> {
+        let obj = self
+            .env
+            .call_method_unchecked(
+                self.internal,
+                self.get_uuid,
+                JavaType::Object("Ljava/util/UUID;".to_string()),
+                &[],
+            )?
+            .l()?;
+        let uuid_obj = JUuid::from_env(self.env, obj)?;
+        Ok(uuid_obj.as_uuid()?)
+    }
 }
 
 pub struct JBluetoothDevice<'a: 'b, 'b> {
@@ -417,6 +520,43 @@ impl<'a: 'b, 'b> JBluetoothDevice<'a, 'b> {
             )?
             .l()?;
         Ok(obj.into())
+    }
+}
+
+pub struct JScanFilter<'a> {
+    internal: JObject<'a>,
+}
+
+impl<'a> JScanFilter<'a> {
+    pub fn new(env: &'a JNIEnv<'a>, filter: ScanFilter) -> Result<Self> {
+        let uuids = env.new_object_array(
+            filter.services.len() as i32,
+            env.find_class("java/lang/String")?,
+            JObject::null(),
+        )?;
+        for (idx, uuid) in filter.services.into_iter().enumerate() {
+            let uuid_str = env.new_string(uuid.to_string())?;
+            env.set_object_array_element(uuids, idx as i32, uuid_str)?;
+        }
+        let obj = env.new_object(
+            JClass::from(
+                jni_utils::classcache::get_class(
+                    "com/nonpolynomial/btleplug/android/impl/ScanFilter",
+                )
+                .unwrap()
+                .as_obj(),
+            ),
+            //class.as_obj(),
+            "([Ljava/lang/String;)V",
+            &[uuids.into()],
+        )?;
+        Ok(Self { internal: obj })
+    }
+}
+
+impl<'a> From<JScanFilter<'a>> for JObject<'a> {
+    fn from(value: JScanFilter<'a>) -> Self {
+        value.internal
     }
 }
 
@@ -608,6 +748,7 @@ impl<'a: 'b, 'b> TryFrom<JScanResult<'a, 'b>> for (BDAddr, Option<PeripheralProp
                 service_data,
                 services,
                 rssi,
+                class: None,
             })
         };
         Ok((addr, properties))

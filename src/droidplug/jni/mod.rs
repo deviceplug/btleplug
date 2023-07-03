@@ -27,7 +27,31 @@ pub fn init(env: &JNIEnv) -> crate::Result<()> {
         jni_utils::classcache::find_add_class(
             env,
             "com/nonpolynomial/btleplug/android/impl/Peripheral",
-        );
+        )?;
+        jni_utils::classcache::find_add_class(
+            env,
+            "com/nonpolynomial/btleplug/android/impl/ScanFilter",
+        )?;
+        jni_utils::classcache::find_add_class(
+            env,
+            "com/nonpolynomial/btleplug/android/impl/NotConnectedException",
+        )?;
+        jni_utils::classcache::find_add_class(
+            env,
+            "com/nonpolynomial/btleplug/android/impl/PermissionDeniedException",
+        )?;
+        jni_utils::classcache::find_add_class(
+            env,
+            "com/nonpolynomial/btleplug/android/impl/UnexpectedCallbackException",
+        )?;
+        jni_utils::classcache::find_add_class(
+            env,
+            "com/nonpolynomial/btleplug/android/impl/UnexpectedCharacteristicException",
+        )?;
+        jni_utils::classcache::find_add_class(
+            env,
+            "com/nonpolynomial/btleplug/android/impl/NoSuchCharacteristicException",
+        )?;
     }
     Ok(())
 }

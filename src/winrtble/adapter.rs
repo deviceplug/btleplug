@@ -55,23 +55,25 @@ impl Central for Adapter {
         Ok(self.manager.event_stream())
     }
 
-    async fn start_scan(&self, _filter: ScanFilter) -> Result<()> {
-        // TODO: implement filter
+    async fn start_scan(&self, filter: ScanFilter) -> Result<()> {
         let watcher = self.watcher.lock().unwrap();
         let manager = self.manager.clone();
-        watcher.start(Box::new(move |args| {
-            let bluetooth_address = args.BluetoothAddress().unwrap();
-            let address: BDAddr = bluetooth_address.try_into().unwrap();
-            if let Some(mut entry) = manager.peripheral_mut(&address.into()) {
-                entry.value_mut().update_properties(args);
-                manager.emit(CentralEvent::DeviceUpdated(address.into()));
-            } else {
-                let peripheral = Peripheral::new(Arc::downgrade(&manager), address);
-                peripheral.update_properties(args);
-                manager.add_peripheral(peripheral);
-                manager.emit(CentralEvent::DeviceDiscovered(address.into()));
-            }
-        }))
+        watcher.start(
+            filter,
+            Box::new(move |args| {
+                let bluetooth_address = args.BluetoothAddress().unwrap();
+                let address: BDAddr = bluetooth_address.try_into().unwrap();
+                if let Some(mut entry) = manager.peripheral_mut(&address.into()) {
+                    entry.value_mut().update_properties(args);
+                    manager.emit(CentralEvent::DeviceUpdated(address.into()));
+                } else {
+                    let peripheral = Peripheral::new(Arc::downgrade(&manager), address);
+                    peripheral.update_properties(args);
+                    manager.add_peripheral(peripheral);
+                    manager.emit(CentralEvent::DeviceDiscovered(address.into()));
+                }
+            }),
+        )
     }
 
     async fn stop_scan(&self) -> Result<()> {

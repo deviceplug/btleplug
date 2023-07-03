@@ -144,6 +144,8 @@ pub struct Characteristic {
     /// supports. If you attempt an operation that is not supported by the characteristics (for
     /// example setting notify on one without the NOTIFY flag), that operation will fail.
     pub properties: CharPropFlags,
+    /// The descriptors of this characteristic.
+    pub descriptors: BTreeSet<Descriptor>,
 }
 
 impl Display for Characteristic {
@@ -153,6 +155,23 @@ impl Display for Characteristic {
             "uuid: {:?}, char properties: {:?}",
             self.uuid, self.properties
         )
+    }
+}
+
+/// Add doc
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
+pub struct Descriptor {
+    /// The UUID for this descriptor. This uniquely identifies its behavior.
+    pub uuid: Uuid,
+    /// The UUID of the service this descriptor belongs to.
+    pub service_uuid: Uuid,
+    /// The UUID of the characteristic this descriptor belongs to.
+    pub characteristic_uuid: Uuid,
+}
+
+impl Display for Descriptor {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "uuid: {:?}", self.uuid)
     }
 }
 
@@ -183,6 +202,7 @@ pub struct PeripheralProperties {
     pub service_data: HashMap<Uuid, Vec<u8>>,
     /// Advertised services for this device
     pub services: Vec<Uuid>,
+    pub class: Option<u32>,
 }
 
 #[cfg_attr(
@@ -274,6 +294,14 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     /// The stream will remain valid across connections and can be queried before any connection
     /// is made.
     async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>>;
+
+    /// Write some data to the descriptor. Returns an error if the write couldn't be sent or (in
+    /// the case of a write-with-response) if the device returns an error.
+    async fn write_descriptor(&self, descriptor: &Descriptor, data: &[u8]) -> Result<()>;
+
+    /// Sends a read descriptor request to the device. Returns either an error if the request
+    /// was not accepted or the response from the device.
+    async fn read_descriptor(&self, descriptor: &Descriptor) -> Result<Vec<u8>>;
 }
 
 #[cfg_attr(

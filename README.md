@@ -48,7 +48,7 @@ support.
 | Discover Devices                      | X       | X           | X     | X       |
 | └ Discover Services                   | X       | X           | X     | X       |
 | └ Discover Characteristics            | X       | X           | X     | X       |
-| └ Discover Descriptors                |         |             |       |         |
+| └ Discover Descriptors                | X       | X           | X     | X       |
 | └ Discover Name                       | X       | X           | X     | X       |
 | └ Discover Manufacturer Data          | X       | X           | X     | X       |
 | └ Discover Service Data               | X       | X           | X     | X       |
@@ -62,8 +62,8 @@ support.
 | Subscribe to Characteristic           | X       | X           | X     | X       |
 | Unsubscribe from Characteristic       | X       | X           | X     | X       |
 | Get Characteristic Notification Event | X       | X           | X     | X       |
-| Read Descriptor                       |         |             |       |         |
-| Write Descriptor                      |         |             |       |         |
+| Read Descriptor                       | X       | X           | X     | X       |
+| Write Descriptor                      | X       | X           | X     | X       |
 
 ## Library Features
 

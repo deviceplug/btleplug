@@ -1,3 +1,17 @@
+# 0.11.0 (2023-07-04)
+
+## Features
+
+- Add scan filtering for android and windows
+- Implement serde Serialize/Deserliaze for PeripheralProperties, ScannFilter (#310, #314)
+- Add device class to properties (#319)
+- Add descriptor discovery and read/write across all platforms (#316)
+
+## Bugfixes
+
+- Update RSSI w/ advertisements on CoreBluetooth (#306)
+- Fix issues with various unhandled exceptions on Android (#311)
+
 # 0.10.5 (2023-04-13)
 
 ## Features

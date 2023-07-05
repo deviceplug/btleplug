@@ -4,7 +4,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:4.2.2'
+        classpath 'com.android.tools.build:gradle:7.4.2'
     }
 }
 
@@ -26,7 +26,7 @@ android {
     defaultConfig {
         minSdkVersion 23
         versionCode 1
-        versionName '0.7.2'
+        versionName '0.7.3'
     }
 
     compileOptions {
@@ -36,5 +36,6 @@ android {
 }
 
 dependencies {
-    implementation 'io.github.gedgygedgy.rust:jni-utils:0.1.0-SNAPSHOT'
+    implementation 'io.github.gedgygedgy.rust:jni-utils:0.1.1-SNAPSHOT'
+    //implementation files('c:/Users/qdot/code/jni-utils-rs/java/build/libs/jni-utils-0.1.1-SNAPSHOT.jar')
 }

@@ -29,6 +29,7 @@ pub type ConnectedEventHandler = Box<dyn Fn(bool) + Send>;
 pub struct BLEDevice {
     device: BluetoothLEDevice,
     connection_token: EventRegistrationToken,
+    services: Vec<GattDeviceService>,
 }
 
 impl BLEDevice {
@@ -59,6 +60,7 @@ impl BLEDevice {
         Ok(BLEDevice {
             device,
             connection_token,
+            services: vec![],
         })
     }
 
@@ -132,7 +134,7 @@ impl BLEDevice {
         }
     }
 
-    pub async fn discover_services(&self) -> Result<Vec<GattDeviceService>> {
+    pub async fn discover_services(&mut self) -> Result<&[GattDeviceService]> {
         let winrt_error = |e| Error::Other(format!("{:?}", e).into());
         let service_result = self.get_gatt_services(BluetoothCacheMode::Cached).await?;
         let status = service_result.Status().map_err(winrt_error)?;
@@ -144,10 +146,10 @@ impl BLEDevice {
                 .map_err(winrt_error)?
                 .into_iter()
                 .collect();
-            debug!("services {:?}", services.len());
-            return Ok(services);
+            self.services = services;
+            debug!("services {:?}", self.services.len());
         }
-        Ok(Vec::new())
+        Ok(self.services.as_slice())
     }
 }
 
@@ -159,6 +161,12 @@ impl Drop for BLEDevice {
         if let Err(err) = result {
             debug!("Drop:remove_connection_status_changed {:?}", err);
         }
+
+        self.services.iter().for_each(|service| {
+            if let Err(err) = service.Close() {
+                debug!("Drop:remove_gatt_Service {:?}", err);
+            }
+        });
 
         let result = self.device.Close();
         if let Err(err) = result {

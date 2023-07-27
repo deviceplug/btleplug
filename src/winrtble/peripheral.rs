@@ -391,6 +391,9 @@ impl ApiPeripheral for Peripheral {
 
     /// Terminates a connection to the device. This is a synchronous operation.
     async fn disconnect(&self) -> Result<()> {
+        // We need to clear the services because if this device is re-connected,
+        // the cached service objects will no longer be valid (they must be refreshed).
+        self.shared.ble_services.clear();
         let mut device = self.shared.device.lock().await;
         *device = None;
         self.shared.connected.store(false, Ordering::Relaxed);
@@ -400,10 +403,10 @@ impl ApiPeripheral for Peripheral {
 
     /// Discovers all characteristics for the device. This is a synchronous operation.
     async fn discover_services(&self) -> Result<()> {
-        let device = self.shared.device.lock().await;
-        if let Some(ref device) = *device {
+        let mut device = self.shared.device.lock().await;
+        if let Some(ref mut device) = *device {
             let gatt_services = device.discover_services().await?;
-            for service in &gatt_services {
+            for service in gatt_services {
                 let uuid = utils::to_uuid(&service.Uuid().unwrap());
                 if !self.shared.ble_services.contains_key(&uuid) {
                     match BLEDevice::get_characteristics(&service).await {

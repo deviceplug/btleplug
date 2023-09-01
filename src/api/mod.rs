@@ -94,8 +94,11 @@ pub struct ValueNotification {
     pub value: Vec<u8>,
 }
 
+
+
 bitflags! {
     /// A set of properties that indicate what operations are supported by a Characteristic.
+    #[derive(Default, Debug, PartialEq, Eq, Ord, PartialOrd, Clone, Copy)]
     pub struct CharPropFlags: u8 {
         const BROADCAST = 0x01;
         const READ = 0x02;
@@ -105,12 +108,6 @@ bitflags! {
         const INDICATE = 0x20;
         const AUTHENTICATED_SIGNED_WRITES = 0x40;
         const EXTENDED_PROPERTIES = 0x80;
-    }
-}
-
-impl Default for CharPropFlags {
-    fn default() -> Self {
-        Self { bits: 0 }
     }
 }
 

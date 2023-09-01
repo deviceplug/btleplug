@@ -1,3 +1,10 @@
+# 0.11.1 (2023-09-01)
+
+## Bugfixes
+
+- Windows/UWP: Internally held BTLE services now automatically disconnect when device disconnect is
+  called.
+
 # 0.11.0 (2023-07-04)
 
 ## Features

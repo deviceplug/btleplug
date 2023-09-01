@@ -32,7 +32,8 @@ serde_bytes = { version = "0.11.12", optional = true }
 dashmap = "5.5.3"
 futures = "0.3.28"
 static_assertions = "1.1.0"
-tokio = { version = "1.32.0", features = ["sync"] }
+# rt feature needed for block_on in macOS internal thread
+tokio = { version = "1.32.0", features = ["sync", "rt"] }
 tokio-stream = { version = "0.1.14", features = ["sync"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

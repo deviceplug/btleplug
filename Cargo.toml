@@ -49,6 +49,7 @@ jni-utils = "0.1.1"
 cocoa = "0.25.0"
 objc = "0.2.7"
 libc = "0.2.147"
+os_info = "3.7.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.51.1", features = ["Devices_Bluetooth", "Devices_Bluetooth_GenericAttributeProfile", "Devices_Bluetooth_Advertisement", "Devices_Radios", "Foundation_Collections", "Foundation", "Storage_Streams"] }

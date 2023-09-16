@@ -94,8 +94,6 @@ pub struct ValueNotification {
     pub value: Vec<u8>,
 }
 
-
-
 bitflags! {
     /// A set of properties that indicate what operations are supported by a Characteristic.
     #[derive(Default, Debug, PartialEq, Eq, Ord, PartialOrd, Clone, Copy)]

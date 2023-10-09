@@ -8,7 +8,6 @@ use crate::{
 use async_trait::async_trait;
 use futures::stream::Stream;
 use jni::{
-    descriptors,
     objects::{GlobalRef, JList, JObject},
     JNIEnv,
 };
@@ -270,7 +269,7 @@ impl api::Peripheral for Peripheral {
 
             for service in list.iter()? {
                 let service = JBluetoothGattService::from_env(env, service)?;
-                let mut characteristics = BTreeSet::new();
+                let mut characteristics = BTreeSet::<Characteristic>::new();
                 for characteristic in service.get_characteristics()? {
                     let mut descriptors = BTreeSet::new();
                     for descriptor in characteristic.get_descriptors()? {
@@ -280,18 +279,23 @@ impl api::Peripheral for Peripheral {
                             characteristic_uuid: characteristic.get_uuid()?,
                         });
                     }
-                    characteristics.insert(Characteristic {
+                    let char = Characteristic {
                         service_uuid: service.get_uuid()?,
                         uuid: characteristic.get_uuid()?,
                         properties: characteristic.get_properties()?,
                         descriptors: descriptors.clone(),
-                    });
-                    peripheral_characteristics.push(Characteristic {
-                        service_uuid: service.get_uuid()?,
-                        uuid: characteristic.get_uuid()?,
-                        properties: characteristic.get_properties()?,
-                        descriptors: descriptors,
-                    });
+                    };
+                    // Only consider the first characteristic of each UUID
+                    // This "should" be unique, but of course it's not enforced
+                    if characteristics
+                        .iter()
+                        .filter(|c| c.service_uuid == char.service_uuid && c.uuid == char.uuid)
+                        .count()
+                        == 0
+                    {
+                        characteristics.insert(char.clone());
+                        peripheral_characteristics.push(char.clone());
+                    }
                 }
                 peripheral_services.push(Service {
                     uuid: service.get_uuid()?,

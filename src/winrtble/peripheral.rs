@@ -44,6 +44,8 @@ use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use std::sync::Weak;
+use windows::core::GUID;
+use windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic;
 use windows::Devices::Bluetooth::{Advertisement::*, BluetoothAddressType};
 
 #[cfg_attr(
@@ -411,8 +413,23 @@ impl ApiPeripheral for Peripheral {
                 if !self.shared.ble_services.contains_key(&uuid) {
                     match BLEDevice::get_characteristics(&service).await {
                         Ok(characteristics) => {
-                            let characteristics =
-                                characteristics.into_iter().map(|characteristic| async {
+                            let characteristics = characteristics
+                                .into_iter()
+                                .fold(
+                                    // Only consider the first characteristic of each UUID
+                                    // This "should" be unique, but of course it's not enforced
+                                    HashMap::<GUID, GattCharacteristic>::new(),
+                                    |mut map, gatt_characteristic| {
+                                        let uuid = gatt_characteristic.Uuid().unwrap_or_default();
+                                        if !map.contains_key(&uuid) {
+                                            map.insert(uuid, gatt_characteristic);
+                                        }
+                                        map
+                                    },
+                                )
+                                .into_iter()
+                                .map(|mapped_characteristic| async {
+                                    let characteristic = mapped_characteristic.1;
                                     match BLEDevice::get_characteristic_descriptors(&characteristic)
                                         .await
                                     {

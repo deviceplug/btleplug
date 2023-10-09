@@ -280,18 +280,22 @@ impl api::Peripheral for Peripheral {
                             characteristic_uuid: characteristic.get_uuid()?,
                         });
                     }
-                    characteristics.insert(Characteristic {
+                    let char = Characteristic {
                         service_uuid: service.get_uuid()?,
                         uuid: characteristic.get_uuid()?,
                         properties: characteristic.get_properties()?,
                         descriptors: descriptors.clone(),
-                    });
-                    peripheral_characteristics.push(Characteristic {
-                        service_uuid: service.get_uuid()?,
-                        uuid: characteristic.get_uuid()?,
-                        properties: characteristic.get_properties()?,
-                        descriptors: descriptors,
-                    });
+                    };
+                    // Only consider the first characteristic of each UUID
+                    // This "should" be unique, but of course it's not enforced
+                    if !characteristics
+                        .iter()
+                        .filter(|c| c.service_uuid == char.service_uuid && c.uuid == char.uuid)
+                        .any()
+                    {
+                        characteristics.insert(char.clone());
+                        peripheral_characteristics.push(char.clone());
+                    }
                 }
                 peripheral_services.push(Service {
                     uuid: service.get_uuid()?,

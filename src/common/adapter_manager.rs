@@ -44,11 +44,8 @@ where
     PeripheralType: Peripheral + 'static,
 {
     pub fn emit(&self, event: CentralEvent) {
-        match event {
-            CentralEvent::DeviceDisconnected(ref id) => {
-                self.peripherals.remove(id);
-            }
-            _ => {}
+        if let CentralEvent::DeviceDisconnected(ref id) = event {
+            self.peripherals.remove(id);
         }
 
         if let Err(lost) = self.events_channel.send(event) {
@@ -58,13 +55,7 @@ where
 
     pub fn event_stream(&self) -> Pin<Box<dyn Stream<Item = CentralEvent> + Send>> {
         let receiver = self.events_channel.subscribe();
-        Box::pin(BroadcastStream::new(receiver).filter_map(|x| async move {
-            if x.is_ok() {
-                Some(x.unwrap())
-            } else {
-                None
-            }
-        }))
+        Box::pin(BroadcastStream::new(receiver).filter_map(|x| async move { x.ok() }))
     }
 
     pub fn add_peripheral(&self, peripheral: PeripheralType) {

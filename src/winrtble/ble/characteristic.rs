@@ -35,9 +35,9 @@ use windows::{
 
 pub type NotifiyEventHandler = Box<dyn Fn(Vec<u8>) + Send>;
 
-impl Into<GattWriteOption> for WriteType {
-    fn into(self) -> GattWriteOption {
-        match self {
+impl From<WriteType> for GattWriteOption {
+    fn from(val: WriteType) -> Self {
+        match val {
             WriteType::WithoutResponse => GattWriteOption::WriteWithoutResponse,
             WriteType::WithResponse => GattWriteOption::WriteWithResponse,
         }

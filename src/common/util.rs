@@ -14,11 +14,5 @@ use tokio_stream::wrappers::BroadcastStream;
 pub fn notifications_stream_from_broadcast_receiver(
     receiver: Receiver<ValueNotification>,
 ) -> Pin<Box<dyn Stream<Item = ValueNotification> + Send>> {
-    Box::pin(BroadcastStream::new(receiver).filter_map(|x| async move {
-        if x.is_ok() {
-            Some(x.unwrap())
-        } else {
-            None
-        }
-    }))
+    Box::pin(BroadcastStream::new(receiver).filter_map(|x| async move { x.ok() }))
 }

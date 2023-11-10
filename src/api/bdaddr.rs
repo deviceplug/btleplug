@@ -106,7 +106,7 @@ impl TryFrom<u64> for BDAddr {
 impl From<BDAddr> for u64 {
     fn from(addr: BDAddr) -> Self {
         let mut slice = [0; 8];
-        (&mut slice[2..]).copy_from_slice(&addr.into_inner());
+        slice[2..].copy_from_slice(&addr.into_inner());
         u64::from_be_bytes(slice)
     }
 }

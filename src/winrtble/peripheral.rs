@@ -90,9 +90,9 @@ impl Peripheral {
         let (broadcast_sender, _) = broadcast::channel(16);
         Peripheral {
             shared: Arc::new(Shared {
-                adapter: adapter,
+                adapter,
                 device: tokio::sync::Mutex::new(None),
-                address: address,
+                address,
                 connected: AtomicBool::new(false),
                 ble_services: DashMap::new(),
                 notifications_channel: broadcast_sender,
@@ -125,9 +125,9 @@ impl Peripheral {
                 .read()
                 .unwrap()
                 .iter()
-                .map(|uuid| *uuid)
+                .copied()
                 .collect(),
-            class: self.shared.class.read().unwrap().clone(),
+            class: *self.shared.class.read().unwrap(),
         }
     }
 
@@ -251,7 +251,7 @@ impl Peripheral {
 
                 self.emit_event(CentralEvent::ServicesAdvertisement {
                     id: self.shared.address.into(),
-                    services: services_guard.iter().map(|uuid| *uuid).collect(),
+                    services: services_guard.iter().copied().collect(),
                 });
             }
         }
@@ -409,7 +409,7 @@ impl ApiPeripheral for Peripheral {
             for service in gatt_services {
                 let uuid = utils::to_uuid(&service.Uuid().unwrap());
                 if !self.shared.ble_services.contains_key(&uuid) {
-                    match BLEDevice::get_characteristics(&service).await {
+                    match BLEDevice::get_characteristics(service).await {
                         Ok(characteristics) => {
                             let characteristics =
                                 characteristics.into_iter().map(|characteristic| async {
@@ -499,7 +499,7 @@ impl ApiPeripheral for Peripheral {
         let uuid = characteristic.uuid;
         ble_characteristic
             .subscribe(Box::new(move |value| {
-                let notification = ValueNotification { uuid: uuid, value };
+                let notification = ValueNotification { uuid, value };
                 // Note: we ignore send errors here which may happen while there are no
                 // receivers...
                 let _ = notifications_sender.send(notification);

@@ -368,8 +368,8 @@ impl From<&ServiceInternal> for Service {
             primary: service.info.primary,
             characteristics: service
                 .characteristics
-                .iter()
-                .map(|(_, characteristic)| make_characteristic(characteristic, service.info.uuid))
+                .values()
+                .map(|characteristic| make_characteristic(characteristic, service.info.uuid))
                 .collect(),
         }
     }

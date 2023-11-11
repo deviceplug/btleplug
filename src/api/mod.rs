@@ -48,19 +48,15 @@ use crate::platform::PeripheralId;
     derive(Serialize, Deserialize),
     serde(crate = "serde_cr")
 )]
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
 pub enum AddressType {
     Random,
+    #[default]
     Public,
 }
 
-impl Default for AddressType {
-    fn default() -> Self {
-        AddressType::Public
-    }
-}
-
 impl AddressType {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(v: &str) -> Option<AddressType> {
         match v {
             "public" => Some(AddressType::Public),

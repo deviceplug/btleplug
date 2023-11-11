@@ -174,7 +174,13 @@ pub mod cb {
 
     // CBManager
     pub fn manager_authorization() -> CBManagerAuthorization {
-        unsafe { msg_send![class!(CBManager), authorization] }
+        use os_info::Version::Semantic as OSSemVer;
+
+        if os_info::get().version() >= &OSSemVer(10, 15, 0) {
+            unsafe { msg_send![class!(CBManager), authorization] }
+        } else {
+            CBManagerAuthorization::NotDetermined
+        }
     }
 
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]

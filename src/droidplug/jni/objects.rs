@@ -663,10 +663,12 @@ impl<'a: 'b, 'b> TryFrom<JScanResult<'a, 'b>> for (BDAddr, Option<PeripheralProp
                 // possibly c str with null characters, or whatever. We should try UTF-8 first, if
                 // that doesn't work out, see if there's a null termination character in it and try
                 // parsing that.
-                Some(String::from_utf8_lossy(device_name_str.to_bytes())
+                Some(
+                    String::from_utf8_lossy(device_name_str.to_bytes())
                         .chars()
                         .filter(|&c| c != '\u{fffd}')
-                        .collect())
+                        .collect(),
+                )
             };
 
             let tx_power_level = result.get_tx_power()?;

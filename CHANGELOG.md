@@ -1,3 +1,10 @@
+# 0.11.2 (2023-11-18)
+
+## Bugfixes
+
+- Android: Fix advertisements with invalid UTF-8 strings not appearing
+- All Platforms: Fix clippy warnings
+
 # 0.11.1 (2023-09-08)
 
 ## Bugfixes

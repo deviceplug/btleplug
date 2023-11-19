@@ -108,7 +108,7 @@ impl<T> Future for BtlePlugFuture<T> {
             let msg = waker_state.reply_msg.take().unwrap();
             Poll::Ready(msg)
         } else {
-            debug!("Waker set.");
+            trace!("Waker set.");
             waker_state.waker = Some(cx.waker().clone());
             Poll::Pending
         }

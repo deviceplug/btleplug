@@ -1,3 +1,9 @@
+# 0.11.3 (2023-11-18)
+
+## Bugfixes
+
+- CoreBluetooth: Fix missing include
+
 # 0.11.2 (2023-11-18)
 
 ## Bugfixes

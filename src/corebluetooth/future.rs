@@ -1,5 +1,4 @@
 use core::pin::Pin;
-use log::debug;
 use std::future::Future;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
@@ -108,7 +107,6 @@ impl<T> Future for BtlePlugFuture<T> {
             let msg = waker_state.reply_msg.take().unwrap();
             Poll::Ready(msg)
         } else {
-            trace!("Waker set.");
             waker_state.waker = Some(cx.waker().clone());
             Poll::Pending
         }

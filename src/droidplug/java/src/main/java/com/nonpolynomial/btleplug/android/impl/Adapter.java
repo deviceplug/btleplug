@@ -1,5 +1,6 @@
 package com.nonpolynomial.btleplug.android.impl;
 
+import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter.Builder;
@@ -17,6 +18,7 @@ class Adapter {
 
     public Adapter() {}
 
+    @SuppressLint("MissingPermission")
     public void startScan(ScanFilter filter) {
         ArrayList<android.bluetooth.le.ScanFilter> filters = null;
         String[] uuids = filter.getUuids();
@@ -32,6 +34,7 @@ class Adapter {
         BluetoothAdapter.getDefaultAdapter().getBluetoothLeScanner().startScan(filters, settings, this.callback);
     }
 
+    @SuppressLint("MissingPermission")
     public void stopScan() {
         BluetoothAdapter.getDefaultAdapter().getBluetoothLeScanner().stopScan(this.callback);
     }

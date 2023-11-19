@@ -1,5 +1,6 @@
 package com.nonpolynomial.btleplug.android.impl;
 
+import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
@@ -41,6 +42,7 @@ class Peripheral {
         this.callback = new Callback();
     }
 
+    @SuppressLint("MissingPermission")
     public Future<Void> connect() {
         SimpleFuture<Void> future = new SimpleFuture<>();
         synchronized (this) {
@@ -82,6 +84,7 @@ class Peripheral {
         return future;
     }
 
+    @SuppressLint("MissingPermission")
     public Future<Void> disconnect() {
         SimpleFuture<Void> future = new SimpleFuture<>();
         synchronized (this) {
@@ -118,6 +121,7 @@ class Peripheral {
         return this.connected;
     }
 
+    @SuppressLint("MissingPermission")
     public Future<byte[]> read(UUID uuid) {
         SimpleFuture<byte[]> future = new SimpleFuture<>();
         synchronized (this) {
@@ -163,6 +167,7 @@ class Peripheral {
         return future;
     }
 
+    @SuppressLint("MissingPermission")
     public Future<Void> write(UUID uuid, byte[] data, int writeType) {
         SimpleFuture<Void> future = new SimpleFuture<>();
         synchronized (this) {
@@ -210,6 +215,7 @@ class Peripheral {
         return future;
     }
 
+    @SuppressLint("MissingPermission")
     public Future<List<BluetoothGattService>> discoverServices() {
         SimpleFuture<List<BluetoothGattService>> future = new SimpleFuture<>();
         synchronized (this) {
@@ -252,6 +258,7 @@ class Peripheral {
         return future;
     }
 
+    @SuppressLint("MissingPermission")
     public Future<Void> setCharacteristicNotification(UUID uuid, boolean enable) {
         SimpleFuture<Void> future = new SimpleFuture<>();
         synchronized (this) {
@@ -316,6 +323,7 @@ class Peripheral {
         return stream;
     }
 
+    @SuppressLint("MissingPermission")
     public Future<byte[]> readDescriptor(UUID characteristic, UUID uuid) {
         SimpleFuture<byte[]> future = new SimpleFuture<>();
         synchronized (this) {
@@ -347,6 +355,7 @@ class Peripheral {
         return future;
     }
 
+    @SuppressLint("MissingPermission")
     public Future<Void> writeDescriptor(UUID characteristic, UUID uuid, byte[] data, int writeType) {
         SimpleFuture<Void> future = new SimpleFuture<>();
         synchronized (this) {
@@ -379,6 +388,7 @@ class Peripheral {
         return future;
     }
 
+    @SuppressLint("MissingPermission")
     private List<BluetoothGattCharacteristic> getCharacteristics() {
         List<BluetoothGattCharacteristic> result = new ArrayList<>();
         if (this.gatt != null) {
@@ -389,6 +399,7 @@ class Peripheral {
         return result;
     }
 
+    @SuppressLint("MissingPermission")
     private BluetoothGattCharacteristic getCharacteristicByUuid(UUID uuid) {
         for (BluetoothGattCharacteristic characteristic : this.getCharacteristics()) {
             if (characteristic.getUuid().equals(uuid)) {
@@ -399,6 +410,7 @@ class Peripheral {
         throw new NoSuchCharacteristicException();
     }
 
+    @SuppressLint("MissingPermission")
     private BluetoothGattDescriptor getDescriptorByUuid(UUID characteristicUuid, UUID uuid) {
         BluetoothGattCharacteristic characteristic = getCharacteristicByUuid(characteristicUuid);
         for (BluetoothGattDescriptor descriptor : characteristic.getDescriptors()) {

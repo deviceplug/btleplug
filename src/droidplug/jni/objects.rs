@@ -658,12 +658,15 @@ impl<'a: 'b, 'b> TryFrom<JScanResult<'a, 'b>> for (BDAddr, Option<PeripheralProp
                 None
             } else {
                 let device_name_str = JavaStr::from_env(result.env, device_name_obj)?;
-                Some(
-                    device_name_str
-                        .to_str()
-                        .map_err(|e| Self::Error::Other(e.into()))?
-                        .to_string(),
-                )
+                // On Android, there is a chance that a device name may not actually be valid UTF-8.
+                // We're given the full buffer, regardless of if it's just UTF-8 characters,
+                // possibly c str with null characters, or whatever. We should try UTF-8 first, if
+                // that doesn't work out, see if there's a null termination character in it and try
+                // parsing that.
+                Some(String::from_utf8_lossy(device_name_str.to_bytes())
+                        .chars()
+                        .filter(|&c| c != '\u{fffd}')
+                        .collect())
             };
 
             let tx_power_level = result.get_tx_power()?;

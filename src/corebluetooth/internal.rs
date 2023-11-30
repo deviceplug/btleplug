@@ -737,7 +737,11 @@ impl CoreBluetoothInternal {
                             .set_reply(CoreBluetoothReply::ReadResult(data_clone));
                     } else if let Err(e) = peripheral
                         .event_sender
-                        .send(CBPeripheralEvent::Notification(service_uuid, characteristic_uuid, data))
+                        .send(CBPeripheralEvent::Notification(
+                            service_uuid,
+                            characteristic_uuid,
+                            data,
+                        ))
                         .await
                     {
                         error!("Error sending notification event: {}", e);

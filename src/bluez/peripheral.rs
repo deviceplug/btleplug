@@ -283,7 +283,11 @@ fn value_notification(
         } if id.service().device() == *device_id => {
             let services = services.lock().unwrap();
             let (service, characteristic) = find_characteristic_by_id(&services, id)?;
-            Some(ValueNotification { uuid: characteristic.uuid, service_uuid: service.info.uuid, value })
+            Some(ValueNotification {
+                uuid: characteristic.uuid,
+                service_uuid: service.info.uuid,
+                value,
+            })
         }
         _ => None,
     }

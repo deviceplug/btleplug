@@ -499,7 +499,11 @@ impl ApiPeripheral for Peripheral {
         let uuid = characteristic.uuid;
         ble_characteristic
             .subscribe(Box::new(move |value| {
-                let notification = ValueNotification { uuid, value };
+                let notification = ValueNotification {
+                    service_uuid: ble_service.uuid,
+                    uuid,
+                    value,
+                };
                 // Note: we ignore send errors here which may happen while there are no
                 // receivers...
                 let _ = notifications_sender.send(notification);

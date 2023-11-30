@@ -497,10 +497,11 @@ impl ApiPeripheral for Peripheral {
             .ok_or_else(|| Error::NotSupported("Characteristic not found for subscribe".into()))?;
         let notifications_sender = self.shared.notifications_channel.clone();
         let uuid = characteristic.uuid;
+        let service_uuid = ble_service.uuid;
         ble_characteristic
             .subscribe(Box::new(move |value| {
                 let notification = ValueNotification {
-                    service_uuid: ble_service.uuid,
+                    service_uuid,
                     uuid,
                     value,
                 };

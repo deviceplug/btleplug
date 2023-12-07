@@ -91,6 +91,7 @@ pub enum CentralDelegateEvent {
     },
     ConnectionFailed {
         peripheral_uuid: Uuid,
+        error_description: Option<String>,
     },
     DisconnectedDevice {
         peripheral_uuid: Uuid,
@@ -176,9 +177,13 @@ impl Debug for CentralDelegateEvent {
                 .debug_struct("ConnectedDevice")
                 .field("peripheral_uuid", peripheral_uuid)
                 .finish(),
-            CentralDelegateEvent::ConnectionFailed { peripheral_uuid } => f
+            CentralDelegateEvent::ConnectionFailed {
+                peripheral_uuid,
+                error_description,
+            } => f
                 .debug_struct("ConnectionFailed")
                 .field("peripheral_uuid", peripheral_uuid)
+                .field("error_description", error_description)
                 .finish(),
             CentralDelegateEvent::DisconnectedDevice { peripheral_uuid } => f
                 .debug_struct("DisconnectedDevice")
@@ -486,13 +491,18 @@ pub mod CentralDelegate {
         _cmd: Sel,
         _central: id,
         peripheral: id,
-        _error: id,
+        error: id,
     ) {
         trace!("delegate_centralmanager_didfailtoconnectperipheral_error");
         let peripheral_uuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
+        let error_description_ns = ns::error_localizeddescription(error);
+        let error_description = nsstring_to_string(error_description_ns);
         send_delegate_event(
             delegate,
-            CentralDelegateEvent::ConnectionFailed { peripheral_uuid },
+            CentralDelegateEvent::ConnectionFailed {
+                peripheral_uuid,
+                error_description,
+            },
         );
     }
 

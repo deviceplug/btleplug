@@ -606,8 +606,13 @@ impl CoreBluetoothInternal {
         // itself when it receives all of its service/characteristic info.
     }
 
-    fn on_peripheral_connection_failed(&mut self, peripheral_uuid: Uuid) {
+    fn on_peripheral_connection_failed(
+        &mut self,
+        peripheral_uuid: Uuid,
+        error_description: Option<String>,
+    ) {
         trace!("Got connection fail event!");
+        let error = error_description.unwrap_or(String::from("Connection failed"));
         if self.peripherals.contains_key(&peripheral_uuid) {
             let peripheral = self
                 .peripherals
@@ -619,7 +624,7 @@ impl CoreBluetoothInternal {
                 .unwrap()
                 .lock()
                 .unwrap()
-                .set_reply(CoreBluetoothReply::Err(String::from("Connection failed")));
+                .set_reply(CoreBluetoothReply::Err(error));
         }
     }
 
@@ -1022,8 +1027,8 @@ impl CoreBluetoothInternal {
                     CentralDelegateEvent::ConnectedDevice{peripheral_uuid} => {
                             self.on_peripheral_connect(peripheral_uuid)
                     },
-                    CentralDelegateEvent::ConnectionFailed{peripheral_uuid} => {
-                        self.on_peripheral_connection_failed(peripheral_uuid)
+                    CentralDelegateEvent::ConnectionFailed{peripheral_uuid, error_description} => {
+                        self.on_peripheral_connection_failed(peripheral_uuid, error_description)
                     },
                     CentralDelegateEvent::DisconnectedDevice{peripheral_uuid} => {
                         self.on_peripheral_disconnect(peripheral_uuid).await

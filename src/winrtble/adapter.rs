@@ -17,7 +17,6 @@ use crate::{
     common::adapter_manager::AdapterManager,
     Error, Result,
 };
-use async_trait::async_trait;
 use futures::stream::Stream;
 use std::convert::TryInto;
 use std::fmt::{self, Debug, Formatter};
@@ -47,7 +46,6 @@ impl Debug for Adapter {
     }
 }
 
-#[async_trait]
 impl Central for Adapter {
     type Peripheral = Peripheral;
 

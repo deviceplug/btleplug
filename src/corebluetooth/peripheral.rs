@@ -19,7 +19,6 @@ use crate::{
     common::{adapter_manager::AdapterManager, util::notifications_stream_from_broadcast_receiver},
     Error, Result,
 };
-use async_trait::async_trait;
 use futures::channel::mpsc::{Receiver, SendError, Sender};
 use futures::sink::SinkExt;
 use futures::stream::{Stream, StreamExt};
@@ -195,7 +194,6 @@ impl Debug for Peripheral {
     }
 }
 
-#[async_trait]
 impl api::Peripheral for Peripheral {
     fn id(&self) -> PeripheralId {
         PeripheralId(self.shared.uuid)

@@ -24,7 +24,6 @@ use crate::{
     common::{adapter_manager::AdapterManager, util::notifications_stream_from_broadcast_receiver},
     Error, Result,
 };
-use async_trait::async_trait;
 use dashmap::DashMap;
 use futures::stream::Stream;
 use log::{error, trace};
@@ -328,7 +327,6 @@ impl Debug for Peripheral {
     }
 }
 
-#[async_trait]
 impl ApiPeripheral for Peripheral {
     fn id(&self) -> PeripheralId {
         PeripheralId(self.shared.address)

@@ -3,7 +3,6 @@ use super::peripheral::{Peripheral, PeripheralId};
 use crate::api::{Central, CentralEvent, ScanFilter};
 use crate::common::adapter_manager::AdapterManager;
 use crate::{Error, Result};
-use async_trait::async_trait;
 use futures::channel::mpsc::{self, Sender};
 use futures::sink::SinkExt;
 use futures::stream::{Stream, StreamExt};
@@ -79,7 +78,6 @@ impl Adapter {
     }
 }
 
-#[async_trait]
 impl Central for Adapter {
     type Peripheral = Peripheral;
 

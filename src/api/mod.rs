@@ -25,7 +25,6 @@ pub(crate) mod bdaddr;
 pub mod bleuuid;
 
 use crate::Result;
-use async_trait::async_trait;
 use bitflags::bitflags;
 use futures::stream::Stream;
 #[cfg(feature = "serde")]
@@ -222,7 +221,6 @@ pub enum WriteType {
 /// Peripheral is the device that you would like to communicate with (the "server" of BLE). This
 /// struct contains both the current state of the device (its properties, characteristics, etc.)
 /// as well as functions for communication.
-#[async_trait]
 pub trait Peripheral: Send + Sync + Clone + Debug {
     /// Returns the unique identifier of the peripheral.
     fn id(&self) -> PeripheralId;
@@ -232,7 +230,9 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
 
     /// Returns the set of properties associated with the peripheral. These may be updated over time
     /// as additional advertising reports are received.
-    async fn properties(&self) -> Result<Option<PeripheralProperties>>;
+    fn properties(
+        &self,
+    ) -> impl std::future::Future<Output = Result<Option<PeripheralProperties>>> + Send;
 
     /// The set of services we've discovered for this device. This will be empty until
     /// `discover_services` is called.
@@ -248,51 +248,71 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     }
 
     /// Returns true iff we are currently connected to the device.
-    async fn is_connected(&self) -> Result<bool>;
+    fn is_connected(&self) -> impl std::future::Future<Output = Result<bool>> + Send;
 
     /// Creates a connection to the device. If this method returns Ok there has been successful
     /// connection. Note that peripherals allow only one connection at a time. Operations that
     /// attempt to communicate with a device will fail until it is connected.
-    async fn connect(&self) -> Result<()>;
+    fn connect(&self) -> impl std::future::Future<Output = Result<()>> + Send;
 
     /// Terminates a connection to the device.
-    async fn disconnect(&self) -> Result<()>;
+    fn disconnect(&self) -> impl std::future::Future<Output = Result<()>> + Send;
 
     /// Discovers all services for the device, including their characteristics.
-    async fn discover_services(&self) -> Result<()>;
+    fn discover_services(&self) -> impl std::future::Future<Output = Result<()>> + Send;
 
     /// Write some data to the characteristic. Returns an error if the write couldn't be sent or (in
     /// the case of a write-with-response) if the device returns an error.
-    async fn write(
+    fn write(
         &self,
         characteristic: &Characteristic,
         data: &[u8],
         write_type: WriteType,
-    ) -> Result<()>;
+    ) -> impl std::future::Future<Output = Result<()>> + Send;
 
     /// Sends a read request to the device. Returns either an error if the request was not accepted
     /// or the response from the device.
-    async fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>>;
+    fn read(
+        &self,
+        characteristic: &Characteristic,
+    ) -> impl std::future::Future<Output = Result<Vec<u8>>> + Send;
 
     /// Enables either notify or indicate (depending on support) for the specified characteristic.
-    async fn subscribe(&self, characteristic: &Characteristic) -> Result<()>;
+    fn subscribe(
+        &self,
+        characteristic: &Characteristic,
+    ) -> impl std::future::Future<Output = Result<()>> + Send;
 
     /// Disables either notify or indicate (depending on support) for the specified characteristic.
-    async fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()>;
+    fn unsubscribe(
+        &self,
+        characteristic: &Characteristic,
+    ) -> impl std::future::Future<Output = Result<()>> + Send;
 
     /// Returns a stream of notifications for characteristic value updates. The stream will receive
     /// a notification when a value notification or indication is received from the device.
     /// The stream will remain valid across connections and can be queried before any connection
     /// is made.
-    async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>>;
+    fn notifications(
+        &self,
+    ) -> impl std::future::Future<
+        Output = Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>>,
+    > + Send;
 
     /// Write some data to the descriptor. Returns an error if the write couldn't be sent or (in
     /// the case of a write-with-response) if the device returns an error.
-    async fn write_descriptor(&self, descriptor: &Descriptor, data: &[u8]) -> Result<()>;
+    fn write_descriptor(
+        &self,
+        descriptor: &Descriptor,
+        data: &[u8],
+    ) -> impl std::future::Future<Output = Result<()>> + Send;
 
     /// Sends a read descriptor request to the device. Returns either an error if the request
     /// was not accepted or the response from the device.
-    async fn read_descriptor(&self, descriptor: &Descriptor) -> Result<Vec<u8>>;
+    fn read_descriptor(
+        &self,
+        descriptor: &Descriptor,
+    ) -> impl std::future::Future<Output = Result<Vec<u8>>> + Send;
 }
 
 #[cfg_attr(
@@ -325,13 +345,14 @@ pub enum CentralEvent {
 
 /// Central is the "client" of BLE. It's able to scan for and establish connections to peripherals.
 /// A Central can be obtained from [`Manager::adapters()`].
-#[async_trait]
 pub trait Central: Send + Sync + Clone {
     type Peripheral: Peripheral;
 
     /// Retrieve a stream of `CentralEvent`s. This stream will receive notifications when events
     /// occur for this Central module. See [`CentralEvent`] for the full set of possible events.
-    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent> + Send>>>;
+    fn events(
+        &self,
+    ) -> impl std::future::Future<Output = Result<Pin<Box<dyn Stream<Item = CentralEvent> + Send>>>> + Send;
 
     /// Starts a scan for BLE devices. This scan will generally continue until explicitly stopped,
     /// although this may depend on your Bluetooth adapter. Discovered devices will be announced
@@ -340,26 +361,37 @@ pub trait Central: Send + Sync + Clone {
     /// ignore (parts of) the filter and make additional devices available, other implementations
     /// might require at least one filter for security reasons. Cross-platform code should provide
     /// a filter, but must be able to handle devices, which do not fit into the filter.
-    async fn start_scan(&self, filter: ScanFilter) -> Result<()>;
+    fn start_scan(
+        &self,
+        filter: ScanFilter,
+    ) -> impl std::future::Future<Output = Result<()>> + Send;
 
     /// Stops scanning for BLE devices.
-    async fn stop_scan(&self) -> Result<()>;
+    fn stop_scan(&self) -> impl std::future::Future<Output = Result<()>> + Send;
 
     /// Returns the list of [`Peripheral`]s that have been discovered so far. Note that this list
     /// may contain peripherals that are no longer available.
-    async fn peripherals(&self) -> Result<Vec<Self::Peripheral>>;
+    fn peripherals(
+        &self,
+    ) -> impl std::future::Future<Output = Result<Vec<Self::Peripheral>>> + Send;
 
     /// Returns a particular [`Peripheral`] by its address if it has been discovered.
-    async fn peripheral(&self, id: &PeripheralId) -> Result<Self::Peripheral>;
+    fn peripheral(
+        &self,
+        id: &PeripheralId,
+    ) -> impl std::future::Future<Output = Result<Self::Peripheral>> + Send;
 
     /// Add a [`Peripheral`] from a MAC address without a scan result. Not supported on all Bluetooth systems.
-    async fn add_peripheral(&self, address: &PeripheralId) -> Result<Self::Peripheral>;
+    fn add_peripheral(
+        &self,
+        address: &PeripheralId,
+    ) -> impl std::future::Future<Output = Result<Self::Peripheral>> + Send;
 
     /// Get information about the Bluetooth adapter being used, such as the model or type.
     ///
     /// The details of this are platform-specific andyou should not attempt to parse it, but it may
     /// be useful for debug logs.
-    async fn adapter_info(&self) -> Result<String>;
+    fn adapter_info(&self) -> impl std::future::Future<Output = Result<String>> + Send;
 }
 
 /// The Manager is the entry point to the library, providing access to all the Bluetooth adapters on
@@ -380,11 +412,10 @@ pub trait Central: Send + Sync + Clone {
 /// # Ok(())
 /// # }
 /// ```
-#[async_trait]
 pub trait Manager {
     /// The concrete type of the [`Central`] implementation.
     type Adapter: Central;
 
     /// Get a list of all Bluetooth adapters on the system. Each adapter implements [`Central`].
-    async fn adapters(&self) -> Result<Vec<Self::Adapter>>;
+    fn adapters(&self) -> impl std::future::Future<Output = Result<Vec<Self::Adapter>>> + Send;
 }

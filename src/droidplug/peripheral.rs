@@ -5,7 +5,6 @@ use crate::{
     },
     Error, Result,
 };
-use async_trait::async_trait;
 use futures::stream::Stream;
 use jni::{
     descriptors,
@@ -206,7 +205,6 @@ impl Debug for Peripheral {
     }
 }
 
-#[async_trait]
 impl api::Peripheral for Peripheral {
     /// Returns the unique identifier of the peripheral.
     fn id(&self) -> PeripheralId {

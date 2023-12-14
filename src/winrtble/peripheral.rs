@@ -567,7 +567,7 @@ impl ApiPeripheral for Peripheral {
             .ok_or_else(|| Error::NotSupported("Service not found for read".into()))?;
         let ble_characteristic = ble_service
             .characteristics
-            .get(&descriptor.uuid)
+            .get(&descriptor.characteristic_uuid)
             .ok_or_else(|| Error::NotSupported("Characteristic not found for read".into()))?;
         let ble_descriptor = ble_characteristic
             .descriptors

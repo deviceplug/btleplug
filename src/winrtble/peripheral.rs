@@ -258,7 +258,7 @@ impl Peripheral {
                     id: self.shared.address.into(),
                     services: services_guard.iter().copied().collect(),
                 });
-                drop(service_data_guard);
+                drop(service_guard);
             }
         }
 

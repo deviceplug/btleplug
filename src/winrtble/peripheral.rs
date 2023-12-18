@@ -143,26 +143,30 @@ impl Peripheral {
 
                 let mut local_name_guard = self.shared.local_name.write().unwrap();
                 *local_name_guard = Some(name.to_string());
+                drop(local_name_guard);
             }
         }
         if let Ok(manufacturer_data) = advertisement.ManufacturerData() {
             let mut manufacturer_data_guard = self.shared.latest_manufacturer_data.write().unwrap();
 
-            *manufacturer_data_guard = manufacturer_data
-                .into_iter()
-                .map(|d| {
-                    let manufacturer_id = d.CompanyId().unwrap();
-                    let data = utils::to_vec(&d.Data().unwrap());
+            if manufacturer_data.Size().unwrap() > 0 {
+                *manufacturer_data_guard = manufacturer_data
+                    .into_iter()
+                    .map(|d| {
+                        let manufacturer_id = d.CompanyId().unwrap();
+                        let data = utils::to_vec(&d.Data().unwrap());
 
-                    (manufacturer_id, data)
-                })
-                .collect();
+                        (manufacturer_id, data)
+                    })
+                    .collect();
 
-            // Emit event of newly received advertisement
-            self.emit_event(CentralEvent::ManufacturerDataAdvertisement {
-                id: self.shared.address.into(),
-                manufacturer_data: manufacturer_data_guard.clone(),
-            });
+                // Emit event of newly received advertisement
+                self.emit_event(CentralEvent::ManufacturerDataAdvertisement {
+                    id: self.shared.address.into(),
+                    manufacturer_data: manufacturer_data_guard.clone(),
+                });
+                drop(manufacturer_data_guard);
+            }
         }
 
         // The Windows Runtime API (as of 19041) does not directly expose Service Data as a friendly API (like Manufacturer Data above)
@@ -217,6 +221,7 @@ impl Peripheral {
                     id: self.shared.address.into(),
                     service_data: service_data_guard.clone(),
                 });
+                drop(service_data_guard);
             }
         }
 
@@ -253,6 +258,7 @@ impl Peripheral {
                     id: self.shared.address.into(),
                     services: services_guard.iter().copied().collect(),
                 });
+                drop(services_guard);
             }
         }
 
@@ -263,6 +269,7 @@ impl Peripheral {
                 BluetoothAddressType::Random => Some(AddressType::Random),
                 _ => None,
             };
+            drop(address_type_guard);
         }
 
         if let Ok(tx_reference) = args.TransmitPowerLevelInDBm() {

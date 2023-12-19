@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use bluez_async::{
     BluetoothEvent, BluetoothSession, CharacteristicEvent, CharacteristicFlags, CharacteristicId,
     CharacteristicInfo, DescriptorInfo, DeviceId, DeviceInfo, MacAddress, ServiceInfo,
@@ -128,7 +127,6 @@ impl Peripheral {
     }
 }
 
-#[async_trait]
 impl api::Peripheral for Peripheral {
     fn id(&self) -> PeripheralId {
         PeripheralId(self.device.to_owned())

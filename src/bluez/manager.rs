@@ -1,6 +1,5 @@
 use super::adapter::Adapter;
 use crate::{api, Result};
-use async_trait::async_trait;
 use bluez_async::BluetoothSession;
 
 /// Implementation of [api::Manager](crate::api::Manager).
@@ -16,7 +15,6 @@ impl Manager {
     }
 }
 
-#[async_trait]
 impl api::Manager for Manager {
     type Adapter = Adapter;
 

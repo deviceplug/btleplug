@@ -22,7 +22,6 @@ path = "src/lib.rs"
 serde = ["uuid/serde", "serde_cr", "serde_bytes"]
 
 [dependencies]
-async-trait = "0.1.74"
 log = "0.4.20"
 bitflags = "2.4.1"
 thiserror = "1.0.50"

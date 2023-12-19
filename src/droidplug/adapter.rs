@@ -10,7 +10,6 @@ use crate::{
     common::adapter_manager::AdapterManager,
     Error, Result,
 };
-use async_trait::async_trait;
 use futures::stream::Stream;
 use jni::{
     objects::{GlobalRef, JObject, JString},
@@ -123,7 +122,6 @@ impl Adapter {
     }
 }
 
-#[async_trait]
 impl Central for Adapter {
     type Peripheral = Peripheral;
 

@@ -1,7 +1,6 @@
 use super::peripheral::{Peripheral, PeripheralId};
 use crate::api::{Central, CentralEvent, ScanFilter};
 use crate::{Error, Result};
-use async_trait::async_trait;
 use bluez_async::{
     AdapterId, BluetoothError, BluetoothEvent, BluetoothSession, DeviceEvent, DiscoveryFilter,
     Transport,
@@ -22,7 +21,6 @@ impl Adapter {
     }
 }
 
-#[async_trait]
 impl Central for Adapter {
     type Peripheral = Peripheral;
 

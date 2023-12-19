@@ -1,6 +1,5 @@
 use super::adapter::Adapter;
 use crate::{api, Result};
-use async_trait::async_trait;
 
 #[derive(Clone, Debug)]
 pub struct Manager;
@@ -11,7 +10,6 @@ impl Manager {
     }
 }
 
-#[async_trait]
 impl api::Manager for Manager {
     type Adapter = Adapter;
 

@@ -7,7 +7,6 @@
 
 use super::adapter::Adapter;
 use crate::{api, Result};
-use async_trait::async_trait;
 
 /// Implementation of [api::Manager](crate::api::Manager).
 #[derive(Clone, Debug)]
@@ -19,7 +18,6 @@ impl Manager {
     }
 }
 
-#[async_trait]
 impl api::Manager for Manager {
     type Adapter = Adapter;
 

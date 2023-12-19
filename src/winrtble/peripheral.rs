@@ -143,7 +143,6 @@ impl Peripheral {
 
                 let mut local_name_guard = self.shared.local_name.write().unwrap();
                 *local_name_guard = Some(name.to_string());
-                drop(local_name_guard);
             }
         }
         if let Ok(manufacturer_data) = advertisement.ManufacturerData() {
@@ -165,7 +164,6 @@ impl Peripheral {
                     id: self.shared.address.into(),
                     manufacturer_data: manufacturer_data_guard.clone(),
                 });
-                drop(manufacturer_data_guard);
             }
         }
 
@@ -221,7 +219,6 @@ impl Peripheral {
                     id: self.shared.address.into(),
                     service_data: service_data_guard.clone(),
                 });
-                drop(service_data_guard);
             }
         }
 
@@ -258,7 +255,6 @@ impl Peripheral {
                     id: self.shared.address.into(),
                     services: services_guard.iter().copied().collect(),
                 });
-                drop(services_guard);
             }
         }
 
@@ -269,7 +265,6 @@ impl Peripheral {
                 BluetoothAddressType::Random => Some(AddressType::Random),
                 _ => None,
             };
-            drop(address_type_guard);
         }
 
         if let Ok(tx_reference) = args.TransmitPowerLevelInDBm() {

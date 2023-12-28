@@ -454,6 +454,7 @@ impl ApiPeripheral for Peripheral {
                         }
                         Err(e) => {
                             error!("get_characteristics_async {:?}", e);
+                            return Err(e);
                         }
                     }
                 }

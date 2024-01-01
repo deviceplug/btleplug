@@ -22,18 +22,18 @@ path = "src/lib.rs"
 serde = ["uuid/serde", "serde_cr", "serde_bytes"]
 
 [dependencies]
-async-trait = "0.1.74"
+async-trait = "0.1.76"
 log = "0.4.20"
 bitflags = "2.4.1"
-thiserror = "1.0.50"
-uuid = "1.5.0"
-serde_cr = { package = "serde", version = "1.0.192", features = ["derive"], default-features = false, optional = true }
-serde_bytes = { version = "0.11.12", optional = true }
+thiserror = "1.0.53"
+uuid = "1.6.1"
+serde_cr = { package = "serde", version = "1.0.193", features = ["derive"], default-features = false, optional = true }
+serde_bytes = { version = "0.11.13", optional = true }
 dashmap = "5.5.3"
-futures = "0.3.29"
+futures = "0.3.30"
 static_assertions = "1.1.0"
 # rt feature needed for block_on in macOS internal thread
-tokio = { version = "1.34.0", features = ["sync", "rt"] }
+tokio = { version = "1.35.1", features = ["sync", "rt"] }
 tokio-stream = { version = "0.1.14", features = ["sync"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -42,13 +42,13 @@ bluez-async = "0.7.2"
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.19.0"
-once_cell = "1.18.0"
+once_cell = "1.19.0"
 jni-utils = "0.1.1"
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 cocoa = "0.25.0"
 objc = "0.2.7"
-libc = "0.2.150"
+libc = "0.2.151"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.52.0", features = ["Devices_Bluetooth", "Devices_Bluetooth_GenericAttributeProfile", "Devices_Bluetooth_Advertisement", "Devices_Radios", "Foundation_Collections", "Foundation", "Storage_Streams"] }
@@ -56,5 +56,5 @@ windows = { version = "0.52.0", features = ["Devices_Bluetooth", "Devices_Blueto
 [dev-dependencies]
 rand = "0.8.5"
 pretty_env_logger = "0.5.0"
-tokio = { version = "1.34.0", features = ["macros", "rt", "rt-multi-thread"] }
-serde_json = "1.0.108"
+tokio = { version = "1.35.1", features = ["macros", "rt", "rt-multi-thread"] }
+serde_json = "1.0.109"

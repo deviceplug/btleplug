@@ -1,3 +1,12 @@
+# 0.11.4 (2024-01-01)
+
+## Bugfixes
+
+- Fix issue with manufacturer data not being consistently found on windows
+- Fix UUID used for finding characteristics on windows
+- Peripheral connection failure now returns an error
+- Peripheral service discovery failure now returns an error
+
 # 0.11.3 (2023-11-18)
 
 ## Bugfixes

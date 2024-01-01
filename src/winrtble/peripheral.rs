@@ -147,7 +147,8 @@ impl Peripheral {
         }
         if let Ok(manufacturer_data) = advertisement.ManufacturerData() {
             if manufacturer_data.Size().unwrap() > 0 {
-                let mut manufacturer_data_guard = self.shared.latest_manufacturer_data.write().unwrap();
+                let mut manufacturer_data_guard =
+                    self.shared.latest_manufacturer_data.write().unwrap();
                 *manufacturer_data_guard = manufacturer_data
                     .into_iter()
                     .map(|d| {

@@ -97,9 +97,7 @@ impl BLEDevice {
     pub async fn get_characteristics(
         service: &GattDeviceService,
     ) -> Result<Vec<GattCharacteristic>> {
-        let async_result = service
-            .GetCharacteristicsWithCacheModeAsync(BluetoothCacheMode::Uncached)?
-            .await?;
+        let async_result = service.GetCharacteristicsAsync()?.await?;
         let status = async_result.Status();
         if status == Ok(GattCommunicationStatus::Success) {
             let results = async_result.Characteristics()?;

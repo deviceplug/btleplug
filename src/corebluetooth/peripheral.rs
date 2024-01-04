@@ -252,7 +252,8 @@ impl api::Peripheral for Peripheral {
                 self.shared
                     .emit_event(CentralEvent::DeviceConnected(self.shared.uuid.into()));
             }
-            _ => panic!("Shouldn't get anything but connected!"),
+            CoreBluetoothReply::Err(msg) => return Err(Error::RuntimeError(msg)),
+            _ => panic!("Shouldn't get anything but connected or err!"),
         }
         trace!("Device connected!");
         Ok(())

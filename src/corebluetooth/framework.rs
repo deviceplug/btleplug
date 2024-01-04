@@ -94,6 +94,15 @@ pub mod ns {
             uuidstring
         }
     }
+
+    // NSError
+
+    pub fn error_localizeddescription(nserror: id) -> id /* NSString* */ {
+        unsafe {
+            let description: id = msg_send![nserror, localizedDescription];
+            description
+        }
+    }
 }
 
 pub mod cb {

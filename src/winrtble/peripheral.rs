@@ -146,23 +146,25 @@ impl Peripheral {
             }
         }
         if let Ok(manufacturer_data) = advertisement.ManufacturerData() {
-            let mut manufacturer_data_guard = self.shared.latest_manufacturer_data.write().unwrap();
+            if manufacturer_data.Size().unwrap() > 0 {
+                let mut manufacturer_data_guard =
+                    self.shared.latest_manufacturer_data.write().unwrap();
+                *manufacturer_data_guard = manufacturer_data
+                    .into_iter()
+                    .map(|d| {
+                        let manufacturer_id = d.CompanyId().unwrap();
+                        let data = utils::to_vec(&d.Data().unwrap());
 
-            *manufacturer_data_guard = manufacturer_data
-                .into_iter()
-                .map(|d| {
-                    let manufacturer_id = d.CompanyId().unwrap();
-                    let data = utils::to_vec(&d.Data().unwrap());
+                        (manufacturer_id, data)
+                    })
+                    .collect();
 
-                    (manufacturer_id, data)
-                })
-                .collect();
-
-            // Emit event of newly received advertisement
-            self.emit_event(CentralEvent::ManufacturerDataAdvertisement {
-                id: self.shared.address.into(),
-                manufacturer_data: manufacturer_data_guard.clone(),
-            });
+                // Emit event of newly received advertisement
+                self.emit_event(CentralEvent::ManufacturerDataAdvertisement {
+                    id: self.shared.address.into(),
+                    manufacturer_data: manufacturer_data_guard.clone(),
+                });
+            }
         }
 
         // The Windows Runtime API (as of 19041) does not directly expose Service Data as a friendly API (like Manufacturer Data above)
@@ -454,6 +456,7 @@ impl ApiPeripheral for Peripheral {
                         }
                         Err(e) => {
                             error!("get_characteristics_async {:?}", e);
+                            return Err(e);
                         }
                     }
                 }
@@ -572,7 +575,7 @@ impl ApiPeripheral for Peripheral {
             .ok_or_else(|| Error::NotSupported("Service not found for read".into()))?;
         let ble_characteristic = ble_service
             .characteristics
-            .get(&descriptor.uuid)
+            .get(&descriptor.characteristic_uuid)
             .ok_or_else(|| Error::NotSupported("Characteristic not found for read".into()))?;
         let ble_descriptor = ble_characteristic
             .descriptors

@@ -100,15 +100,27 @@ impl BLEDevice {
         let async_result = service
             .GetCharacteristicsWithCacheModeAsync(BluetoothCacheMode::Uncached)?
             .await?;
-        let status = async_result.Status();
-        if status == Ok(GattCommunicationStatus::Success) {
-            let results = async_result.Characteristics()?;
-            debug!("characteristics {:?}", results.Size());
-            Ok(results.into_iter().collect())
-        } else {
-            Err(Error::Other(
-                format!("get_characteristics for {:?} failed: {:?}", service, status).into(),
-            ))
+
+        match async_result.Status() {
+            Ok(GattCommunicationStatus::Success) => {
+                let results = async_result.Characteristics()?;
+                debug!("characteristics {:?}", results.Size());
+                Ok(results.into_iter().collect())
+            }
+            Ok(GattCommunicationStatus::ProtocolError) => Err(Error::Other(
+                format!(
+                    "get_characteristics for {:?} encountered a protocol error",
+                    service
+                )
+                .into(),
+            )),
+            Ok(status) => {
+                debug!("characteristic read failed due to {:?}", status);
+                Ok(vec![])
+            }
+            Err(e) => Err(Error::Other(
+                format!("get_characteristics for {:?} failed: {:?}", service, e).into(),
+            )),
         }
     }
 

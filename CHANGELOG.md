@@ -1,3 +1,9 @@
+# 0.11.5 (2024-01-10)
+
+## Bugfixes
+
+- Fix issue with Windows failing to read characteristic descriptors
+
 # 0.11.4 (2024-01-01)
 
 ## Bugfixes

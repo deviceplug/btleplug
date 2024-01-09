@@ -27,7 +27,7 @@ use crate::{
 use async_trait::async_trait;
 use dashmap::DashMap;
 use futures::stream::Stream;
-use log::{error, trace};
+use log::{trace, warn};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
@@ -449,8 +449,7 @@ impl ApiPeripheral for Peripheral {
                             );
                         }
                         Err(e) => {
-                            error!("get_characteristics_async {:?}", e);
-                            return Err(e);
+                            warn!("get_characteristics_async {:?}", e);
                         }
                     }
                 }

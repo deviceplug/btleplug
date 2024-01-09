@@ -415,29 +415,23 @@ impl ApiPeripheral for Peripheral {
                         Ok(characteristics) => {
                             let characteristics =
                                 characteristics.into_iter().map(|characteristic| async {
-                                    match BLEDevice::get_characteristic_descriptors(&characteristic)
-                                        .await
-                                    {
-                                        Ok(descriptors) => {
-                                            let descriptors: HashMap<Uuid, BLEDescriptor> =
-                                                descriptors
-                                                    .into_iter()
-                                                    .map(|descriptor| {
-                                                        let descriptor =
-                                                            BLEDescriptor::new(descriptor);
-                                                        (descriptor.uuid(), descriptor)
-                                                    })
-                                                    .collect();
-                                            Ok((characteristic, descriptors))
-                                        }
-                                        Err(e) => {
-                                            error!("get_characteristic_descriptors_async {:?}", e);
-                                            Err(e)
-                                        }
-                                    }
+                                    let c = characteristic.clone();
+                                    (
+                                        characteristic,
+                                        BLEDevice::get_characteristic_descriptors(&c)
+                                            .await
+                                            .unwrap_or(Vec::new())
+                                            .into_iter()
+                                            .map(|descriptor| {
+                                                let descriptor = BLEDescriptor::new(descriptor);
+                                                (descriptor.uuid(), descriptor)
+                                            })
+                                            .collect(),
+                                    )
                                 });
-                            let characteristics = futures::future::try_join_all(characteristics)
-                                .await?
+
+                            let characteristics = futures::future::join_all(characteristics)
+                                .await
                                 .into_iter()
                                 .map(|(characteristic, descriptors)| {
                                     let characteristic =

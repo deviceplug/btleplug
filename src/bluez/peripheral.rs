@@ -21,6 +21,7 @@ use crate::api::{
     Service, ValueNotification, WriteType,
 };
 use crate::{Error, Result};
+use std::time::Duration;
 
 #[derive(Clone, Debug)]
 struct CharacteristicInternal {
@@ -169,6 +170,13 @@ impl api::Peripheral for Peripheral {
 
     async fn connect(&self) -> Result<()> {
         self.session.connect(&self.device).await?;
+        Ok(())
+    }
+
+    async fn connect_with_timeout(&self, timeout: Duration) -> Result<()> {
+        self.session
+            .connect_with_timeout(&self.device, timeout)
+            .await?;
         Ok(())
     }
 

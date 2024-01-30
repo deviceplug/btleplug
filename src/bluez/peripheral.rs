@@ -182,19 +182,35 @@ impl api::Peripheral for Peripheral {
         let services = self.session.get_services(&self.device).await?;
         for service in services {
             let characteristics = self.session.get_characteristics(&service.id).await?;
-            let characteristics =
-                join_all(characteristics.into_iter().map(|characteristic| async {
-                    let descriptors = self
-                        .session
-                        .get_descriptors(&characteristic.id)
-                        .await
-                        .unwrap_or(Vec::new())
-                        .into_iter()
-                        .map(|descriptor| (descriptor.uuid, descriptor))
-                        .collect();
-                    CharacteristicInternal::new(characteristic, descriptors)
-                }))
-                .await;
+            let characteristics = join_all(
+                characteristics
+                    .into_iter()
+                    .fold(
+                        // Only consider the first characteristic of each UUID
+                        // This "should" be unique, but of course it's not enforced
+                        HashMap::<Uuid, CharacteristicInfo>::new(),
+                        |mut map, characteristic| {
+                            if !map.contains_key(&characteristic.uuid) {
+                                map.insert(characteristic.uuid, characteristic);
+                            }
+                            map
+                        },
+                    )
+                    .into_iter()
+                    .map(|mapped_characteristic| async {
+                        let characteristic = mapped_characteristic.1;
+                        let descriptors = self
+                            .session
+                            .get_descriptors(&characteristic.id)
+                            .await
+                            .unwrap_or(Vec::new())
+                            .into_iter()
+                            .map(|descriptor| (descriptor.uuid, descriptor))
+                            .collect();
+                        CharacteristicInternal::new(characteristic, descriptors)
+                    }),
+            )
+            .await;
             services_internal.insert(
                 service.uuid,
                 ServiceInternal {

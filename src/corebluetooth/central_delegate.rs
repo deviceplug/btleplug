@@ -29,7 +29,7 @@ use cocoa::base::{id, nil};
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::sink::SinkExt;
 use libc::c_void;
-use log::{error, trace};
+use log::{error, trace, warn};
 use objc::{
     class,
     declare::ClassDecl,
@@ -690,7 +690,15 @@ pub mod CentralDelegate {
                 // Create the map entry we'll need to export.
                 let uuid = cbuuid_to_uuid(cb::attribute_uuid(c));
                 let held_char = unsafe { StrongPtr::retain(c) };
-                characteristics.insert(uuid, held_char);
+
+                // Only consider the first characteristic of each UUID
+                // This "should" be unique, but of course it's not enforced
+
+                if !characteristics.contains_key(&uuid) {
+                    characteristics.insert(uuid, held_char);
+                } else {
+                    warn!("Duplicate characteristic UUID discovered: {:?}", uuid)
+                }
             }
             let peripheral_uuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
             let service_uuid = cbuuid_to_uuid(cb::attribute_uuid(service));

@@ -35,7 +35,7 @@ impl api::Manager for Manager {
         Ok(radios
             .into_iter()
             .filter(|radio| radio.Kind() == Ok(RadioKind::Bluetooth))
-            .map(|_| Adapter::new())
+            .map(|radio| Adapter::new(radio))
             .collect())
     }
 }

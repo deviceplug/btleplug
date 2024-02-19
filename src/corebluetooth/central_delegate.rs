@@ -26,8 +26,8 @@ use objc2::{declare_class, msg_send_id, mutability, rc::Retained, ClassType, Dec
 use objc2_core_bluetooth::{
     CBAdvertisementDataLocalNameKey, CBAdvertisementDataManufacturerDataKey,
     CBAdvertisementDataServiceDataKey, CBAdvertisementDataServiceUUIDsKey, CBCentralManager,
-    CBCentralManagerDelegate, CBCharacteristic, CBDescriptor, CBPeripheral, CBPeripheralDelegate,
-    CBService, CBUUID,
+    CBCentralManagerDelegate, CBCharacteristic, CBDescriptor, CBManagerState, CBPeripheral,
+    CBPeripheralDelegate, CBService, CBUUID,
 };
 use objc2_foundation::{
     NSArray, NSData, NSDictionary, NSError, NSNumber, NSObject, NSObjectProtocol, NSString,
@@ -41,7 +41,9 @@ use std::{
 use uuid::Uuid;
 
 pub enum CentralDelegateEvent {
-    DidUpdateState,
+    DidUpdateState {
+        state: CBManagerState,
+    },
     DiscoveredPeripheral {
         cbperipheral: Retained<CBPeripheral>,
         local_name: Option<String>,
@@ -128,7 +130,10 @@ pub enum CentralDelegateEvent {
 impl Debug for CentralDelegateEvent {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            CentralDelegateEvent::DidUpdateState => f.debug_tuple("DidUpdateState").finish(),
+            CentralDelegateEvent::DidUpdateState { state } => f
+                .debug_struct("CentralDelegateEvent")
+                .field("state", state)
+                .finish(),
             CentralDelegateEvent::DiscoveredPeripheral {
                 cbperipheral,
                 local_name,
@@ -308,9 +313,10 @@ declare_class!(
 
     unsafe impl CBCentralManagerDelegate for CentralDelegate {
         #[method(centralManagerDidUpdateState:)]
-        fn delegate_centralmanagerdidupdatestate(&self, _central: &CBCentralManager) {
+        fn delegate_centralmanagerdidupdatestate(&self, central: &CBCentralManager) {
             trace!("delegate_centralmanagerdidupdatestate");
-            self.send_event(CentralDelegateEvent::DidUpdateState);
+            let state = unsafe { central.state() };
+            self.send_event(CentralDelegateEvent::DidUpdateState { state });
         }
 
         // #[method(centralManager:willRestoreState:)]

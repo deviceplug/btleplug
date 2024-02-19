@@ -1,5 +1,5 @@
 use super::peripheral::{Peripheral, PeripheralId};
-use crate::api::{Central, CentralEvent, ScanFilter};
+use crate::api::{Central, CentralEvent, CentralState, ScanFilter};
 use crate::{Error, Result};
 use async_trait::async_trait;
 use bluez_async::{
@@ -104,6 +104,10 @@ impl Central for Adapter {
     async fn adapter_info(&self) -> Result<String> {
         let adapter_info = self.session.get_adapter_info(&self.adapter).await?;
         Ok(format!("{} ({})", adapter_info.id, adapter_info.modalias))
+    }
+
+    async fn adapter_state(&self) -> Result<CentralState> {
+        Ok(CentralState::Unknown)
     }
 }
 

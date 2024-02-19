@@ -6,7 +6,7 @@ use super::{
     peripheral::{Peripheral, PeripheralId},
 };
 use crate::{
-    api::{BDAddr, Central, CentralEvent, PeripheralProperties, ScanFilter},
+    api::{BDAddr, Central, CentralEvent, CentralState, PeripheralProperties, ScanFilter},
     common::adapter_manager::AdapterManager,
     Error, Result,
 };
@@ -166,6 +166,10 @@ impl Central for Adapter {
 
     async fn add_peripheral(&self, address: &PeripheralId) -> Result<Peripheral> {
         self.add(address.0)
+    }
+
+    async fn adapter_state(&self) -> Result<CentralState> {
+        Ok(CentralState::Unknown)
     }
 }
 

@@ -1,6 +1,6 @@
 use super::internal::{run_corebluetooth_thread, CoreBluetoothEvent, CoreBluetoothMessage};
 use super::peripheral::{Peripheral, PeripheralId};
-use crate::api::{Central, CentralEvent, ScanFilter};
+use crate::api::{Central, CentralEvent, CentralState, ScanFilter};
 use crate::common::adapter_manager::AdapterManager;
 use crate::{Error, Result};
 use async_trait::async_trait;
@@ -120,5 +120,9 @@ impl Central for Adapter {
     async fn adapter_info(&self) -> Result<String> {
         // TODO: Get information about the adapter.
         Ok("CoreBluetooth".to_string())
+    }
+
+    async fn adapter_state(&self) -> Result<CentralState> {
+        Ok(CentralState::Unknown)
     }
 }

@@ -23,6 +23,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // connect to the adapter
     let central = get_central(&manager).await;
 
+    let central_state = central.adapter_state().await.unwrap();
+    println!("CentralState: {:?}", central_state);
+
     // Each adapter has an event stream, we fetch via events(),
     // simplifying the type, this will return what is essentially a
     // Future<Result<Stream<Item=CentralEvent>>>.
@@ -44,6 +47,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .map(|local_name| format!("Name: {local_name}"))
                     .unwrap_or_default();
                 println!("DeviceDiscovered: {:?} {}", id, name);
+            }
+            CentralEvent::StateUpdate(state) => {
+                println!("AdapterStatusUpdate {:?}", state);
             }
             CentralEvent::DeviceConnected(id) => {
                 println!("DeviceConnected: {:?}", id);

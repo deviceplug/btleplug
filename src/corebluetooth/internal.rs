@@ -421,7 +421,9 @@ pub enum CoreBluetoothMessage {
 
 #[derive(Debug)]
 pub enum CoreBluetoothEvent {
-    AdapterConnected,
+    DidUpdateState {
+        state: cb::CBManagerState,
+    },
     DeviceDiscovered {
         uuid: Uuid,
         name: Option<String>,
@@ -1050,14 +1052,11 @@ impl CoreBluetoothInternal {
         select! {
             delegate_msg = self.delegate_receiver.select_next_some() => {
                 match delegate_msg {
-                    // TODO DidUpdateState does not imply that the adapter is
-                    // on, just that it updated state.
-                    //
                     // TODO We should probably also register some sort of
                     // "ready" variable in our adapter that will cause scans/etc
                     // to fail if this hasn't updated.
-                    CentralDelegateEvent::DidUpdateState => {
-                        self.dispatch_event(CoreBluetoothEvent::AdapterConnected).await
+                    CentralDelegateEvent::DidUpdateState{state} => {
+                        self.dispatch_event(CoreBluetoothEvent::DidUpdateState{state}).await
                     }
                     CentralDelegateEvent::DiscoveredPeripheral{cbperipheral, local_name} => {
                         self.on_discovered_peripheral(cbperipheral, local_name).await

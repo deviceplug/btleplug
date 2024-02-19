@@ -29,7 +29,7 @@ impl Adapter {
         debug!("Waiting on adapter connect");
         if !matches!(
             receiver.next().await,
-            Some(CoreBluetoothEvent::AdapterConnected)
+            Some(CoreBluetoothEvent::DidUpdateState{state:_})
         ) {
             return Err(Error::Other(
                 "Adapter failed to connect.".to_string().into(),

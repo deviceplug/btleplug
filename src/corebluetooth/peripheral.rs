@@ -160,6 +160,7 @@ impl Peripheral {
                     }
                     Some(CBPeripheralEvent::Disconnected) => (),
                     None => {
+                        shared.emit_event(CentralEvent::DeviceDisconnected(shared.uuid.into()));
                         info!("Event receiver died, breaking out of corebluetooth device loop.");
                         break;
                     }

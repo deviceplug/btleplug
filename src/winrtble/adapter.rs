@@ -13,7 +13,7 @@
 
 use super::{ble::watcher::BLEWatcher, peripheral::Peripheral, peripheral::PeripheralId};
 use crate::{
-    api::{BDAddr, Central, CentralEvent, ScanFilter},
+    api::{BDAddr, Central, CentralEvent, CentralState, ScanFilter},
     common::adapter_manager::AdapterManager,
     Error, Result,
 };
@@ -99,5 +99,9 @@ impl Central for Adapter {
     async fn adapter_info(&self) -> Result<String> {
         // TODO: Get information about the adapter.
         Ok("WinRT".to_string())
+    }
+
+    async fn adapter_state(&self) -> Result<CentralState> {
+        Ok(CentralState::Unknown)
     }
 }

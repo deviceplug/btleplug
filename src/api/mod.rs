@@ -300,6 +300,19 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     derive(Serialize, Deserialize),
     serde(crate = "serde_cr")
 )]
+/// The state of the Central
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CentralState {
+    Unknown = 0,
+    PoweredOn = 1,
+    PoweredOff = 2,
+}
+
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(crate = "serde_cr")
+)]
 #[derive(Debug, Clone)]
 pub enum CentralEvent {
     DeviceDiscovered(PeripheralId),
@@ -321,6 +334,7 @@ pub enum CentralEvent {
         id: PeripheralId,
         services: Vec<Uuid>,
     },
+    StateUpdate(CentralState),
 }
 
 /// Central is the "client" of BLE. It's able to scan for and establish connections to peripherals.
@@ -360,6 +374,9 @@ pub trait Central: Send + Sync + Clone {
     /// The details of this are platform-specific andyou should not attempt to parse it, but it may
     /// be useful for debug logs.
     async fn adapter_info(&self) -> Result<String>;
+
+    /// Get information about the Bluetooth adapter state.
+    async fn adapter_state(&self) -> Result<CentralState>;
 }
 
 /// The Manager is the entry point to the library, providing access to all the Bluetooth adapters on

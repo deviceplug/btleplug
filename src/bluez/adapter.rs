@@ -1,10 +1,10 @@
 use super::peripheral::{Peripheral, PeripheralId};
-use crate::api::{Central, CentralEvent, ScanFilter};
+use crate::api::{Central, CentralEvent, CentralState, ScanFilter};
 use crate::{Error, Result};
 use async_trait::async_trait;
 use bluez_async::{
-    AdapterId, BluetoothError, BluetoothEvent, BluetoothSession, DeviceEvent, DiscoveryFilter,
-    Transport,
+    AdapterEvent, AdapterId, BluetoothError, BluetoothEvent, BluetoothSession, DeviceEvent,
+    DiscoveryFilter, Transport,
 };
 use futures::stream::{self, Stream, StreamExt};
 use std::pin::Pin;
@@ -19,6 +19,13 @@ pub struct Adapter {
 impl Adapter {
     pub(crate) fn new(session: BluetoothSession, adapter: AdapterId) -> Self {
         Self { session, adapter }
+    }
+}
+
+fn get_central_state(powered: bool) -> CentralState {
+    match powered {
+        true => CentralState::PoweredOn,
+        false => CentralState::PoweredOff,
     }
 }
 
@@ -105,6 +112,14 @@ impl Central for Adapter {
         let adapter_info = self.session.get_adapter_info(&self.adapter).await?;
         Ok(format!("{} ({})", adapter_info.id, adapter_info.modalias))
     }
+
+    async fn adapter_state(&self) -> Result<CentralState> {
+        let mut powered = false;
+        if let Ok(info) = self.session.get_adapter_info(&self.adapter).await {
+            powered = info.powered;
+        }
+        Ok(get_central_state(powered))
+    }
 }
 
 impl From<BluetoothError> for Error {
@@ -159,6 +174,16 @@ async fn central_event(
                     id: device.id.into(),
                     services,
                 })
+            }
+            _ => None,
+        },
+        BluetoothEvent::Adapter {
+            id,
+            event: adapter_event,
+        } if id == adapter_id => match adapter_event {
+            AdapterEvent::Powered { powered } => {
+                let state = get_central_state(powered);
+                Some(CentralEvent::StateUpdate(state))
             }
             _ => None,
         },

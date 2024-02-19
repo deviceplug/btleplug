@@ -145,6 +145,7 @@ impl CBCharacteristic {
 
 #[derive(Clone, Debug)]
 pub enum CoreBluetoothReply {
+    AdapterState(cb::CBManagerState),
     ReadResult(Vec<u8>),
     Connected(BTreeSet<Service>),
     State(CBPeripheralState),
@@ -351,6 +352,9 @@ impl Debug for CoreBluetoothInternal {
 
 #[derive(Debug)]
 pub enum CoreBluetoothMessage {
+    GetAdapterState {
+        future: CoreBluetoothReplyStateShared,
+    },
     StartScanning {
         filter: ScanFilter,
     },
@@ -412,7 +416,9 @@ pub enum CoreBluetoothMessage {
 
 #[derive(Debug)]
 pub enum CoreBluetoothEvent {
-    AdapterConnected,
+    DidUpdateState {
+        state: cb::CBManagerState,
+    },
     DeviceDiscovered {
         uuid: Uuid,
         name: Option<String>,
@@ -1003,14 +1009,11 @@ impl CoreBluetoothInternal {
         select! {
             delegate_msg = self.delegate_receiver.select_next_some() => {
                 match delegate_msg {
-                    // TODO DidUpdateState does not imply that the adapter is
-                    // on, just that it updated state.
-                    //
                     // TODO We should probably also register some sort of
                     // "ready" variable in our adapter that will cause scans/etc
                     // to fail if this hasn't updated.
-                    CentralDelegateEvent::DidUpdateState => {
-                        self.dispatch_event(CoreBluetoothEvent::AdapterConnected).await
+                    CentralDelegateEvent::DidUpdateState{state} => {
+                        self.dispatch_event(CoreBluetoothEvent::DidUpdateState{state}).await
                     }
                     CentralDelegateEvent::DiscoveredPeripheral{cbperipheral} => {
                         self.on_discovered_peripheral(cbperipheral).await
@@ -1081,6 +1084,9 @@ impl CoreBluetoothInternal {
             adapter_msg = self.message_receiver.select_next_some() => {
                 trace!("Adapter message!");
                 match adapter_msg {
+                    CoreBluetoothMessage::GetAdapterState { future } => {
+                        self.get_adapter_state(future);
+                    },
                     CoreBluetoothMessage::StartScanning{filter} => self.start_discovery(filter),
                     CoreBluetoothMessage::StopScanning => self.stop_discovery(),
                     CoreBluetoothMessage::ConnectDevice{peripheral_uuid, future} => {
@@ -1122,6 +1128,13 @@ impl CoreBluetoothInternal {
                 };
             }
         }
+    }
+
+    fn get_adapter_state(&mut self, fut: CoreBluetoothReplyStateShared) {
+        let state = cb::centralmanager_state(*self.manager);
+        fut.lock()
+            .unwrap()
+            .set_reply(CoreBluetoothReply::AdapterState(state))
     }
 
     fn start_discovery(&mut self, filter: ScanFilter) {

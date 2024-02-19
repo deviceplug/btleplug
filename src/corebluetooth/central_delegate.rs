@@ -48,7 +48,9 @@ use std::{
 use uuid::Uuid;
 
 pub enum CentralDelegateEvent {
-    DidUpdateState,
+    DidUpdateState {
+        state: cb::CBManagerState,
+    },
     DiscoveredPeripheral {
         cbperipheral: StrongPtr,
     },
@@ -135,7 +137,10 @@ pub enum CentralDelegateEvent {
 impl Debug for CentralDelegateEvent {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            CentralDelegateEvent::DidUpdateState => f.debug_tuple("DidUpdateState").finish(),
+            CentralDelegateEvent::DidUpdateState { state } => f
+                .debug_struct("CentralDelegateEvent")
+                .field("state", state)
+                .finish(),
             CentralDelegateEvent::DiscoveredPeripheral { cbperipheral } => f
                 .debug_struct("CentralDelegateEvent")
                 .field("cbperipheral", cbperipheral.deref())
@@ -439,10 +444,11 @@ pub mod CentralDelegate {
     extern "C" fn delegate_centralmanagerdidupdatestate(
         delegate: &mut Object,
         _cmd: Sel,
-        _central: id,
+        central: id,
     ) {
         trace!("delegate_centralmanagerdidupdatestate");
-        send_delegate_event(delegate, CentralDelegateEvent::DidUpdateState);
+        let state = cb::centralmanager_state(central);
+        send_delegate_event(delegate, CentralDelegateEvent::DidUpdateState { state });
     }
 
     // extern fn delegate_centralmanager_willrestorestate(_delegate: &mut Object, _cmd: Sel, _central: id, _dict: id) {

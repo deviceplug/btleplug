@@ -181,6 +181,22 @@ pub mod cb {
         unsafe { msg_send![cbcentralmanager, cancelPeripheralConnection: peripheral] }
     }
 
+    pub fn centralmanager_state(cbcentralmanager: id) -> CBManagerState {
+        unsafe { msg_send![cbcentralmanager, state] }
+    }
+
+    // https://developer.apple.com/documentation/corebluetooth/cbmanagerstate
+    #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+    #[repr(i64)]
+    pub enum CBManagerState {
+        Unknown = 0,
+        Resetting = 1,
+        Unsupported = 2,
+        Unauthorized = 3,
+        PoweredOff = 4,
+        PoweredOn = 5,
+    }
+
     // CBManager
     pub fn manager_authorization() -> CBManagerAuthorization {
         unsafe { msg_send![class!(CBManager), authorization] }

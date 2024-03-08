@@ -56,13 +56,13 @@ impl Display for PeripheralId {
 /// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone)]
 pub struct Peripheral {
-    shared: Arc<Shared>,
+    pub shared: Arc<Shared>,
 }
 
-struct Shared {
+pub struct Shared {
     notifications_channel: broadcast::Sender<ValueNotification>,
     manager: Weak<AdapterManager<Peripheral>>,
-    uuid: Uuid,
+    pub uuid: Uuid,
     services: Mutex<BTreeSet<Service>>,
     properties: Mutex<PeripheralProperties>,
     message_sender: Sender<CoreBluetoothMessage>,

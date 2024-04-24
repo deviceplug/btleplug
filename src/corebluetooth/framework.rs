@@ -16,48 +16,60 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use cocoa::{
-    base::{id, nil},
-    foundation::{NSArray, NSData, NSDictionary, NSString, NSUInteger},
-};
-use objc::runtime::BOOL;
-use objc::{class, msg_send, sel, sel_impl};
-use std::os::raw::{c_char, c_int, c_uint};
+use super::utils::{id, nil};
+use objc2::encode::{Encode, Encoding};
+use objc2::rc::Id;
+use objc2::{class, msg_send};
+use objc2_foundation::{NSArray, NSDictionary, NSInteger, NSString, NSUInteger};
+use std::os::raw::{c_char, c_int, c_uint, c_void};
+use std::ptr;
 
 pub mod ns {
+    use objc2::runtime::AnyObject;
+
     use super::*;
 
     // NSNumber
 
-    pub fn number_withbool(value: BOOL) -> id {
+    pub fn number_withbool(value: bool) -> id {
         unsafe { msg_send![class!(NSNumber), numberWithBool: value] }
     }
 
     pub fn number_as_i64(value: id) -> i64 {
         unsafe {
-            let i: cocoa::foundation::NSInteger = msg_send![&*value, integerValue];
+            let i: NSInteger = msg_send![&*value, integerValue];
             i as i64
         }
     }
 
     // NSArray
 
-    pub fn array_count(nsarray: impl NSArray) -> NSUInteger {
-        unsafe { nsarray.count() }
+    pub fn array_count(nsarray: id /* NSArray* */) -> NSUInteger {
+        let nsarray: &NSArray = unsafe { &*nsarray.cast() };
+        nsarray.count()
     }
 
-    pub fn array_objectatindex(nsarray: impl NSArray, index: NSUInteger) -> id {
-        unsafe { nsarray.objectAtIndex(index) }
+    pub fn array_objectatindex(
+        nsarray: id, /* NSArray* */
+        index: NSUInteger,
+    ) -> *mut AnyObject {
+        let nsarray: &NSArray = unsafe { &*nsarray.cast() };
+        unsafe { Id::into_raw(nsarray.objectAtIndex(index)).cast() }
     }
 
     // NSDictionary
 
-    pub fn dictionary_allkeys(nsdict: impl NSDictionary) -> id /* NSArray* */ {
-        unsafe { nsdict.allKeys() }
+    pub fn dictionary_allkeys(nsdict: id /* NSDictionary* */) -> id /* NSArray* */ {
+        let nsdict: &NSDictionary = unsafe { &*nsdict.cast() };
+        unsafe { Id::into_raw(nsdict.allKeys()).cast() }
     }
 
-    pub fn dictionary_objectforkey(nsdict: impl NSDictionary, key: id) -> id {
-        unsafe { nsdict.objectForKey_(key) }
+    pub fn dictionary_objectforkey(nsdict: id /* NSDictionary* */, key: id) -> id {
+        let nsdict: &NSDictionary = unsafe { &*nsdict.cast() };
+        match unsafe { nsdict.objectForKey(&*key) } {
+            Some(obj) => Id::into_raw(obj).cast(),
+            None => ptr::null_mut(),
+        }
     }
 
     // NSMutableDictionary : NSDictionary
@@ -78,12 +90,13 @@ pub mod ns {
         }
     }
 
-    pub fn data_length(nsdata: impl NSData) -> NSUInteger {
-        unsafe { nsdata.length() }
+    pub fn data_length(nsdata: id /* NSData* */) -> NSUInteger {
+        unsafe { msg_send![nsdata, length] }
     }
 
     pub fn data_bytes(nsdata: id) -> *const u8 {
-        unsafe { msg_send![nsdata, bytes] }
+        let bytes: *const c_void = unsafe { msg_send![nsdata, bytes] };
+        bytes.cast()
     }
 
     // NSUUID
@@ -106,6 +119,9 @@ pub mod ns {
 }
 
 pub mod cb {
+    use objc2::msg_send_id;
+    use objc2::runtime::AnyObject;
+
     use super::*;
     use std::ffi::CString;
 
@@ -132,11 +148,11 @@ pub mod cb {
 
         #[link(name = "CoreBluetooth", kind = "framework")]
         extern "C" {
-            pub static CBAdvertisementDataManufacturerDataKey: id;
-            pub static CBAdvertisementDataServiceDataKey: id;
-            pub static CBAdvertisementDataServiceUUIDsKey: id;
+            pub static CBAdvertisementDataManufacturerDataKey: &'static NSString;
+            pub static CBAdvertisementDataServiceDataKey: &'static NSString;
+            pub static CBAdvertisementDataServiceUUIDsKey: &'static NSString;
 
-            pub static CBCentralManagerScanOptionAllowDuplicatesKey: id;
+            pub static CBCentralManagerScanOptionAllowDuplicatesKey: &'static NSString;
         }
     }
 
@@ -148,6 +164,7 @@ pub mod cb {
         unsafe {
             let cbcentralmanager: id = msg_send![class!(CBCentralManager), alloc];
             let queue = dispatch_queue_create(label.as_ptr(), DISPATCH_QUEUE_SERIAL);
+            let queue: id = queue.cast();
 
             msg_send![cbcentralmanager, initWithDelegate:delegate queue:queue]
         }
@@ -195,6 +212,10 @@ pub mod cb {
         AllowedAlways = 3,
     }
 
+    unsafe impl Encode for CBManagerAuthorization {
+        const ENCODING: Encoding = i64::ENCODING;
+    }
+
     // CBPeer
 
     pub fn peer_identifier(cbpeer: id) -> id /* NSUUID* */ {
@@ -214,6 +235,10 @@ pub mod cb {
         Connecting = 1,
         Connected = 2,
         Disconnecting = 3,
+    }
+
+    unsafe impl Encode for CBPeripheralState {
+        const ENCODING: Encoding = i64::ENCODING;
     }
 
     pub fn peripheral_state(cbperipheral: id) -> CBPeripheralState {
@@ -267,7 +292,7 @@ pub mod cb {
 
     pub fn peripheral_setnotifyvalue_forcharacteristic(
         cbperipheral: id,
-        value: BOOL,
+        value: bool,
         characteristic: id, /* CBCharacteristic* */
     ) {
         unsafe { msg_send![cbperipheral, setNotifyValue:value forCharacteristic:characteristic] }
@@ -312,7 +337,7 @@ pub mod cb {
 
     // CBService : CBAttribute
 
-    pub fn service_isprimary(cbservice: id) -> BOOL {
+    pub fn service_isprimary(cbservice: id) -> bool {
         unsafe { msg_send![cbservice, isPrimary] }
     }
 
@@ -326,7 +351,7 @@ pub mod cb {
 
     // CBCharacteristic : CBAttribute
 
-    pub fn characteristic_isnotifying(cbcharacteristic: id) -> BOOL {
+    pub fn characteristic_isnotifying(cbcharacteristic: id) -> bool {
         unsafe { msg_send![cbcharacteristic, isNotifying] }
     }
 
@@ -368,8 +393,8 @@ pub mod cb {
         unsafe { msg_send![cbuuid, UUIDString] }
     }
 
-    pub fn uuid_uuidwithstring(s: impl NSString) -> id /* CBUUID */ {
-        unsafe { msg_send![class!(CBUUID), UUIDWithString: s] }
+    pub fn uuid_uuidwithstring(s: &NSString) -> Id<AnyObject> /* CBUUID */ {
+        unsafe { msg_send_id![class!(CBUUID), UUIDWithString: s] }
     }
 
     // CBCentralManagerScanOption...Key

@@ -16,24 +16,16 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use cocoa::{
-    base::{id, nil},
-    foundation::NSString,
-};
-use std::ffi::CStr;
+use objc2_foundation::NSString;
+
+use super::id;
 
 /// Convert the given `NSString` to a Rust `String`, or `None` if it is `nil`.
 pub fn nsstring_to_string(nsstring: id) -> Option<String> {
-    if nsstring == nil {
-        return None;
+    let nsstring: *const NSString = nsstring.cast();
+    if let Some(nsstring) = unsafe { nsstring.as_ref() } {
+        Some(nsstring.to_string())
+    } else {
+        None
     }
-    unsafe {
-        Some(String::from(
-            CStr::from_ptr(nsstring.UTF8String()).to_str().unwrap(),
-        ))
-    }
-}
-
-pub fn str_to_nsstring(string: &str) -> id {
-    unsafe { NSString::alloc(nil).init_str(string) }
 }

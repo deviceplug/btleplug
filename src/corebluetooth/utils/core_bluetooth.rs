@@ -21,8 +21,7 @@ use objc2::runtime::AnyObject;
 use objc2_foundation::NSString;
 use uuid::Uuid;
 
-use super::super::framework::{cb, ns};
-use super::nsstring::nsstring_to_string;
+use super::super::framework::cb;
 use super::{id, nil};
 
 /// Convert a CBUUID object to the standard Uuid type.
@@ -30,7 +29,7 @@ pub fn cbuuid_to_uuid(cbuuid: id) -> Uuid {
     // NOTE: CoreBluetooth tends to return uppercase UUID strings, and only 4
     // character long if the UUID is short (16 bits). It can also return 8
     // character strings if the rest of the UUID matches the generic UUID.
-    let uuid = nsstring_to_string(cb::uuid_uuidstring(cbuuid)).unwrap();
+    let uuid = cb::uuid_uuidstring(cbuuid).to_string();
     let long = if uuid.len() == 4 {
         format!("0000{}-0000-1000-8000-00805f9b34fb", uuid)
     } else if uuid.len() == 8 {
@@ -51,9 +50,8 @@ pub fn peripheral_debug(peripheral: id) -> String {
     if peripheral == nil {
         return String::from("nil");
     }
-    let name = nsstring_to_string(cb::peripheral_name(peripheral));
-    let uuid = nsstring_to_string(ns::uuid_uuidstring(cb::peer_identifier(peripheral))).unwrap();
-    if let Some(name) = name {
+    let uuid = cb::peer_identifier(peripheral).UUIDString();
+    if let Some(name) = cb::peripheral_name(peripheral) {
         format!("CBPeripheral({}, {})", name, uuid)
     } else {
         format!("CBPeripheral({})", uuid)
@@ -65,7 +63,7 @@ pub fn service_debug(service: id) -> String {
         return String::from("nil");
     }
     let uuid = cb::uuid_uuidstring(cb::attribute_uuid(service));
-    format!("CBService({})", nsstring_to_string(uuid).unwrap())
+    format!("CBService({})", uuid)
 }
 
 pub fn characteristic_debug(characteristic: id) -> String {
@@ -73,7 +71,7 @@ pub fn characteristic_debug(characteristic: id) -> String {
         return String::from("nil");
     }
     let uuid = cb::uuid_uuidstring(cb::attribute_uuid(characteristic));
-    format!("CBCharacteristic({})", nsstring_to_string(uuid).unwrap())
+    format!("CBCharacteristic({})", uuid)
 }
 
 pub fn descriptor_debug(descriptor: id) -> String {
@@ -81,7 +79,7 @@ pub fn descriptor_debug(descriptor: id) -> String {
         return String::from("nil");
     }
     let uuid = cb::uuid_uuidstring(cb::attribute_uuid(descriptor));
-    format!("CBDescriptor({})", nsstring_to_string(uuid).unwrap())
+    format!("CBDescriptor({})", uuid)
 }
 
 #[cfg(test)]

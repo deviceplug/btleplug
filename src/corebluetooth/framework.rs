@@ -19,111 +19,14 @@
 use super::utils::{id, nil};
 use objc2::encode::{Encode, Encoding};
 use objc2::rc::Id;
-use objc2::{class, msg_send};
-use objc2_foundation::{NSArray, NSDictionary, NSInteger, NSString, NSUInteger};
-use std::os::raw::{c_char, c_void};
-use std::ptr;
-
-pub mod ns {
-    use objc2::runtime::AnyObject;
-
-    use super::*;
-
-    // NSNumber
-
-    pub fn number_withbool(value: bool) -> id {
-        unsafe { msg_send![class!(NSNumber), numberWithBool: value] }
-    }
-
-    pub fn number_as_i64(value: id) -> i64 {
-        unsafe {
-            let i: NSInteger = msg_send![&*value, integerValue];
-            i as i64
-        }
-    }
-
-    // NSArray
-
-    pub fn array_count(nsarray: id /* NSArray* */) -> NSUInteger {
-        let nsarray: &NSArray = unsafe { &*nsarray.cast() };
-        nsarray.count()
-    }
-
-    pub fn array_objectatindex(
-        nsarray: id, /* NSArray* */
-        index: NSUInteger,
-    ) -> *mut AnyObject {
-        let nsarray: &NSArray = unsafe { &*nsarray.cast() };
-        unsafe { Id::into_raw(nsarray.objectAtIndex(index)).cast() }
-    }
-
-    // NSDictionary
-
-    pub fn dictionary_allkeys(nsdict: id /* NSDictionary* */) -> id /* NSArray* */ {
-        let nsdict: &NSDictionary = unsafe { &*nsdict.cast() };
-        unsafe { Id::into_raw(nsdict.allKeys()).cast() }
-    }
-
-    pub fn dictionary_objectforkey(nsdict: id /* NSDictionary* */, key: id) -> id {
-        let nsdict: &NSDictionary = unsafe { &*nsdict.cast() };
-        match unsafe { nsdict.objectForKey(&*key) } {
-            Some(obj) => Id::into_raw(obj).cast(),
-            None => ptr::null_mut(),
-        }
-    }
-
-    // NSMutableDictionary : NSDictionary
-
-    pub fn mutabledictionary() -> id {
-        unsafe { msg_send![class!(NSMutableDictionary), dictionaryWithCapacity: 0usize] }
-    }
-
-    pub fn mutabledictionary_setobject_forkey(nsmutdict: id, object: id, key: id) {
-        unsafe { msg_send![nsmutdict, setObject:object forKey:key] }
-    }
-
-    // NSData
-
-    pub fn data(bytes: &[u8]) -> id /* NSData* */ {
-        unsafe {
-            msg_send![class!(NSData), dataWithBytes:bytes.as_ptr() length:bytes.len() as NSUInteger]
-        }
-    }
-
-    pub fn data_length(nsdata: id /* NSData* */) -> NSUInteger {
-        unsafe { msg_send![nsdata, length] }
-    }
-
-    pub fn data_bytes(nsdata: id) -> *const u8 {
-        let bytes: *const c_void = unsafe { msg_send![nsdata, bytes] };
-        bytes.cast()
-    }
-
-    // NSUUID
-
-    pub fn uuid_uuidstring(nsuuid: id) -> id /* NSString* */ {
-        unsafe {
-            let uuidstring: id = msg_send![nsuuid, UUIDString];
-            uuidstring
-        }
-    }
-
-    // NSError
-
-    pub fn error_localizeddescription(nserror: id) -> id /* NSString* */ {
-        unsafe {
-            let description: id = msg_send![nserror, localizedDescription];
-            description
-        }
-    }
-}
+use objc2::runtime::AnyObject;
+use objc2::{class, msg_send, msg_send_id};
+use objc2_foundation::{NSArray, NSData, NSDictionary, NSString, NSUInteger, NSUUID};
+use std::ffi::CString;
+use std::os::raw::c_char;
 
 pub mod cb {
-    use objc2::msg_send_id;
-    use objc2::runtime::AnyObject;
-
     use super::*;
-    use std::ffi::CString;
 
     #[allow(non_camel_case_types)]
     pub enum dispatch_object_s {}
@@ -134,7 +37,6 @@ pub mod cb {
     pub const DISPATCH_QUEUE_SERIAL: dispatch_queue_attr_t = 0 as dispatch_queue_attr_t;
 
     #[cfg_attr(target_os = "macos", link(name = "AppKit", kind = "framework"))]
-    #[link(name = "Foundation", kind = "framework")]
     #[link(name = "CoreBluetooth", kind = "framework")]
     extern "C" {
         pub fn dispatch_queue_create(
@@ -173,7 +75,7 @@ pub mod cb {
     pub fn centralmanager_scanforperipheralswithservices_options(
         cbcentralmanager: id,
         service_uuids: id, /* NSArray<CBUUID *> */
-        options: id,       /* NSDictionary<NSString*,id> */
+        options: &NSDictionary<NSString, AnyObject>,
     ) {
         unsafe {
             msg_send![cbcentralmanager, scanForPeripheralsWithServices:service_uuids options:options]
@@ -218,14 +120,14 @@ pub mod cb {
 
     // CBPeer
 
-    pub fn peer_identifier(cbpeer: id) -> id /* NSUUID* */ {
-        unsafe { msg_send![cbpeer, identifier] }
+    pub fn peer_identifier(cbpeer: id) -> Id<NSUUID> {
+        unsafe { msg_send_id![cbpeer, identifier] }
     }
 
     // CBPeripheral : CBPeer
 
-    pub fn peripheral_name(cbperipheral: id) -> id /* NSString* */ {
-        unsafe { msg_send![cbperipheral, name] }
+    pub fn peripheral_name(cbperipheral: id) -> Option<Id<NSString>> {
+        unsafe { msg_send_id![cbperipheral, name] }
     }
 
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -255,18 +157,19 @@ pub mod cb {
 
     pub fn peripheral_discoverincludedservicesforservice(
         cbperipheral: id,
-        service: id, /* CBService* */
+        service: &AnyObject, /* CBService* */
     ) {
         unsafe { msg_send![cbperipheral, discoverIncludedServices:nil forService:service] }
     }
 
-    pub fn peripheral_services(cbperipheral: id) -> id /* NSArray<CBService*>* */ {
-        unsafe { msg_send![cbperipheral, services] }
+    pub fn peripheral_services(cbperipheral: id) -> Option<Id<NSArray<AnyObject>>> /* NSArray<CBService*>* */
+    {
+        unsafe { msg_send_id![cbperipheral, services] }
     }
 
     pub fn peripheral_discovercharacteristicsforservice(
         cbperipheral: id,
-        service: id, /* CBService* */
+        service: &AnyObject, /* CBService* */
     ) {
         unsafe { msg_send![cbperipheral, discoverCharacteristics:nil forService:service] }
     }
@@ -280,7 +183,7 @@ pub mod cb {
 
     pub fn peripheral_writevalue_forcharacteristic(
         cbperipheral: id,
-        value: id,          /* NSData* */
+        value: &NSData,
         characteristic: id, /* CBCharacteristic* */
         write_type: usize,
     ) {
@@ -300,7 +203,7 @@ pub mod cb {
 
     pub fn peripheral_discoverdescriptorsforcharacteristic(
         cbperipheral: id,
-        characteristic: id, /* CBCharacteristic* */
+        characteristic: &AnyObject, /* CBCharacteristic* */
     ) {
         unsafe {
             msg_send![
@@ -319,7 +222,7 @@ pub mod cb {
 
     pub fn peripheral_writevalue_fordescriptor(
         cbperipheral: id,
-        value: id,      /* NSData* */
+        value: &NSData,
         descriptor: id, /* CBCharacteristic* */
     ) {
         unsafe { msg_send![cbperipheral, writeValue:value forDescriptor:descriptor] }
@@ -341,12 +244,14 @@ pub mod cb {
         unsafe { msg_send![cbservice, isPrimary] }
     }
 
-    pub fn service_includedservices(cbservice: id) -> id /* NSArray<CBService*>* */ {
-        unsafe { msg_send![cbservice, includedServices] }
+    pub fn service_includedservices(cbservice: id) -> Option<Id<NSArray<AnyObject>>> /* NSArray<CBService*>* */
+    {
+        unsafe { msg_send_id![cbservice, includedServices] }
     }
 
-    pub fn service_characteristics(cbservice: id) -> id /* NSArray<CBCharacteristic*>* */ {
-        unsafe { msg_send![cbservice, characteristics] }
+    pub fn service_characteristics(cbservice: id) -> Option<Id<NSArray<AnyObject>>> /* NSArray<CBCharacteristic*>* */
+    {
+        unsafe { msg_send_id![cbservice, characteristics] }
     }
 
     // CBCharacteristic : CBAttribute
@@ -355,8 +260,8 @@ pub mod cb {
         unsafe { msg_send![cbcharacteristic, isNotifying] }
     }
 
-    pub fn characteristic_value(cbcharacteristic: id) -> id /* NSData* */ {
-        unsafe { msg_send![cbcharacteristic, value] }
+    pub fn characteristic_value(cbcharacteristic: id) -> Option<Id<NSData>> {
+        unsafe { msg_send_id![cbcharacteristic, value] }
     }
 
     pub fn characteristic_properties(cbcharacteristic: id) -> NSUInteger {
@@ -367,8 +272,9 @@ pub mod cb {
         unsafe { msg_send![cbcharacteristic, service] }
     }
 
-    pub fn characteristic_descriptors(cbcharacteristic: id) -> id /* NSArray<CBDescriptor*>* */ {
-        unsafe { msg_send![cbcharacteristic, descriptors] }
+    pub fn characteristic_descriptors(cbcharacteristic: id) -> Option<Id<NSArray<AnyObject>>> /* NSArray<CBDescriptor*>* */
+    {
+        unsafe { msg_send_id![cbcharacteristic, descriptors] }
     }
 
     // CBDescriptor : CBAttribute
@@ -389,8 +295,8 @@ pub mod cb {
 
     // CBUUID
 
-    pub fn uuid_uuidstring(cbuuid: id) -> id /* NSString* */ {
-        unsafe { msg_send![cbuuid, UUIDString] }
+    pub fn uuid_uuidstring(cbuuid: id) -> Id<NSString> {
+        unsafe { msg_send_id![cbuuid, UUIDString] }
     }
 
     pub fn uuid_uuidwithstring(s: &NSString) -> Id<AnyObject> /* CBUUID */ {

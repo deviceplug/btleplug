@@ -10,16 +10,11 @@
 
 use super::{
     central_delegate::{CentralDelegate, CentralDelegateEvent},
-    framework::{
-        cb::{self, CBManagerAuthorization, CBPeripheralState},
-        ns,
-    },
+    framework::cb::{self, CBManagerAuthorization, CBPeripheralState},
     future::{BtlePlugFuture, BtlePlugFutureStateShared},
     utils::{
         core_bluetooth::{cbuuid_to_uuid, uuid_to_cbuuid},
-        id, nil,
-        nsstring::nsstring_to_string,
-        nsuuid_to_uuid, StrongPtr,
+        id, nil, nsuuid_to_uuid, StrongPtr,
     },
 };
 use crate::api::{CharPropFlags, Characteristic, Descriptor, ScanFilter, Service, WriteType};
@@ -30,7 +25,7 @@ use futures::sink::SinkExt;
 use futures::stream::{Fuse, StreamExt};
 use log::{error, trace, warn};
 use objc2::rc::Id;
-use objc2_foundation::NSArray;
+use objc2_foundation::{NSArray, NSData, NSMutableDictionary, NSNumber};
 use std::{
     collections::{BTreeSet, HashMap, VecDeque},
     fmt::{self, Debug, Formatter},
@@ -91,10 +86,11 @@ impl CBCharacteristic {
         let uuid = cbuuid_to_uuid(cb::attribute_uuid(&*characteristic));
         let descriptors_arr = cb::characteristic_descriptors(&*characteristic);
         let mut descriptors = HashMap::new();
-        for i in 0..ns::array_count(descriptors_arr) {
-            let d = ns::array_objectatindex(descriptors_arr, i);
-            let descriptor = CBDescriptor::new(unsafe { StrongPtr::retain(d).unwrap() });
-            descriptors.insert(descriptor.uuid, descriptor);
+        if let Some(descriptors_arr) = descriptors_arr {
+            for d in descriptors_arr {
+                let descriptor = CBDescriptor::new(d);
+                descriptors.insert(descriptor.uuid, descriptor);
+            }
         }
         Self {
             characteristic,
@@ -508,12 +504,15 @@ impl CoreBluetoothInternal {
     }
 
     async fn on_discovered_peripheral(&mut self, peripheral: StrongPtr) {
-        let uuid = nsuuid_to_uuid(cb::peer_identifier(&*peripheral));
-        let name = nsstring_to_string(cb::peripheral_name(&*peripheral));
+        let uuid = nsuuid_to_uuid(&cb::peer_identifier(&*peripheral));
+        let name = cb::peripheral_name(&*peripheral);
         if self.peripherals.contains_key(&uuid) {
             if let Some(name) = name {
-                self.dispatch_event(CoreBluetoothEvent::DeviceUpdated { uuid, name })
-                    .await;
+                self.dispatch_event(CoreBluetoothEvent::DeviceUpdated {
+                    uuid,
+                    name: name.to_string(),
+                })
+                .await;
             }
         } else {
             // Create our channels
@@ -522,7 +521,7 @@ impl CoreBluetoothInternal {
                 .insert(uuid, CBPeripheral::new(peripheral, event_sender));
             self.dispatch_event(CoreBluetoothEvent::DeviceDiscovered {
                 uuid,
-                name,
+                name: name.map(|name| name.to_string()),
                 event_receiver,
             })
             .await;
@@ -806,7 +805,7 @@ impl CoreBluetoothInternal {
                     trace!("Writing value! With kind {:?}", kind);
                     cb::peripheral_writevalue_forcharacteristic(
                         &*peripheral.peripheral,
-                        ns::data(&data),
+                        &NSData::from_vec(data),
                         &*characteristic.characteristic,
                         match kind {
                             WriteType::WithResponse => 0,
@@ -910,7 +909,7 @@ impl CoreBluetoothInternal {
                         trace!("Writing descriptor value!");
                         cb::peripheral_writevalue_fordescriptor(
                             &*peripheral.peripheral,
-                            ns::data(&data),
+                            &NSData::from_vec(data),
                             &*descriptor.descriptor,
                         );
                         descriptor.write_future_state.push_front(fut);
@@ -1122,16 +1121,17 @@ impl CoreBluetoothInternal {
     fn start_discovery(&mut self, filter: ScanFilter) {
         trace!("BluetoothAdapter::start_discovery");
         let service_uuids = scan_filter_to_service_uuids(filter);
-        let options = ns::mutabledictionary();
+        let mut options = NSMutableDictionary::new();
         // NOTE: If duplicates are not allowed then a peripheral will not show
         // up again once connected and then disconnected.
-        ns::mutabledictionary_setobject_forkey(options, ns::number_withbool(true), unsafe {
-            &***cb::CENTRALMANAGERSCANOPTIONALLOWDUPLICATESKEY
-        });
+        options.insert_id(
+            unsafe { cb::CENTRALMANAGERSCANOPTIONALLOWDUPLICATESKEY },
+            Id::into_super(Id::into_super(Id::into_super(NSNumber::new_bool(true)))),
+        );
         cb::centralmanager_scanforperipheralswithservices_options(
             &*self.manager,
             service_uuids,
-            options,
+            &**options,
         );
     }
 

@@ -21,7 +21,7 @@ use objc2::encode::{Encode, Encoding};
 use objc2::rc::Id;
 use objc2::{class, msg_send};
 use objc2_foundation::{NSArray, NSDictionary, NSInteger, NSString, NSUInteger};
-use std::os::raw::{c_char, c_int, c_uint, c_void};
+use std::os::raw::{c_char, c_void};
 use std::ptr;
 
 pub mod ns {
@@ -75,7 +75,7 @@ pub mod ns {
     // NSMutableDictionary : NSDictionary
 
     pub fn mutabledictionary() -> id {
-        unsafe { msg_send![class!(NSMutableDictionary), dictionaryWithCapacity:0] }
+        unsafe { msg_send![class!(NSMutableDictionary), dictionaryWithCapacity: 0usize] }
     }
 
     pub fn mutabledictionary_setobject_forkey(nsmutdict: id, object: id, key: id) {
@@ -327,7 +327,7 @@ pub mod cb {
 
     // CBPeripheralState = NSInteger from CBPeripheral.h
 
-    pub const PERIPHERALSTATE_CONNECTED: c_int = 2; // CBPeripheralStateConnected
+    pub const PERIPHERALSTATE_CONNECTED: isize = 2; // CBPeripheralStateConnected
 
     // CBAttribute
 
@@ -359,7 +359,7 @@ pub mod cb {
         unsafe { msg_send![cbcharacteristic, value] }
     }
 
-    pub fn characteristic_properties(cbcharacteristic: id) -> c_uint {
+    pub fn characteristic_properties(cbcharacteristic: id) -> NSUInteger {
         unsafe { msg_send![cbcharacteristic, properties] }
     }
 
@@ -379,13 +379,13 @@ pub mod cb {
 
     // CBCharacteristicProperties = NSUInteger from CBCharacteristic.h
 
-    pub const CHARACTERISTICPROPERTY_BROADCAST: c_uint = 0x01; // CBCharacteristicPropertyBroadcast
-    pub const CHARACTERISTICPROPERTY_READ: c_uint = 0x02; // CBCharacteristicPropertyRead
-    pub const CHARACTERISTICPROPERTY_WRITEWITHOUTRESPONSE: c_uint = 0x04; // CBCharacteristicPropertyWriteWithoutResponse
-    pub const CHARACTERISTICPROPERTY_WRITE: c_uint = 0x08; // CBCharacteristicPropertyWrite
-    pub const CHARACTERISTICPROPERTY_NOTIFY: c_uint = 0x10; // CBCharacteristicPropertyNotify
-    pub const CHARACTERISTICPROPERTY_INDICATE: c_uint = 0x20; // CBCharacteristicPropertyIndicate
-    pub const CHARACTERISTICPROPERTY_AUTHENTICATEDSIGNEDWRITES: c_uint = 0x40; // CBCharacteristicPropertyAuthenticatedSignedWrites
+    pub const CHARACTERISTICPROPERTY_BROADCAST: usize = 0x01; // CBCharacteristicPropertyBroadcast
+    pub const CHARACTERISTICPROPERTY_READ: usize = 0x02; // CBCharacteristicPropertyRead
+    pub const CHARACTERISTICPROPERTY_WRITEWITHOUTRESPONSE: usize = 0x04; // CBCharacteristicPropertyWriteWithoutResponse
+    pub const CHARACTERISTICPROPERTY_WRITE: usize = 0x08; // CBCharacteristicPropertyWrite
+    pub const CHARACTERISTICPROPERTY_NOTIFY: usize = 0x10; // CBCharacteristicPropertyNotify
+    pub const CHARACTERISTICPROPERTY_INDICATE: usize = 0x20; // CBCharacteristicPropertyIndicate
+    pub const CHARACTERISTICPROPERTY_AUTHENTICATEDSIGNEDWRITES: usize = 0x40; // CBCharacteristicPropertyAuthenticatedSignedWrites
 
     // CBUUID
 

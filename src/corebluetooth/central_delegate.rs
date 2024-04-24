@@ -22,21 +22,17 @@ use super::{
         core_bluetooth::{cbuuid_to_uuid, characteristic_debug, peripheral_debug, service_debug},
         nsdata_to_vec,
         nsstring::nsstring_to_string,
-        nsuuid_to_uuid,
+        nsuuid_to_uuid, StrongPtr,
     },
 };
-use cocoa::base::{id, nil};
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::sink::SinkExt;
 use libc::c_void;
 use log::{error, trace};
-use objc::{
-    class,
-    declare::ClassDecl,
-    rc::StrongPtr,
-    runtime::{Class, Object, Protocol, Sel},
+use objc2::runtime::{
+    AnyClass as Class, AnyObject as Object, AnyProtocol as Protocol, ClassBuilder, Sel,
 };
-use objc::{msg_send, sel, sel_impl};
+use objc2::{class, msg_send, sel};
 use std::convert::TryInto;
 use std::{
     collections::HashMap,
@@ -294,8 +290,12 @@ impl Debug for CentralDelegateEvent {
 }
 
 pub mod CentralDelegate {
+    use objc2::runtime::AnyObject;
+    use objc2_foundation::{NSDictionary, NSString};
+
     use crate::corebluetooth::{
-        framework::ns::number_as_i64, utils::core_bluetooth::descriptor_debug,
+        framework::ns::number_as_i64,
+        utils::{core_bluetooth::descriptor_debug, id, nil},
     };
 
     use super::*;
@@ -327,50 +327,50 @@ pub mod CentralDelegate {
         trace!("delegate_class");
         static REGISTER_DELEGATE_CLASS: Once = Once::new();
         REGISTER_DELEGATE_CLASS.call_once(|| {
-            let mut decl = ClassDecl::new("BtlePlugCentralManagerDelegate", class!(NSObject)).unwrap();
+            let mut decl = ClassBuilder::new("BtlePlugCentralManagerDelegate", class!(NSObject)).unwrap();
             decl.add_protocol(Protocol::get("CBCentralManagerDelegate").unwrap());
 
             decl.add_ivar::<*mut c_void>(DELEGATE_SENDER_IVAR); /* crossbeam_channel::Sender<DelegateMessage>* */
             unsafe {
                 // Initialization
                 decl.add_method(sel!(initWithSender:),
-                                delegate_init as extern fn(&mut Object, Sel, *mut c_void) -> id);
+                                delegate_init as extern fn(_, _, _) -> _);
 
                 // CentralManager Events
                 decl.add_method(sel!(centralManagerDidUpdateState:),
-                                delegate_centralmanagerdidupdatestate as extern fn(&mut Object, Sel, id));
+                                delegate_centralmanagerdidupdatestate as extern fn(_, _, _));
                 // decl.add_method(sel!(centralManager:willRestoreState:),
-                //                 delegate_centralmanager_willrestorestate as extern fn(&mut Object, Sel, id, id));
+                //                 delegate_centralmanager_willrestorestate as extern fn(_, _, _, _));
                 decl.add_method(sel!(centralManager:didConnectPeripheral:),
-                                delegate_centralmanager_didconnectperipheral as extern fn(&mut Object, Sel, id, id));
+                                delegate_centralmanager_didconnectperipheral as extern fn(_, _, _, _));
                 decl.add_method(sel!(centralManager:didDisconnectPeripheral:error:),
-                                delegate_centralmanager_diddisconnectperipheral_error as extern fn(&mut Object, Sel, id, id, id));
+                                delegate_centralmanager_diddisconnectperipheral_error as extern fn(_, _, _, _, _));
                 decl.add_method(sel!(centralManager:didFailToConnectPeripheral:error:),
-                                delegate_centralmanager_didfailtoconnectperipheral_error as extern fn(&mut Object, Sel, id, id, id));
+                                delegate_centralmanager_didfailtoconnectperipheral_error as extern fn(_, _, _, _, _));
                 decl.add_method(sel!(centralManager:didDiscoverPeripheral:advertisementData:RSSI:),
-                                delegate_centralmanager_diddiscoverperipheral_advertisementdata_rssi as extern fn(&mut Object, Sel, id, id, id, id));
+                                delegate_centralmanager_diddiscoverperipheral_advertisementdata_rssi as extern fn(_, _, _, _, _, _));
 
                 // Peripheral events
                 decl.add_method(sel!(peripheral:didDiscoverServices:),
-                                delegate_peripheral_diddiscoverservices as extern fn(&mut Object, Sel, id, id));
+                                delegate_peripheral_diddiscoverservices as extern fn(_, _, _, _));
                 decl.add_method(sel!(peripheral:didDiscoverIncludedServicesForService:error:),
-                                delegate_peripheral_diddiscoverincludedservicesforservice_error as extern fn(&mut Object, Sel, id, id, id));
+                                delegate_peripheral_diddiscoverincludedservicesforservice_error as extern fn(_, _, _, _, _));
                 decl.add_method(sel!(peripheral:didDiscoverCharacteristicsForService:error:),
-                                delegate_peripheral_diddiscovercharacteristicsforservice_error as extern fn(&mut Object, Sel, id, id, id));
+                                delegate_peripheral_diddiscovercharacteristicsforservice_error as extern fn(_, _, _, _, _));
                 decl.add_method(sel!(peripheral:didDiscoverDescriptorsForCharacteristic:error:),
-                                delegate_peripheral_diddiscoverdescriptorsforcharacteristic_error as extern fn(&mut Object, Sel, id, id, id));
+                                delegate_peripheral_diddiscoverdescriptorsforcharacteristic_error as extern fn(_, _, _, _, _));
                 decl.add_method(sel!(peripheral:didUpdateValueForCharacteristic:error:),
-                                delegate_peripheral_didupdatevalueforcharacteristic_error as extern fn(&mut Object, Sel, id, id, id));
+                                delegate_peripheral_didupdatevalueforcharacteristic_error as extern fn(_, _, _, _, _));
                 decl.add_method(sel!(peripheral:didUpdateNotificationStateForCharacteristic:error:),
-                                delegate_peripheral_didupdatenotificationstateforcharacteristic_error as extern fn(&mut Object, Sel, id, id, id));
+                                delegate_peripheral_didupdatenotificationstateforcharacteristic_error as extern fn(_, _, _, _, _));
                 decl.add_method(sel!(peripheral:didWriteValueForCharacteristic:error:),
-                                delegate_peripheral_didwritevalueforcharacteristic_error as extern fn(&mut Object, Sel, id, id, id));
+                                delegate_peripheral_didwritevalueforcharacteristic_error as extern fn(_, _, _, _, _));
                 decl.add_method(sel!(peripheral:didReadRSSI:error:),
-                                delegate_peripheral_didreadrssi_error as extern fn(&mut Object, Sel, id, id, id));
+                                delegate_peripheral_didreadrssi_error as extern fn(_, _, _, _, _));
                 decl.add_method(sel!(peripheral:didUpdateValueForDescriptor:error:),
-                                delegate_peripheral_didupdatevaluefordescriptor_error as extern fn(&mut Object, Sel, id, id, id));
+                                delegate_peripheral_didupdatevaluefordescriptor_error as extern fn(_, _, _, _, _));
                 decl.add_method(sel!(peripheral:didWriteValueForDescriptor:error:),
-                                delegate_peripheral_didwritevaluefordescriptor_error as extern fn(&mut Object, Sel, id, id, id));
+                                delegate_peripheral_didwritevaluefordescriptor_error as extern fn(_, _, _, _, _));
             }
 
             decl.register();
@@ -417,7 +417,7 @@ pub mod CentralDelegate {
         // dropped? Not quite sure how delegate lifetime works here.
         unsafe {
             trace!("Storing off ivars!");
-            delegate.set_ivar(DELEGATE_SENDER_IVAR, sender);
+            *delegate.get_mut_ivar(DELEGATE_SENDER_IVAR) = sender;
         }
         delegate
     }
@@ -511,7 +511,7 @@ pub mod CentralDelegate {
         _cmd: Sel,
         _central: id,
         peripheral: id,
-        adv_data: id,
+        adv_data: &NSDictionary<NSString, AnyObject>,
         rssi: id,
     ) {
         trace!(
@@ -519,7 +519,7 @@ pub mod CentralDelegate {
             peripheral_debug(peripheral)
         );
 
-        let held_peripheral = unsafe { StrongPtr::retain(peripheral) };
+        let held_peripheral = unsafe { StrongPtr::retain(peripheral as *mut _).unwrap() };
         send_delegate_event(
             delegate,
             CentralDelegateEvent::DiscoveredPeripheral {
@@ -531,10 +531,9 @@ pub mod CentralDelegate {
 
         let peripheral_uuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
 
-        let manufacturer_data = ns::dictionary_objectforkey(adv_data, unsafe {
-            cb::ADVERTISEMENT_DATA_MANUFACTURER_DATA_KEY
-        });
-        if manufacturer_data != nil {
+        let manufacturer_data =
+            adv_data.get(unsafe { cb::ADVERTISEMENT_DATA_MANUFACTURER_DATA_KEY });
+        if let Some(manufacturer_data) = manufacturer_data {
             // manufacturer_data: NSData
             let length = ns::data_length(manufacturer_data);
             if length >= 2 {
@@ -553,10 +552,9 @@ pub mod CentralDelegate {
                 );
             }
         }
-        let service_data = ns::dictionary_objectforkey(adv_data, unsafe {
-            cb::ADVERTISEMENT_DATA_SERVICE_DATA_KEY
-        });
-        if service_data != nil {
+
+        let service_data = adv_data.get(unsafe { cb::ADVERTISEMENT_DATA_SERVICE_DATA_KEY });
+        if let Some(service_data) = service_data {
             // service_data: [CBUUID, NSData]
             let uuids = ns::dictionary_allkeys(service_data);
             let mut result = HashMap::new();
@@ -577,10 +575,8 @@ pub mod CentralDelegate {
             );
         }
 
-        let services = ns::dictionary_objectforkey(adv_data, unsafe {
-            cb::ADVERTISEMENT_DATA_SERVICE_UUIDS_KEY
-        });
-        if services != nil {
+        let services = adv_data.get(unsafe { cb::ADVERTISEMENT_DATA_SERVICE_UUIDS_KEY });
+        if let Some(services) = services {
             // services: [CBUUID]
             let mut service_uuids = Vec::new();
             for i in 0..ns::array_count(services) {
@@ -629,10 +625,7 @@ pub mod CentralDelegate {
 
                 // Create the map entry we'll need to export.
                 let uuid = cbuuid_to_uuid(cb::attribute_uuid(s));
-                let held_service;
-                unsafe {
-                    held_service = StrongPtr::retain(s);
-                }
+                let held_service = unsafe { StrongPtr::retain(s).unwrap() };
                 service_map.insert(uuid, held_service);
             }
             let peripheral_uuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
@@ -689,7 +682,7 @@ pub mod CentralDelegate {
                 cb::peripheral_discoverdescriptorsforcharacteristic(peripheral, c);
                 // Create the map entry we'll need to export.
                 let uuid = cbuuid_to_uuid(cb::attribute_uuid(c));
-                let held_char = unsafe { StrongPtr::retain(c) };
+                let held_char = unsafe { StrongPtr::retain(c).unwrap() };
                 characteristics.insert(uuid, held_char);
             }
             let peripheral_uuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
@@ -725,7 +718,7 @@ pub mod CentralDelegate {
                 let d = ns::array_objectatindex(descs, i);
                 // Create the map entry we'll need to export.
                 let uuid = cbuuid_to_uuid(cb::attribute_uuid(d));
-                let held_desc = unsafe { StrongPtr::retain(d) };
+                let held_desc = unsafe { StrongPtr::retain(d).unwrap() };
                 descriptors.insert(uuid, held_desc);
             }
             let peripheral_uuid = nsuuid_to_uuid(cb::peer_identifier(peripheral));
@@ -811,7 +804,7 @@ pub mod CentralDelegate {
         let service = cb::characteristic_service(characteristic);
         let service_uuid = cbuuid_to_uuid(cb::attribute_uuid(service));
         let characteristic_uuid = cbuuid_to_uuid(cb::attribute_uuid(characteristic));
-        if cb::characteristic_isnotifying(characteristic) == objc::runtime::YES {
+        if cb::characteristic_isnotifying(characteristic) {
             send_delegate_event(
                 delegate,
                 CentralDelegateEvent::CharacteristicSubscribed {

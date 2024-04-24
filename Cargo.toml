@@ -46,8 +46,8 @@ once_cell = "1.19.0"
 jni-utils = "0.1.1"
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
-cocoa = "0.25.0"
-objc = "0.2.7"
+objc2 = "0.5.1"
+objc2-foundation = { version = "0.2.0", features = ["NSArray", "NSData", "NSDictionary", "NSError", "NSString", "NSUUID", "NSValue"] }
 libc = "0.2.151"
 
 [target.'cfg(target_os = "windows")'.dependencies]

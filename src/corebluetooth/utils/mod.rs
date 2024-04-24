@@ -16,7 +16,8 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use cocoa::base::id;
+use objc2::rc::Id;
+use objc2::runtime::AnyObject;
 use std::slice;
 use uuid::Uuid;
 
@@ -39,3 +40,9 @@ pub fn nsuuid_to_uuid(uuid: id) -> Uuid {
     let uuid_nsstring = ns::uuid_uuidstring(uuid);
     nsstring_to_string(uuid_nsstring).unwrap().parse().unwrap()
 }
+
+#[allow(non_camel_case_types)]
+pub type id = *const objc2::runtime::AnyObject;
+#[allow(non_upper_case_globals)]
+pub const nil: id = std::ptr::null();
+pub type StrongPtr = Id<AnyObject>;

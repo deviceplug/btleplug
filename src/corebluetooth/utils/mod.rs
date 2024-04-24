@@ -18,27 +18,13 @@
 
 use objc2::rc::Id;
 use objc2::runtime::AnyObject;
-use std::slice;
+use objc2_foundation::NSUUID;
 use uuid::Uuid;
 
-use self::nsstring::nsstring_to_string;
-use super::framework::ns;
-
 pub mod core_bluetooth;
-pub mod nsstring;
 
-pub fn nsdata_to_vec(data: id) -> Vec<u8> {
-    let length = ns::data_length(data);
-    if length == 0 {
-        return vec![];
-    }
-    let bytes = ns::data_bytes(data);
-    unsafe { slice::from_raw_parts(bytes, length as usize).to_vec() }
-}
-
-pub fn nsuuid_to_uuid(uuid: id) -> Uuid {
-    let uuid_nsstring = ns::uuid_uuidstring(uuid);
-    nsstring_to_string(uuid_nsstring).unwrap().parse().unwrap()
+pub fn nsuuid_to_uuid(uuid: &NSUUID) -> Uuid {
+    uuid.UUIDString().to_string().parse().unwrap()
 }
 
 #[allow(non_camel_case_types)]

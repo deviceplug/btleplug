@@ -94,7 +94,7 @@ pub mod api;
 mod bluez;
 #[cfg(not(target_os = "linux"))]
 mod common;
-#[cfg(any(target_os = "macos", target_os = "ios"))]
+#[cfg(target_vendor = "apple")]
 mod corebluetooth;
 #[cfg(target_os = "android")]
 mod droidplug;

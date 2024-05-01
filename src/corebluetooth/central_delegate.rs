@@ -25,7 +25,6 @@ use super::{
 };
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::sink::SinkExt;
-use libc::c_void;
 use log::{error, trace};
 use objc2::runtime::{
     AnyClass as Class, AnyObject as Object, AnyProtocol as Protocol, ClassBuilder, Sel,
@@ -36,6 +35,7 @@ use std::{
     collections::HashMap,
     fmt::{self, Debug, Formatter},
     ops::Deref,
+    os::raw::c_void,
     sync::Once,
 };
 use uuid::Uuid;

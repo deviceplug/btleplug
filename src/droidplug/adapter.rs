@@ -167,6 +167,11 @@ impl Central for Adapter {
     async fn add_peripheral(&self, address: &PeripheralId) -> Result<Peripheral> {
         self.add(address.0)
     }
+
+    async fn clear_peripherals(&self) -> Result<()> {
+        self.manager.clear_peripherals();
+        Ok(())
+    }
 }
 
 pub(crate) fn adapter_report_scan_result_internal(

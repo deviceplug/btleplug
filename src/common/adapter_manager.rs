@@ -66,6 +66,10 @@ where
         self.peripherals.insert(peripheral.id(), peripheral);
     }
 
+    pub fn clear_peripherals(&self) {
+        self.peripherals.clear();
+    }
+
     pub fn peripherals(&self) -> Vec<PeripheralType> {
         self.peripherals
             .iter()

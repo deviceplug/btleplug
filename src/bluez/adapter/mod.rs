@@ -245,7 +245,7 @@ impl ConnectedAdapter {
     }
 
     fn set_socket_filter(&self) -> Result<()> {
-        let mut filter = BytesMut::with_capacity(14);
+        let mut filter = BytesMut::with_capacity(16);
         let type_mask =
             (1 << HCI_COMMAND_PKT) | (1 << HCI_EVENT_PKT) as u8 | (1 << HCI_ACLDATA_PKT) as u8;
         let event_mask1 = (1 << EVT_DISCONN_COMPLETE)
@@ -254,11 +254,13 @@ impl ConnectedAdapter {
             | (1 << EVT_CMD_STATUS);
         let event_mask2 = 1 << (EVT_LE_META_EVENT - 32);
         let opcode = 0;
+        let padding = 0;
 
         filter.put_u32_le(type_mask as u32);
         filter.put_u32_le(event_mask1 as u32);
         filter.put_u32_le(event_mask2 as u32);
         filter.put_u16_le(opcode);
+        filter.put_u16_le(padding);
 
         handle_error(unsafe {
             libc::setsockopt(

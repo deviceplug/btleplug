@@ -146,7 +146,7 @@ pub enum CoreBluetoothReply {
 #[derive(Debug)]
 pub enum CBPeripheralEvent {
     Disconnected,
-    Notification(Uuid, Vec<u8>),
+    Notification(Uuid, Uuid, Vec<u8>),
     ManufacturerData(u16, Vec<u8>, i16),
     ServiceData(HashMap<Uuid, Vec<u8>>, i16),
     Services(Vec<Uuid>, i16),
@@ -736,7 +736,11 @@ impl CoreBluetoothInternal {
                             .set_reply(CoreBluetoothReply::ReadResult(data_clone));
                     } else if let Err(e) = peripheral
                         .event_sender
-                        .send(CBPeripheralEvent::Notification(characteristic_uuid, data))
+                        .send(CBPeripheralEvent::Notification(
+                            service_uuid,
+                            characteristic_uuid,
+                            data,
+                        ))
                         .await
                     {
                         error!("Error sending notification event: {}", e);

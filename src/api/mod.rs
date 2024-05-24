@@ -84,6 +84,8 @@ impl AddressType {
 /// A notification sent from a peripheral due to a change in a value.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ValueNotification {
+    /// UUID of the service that fired the notification.
+    pub service_uuid: Uuid,
     /// UUID of the characteristic that fired the notification.
     pub uuid: Uuid,
     /// The new value of the characteristic.

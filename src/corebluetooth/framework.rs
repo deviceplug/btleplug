@@ -82,6 +82,26 @@ pub mod cb {
         }
     }
 
+    #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+    #[repr(i64)]
+    #[allow(dead_code)]
+    pub enum CBManagerState {
+        Unknown = 0,
+        Resetting = 1,
+        Unsupported = 2,
+        Unauthorized = 3,
+        PoweredOff = 4,
+        PoweredOn = 5,
+    }
+
+    unsafe impl Encode for CBManagerState {
+        const ENCODING: Encoding = i64::ENCODING;
+    }
+
+    pub fn centeralmanger_state(cbcentralmanager: id) -> CBManagerState {
+        unsafe { msg_send![cbcentralmanager, state] }
+    }
+
     pub fn centralmanager_stopscan(cbcentralmanager: id) {
         unsafe { msg_send![cbcentralmanager, stopScan] }
     }
@@ -130,10 +150,11 @@ pub mod cb {
         unsafe { msg_send_id![cbperipheral, name] }
     }
 
+    #[allow(dead_code)]
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
     #[repr(i64)]
     pub enum CBPeripheralState {
-        Disonnected = 0,
+        Disconnected = 0,
         Connecting = 1,
         Connected = 2,
         Disconnecting = 3,

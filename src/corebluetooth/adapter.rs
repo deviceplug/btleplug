@@ -2,6 +2,7 @@ use super::internal::{run_corebluetooth_thread, CoreBluetoothEvent, CoreBluetoot
 use super::peripheral::{Peripheral, PeripheralId};
 use crate::api::{Central, CentralEvent, ScanFilter};
 use crate::common::adapter_manager::AdapterManager;
+use crate::corebluetooth::internal::{CoreBluetoothReply, CoreBluetoothReplyFuture};
 use crate::{Error, Result};
 use async_trait::async_trait;
 use futures::channel::mpsc::{self, Sender};
@@ -29,7 +30,7 @@ impl Adapter {
         debug!("Waiting on adapter connect");
         if !matches!(
             receiver.next().await,
-            Some(CoreBluetoothEvent::AdapterConnected)
+            Some(CoreBluetoothEvent::DidUpdateState)
         ) {
             return Err(Error::Other(
                 "Adapter failed to connect.".to_string().into(),
@@ -39,7 +40,7 @@ impl Adapter {
         let manager = Arc::new(AdapterManager::default());
 
         let manager_clone = manager.clone();
-        let adapter_sender_clone = adapter_sender.clone();
+        let mut adapter_sender_clone = adapter_sender.clone();
         task::spawn(async move {
             while let Some(msg) = receiver.next().await {
                 match msg {
@@ -67,7 +68,18 @@ impl Adapter {
                     CoreBluetoothEvent::DeviceDisconnected { uuid } => {
                         manager_clone.emit(CentralEvent::DeviceDisconnected(uuid.into()));
                     }
-                    _ => {}
+                    CoreBluetoothEvent::DidUpdateState => {
+                        let fut = CoreBluetoothReplyFuture::default();
+                        let _ = adapter_sender_clone
+                            .send(CoreBluetoothMessage::FetchManagerState {
+                                future: fut.get_state_clone(),
+                            })
+                            .await;
+
+                        if let CoreBluetoothReply::ManagerState(state) = fut.await {
+                            error!("Adapter state changed to {:?}. Aborting manager", state)
+                        }
+                    }
                 }
             }
         });

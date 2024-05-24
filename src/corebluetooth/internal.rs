@@ -10,7 +10,7 @@
 
 use super::{
     central_delegate::{CentralDelegate, CentralDelegateEvent},
-    framework::cb::{self, CBManagerAuthorization, CBPeripheralState},
+    framework::cb::{self, CBManagerAuthorization, CBManagerState, CBPeripheralState},
     future::{BtlePlugFuture, BtlePlugFutureStateShared},
     utils::{
         core_bluetooth::{cbuuid_to_uuid, uuid_to_cbuuid},
@@ -139,6 +139,7 @@ pub enum CoreBluetoothReply {
     ReadResult(Vec<u8>),
     Connected(BTreeSet<Service>),
     State(CBPeripheralState),
+    ManagerState(CBManagerState),
     Ok,
     Err(String),
 }
@@ -399,11 +400,14 @@ pub enum CoreBluetoothMessage {
         data: Vec<u8>,
         future: CoreBluetoothReplyStateShared,
     },
+    FetchManagerState {
+        future: CoreBluetoothReplyStateShared,
+    },
 }
 
 #[derive(Debug)]
 pub enum CoreBluetoothEvent {
-    AdapterConnected,
+    DidUpdateState,
     DeviceDiscovered {
         uuid: Uuid,
         name: Option<String>,
@@ -789,6 +793,18 @@ impl CoreBluetoothInternal {
         }
     }
 
+    fn get_manager_state(&mut self) -> CBManagerState {
+        cb::centeralmanger_state(&*self.manager)
+    }
+
+    fn get_manager_state_async(&mut self, fut: CoreBluetoothReplyStateShared) {
+        let state = cb::centeralmanger_state(&*self.manager);
+        trace!("Manager state {:?} ", state);
+        fut.lock()
+            .unwrap()
+            .set_reply(CoreBluetoothReply::ManagerState(state));
+    }
+
     fn write_value(
         &mut self,
         peripheral_uuid: Uuid,
@@ -831,6 +847,11 @@ impl CoreBluetoothInternal {
         characteristic_uuid: Uuid,
         fut: CoreBluetoothReplyStateShared,
     ) {
+        trace!(
+            "Manager State {:?}",
+            cb::centeralmanger_state(&*self.manager)
+        );
+
         if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Some(service) = peripheral.services.get_mut(&service_uuid) {
                 if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
@@ -1004,7 +1025,7 @@ impl CoreBluetoothInternal {
                     // "ready" variable in our adapter that will cause scans/etc
                     // to fail if this hasn't updated.
                     CentralDelegateEvent::DidUpdateState => {
-                        self.dispatch_event(CoreBluetoothEvent::AdapterConnected).await
+                        self.dispatch_event(CoreBluetoothEvent::DidUpdateState).await
                     }
                     CentralDelegateEvent::DiscoveredPeripheral{cbperipheral} => {
                         self.on_discovered_peripheral(cbperipheral).await
@@ -1103,6 +1124,9 @@ impl CoreBluetoothInternal {
                     CoreBluetoothMessage::IsConnected{peripheral_uuid, future} => {
                         self.is_connected(peripheral_uuid, future);
                     },
+                    CoreBluetoothMessage::FetchManagerState {future} =>{
+                        self.get_manager_state_async(future);
+                    },
                     CoreBluetoothMessage::ReadDescriptorValue{peripheral_uuid, service_uuid, characteristic_uuid, descriptor_uuid, future} => {
                         self.read_descriptor_value(peripheral_uuid, service_uuid, characteristic_uuid, descriptor_uuid, future)
                     }
@@ -1184,6 +1208,14 @@ pub fn run_corebluetooth_thread(
         runtime.block_on(async move {
             let mut cbi = CoreBluetoothInternal::new(receiver, event_sender);
             loop {
+                // When the IOS or MacOS device if powered off or locked
+                // the manager state will suddenly throw DidUpdateState event and turn off.
+                // If we are not exiting the main loop here the futures requested after
+                // power off will be stuck forever.
+                if cbi.get_manager_state() == CBManagerState::PoweredOff {
+                    trace!("Breaking out of the corebluetooth loop. Manager is off.");
+                    break;
+                }
                 cbi.wait_for_message().await;
             }
         })

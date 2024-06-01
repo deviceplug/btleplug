@@ -24,7 +24,7 @@ use futures::select;
 use futures::sink::SinkExt;
 use futures::stream::{Fuse, StreamExt};
 use log::{error, trace, warn};
-use objc2::rc::Id;
+use objc2::rc::{Id, Retained};
 use objc2_foundation::{NSArray, NSData, NSMutableDictionary, NSNumber};
 use std::{
     collections::{BTreeSet, HashMap, VecDeque},
@@ -317,7 +317,7 @@ impl CBPeripheral {
 // call it good. Right?
 struct CoreBluetoothInternal {
     manager: StrongPtr,
-    delegate: StrongPtr,
+    delegate: Retained<CentralDelegate>,
     // Map of identifiers to object pointers
     peripherals: HashMap<Uuid, CBPeripheral>,
     delegate_receiver: Fuse<Receiver<CentralDelegateEvent>>,
@@ -425,12 +425,12 @@ impl CoreBluetoothInternal {
     ) -> Self {
         // Pretty sure these come preallocated?
         unsafe {
-            let (delegate, delegate_receiver) = CentralDelegate::delegate();
-            let delegate = StrongPtr::from_raw(delegate as *mut _).unwrap();
+            let (sender, receiver) = mpsc::channel::<CentralDelegateEvent>(256);
+            let delegate = CentralDelegate::new(sender);
             Self {
-                manager: StrongPtr::from_raw(cb::centralmanager(&*delegate) as *mut _).unwrap(),
+                manager: StrongPtr::from_raw(cb::centralmanager(&delegate) as *mut _).unwrap(),
                 peripherals: HashMap::new(),
-                delegate_receiver: delegate_receiver.fuse(),
+                delegate_receiver: receiver.fuse(),
                 event_sender,
                 message_receiver: message_receiver.fuse(),
                 delegate,
@@ -1161,7 +1161,6 @@ impl Drop for CoreBluetoothInternal {
         trace!("BluetoothAdapter::drop");
         // NOTE: stop discovery only here instead of in BluetoothDiscoverySession
         self.stop_discovery();
-        CentralDelegate::delegate_drop_channel(&*self.delegate);
     }
 }
 

@@ -60,7 +60,7 @@ pub mod cb {
 
     // CBCentralManager
 
-    pub fn centralmanager(delegate: id /*CBCentralManagerDelegate* */) -> id /*CBCentralManager* */
+    pub fn centralmanager(delegate: &AnyObject /*CBCentralManagerDelegate* */) -> id /*CBCentralManager* */
     {
         let label = CString::new("CBqueue").unwrap();
         unsafe {
@@ -147,7 +147,10 @@ pub mod cb {
         unsafe { msg_send![cbperipheral, state] }
     }
 
-    pub fn peripheral_setdelegate(cbperipheral: id, delegate: id /* CBPeripheralDelegate* */) {
+    pub fn peripheral_setdelegate(
+        cbperipheral: id,
+        delegate: &AnyObject, /* CBPeripheralDelegate* */
+    ) {
         unsafe { msg_send![cbperipheral, setDelegate: delegate] }
     }
 

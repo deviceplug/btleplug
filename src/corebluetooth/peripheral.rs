@@ -8,7 +8,7 @@
 use super::{
     framework::cb::CBPeripheralState,
     internal::{
-        CBPeripheralEvent, CoreBluetoothMessage, CoreBluetoothReply, CoreBluetoothReplyFuture,
+        CoreBluetoothMessage, CoreBluetoothReply, CoreBluetoothReplyFuture, PeripheralEventInternal,
     },
 };
 use crate::{
@@ -87,7 +87,7 @@ impl Peripheral {
         uuid: Uuid,
         local_name: Option<String>,
         manager: Weak<AdapterManager<Self>>,
-        event_receiver: Receiver<CBPeripheralEvent>,
+        event_receiver: Receiver<PeripheralEventInternal>,
         message_sender: Sender<CoreBluetoothMessage>,
     ) -> Self {
         // Since we're building the object, we have an active advertisement.
@@ -120,14 +120,18 @@ impl Peripheral {
 
             loop {
                 match event_receiver.next().await {
-                    Some(CBPeripheralEvent::Notification(uuid, data)) => {
+                    Some(PeripheralEventInternal::Notification(uuid, data)) => {
                         let notification = ValueNotification { uuid, value: data };
 
                         // Note: we ignore send errors here which may happen while there are no
                         // receivers...
                         let _ = shared.notifications_channel.send(notification);
                     }
-                    Some(CBPeripheralEvent::ManufacturerData(manufacturer_id, data, rssi)) => {
+                    Some(PeripheralEventInternal::ManufacturerData(
+                        manufacturer_id,
+                        data,
+                        rssi,
+                    )) => {
                         let mut properties = shared.properties.lock().unwrap();
                         properties.rssi = Some(rssi);
                         properties
@@ -138,7 +142,7 @@ impl Peripheral {
                             manufacturer_data: properties.manufacturer_data.clone(),
                         });
                     }
-                    Some(CBPeripheralEvent::ServiceData(service_data, rssi)) => {
+                    Some(PeripheralEventInternal::ServiceData(service_data, rssi)) => {
                         let mut properties = shared.properties.lock().unwrap();
                         properties.rssi = Some(rssi);
                         properties.service_data.extend(service_data.clone());
@@ -148,7 +152,7 @@ impl Peripheral {
                             service_data,
                         });
                     }
-                    Some(CBPeripheralEvent::Services(services, rssi)) => {
+                    Some(PeripheralEventInternal::Services(services, rssi)) => {
                         let mut properties = shared.properties.lock().unwrap();
                         properties.rssi = Some(rssi);
                         properties.services = services.clone();
@@ -158,7 +162,7 @@ impl Peripheral {
                             services,
                         });
                     }
-                    Some(CBPeripheralEvent::Disconnected) => (),
+                    Some(PeripheralEventInternal::Disconnected) => (),
                     None => {
                         info!("Event receiver died, breaking out of corebluetooth device loop.");
                         break;

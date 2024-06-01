@@ -16,8 +16,6 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use objc2::rc::Id;
-use objc2::runtime::AnyObject;
 use objc2_foundation::NSUUID;
 use uuid::Uuid;
 
@@ -26,9 +24,3 @@ pub mod core_bluetooth;
 pub fn nsuuid_to_uuid(uuid: &NSUUID) -> Uuid {
     uuid.UUIDString().to_string().parse().unwrap()
 }
-
-#[allow(non_camel_case_types)]
-pub type id = *const objc2::runtime::AnyObject;
-#[allow(non_upper_case_globals)]
-pub const nil: id = std::ptr::null();
-pub type StrongPtr = Id<AnyObject>;

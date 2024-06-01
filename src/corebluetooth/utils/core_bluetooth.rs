@@ -16,20 +16,17 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
-use objc2::rc::Id;
-use objc2::runtime::AnyObject;
+use objc2::rc::Retained;
+use objc2_core_bluetooth::CBUUID;
 use objc2_foundation::NSString;
 use uuid::Uuid;
 
-use super::super::framework::cb;
-use super::{id, nil};
-
 /// Convert a CBUUID object to the standard Uuid type.
-pub fn cbuuid_to_uuid(cbuuid: id) -> Uuid {
+pub fn cbuuid_to_uuid(cbuuid: &CBUUID) -> Uuid {
     // NOTE: CoreBluetooth tends to return uppercase UUID strings, and only 4
     // character long if the UUID is short (16 bits). It can also return 8
     // character strings if the rest of the UUID matches the generic UUID.
-    let uuid = cb::uuid_uuidstring(cbuuid).to_string();
+    let uuid = unsafe { cbuuid.UUIDString() }.to_string();
     let long = if uuid.len() == 4 {
         format!("0000{}-0000-1000-8000-00805f9b34fb", uuid)
     } else if uuid.len() == 8 {
@@ -42,51 +39,13 @@ pub fn cbuuid_to_uuid(cbuuid: id) -> Uuid {
 }
 
 /// Convert a `Uuid` to a `CBUUID`.
-pub fn uuid_to_cbuuid(uuid: Uuid) -> Id<AnyObject> {
-    cb::uuid_uuidwithstring(&NSString::from_str(&uuid.to_string()))
-}
-
-pub fn peripheral_debug(peripheral: id) -> String {
-    if peripheral == nil {
-        return String::from("nil");
-    }
-    let uuid = cb::peer_identifier(peripheral).UUIDString();
-    if let Some(name) = cb::peripheral_name(peripheral) {
-        format!("CBPeripheral({}, {})", name, uuid)
-    } else {
-        format!("CBPeripheral({})", uuid)
-    }
-}
-
-pub fn service_debug(service: id) -> String {
-    if service == nil {
-        return String::from("nil");
-    }
-    let uuid = cb::uuid_uuidstring(cb::attribute_uuid(service));
-    format!("CBService({})", uuid)
-}
-
-pub fn characteristic_debug(characteristic: id) -> String {
-    if characteristic == nil {
-        return String::from("nil");
-    }
-    let uuid = cb::uuid_uuidstring(cb::attribute_uuid(characteristic));
-    format!("CBCharacteristic({})", uuid)
-}
-
-pub fn descriptor_debug(descriptor: id) -> String {
-    if descriptor == nil {
-        return String::from("nil");
-    }
-    let uuid = cb::uuid_uuidstring(cb::attribute_uuid(descriptor));
-    format!("CBDescriptor({})", uuid)
+pub fn uuid_to_cbuuid(uuid: Uuid) -> Retained<CBUUID> {
+    unsafe { CBUUID::UUIDWithString(&NSString::from_str(&uuid.to_string())) }
 }
 
 #[cfg(test)]
 mod tests {
     use objc2_foundation::ns_string;
-
-    use super::super::super::framework::cb::uuid_uuidwithstring;
 
     use super::*;
 
@@ -94,7 +53,7 @@ mod tests {
     fn parse_uuid_short() {
         let uuid_string = "1234";
         let uuid_nsstring = NSString::from_str(uuid_string);
-        let cbuuid = uuid_uuidwithstring(&uuid_nsstring);
+        let cbuuid = unsafe { CBUUID::UUIDWithString(&uuid_nsstring) };
         let uuid = cbuuid_to_uuid(&*cbuuid);
         assert_eq!(
             uuid,
@@ -105,7 +64,7 @@ mod tests {
     #[test]
     fn parse_uuid_long() {
         let uuid_nsstring = ns_string!("12345678-0000-1111-2222-333344445555");
-        let cbuuid = uuid_uuidwithstring(uuid_nsstring);
+        let cbuuid = unsafe { CBUUID::UUIDWithString(uuid_nsstring) };
         let uuid = cbuuid_to_uuid(&*cbuuid);
         assert_eq!(
             uuid,

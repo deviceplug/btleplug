@@ -10,11 +10,11 @@
 
 use super::{
     central_delegate::{CentralDelegate, CentralDelegateEvent},
-    framework::cb::{self, CBManagerAuthorization, CBPeripheralState},
+    ffi,
     future::{BtlePlugFuture, BtlePlugFutureStateShared},
     utils::{
         core_bluetooth::{cbuuid_to_uuid, uuid_to_cbuuid},
-        id, nil, nsuuid_to_uuid, StrongPtr,
+        nsuuid_to_uuid,
     },
 };
 use crate::api::{CharPropFlags, Characteristic, Descriptor, ScanFilter, Service, WriteType};
@@ -24,10 +24,17 @@ use futures::select;
 use futures::sink::SinkExt;
 use futures::stream::{Fuse, StreamExt};
 use log::{error, trace, warn};
-use objc2::rc::{Id, Retained};
+use objc2::{msg_send_id, ClassType};
+use objc2::{rc::Retained, runtime::AnyObject};
+use objc2_core_bluetooth::{
+    CBCentralManager, CBCentralManagerScanOptionAllowDuplicatesKey, CBCharacteristic,
+    CBCharacteristicProperties, CBCharacteristicWriteType, CBDescriptor, CBManager,
+    CBManagerAuthorization, CBPeripheral, CBPeripheralState, CBService, CBUUID,
+};
 use objc2_foundation::{NSArray, NSData, NSMutableDictionary, NSNumber};
 use std::{
     collections::{BTreeSet, HashMap, VecDeque},
+    ffi::CString,
     fmt::{self, Debug, Formatter},
     ops::Deref,
     thread,
@@ -36,15 +43,15 @@ use tokio::runtime;
 use uuid::Uuid;
 
 struct DescriptorInternal {
-    pub descriptor: StrongPtr,
+    pub descriptor: Retained<CBDescriptor>,
     pub uuid: Uuid,
     pub read_future_state: VecDeque<CoreBluetoothReplyStateShared>,
     pub write_future_state: VecDeque<CoreBluetoothReplyStateShared>,
 }
 
 impl DescriptorInternal {
-    pub fn new(descriptor: StrongPtr) -> Self {
-        let uuid = cbuuid_to_uuid(cb::attribute_uuid(&*descriptor));
+    pub fn new(descriptor: Retained<CBDescriptor>) -> Self {
+        let uuid = cbuuid_to_uuid(unsafe { &descriptor.UUID() });
         Self {
             descriptor,
             uuid,
@@ -55,7 +62,7 @@ impl DescriptorInternal {
 }
 
 struct CharacteristicInternal {
-    pub characteristic: StrongPtr,
+    pub characteristic: Retained<CBCharacteristic>,
     pub uuid: Uuid,
     pub properties: CharPropFlags,
     pub descriptors: HashMap<Uuid, DescriptorInternal>,
@@ -81,10 +88,10 @@ impl Debug for CharacteristicInternal {
 }
 
 impl CharacteristicInternal {
-    pub fn new(characteristic: StrongPtr) -> Self {
+    pub fn new(characteristic: Retained<CBCharacteristic>) -> Self {
         let properties = CharacteristicInternal::form_flags(&*characteristic);
-        let uuid = cbuuid_to_uuid(cb::attribute_uuid(&*characteristic));
-        let descriptors_arr = cb::characteristic_descriptors(&*characteristic);
+        let uuid = cbuuid_to_uuid(unsafe { &characteristic.UUID() });
+        let descriptors_arr = unsafe { characteristic.descriptors() };
         let mut descriptors = HashMap::new();
         if let Some(descriptors_arr) = descriptors_arr {
             for d in descriptors_arr {
@@ -105,28 +112,31 @@ impl CharacteristicInternal {
         }
     }
 
-    fn form_flags(characteristic: id) -> CharPropFlags {
-        let flags = cb::characteristic_properties(characteristic);
+    fn form_flags(characteristic: &CBCharacteristic) -> CharPropFlags {
+        let flags = unsafe { characteristic.properties() };
         let mut v = CharPropFlags::default();
-        if (flags & cb::CHARACTERISTICPROPERTY_BROADCAST) != 0 {
+        if flags.contains(CBCharacteristicProperties::CBCharacteristicPropertyBroadcast) {
             v |= CharPropFlags::BROADCAST;
         }
-        if (flags & cb::CHARACTERISTICPROPERTY_READ) != 0 {
+        if flags.contains(CBCharacteristicProperties::CBCharacteristicPropertyRead) {
             v |= CharPropFlags::READ;
         }
-        if (flags & cb::CHARACTERISTICPROPERTY_WRITEWITHOUTRESPONSE) != 0 {
+        if flags.contains(CBCharacteristicProperties::CBCharacteristicPropertyWriteWithoutResponse)
+        {
             v |= CharPropFlags::WRITE_WITHOUT_RESPONSE;
         }
-        if (flags & cb::CHARACTERISTICPROPERTY_WRITE) != 0 {
+        if flags.contains(CBCharacteristicProperties::CBCharacteristicPropertyWrite) {
             v |= CharPropFlags::WRITE;
         }
-        if (flags & cb::CHARACTERISTICPROPERTY_NOTIFY) != 0 {
+        if flags.contains(CBCharacteristicProperties::CBCharacteristicPropertyNotify) {
             v |= CharPropFlags::NOTIFY;
         }
-        if (flags & cb::CHARACTERISTICPROPERTY_INDICATE) != 0 {
+        if flags.contains(CBCharacteristicProperties::CBCharacteristicPropertyIndicate) {
             v |= CharPropFlags::INDICATE;
         }
-        if (flags & cb::CHARACTERISTICPROPERTY_AUTHENTICATEDSIGNEDWRITES) != 0 {
+        if flags
+            .contains(CBCharacteristicProperties::CBCharacteristicPropertyAuthenticatedSignedWrites)
+        {
             v |= CharPropFlags::AUTHENTICATED_SIGNED_WRITES;
         }
         trace!("Flags: {:?}", v);
@@ -156,13 +166,13 @@ pub type CoreBluetoothReplyStateShared = BtlePlugFutureStateShared<CoreBluetooth
 pub type CoreBluetoothReplyFuture = BtlePlugFuture<CoreBluetoothReply>;
 
 struct ServiceInternal {
-    cbservice: StrongPtr,
+    cbservice: Retained<CBService>,
     characteristics: HashMap<Uuid, CharacteristicInternal>,
     pub discovered: bool,
 }
 
 struct PeripheralInternal {
-    pub peripheral: StrongPtr,
+    pub peripheral: Retained<CBPeripheral>,
     services: HashMap<Uuid, ServiceInternal>,
     pub event_sender: Sender<PeripheralEventInternal>,
     pub disconnected_future_state: Option<CoreBluetoothReplyStateShared>,
@@ -188,7 +198,10 @@ impl Debug for PeripheralInternal {
 }
 
 impl PeripheralInternal {
-    pub fn new(peripheral: StrongPtr, event_sender: Sender<PeripheralEventInternal>) -> Self {
+    pub fn new(
+        peripheral: Retained<CBPeripheral>,
+        event_sender: Sender<PeripheralEventInternal>,
+    ) -> Self {
         Self {
             peripheral,
             services: HashMap::new(),
@@ -201,7 +214,7 @@ impl PeripheralInternal {
     pub fn set_characteristics(
         &mut self,
         service_uuid: Uuid,
-        characteristics: HashMap<Uuid, StrongPtr>,
+        characteristics: HashMap<Uuid, Retained<CBCharacteristic>>,
     ) {
         let characteristics = characteristics
             .into_iter()
@@ -227,7 +240,7 @@ impl PeripheralInternal {
         &mut self,
         service_uuid: Uuid,
         characteristic_uuid: Uuid,
-        descriptors: HashMap<Uuid, StrongPtr>,
+        descriptors: HashMap<Uuid, Retained<CBDescriptor>>,
     ) {
         let descriptors = descriptors
             .into_iter()
@@ -274,7 +287,7 @@ impl PeripheralInternal {
                 .iter()
                 .map(|(&service_uuid, service)| Service {
                     uuid: service_uuid,
-                    primary: cb::service_isprimary(&*service.cbservice),
+                    primary: unsafe { service.cbservice.isPrimary() },
                     characteristics: service
                         .characteristics
                         .iter()
@@ -321,7 +334,7 @@ impl PeripheralInternal {
 // ass mut *Object values, keep them in a single struct, in a single thread, and
 // call it good. Right?
 struct CoreBluetoothInternal {
-    manager: StrongPtr,
+    manager: Retained<CBCentralManager>,
     delegate: Retained<CentralDelegate>,
     // Map of identifiers to object pointers
     peripherals: HashMap<Uuid, PeripheralInternal>,
@@ -429,17 +442,25 @@ impl CoreBluetoothInternal {
         event_sender: Sender<CoreBluetoothEvent>,
     ) -> Self {
         // Pretty sure these come preallocated?
-        unsafe {
-            let (sender, receiver) = mpsc::channel::<CentralDelegateEvent>(256);
-            let delegate = CentralDelegate::new(sender);
-            Self {
-                manager: StrongPtr::from_raw(cb::centralmanager(&delegate) as *mut _).unwrap(),
-                peripherals: HashMap::new(),
-                delegate_receiver: receiver.fuse(),
-                event_sender,
-                message_receiver: message_receiver.fuse(),
-                delegate,
-            }
+        let (sender, receiver) = mpsc::channel::<CentralDelegateEvent>(256);
+        let delegate = CentralDelegate::new(sender);
+
+        let label = CString::new("CBqueue").unwrap();
+        let queue =
+            unsafe { ffi::dispatch_queue_create(label.as_ptr(), ffi::DISPATCH_QUEUE_SERIAL) };
+        let queue: *mut AnyObject = queue.cast();
+
+        let manager = unsafe {
+            msg_send_id![CBCentralManager::alloc(), initWithDelegate: &*delegate, queue: queue]
+        };
+
+        Self {
+            manager,
+            peripherals: HashMap::new(),
+            delegate_receiver: receiver.fuse(),
+            event_sender,
+            message_receiver: message_receiver.fuse(),
+            delegate,
         }
     }
 
@@ -508,9 +529,9 @@ impl CoreBluetoothInternal {
         }
     }
 
-    async fn on_discovered_peripheral(&mut self, peripheral: StrongPtr) {
-        let uuid = nsuuid_to_uuid(&cb::peer_identifier(&*peripheral));
-        let name = cb::peripheral_name(&*peripheral);
+    async fn on_discovered_peripheral(&mut self, peripheral: Retained<CBPeripheral>) {
+        let uuid = nsuuid_to_uuid(unsafe { &peripheral.identifier() });
+        let name = unsafe { peripheral.name() };
         if self.peripherals.contains_key(&uuid) {
             if let Some(name) = name {
                 self.dispatch_event(CoreBluetoothEvent::DeviceUpdated {
@@ -536,7 +557,7 @@ impl CoreBluetoothInternal {
     fn on_discovered_services(
         &mut self,
         peripheral_uuid: Uuid,
-        service_map: HashMap<Uuid, StrongPtr>,
+        service_map: HashMap<Uuid, Retained<CBService>>,
     ) {
         trace!("Found services!");
         for id in service_map.keys() {
@@ -564,7 +585,7 @@ impl CoreBluetoothInternal {
         &mut self,
         peripheral_uuid: Uuid,
         service_uuid: Uuid,
-        characteristics: HashMap<Uuid, StrongPtr>,
+        characteristics: HashMap<Uuid, Retained<CBCharacteristic>>,
     ) {
         trace!(
             "Found characteristics for peripheral {} service {}:",
@@ -584,7 +605,7 @@ impl CoreBluetoothInternal {
         peripheral_uuid: Uuid,
         service_uuid: Uuid,
         characteristic_uuid: Uuid,
-        descriptors: HashMap<Uuid, StrongPtr>,
+        descriptors: HashMap<Uuid, Retained<CBDescriptor>>,
     ) {
         trace!(
             "Found descriptors for peripheral {} service {} characteristic {}:",
@@ -774,7 +795,7 @@ impl CoreBluetoothInternal {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             trace!("Connecting peripheral!");
             p.connected_future_state = Some(fut);
-            cb::centralmanager_connectperipheral(&*self.manager, &*p.peripheral);
+            unsafe { self.manager.connectPeripheral_options(&p.peripheral, None) };
         }
     }
 
@@ -783,13 +804,13 @@ impl CoreBluetoothInternal {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             trace!("Disconnecting peripheral!");
             p.disconnected_future_state = Some(fut);
-            cb::centralmanager_cancelperipheralconnection(&*self.manager, &*p.peripheral);
+            unsafe { self.manager.cancelPeripheralConnection(&p.peripheral) };
         }
     }
 
     fn is_connected(&mut self, peripheral_uuid: Uuid, fut: CoreBluetoothReplyStateShared) {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
-            let state = cb::peripheral_state(&*p.peripheral);
+            let state = unsafe { p.peripheral.state() };
             trace!("Connected state {:?} ", state);
             fut.lock()
                 .unwrap()
@@ -811,15 +832,20 @@ impl CoreBluetoothInternal {
                 if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
                 {
                     trace!("Writing value! With kind {:?}", kind);
-                    cb::peripheral_writevalue_forcharacteristic(
-                        &*peripheral.peripheral,
-                        &NSData::from_vec(data),
-                        &*characteristic.characteristic,
-                        match kind {
-                            WriteType::WithResponse => 0,
-                            WriteType::WithoutResponse => 1,
-                        },
-                    );
+                    unsafe {
+                        peripheral.peripheral.writeValue_forCharacteristic_type(
+                            &NSData::from_vec(data),
+                            &characteristic.characteristic,
+                            match kind {
+                                WriteType::WithResponse => {
+                                    CBCharacteristicWriteType::CBCharacteristicWriteWithResponse
+                                }
+                                WriteType::WithoutResponse => {
+                                    CBCharacteristicWriteType::CBCharacteristicWriteWithoutResponse
+                                }
+                            },
+                        );
+                    }
                     // WriteWithoutResponse does not call the corebluetooth
                     // callback, it just always succeeds silently.
                     if kind == WriteType::WithoutResponse {
@@ -844,10 +870,11 @@ impl CoreBluetoothInternal {
                 if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
                 {
                     trace!("Reading value!");
-                    cb::peripheral_readvalue_forcharacteristic(
-                        &*peripheral.peripheral,
-                        &*characteristic.characteristic,
-                    );
+                    unsafe {
+                        peripheral
+                            .peripheral
+                            .readValueForCharacteristic(&characteristic.characteristic);
+                    }
                     characteristic.read_future_state.push_front(fut);
                 }
             }
@@ -866,11 +893,11 @@ impl CoreBluetoothInternal {
                 if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
                 {
                     trace!("Setting subscribe!");
-                    cb::peripheral_setnotifyvalue_forcharacteristic(
-                        &*peripheral.peripheral,
-                        true,
-                        &*characteristic.characteristic,
-                    );
+                    unsafe {
+                        peripheral
+                            .peripheral
+                            .setNotifyValue_forCharacteristic(true, &characteristic.characteristic);
+                    }
                     characteristic.subscribe_future_state.push_front(fut);
                 }
             }
@@ -889,11 +916,12 @@ impl CoreBluetoothInternal {
                 if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
                 {
                     trace!("Setting subscribe!");
-                    cb::peripheral_setnotifyvalue_forcharacteristic(
-                        &*peripheral.peripheral,
-                        false,
-                        &*characteristic.characteristic,
-                    );
+                    unsafe {
+                        peripheral.peripheral.setNotifyValue_forCharacteristic(
+                            false,
+                            &characteristic.characteristic,
+                        );
+                    }
                     characteristic.unsubscribe_future_state.push_front(fut);
                 }
             }
@@ -915,11 +943,12 @@ impl CoreBluetoothInternal {
                 {
                     if let Some(descriptor) = characteristic.descriptors.get_mut(&descriptor_uuid) {
                         trace!("Writing descriptor value!");
-                        cb::peripheral_writevalue_fordescriptor(
-                            &*peripheral.peripheral,
-                            &NSData::from_vec(data),
-                            &*descriptor.descriptor,
-                        );
+                        unsafe {
+                            peripheral.peripheral.writeValue_forDescriptor(
+                                &NSData::from_vec(data),
+                                &descriptor.descriptor,
+                            );
+                        }
                         descriptor.write_future_state.push_front(fut);
                     }
                 }
@@ -941,10 +970,11 @@ impl CoreBluetoothInternal {
                 {
                     if let Some(descriptor) = characteristic.descriptors.get_mut(&descriptor_uuid) {
                         trace!("Reading descriptor value!");
-                        cb::peripheral_readvalue_fordescriptor(
-                            &*peripheral.peripheral,
-                            &*descriptor.descriptor,
-                        );
+                        unsafe {
+                            peripheral
+                                .peripheral
+                                .readValueForDescriptor(&descriptor.descriptor);
+                        }
                         descriptor.read_future_state.push_front(fut);
                     }
                 }
@@ -964,7 +994,8 @@ impl CoreBluetoothInternal {
             if let Some(service) = peripheral.services.get_mut(&service_uuid) {
                 if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
                 {
-                    if let Some(descriptor) = characteristic.descriptors.get_mut(&descriptor_uuid) {
+                    if let Some(_descriptor) = characteristic.descriptors.get_mut(&descriptor_uuid)
+                    {
                         trace!("Got read event!");
 
                         let mut data_clone = Vec::new();
@@ -1133,34 +1164,35 @@ impl CoreBluetoothInternal {
         // NOTE: If duplicates are not allowed then a peripheral will not show
         // up again once connected and then disconnected.
         options.insert_id(
-            unsafe { cb::CENTRALMANAGERSCANOPTIONALLOWDUPLICATESKEY },
-            Id::into_super(Id::into_super(Id::into_super(NSNumber::new_bool(true)))),
+            unsafe { CBCentralManagerScanOptionAllowDuplicatesKey },
+            Retained::into_super(Retained::into_super(Retained::into_super(
+                NSNumber::new_bool(true),
+            ))),
         );
-        cb::centralmanager_scanforperipheralswithservices_options(
-            &*self.manager,
-            service_uuids,
-            &**options,
-        );
+        unsafe {
+            self.manager
+                .scanForPeripheralsWithServices_options(service_uuids.as_deref(), Some(&options))
+        };
     }
 
     fn stop_discovery(&mut self) {
         trace!("BluetoothAdapter::stop_discovery");
-        cb::centralmanager_stopscan(&*self.manager);
+        unsafe { self.manager.stopScan() };
     }
 }
 
 /// Convert a `ScanFilter` to the appropriate `NSArray<CBUUID *> *` to use for discovery. If the
 /// filter has an empty list of services then this will return `nil`, to discover all devices.
-fn scan_filter_to_service_uuids(filter: ScanFilter) -> id {
+fn scan_filter_to_service_uuids(filter: ScanFilter) -> Option<Retained<NSArray<CBUUID>>> {
     if filter.services.is_empty() {
-        nil
+        None
     } else {
         let service_uuids = filter
             .services
             .into_iter()
             .map(uuid_to_cbuuid)
             .collect::<Vec<_>>();
-        Id::into_raw(NSArray::from_vec(service_uuids)) as id
+        Some(NSArray::from_vec(service_uuids))
     }
 }
 
@@ -1175,7 +1207,7 @@ impl Drop for CoreBluetoothInternal {
 pub fn run_corebluetooth_thread(
     event_sender: Sender<CoreBluetoothEvent>,
 ) -> Result<Sender<CoreBluetoothMessage>, Error> {
-    let authorization = cb::manager_authorization();
+    let authorization = unsafe { CBManager::authorization_class() };
     if authorization != CBManagerAuthorization::AllowedAlways
         && authorization != CBManagerAuthorization::NotDetermined
     {

@@ -7,7 +7,7 @@
 
 pub mod adapter;
 mod central_delegate;
-mod framework;
+mod ffi;
 mod future;
 mod internal;
 pub mod manager;

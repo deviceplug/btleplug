@@ -46,8 +46,8 @@ once_cell = "1.19.0"
 jni-utils = "0.1.1"
 
 [target.'cfg(target_vendor = "apple")'.dependencies]
-objc2 = "0.5.1"
-objc2-foundation = { version = "0.2.0", features = [
+objc2 = "0.5.2"
+objc2-foundation = { version = "0.2.2", features = [
     "block2",
     "NSArray",
     "NSData",
@@ -58,6 +58,10 @@ objc2-foundation = { version = "0.2.0", features = [
     "NSString",
     "NSUUID",
     "NSValue",
+] }
+objc2-core-bluetooth = { version = "0.2.2", features = [
+    "CBPeripheral",
+    "CBCentralManager",
 ] }
 
 [target.'cfg(target_os = "windows")'.dependencies]

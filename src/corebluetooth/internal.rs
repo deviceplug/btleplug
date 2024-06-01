@@ -35,14 +35,14 @@ use std::{
 use tokio::runtime;
 use uuid::Uuid;
 
-struct CBDescriptor {
+struct DescriptorInternal {
     pub descriptor: StrongPtr,
     pub uuid: Uuid,
     pub read_future_state: VecDeque<CoreBluetoothReplyStateShared>,
     pub write_future_state: VecDeque<CoreBluetoothReplyStateShared>,
 }
 
-impl CBDescriptor {
+impl DescriptorInternal {
     pub fn new(descriptor: StrongPtr) -> Self {
         let uuid = cbuuid_to_uuid(cb::attribute_uuid(&*descriptor));
         Self {
@@ -54,11 +54,11 @@ impl CBDescriptor {
     }
 }
 
-struct CBCharacteristic {
+struct CharacteristicInternal {
     pub characteristic: StrongPtr,
     pub uuid: Uuid,
     pub properties: CharPropFlags,
-    pub descriptors: HashMap<Uuid, CBDescriptor>,
+    pub descriptors: HashMap<Uuid, DescriptorInternal>,
     pub read_future_state: VecDeque<CoreBluetoothReplyStateShared>,
     pub write_future_state: VecDeque<CoreBluetoothReplyStateShared>,
     pub subscribe_future_state: VecDeque<CoreBluetoothReplyStateShared>,
@@ -66,7 +66,7 @@ struct CBCharacteristic {
     pub discovered: bool,
 }
 
-impl Debug for CBCharacteristic {
+impl Debug for CharacteristicInternal {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         f.debug_struct("CBCharacteristic")
             .field("characteristic", self.characteristic.deref())
@@ -80,15 +80,15 @@ impl Debug for CBCharacteristic {
     }
 }
 
-impl CBCharacteristic {
+impl CharacteristicInternal {
     pub fn new(characteristic: StrongPtr) -> Self {
-        let properties = CBCharacteristic::form_flags(&*characteristic);
+        let properties = CharacteristicInternal::form_flags(&*characteristic);
         let uuid = cbuuid_to_uuid(cb::attribute_uuid(&*characteristic));
         let descriptors_arr = cb::characteristic_descriptors(&*characteristic);
         let mut descriptors = HashMap::new();
         if let Some(descriptors_arr) = descriptors_arr {
             for d in descriptors_arr {
-                let descriptor = CBDescriptor::new(d);
+                let descriptor = DescriptorInternal::new(d);
                 descriptors.insert(descriptor.uuid, descriptor);
             }
         }
@@ -144,7 +144,7 @@ pub enum CoreBluetoothReply {
 }
 
 #[derive(Debug)]
-pub enum CBPeripheralEvent {
+pub enum PeripheralEventInternal {
     Disconnected,
     Notification(Uuid, Vec<u8>),
     ManufacturerData(u16, Vec<u8>, i16),
@@ -157,19 +157,19 @@ pub type CoreBluetoothReplyFuture = BtlePlugFuture<CoreBluetoothReply>;
 
 struct ServiceInternal {
     cbservice: StrongPtr,
-    characteristics: HashMap<Uuid, CBCharacteristic>,
+    characteristics: HashMap<Uuid, CharacteristicInternal>,
     pub discovered: bool,
 }
 
-struct CBPeripheral {
+struct PeripheralInternal {
     pub peripheral: StrongPtr,
     services: HashMap<Uuid, ServiceInternal>,
-    pub event_sender: Sender<CBPeripheralEvent>,
+    pub event_sender: Sender<PeripheralEventInternal>,
     pub disconnected_future_state: Option<CoreBluetoothReplyStateShared>,
     pub connected_future_state: Option<CoreBluetoothReplyStateShared>,
 }
 
-impl Debug for CBPeripheral {
+impl Debug for PeripheralInternal {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         f.debug_struct("CBPeripheral")
             .field("peripheral", self.peripheral.deref())
@@ -187,8 +187,8 @@ impl Debug for CBPeripheral {
     }
 }
 
-impl CBPeripheral {
-    pub fn new(peripheral: StrongPtr, event_sender: Sender<CBPeripheralEvent>) -> Self {
+impl PeripheralInternal {
+    pub fn new(peripheral: StrongPtr, event_sender: Sender<PeripheralEventInternal>) -> Self {
         Self {
             peripheral,
             services: HashMap::new(),
@@ -206,7 +206,10 @@ impl CBPeripheral {
         let characteristics = characteristics
             .into_iter()
             .map(|(characteristic_uuid, characteristic)| {
-                (characteristic_uuid, CBCharacteristic::new(characteristic))
+                (
+                    characteristic_uuid,
+                    CharacteristicInternal::new(characteristic),
+                )
             })
             .collect();
         let service = self
@@ -228,7 +231,9 @@ impl CBPeripheral {
     ) {
         let descriptors = descriptors
             .into_iter()
-            .map(|(descriptor_uuid, descriptor)| (descriptor_uuid, CBDescriptor::new(descriptor)))
+            .map(|(descriptor_uuid, descriptor)| {
+                (descriptor_uuid, DescriptorInternal::new(descriptor))
+            })
             .collect();
         let service = self
             .services
@@ -319,7 +324,7 @@ struct CoreBluetoothInternal {
     manager: StrongPtr,
     delegate: Retained<CentralDelegate>,
     // Map of identifiers to object pointers
-    peripherals: HashMap<Uuid, CBPeripheral>,
+    peripherals: HashMap<Uuid, PeripheralInternal>,
     delegate_receiver: Fuse<Receiver<CentralDelegateEvent>>,
     // Out in the world beyond CoreBluetooth, we'll be async, so just
     // task::block this when sending even though it'll never actually block.
@@ -407,7 +412,7 @@ pub enum CoreBluetoothEvent {
     DeviceDiscovered {
         uuid: Uuid,
         name: Option<String>,
-        event_receiver: Receiver<CBPeripheralEvent>,
+        event_receiver: Receiver<PeripheralEventInternal>,
     },
     DeviceUpdated {
         uuid: Uuid,
@@ -460,7 +465,7 @@ impl CoreBluetoothInternal {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Err(e) = p
                 .event_sender
-                .send(CBPeripheralEvent::ManufacturerData(
+                .send(PeripheralEventInternal::ManufacturerData(
                     manufacturer_id,
                     manufacturer_data,
                     rssi,
@@ -482,7 +487,7 @@ impl CoreBluetoothInternal {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Err(e) = p
                 .event_sender
-                .send(CBPeripheralEvent::ServiceData(service_data, rssi))
+                .send(PeripheralEventInternal::ServiceData(service_data, rssi))
                 .await
             {
                 error!("Error sending notification event: {}", e);
@@ -495,7 +500,7 @@ impl CoreBluetoothInternal {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             if let Err(e) = p
                 .event_sender
-                .send(CBPeripheralEvent::Services(services, rssi))
+                .send(PeripheralEventInternal::Services(services, rssi))
                 .await
             {
                 error!("Error sending notification event: {}", e);
@@ -518,7 +523,7 @@ impl CoreBluetoothInternal {
             // Create our channels
             let (event_sender, event_receiver) = mpsc::channel(256);
             self.peripherals
-                .insert(uuid, CBPeripheral::new(peripheral, event_sender));
+                .insert(uuid, PeripheralInternal::new(peripheral, event_sender));
             self.dispatch_event(CoreBluetoothEvent::DeviceDiscovered {
                 uuid,
                 name: name.map(|name| name.to_string()),
@@ -630,7 +635,7 @@ impl CoreBluetoothInternal {
                 .get_mut(&peripheral_uuid)
                 .expect("If we're here we should have an ID")
                 .event_sender
-                .send(CBPeripheralEvent::Disconnected)
+                .send(PeripheralEventInternal::Disconnected)
                 .await
             {
                 error!("Error sending notification event: {}", e);
@@ -655,7 +660,7 @@ impl CoreBluetoothInternal {
         peripheral_uuid: Uuid,
         service_uuid: Uuid,
         characteristic_uuid: Uuid,
-    ) -> Option<&mut CBCharacteristic> {
+    ) -> Option<&mut CharacteristicInternal> {
         self.peripherals
             .get_mut(&peripheral_uuid)?
             .services
@@ -671,7 +676,7 @@ impl CoreBluetoothInternal {
         service_uuid: Uuid,
         characteristic_uuid: Uuid,
         descriptor_uuid: Uuid,
-    ) -> Option<&mut CBDescriptor> {
+    ) -> Option<&mut DescriptorInternal> {
         self.get_characteristic(peripheral_uuid, service_uuid, characteristic_uuid)?
             .descriptors
             .get_mut(&descriptor_uuid)
@@ -736,7 +741,10 @@ impl CoreBluetoothInternal {
                             .set_reply(CoreBluetoothReply::ReadResult(data_clone));
                     } else if let Err(e) = peripheral
                         .event_sender
-                        .send(CBPeripheralEvent::Notification(characteristic_uuid, data))
+                        .send(PeripheralEventInternal::Notification(
+                            characteristic_uuid,
+                            data,
+                        ))
                         .await
                     {
                         error!("Error sending notification event: {}", e);

@@ -60,8 +60,17 @@ objc2-foundation = { version = "0.2.2", features = [
     "NSValue",
 ] }
 objc2-core-bluetooth = { version = "0.2.2", features = [
-    "CBPeripheral",
+    "CBAdvertisementData",
+    "CBAttribute",
     "CBCentralManager",
+    "CBCentralManagerConstants",
+    "CBCharacteristic",
+    "CBDescriptor",
+    "CBManager",
+    "CBPeer",
+    "CBPeripheral",
+    "CBService",
+    "CBUUID",
 ] }
 
 [target.'cfg(target_os = "windows")'.dependencies]

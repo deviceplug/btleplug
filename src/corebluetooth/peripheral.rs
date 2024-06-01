@@ -5,11 +5,8 @@
 // Licensed under the BSD 3-Clause license. See LICENSE file in the project root
 // for full license information.
 
-use super::{
-    framework::cb::CBPeripheralState,
-    internal::{
-        CoreBluetoothMessage, CoreBluetoothReply, CoreBluetoothReplyFuture, PeripheralEventInternal,
-    },
+use super::internal::{
+    CoreBluetoothMessage, CoreBluetoothReply, CoreBluetoothReplyFuture, PeripheralEventInternal,
 };
 use crate::{
     api::{
@@ -24,6 +21,7 @@ use futures::channel::mpsc::{Receiver, SendError, Sender};
 use futures::sink::SinkExt;
 use futures::stream::{Stream, StreamExt};
 use log::*;
+use objc2_core_bluetooth::CBPeripheralState;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]

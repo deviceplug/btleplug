@@ -529,9 +529,24 @@ impl CoreBluetoothInternal {
         }
     }
 
-    async fn on_discovered_peripheral(&mut self, peripheral: Retained<CBPeripheral>) {
+    async fn on_discovered_peripheral(
+        &mut self,
+        peripheral: Retained<CBPeripheral>,
+        local_name: Option<String>,
+    ) {
         let uuid = nsuuid_to_uuid(unsafe { &peripheral.identifier() });
-        let name = unsafe { peripheral.name() };
+        let peripheral_name = unsafe { peripheral.name() };
+
+        let name = match (peripheral_name.map(|n| n.to_string()), local_name) {
+            (Some(p_name), Some(l_name)) if p_name != l_name => {
+                Some(format!("{p_name} [{l_name}]"))
+            }
+            (Some(p_name), Some(_)) => Some(p_name),
+            (Some(p_name), None) => Some(p_name),
+            (None, Some(l_name)) => Some(l_name),
+            (None, None) => None,
+        };
+
         if self.peripherals.contains_key(&uuid) {
             if let Some(name) = name {
                 self.dispatch_event(CoreBluetoothEvent::DeviceUpdated {
@@ -1045,8 +1060,8 @@ impl CoreBluetoothInternal {
                     CentralDelegateEvent::DidUpdateState => {
                         self.dispatch_event(CoreBluetoothEvent::AdapterConnected).await
                     }
-                    CentralDelegateEvent::DiscoveredPeripheral{cbperipheral} => {
-                        self.on_discovered_peripheral(cbperipheral).await
+                    CentralDelegateEvent::DiscoveredPeripheral{cbperipheral, local_name} => {
+                        self.on_discovered_peripheral(cbperipheral, local_name).await
                     }
                     CentralDelegateEvent::DiscoveredServices{peripheral_uuid, services} => {
                         self.on_discovered_services(peripheral_uuid, services)

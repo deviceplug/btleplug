@@ -16,6 +16,7 @@
 // This file may not be copied, modified, or distributed except
 // according to those terms.
 
+use super::utils::nsstring_to_string;
 use super::utils::{core_bluetooth::cbuuid_to_uuid, nsuuid_to_uuid};
 use futures::channel::mpsc::Sender;
 use futures::sink::SinkExt;
@@ -23,9 +24,10 @@ use log::{error, trace};
 use objc2::runtime::{AnyObject, ProtocolObject};
 use objc2::{declare_class, msg_send_id, mutability, rc::Retained, ClassType, DeclaredClass};
 use objc2_core_bluetooth::{
-    CBAdvertisementDataManufacturerDataKey, CBAdvertisementDataServiceDataKey,
-    CBAdvertisementDataServiceUUIDsKey, CBCentralManager, CBCentralManagerDelegate,
-    CBCharacteristic, CBDescriptor, CBPeripheral, CBPeripheralDelegate, CBService, CBUUID,
+    CBAdvertisementDataLocalNameKey, CBAdvertisementDataManufacturerDataKey,
+    CBAdvertisementDataServiceDataKey, CBAdvertisementDataServiceUUIDsKey, CBCentralManager,
+    CBCentralManagerDelegate, CBCharacteristic, CBDescriptor, CBPeripheral, CBPeripheralDelegate,
+    CBService, CBUUID,
 };
 use objc2_foundation::{
     NSArray, NSData, NSDictionary, NSError, NSNumber, NSObject, NSObjectProtocol, NSString,
@@ -42,6 +44,7 @@ pub enum CentralDelegateEvent {
     DidUpdateState,
     DiscoveredPeripheral {
         cbperipheral: Retained<CBPeripheral>,
+        local_name: Option<String>,
     },
     DiscoveredServices {
         peripheral_uuid: Uuid,
@@ -126,9 +129,13 @@ impl Debug for CentralDelegateEvent {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             CentralDelegateEvent::DidUpdateState => f.debug_tuple("DidUpdateState").finish(),
-            CentralDelegateEvent::DiscoveredPeripheral { cbperipheral } => f
+            CentralDelegateEvent::DiscoveredPeripheral {
+                cbperipheral,
+                local_name,
+            } => f
                 .debug_struct("CentralDelegateEvent")
                 .field("cbperipheral", cbperipheral.deref())
+                .field("local_name", local_name)
                 .finish(),
             CentralDelegateEvent::DiscoveredServices {
                 peripheral_uuid,
@@ -371,8 +378,14 @@ declare_class!(
                 peripheral_debug(peripheral)
             );
 
+            let local_name = adv_data
+                .get(unsafe { CBAdvertisementDataLocalNameKey })
+                .map(|name| (name as *const AnyObject as *const NSString))
+                .and_then(|name| unsafe { nsstring_to_string(name) });
+
             self.send_event(CentralDelegateEvent::DiscoveredPeripheral {
                 cbperipheral: peripheral.retain(),
+                local_name,
             });
 
             let rssi_value = rssi.as_i16();

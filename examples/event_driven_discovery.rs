@@ -1,7 +1,9 @@
 // See the "macOS permissions note" in README.md before running this on macOS
 // Big Sur or later.
 
-use btleplug::api::{bleuuid::BleUuid, Central, CentralEvent, Manager as _, ScanFilter};
+use btleplug::api::{
+    bleuuid::BleUuid, Central, CentralEvent, Manager as _, Peripheral, ScanFilter,
+};
 use btleplug::platform::{Adapter, Manager};
 use futures::stream::StreamExt;
 use std::error::Error;
@@ -35,7 +37,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     while let Some(event) = events.next().await {
         match event {
             CentralEvent::DeviceDiscovered(id) => {
-                println!("DeviceDiscovered: {:?}", id);
+                let peripheral = central.peripheral(&id).await?;
+                let properties = peripheral.properties().await?;
+                let name = properties
+                    .and_then(|p| p.local_name)
+                    .map(|local_name| format!("Name: {local_name}"))
+                    .unwrap_or_default();
+                println!("DeviceDiscovered: {:?} {}", id, name);
             }
             CentralEvent::DeviceConnected(id) => {
                 println!("DeviceConnected: {:?}", id);

@@ -752,12 +752,32 @@ fn get_characteristic_value(characteristic: &CBCharacteristic) -> Vec<u8> {
 fn get_descriptor_value(descriptor: &CBDescriptor) -> Vec<u8> {
     trace!("Getting data!");
     let v = unsafe { descriptor.value() }.map(|value| unsafe {
-        match descriptor.UUID().UUIDString().to_string().as_str() {
-            "2901" => {
+        let mut clazz = value.class();
+        // Find the root class until we reach NSObject
+        while let Some(superclass) = clazz.superclass() {
+            if superclass == NSObject::class() {
+                break;
+            }
+            clazz = superclass;
+        }
+
+        match clazz.name() {
+            "NSString" => {
                 let d: Retained<NSString> = Retained::cast(value);
                 d.to_string().into_bytes()
             }
-            _ => vec![],
+            "NSData" => {
+                let d: Retained<NSData> = Retained::cast(value);
+                d.bytes().into()
+            }
+            "NSNumber" => {
+                let d: Retained<NSNumber> = Retained::cast(value);
+                d.stringValue().to_string().into_bytes()
+            }
+            _ => {
+                error!("Unknown descriptor value class: {:?}", clazz);
+                Vec::new()
+            }
         }
     });
     trace!("BluetoothGATTDescriptor::get_value -> {:?}", v);

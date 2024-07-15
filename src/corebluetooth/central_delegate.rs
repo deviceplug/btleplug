@@ -599,7 +599,7 @@ declare_class!(
             }
         }
 
-        #[method(peripheral:didUpdateNotificationStateForCharacteristic:error:)]
+        #[method(peripheral:didWriteValueForCharacteristic:error:)]
         fn delegate_peripheral_didwritevalueforcharacteristic_error(
             &self,
             peripheral: &CBPeripheral,
@@ -622,7 +622,7 @@ declare_class!(
             }
         }
 
-        #[method(peripheral:didWriteValueForCharacteristic:error:)]
+        #[method(peripheral:didUpdateNotificationStateForCharacteristic:error:)]
         fn delegate_peripheral_didupdatenotificationstateforcharacteristic_error(
             &self,
             peripheral: &CBPeripheral,

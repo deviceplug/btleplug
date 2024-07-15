@@ -685,7 +685,7 @@ declare_class!(
                     service_uuid: cbuuid_to_uuid(unsafe { &service.UUID() }),
                     characteristic_uuid: cbuuid_to_uuid(unsafe { &characteristic.UUID() }),
                     descriptor_uuid: cbuuid_to_uuid(unsafe { &descriptor.UUID() }),
-                    data: get_characteristic_value(&characteristic),
+                    data: get_descriptor_value(&descriptor),
                 });
                 // Notify BluetoothGATTCharacteristic::read_value that read was successful.
             }
@@ -746,6 +746,21 @@ fn get_characteristic_value(characteristic: &CBCharacteristic) -> Vec<u8> {
     trace!("Getting data!");
     let v = unsafe { characteristic.value() }.map(|value| value.bytes().into());
     trace!("BluetoothGATTCharacteristic::get_value -> {:?}", v);
+    v.unwrap_or_default()
+}
+
+fn get_descriptor_value(descriptor: &CBDescriptor) -> Vec<u8> {
+    trace!("Getting data!");
+    let v = unsafe { descriptor.value() }.map(|value| unsafe {
+        match descriptor.UUID().UUIDString().to_string().as_str() {
+            "2901" => {
+                let d: Retained<NSString> = Retained::cast(value);
+                d.to_string().into_bytes()
+            }
+            _ => vec![],
+        }
+    });
+    trace!("BluetoothGATTDescriptor::get_value -> {:?}", v);
     v.unwrap_or_default()
 }
 

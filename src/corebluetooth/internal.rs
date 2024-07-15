@@ -1009,15 +1009,14 @@ impl CoreBluetoothInternal {
             if let Some(service) = peripheral.services.get_mut(&service_uuid) {
                 if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
                 {
-                    if let Some(_descriptor) = characteristic.descriptors.get_mut(&descriptor_uuid)
-                    {
+                    if let Some(descriptor) = characteristic.descriptors.get_mut(&descriptor_uuid) {
                         trace!("Got read event!");
 
                         let mut data_clone = Vec::new();
                         for byte in data.iter() {
                             data_clone.push(*byte);
                         }
-                        let state = characteristic.read_future_state.pop_back().unwrap();
+                        let state = descriptor.read_future_state.pop_back().unwrap();
                         state
                             .lock()
                             .unwrap()

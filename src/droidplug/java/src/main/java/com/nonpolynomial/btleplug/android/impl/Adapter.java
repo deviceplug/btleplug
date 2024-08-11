@@ -2,6 +2,8 @@ package com.nonpolynomial.btleplug.android.impl;
 
 import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothManager;
+import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter.Builder;
 import android.bluetooth.le.ScanResult;
@@ -20,6 +22,11 @@ class Adapter {
 
     @SuppressLint("MissingPermission")
     public void startScan(ScanFilter filter) {
+        BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        if (bluetoothAdapter == null) {
+          throw new RuntimeException("No bluetooth adapter available.");
+        }
+
         ArrayList<android.bluetooth.le.ScanFilter> filters = null;
         String[] uuids = filter.getUuids();
         if (uuids.length > 0) {
@@ -31,12 +38,16 @@ class Adapter {
         ScanSettings settings = new ScanSettings.Builder()
                 .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
                 .build();
-        BluetoothAdapter.getDefaultAdapter().getBluetoothLeScanner().startScan(filters, settings, this.callback);
+        BluetoothLeScanner scanner = bluetoothAdapter.getBluetoothLeScanner();
+        if (scanner == null) {
+          throw new RuntimeException("No bluetooth scanner available for adapter");
+        }
+        scanner.startScan(filters, settings, this.callback);
     }
 
     @SuppressLint("MissingPermission")
     public void stopScan() {
-        BluetoothAdapter.getDefaultAdapter().getBluetoothLeScanner().stopScan(this.callback);
+        BluetoothAdapter.getAdapter().getBluetoothLeScanner().stopScan(this.callback);
     }
 
     private native void reportScanResult(ScanResult result);

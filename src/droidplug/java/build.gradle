@@ -21,7 +21,7 @@ repositories {
 }
 
 android {
-    compileSdkVersion 32
+    compileSdkVersion 34
 
     defaultConfig {
         minSdkVersion 23
@@ -36,6 +36,6 @@ android {
 }
 
 dependencies {
-    implementation 'io.github.gedgygedgy.rust:jni-utils:0.1.1-SNAPSHOT'
-    //implementation files('c:/Users/qdot/code/jni-utils-rs/java/build/libs/jni-utils-0.1.1-SNAPSHOT.jar')
+    //implementation 'io.github.gedgygedgy.rust:jni-utils:0.1.1-SNAPSHOT'
+    implementation files('c:/Users/qdot/code/jni-utils-rs/java/build/libs/jni-utils-0.1.1-SNAPSHOT.jar')
 }

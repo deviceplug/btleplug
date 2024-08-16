@@ -96,6 +96,11 @@ impl Central for Adapter {
         ))
     }
 
+    async fn clear_peripherals(&self) -> Result<()> {
+        self.manager.clear_peripherals();
+        Ok(())
+    }
+
     async fn adapter_info(&self) -> Result<String> {
         // TODO: Get information about the adapter.
         Ok("WinRT".to_string())

@@ -101,6 +101,12 @@ impl Central for Adapter {
         ))
     }
 
+    async fn clear_peripherals(&self) -> Result<()> {
+        Err(Error::NotSupported(
+            "Can't clear peripheral list on this platform".to_string(),
+        ))
+    }
+
     async fn adapter_info(&self) -> Result<String> {
         let adapter_info = self.session.get_adapter_info(&self.adapter).await?;
         Ok(format!("{} ({})", adapter_info.id, adapter_info.modalias))

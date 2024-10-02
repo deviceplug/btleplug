@@ -47,7 +47,13 @@ class Adapter {
 
     @SuppressLint("MissingPermission")
     public void stopScan() {
-        BluetoothAdapter.getAdapter().getBluetoothLeScanner().stopScan(this.callback);
+        BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        if (bluetoothAdapter != null) {
+            BluetoothLeScanner scanner = bluetoothAdapter.getBluetoothLeScanner();
+            if (scanner != null) {
+                scanner.stopScan(this.callback);
+            }
+        }
     }
 
     private native void reportScanResult(ScanResult result);

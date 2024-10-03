@@ -14,11 +14,29 @@ jobs:
   build:
     strategy:
       matrix:
-        os:
-          - macOS-latest
-          - ubuntu-latest
-          - windows-latest
+        target:
+          - macos
+          - linux
+          - windows
+          - android
+        include:
+          - target: macos
+            os: macOS-latest
+            cbt: aarch64-apple-darwin
+          - target: linux
+            os: ubuntu-latest
+            cbt: x86_64-unknown-linux-gnu
+          - target: windows
+            os: windows-latest
+            cbt: x86_64-pc-windows-msvc
+          - target: android
+            os: ubuntu-latest
+            cbt: aarch64-linux-android
+
     runs-on: ${{ matrix.os }}
+
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.cbt }}
 
     steps:
       - uses: actions/checkout@v2
@@ -27,6 +45,26 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install libdbus-1-dev
+      - uses: actions/setup-java@v2
+        if: ${{ matrix.target == 'android' }}
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+      - name: Setup NDK
+        if: ${{ matrix.target == 'android' }}
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r25b
+          local-cache: true
+      - name: rust toolchain
+        if: ${{ matrix.target == 'android' }}
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          target: aarch64-linux-android
+          toolchain: stable
+          override: true
       - name: Check
         run: cargo check --all --bins --examples
       - name: Check without default features
@@ -34,6 +72,7 @@ jobs:
       - name: Check with all features
         run: cargo check --all --bins --examples --all-features
       - name: Run tests
+        if: ${{ matrix.target != 'android' }}
         run: cargo test --all
       - name: Run clippy
         uses: actions-rs/clippy-check@v1

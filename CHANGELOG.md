@@ -1,3 +1,23 @@
+# 0.11.6 (2024-10-06)
+
+## Features
+
+- Move from objc to objc2
+  - Now using an actually updated/maintained coreAPI library! Thanks madsmtm!
+- Implement CentralState for mac/linux/windows to tell when bluetooth is on/off
+  - Thanks szymonlesisz!
+  - Still needs Android impl.
+
+## Bugfixes
+
+- Make local_name on CoreBluetooth match that of Windows/Linux returns when possible.
+  - Thanks yuyoyuppe!
+- Fix descriptor reading on CoreBluetooth
+  - Thanks kovapatrik!
+- Fix one of the many, many NullPointerException issues in droidplug
+  - Thanks blackspherefollower!
+  - There are so many more though, esp when we don't have correct permissions on Android.
+
 # 0.11.5 (2024-01-10)
 
 ## Bugfixes

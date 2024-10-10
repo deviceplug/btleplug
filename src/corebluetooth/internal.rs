@@ -217,15 +217,20 @@ impl PeripheralInternal {
         service_uuid: Uuid,
         characteristics: HashMap<Uuid, Retained<CBCharacteristic>>,
     ) {
-        let characteristics = characteristics
-            .into_iter()
-            .map(|(characteristic_uuid, characteristic)| {
-                (
-                    characteristic_uuid,
-                    CharacteristicInternal::new(characteristic),
-                )
-            })
-            .collect();
+        let characteristics = characteristics.into_iter().fold(
+            // Only consider the first characteristic of each UUID
+            // This "should" be unique, but of course it's not enforced
+            HashMap::<Uuid, CharacteristicInternal>::new(),
+            |mut map, (characteristic_uuid, characteristic)| {
+                if !map.contains_key(&characteristic_uuid) {
+                    map.insert(
+                        characteristic_uuid,
+                        CharacteristicInternal::new(characteristic),
+                    );
+                }
+                map
+            },
+        );
         let service = self
             .services
             .get_mut(&service_uuid)

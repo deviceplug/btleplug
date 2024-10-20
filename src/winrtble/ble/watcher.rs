@@ -51,7 +51,7 @@ impl BLEWatcher {
         self.watcher
             .SetScanningMode(BluetoothLEScanningMode::Active)
             .unwrap();
-        self.watcher.SetAllowExtendedAdvertisements(true)?;
+        let _ = self.watcher.SetAllowExtendedAdvertisements(true);
         let handler: TypedEventHandler<
             BluetoothLEAdvertisementWatcher,
             BluetoothLEAdvertisementReceivedEventArgs,

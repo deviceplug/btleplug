@@ -8,6 +8,7 @@ import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter.Builder;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
+import android.os.Build;
 import android.os.ParcelUuid;
 
 import java.util.ArrayList;
@@ -35,9 +36,17 @@ class Adapter {
                 filters.add(new Builder().setServiceUuid(ParcelUuid.fromString(uuid)).build());
             }
         }
-        ScanSettings settings = new ScanSettings.Builder()
-                .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
-                .build();
+        ScanSettings settings;
+        if (Build.VERSION.SDK_INT >= 26) {
+            settings = new ScanSettings.Builder()
+                    .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+                    .setLegacy(false)
+                    .build();
+        } else {
+            settings = new ScanSettings.Builder()
+                    .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+                    .build();
+        }
         BluetoothLeScanner scanner = bluetoothAdapter.getBluetoothLeScanner();
         if (scanner == null) {
           throw new RuntimeException("No bluetooth scanner available for adapter");

@@ -66,6 +66,7 @@ impl BLEDevice {
             .ConnectionStatusChanged(&connection_status_handler)
             .map_err(|_| Error::Other("Could not add connection status handler".into()))?;
 
+        max_pdu_size_changed(gatt_session.MaxPduSize().unwrap());
         let max_pdu_size_changed_handler =
             TypedEventHandler::new(move |sender: &Option<GattSession>, _| {
                 if let Some(sender) = sender {

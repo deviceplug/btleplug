@@ -37,7 +37,7 @@ class Peripheral {
     private CommandCallback commandCallback;
 
     public Peripheral(Adapter adapter, String address) {
-        this.device = BluetoothAdapter.getAdapter().getRemoteDevice(address);
+        this.device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
         this.adapter = adapter;
         this.callback = new Callback();
     }

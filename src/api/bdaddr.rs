@@ -197,6 +197,7 @@ impl BDAddr {
 /// Different de-/serialization formats for [`BDAddr`].
 #[cfg(feature = "serde")]
 pub mod serde {
+    use std::borrow::Cow;
     use std::fmt::{self, Write as _};
 
     use serde::{
@@ -266,11 +267,11 @@ pub mod serde {
             D: Deserializer<'de>,
         {
             let buf = d.deserialize_str(ColonDelimVisitor)?;
-            BDAddr::from_str_delim(buf).map_err(D::Error::custom)
+            BDAddr::from_str_delim(&buf).map_err(D::Error::custom)
         }
 
         impl<'de> Visitor<'de> for ColonDelimVisitor {
-            type Value = &'de str;
+            type Value = Cow<'de, str>;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 write!(
@@ -279,11 +280,25 @@ pub mod serde {
                 )
             }
 
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                Ok(v.to_string().into())
+            }
+
             fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
             where
                 E: DeError,
             {
-                Ok(v)
+                Ok(v.into())
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                Ok(v.into())
             }
         }
     }
@@ -329,11 +344,11 @@ pub mod serde {
             D: Deserializer<'de>,
         {
             let buf = d.deserialize_str(NoDelimVisitor)?;
-            BDAddr::from_str_no_delim(buf).map_err(D::Error::custom)
+            BDAddr::from_str_no_delim(&buf).map_err(D::Error::custom)
         }
 
         impl<'de> Visitor<'de> for NoDelimVisitor {
-            type Value = &'de str;
+            type Value = Cow<'de, str>;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 write!(
@@ -342,11 +357,25 @@ pub mod serde {
                 )
             }
 
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                Ok(v.to_string().into())
+            }
+
             fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
             where
                 E: DeError,
             {
-                Ok(v)
+                Ok(v.into())
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                Ok(v.into())
             }
         }
     }

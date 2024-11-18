@@ -327,6 +327,32 @@ impl PeripheralInternal {
         if let Some(future) = self.disconnected_future_state.take() {
             future.lock().unwrap().set_reply(CoreBluetoothReply::Ok)
         }
+
+        // Fulfill all pending futures
+        let error = CoreBluetoothReply::Err(String::from("Device disconnected"));
+        self.services.iter().for_each(|(_, service)| {
+            service
+                .characteristics
+                .iter()
+                .for_each(|(_, characteristic)| {
+                    let CharacteristicInternal {
+                        read_future_state,
+                        write_future_state,
+                        subscribe_future_state,
+                        unsubscribe_future_state,
+                        ..
+                    } = characteristic;
+
+                    let futures = read_future_state
+                        .into_iter()
+                        .chain(write_future_state.into_iter())
+                        .chain(subscribe_future_state.into_iter())
+                        .chain(unsubscribe_future_state.into_iter());
+                    for state in futures {
+                        state.lock().unwrap().set_reply(error.clone());
+                    }
+                });
+        });
     }
 }
 
@@ -734,8 +760,9 @@ impl CoreBluetoothInternal {
             self.get_characteristic(peripheral_uuid, service_uuid, characteristic_uuid)
         {
             trace!("Got subscribed event!");
-            let state = characteristic.subscribe_future_state.pop_back().unwrap();
-            state.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
+            if let Some(state) = characteristic.subscribe_future_state.pop_back() {
+                state.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
+            }
         }
     }
 
@@ -749,8 +776,9 @@ impl CoreBluetoothInternal {
             self.get_characteristic(peripheral_uuid, service_uuid, characteristic_uuid)
         {
             trace!("Got unsubscribed event!");
-            let state = characteristic.unsubscribe_future_state.pop_back().unwrap();
-            state.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
+            if let Some(state) = characteristic.unsubscribe_future_state.pop_back() {
+                state.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
+            }
         }
     }
 

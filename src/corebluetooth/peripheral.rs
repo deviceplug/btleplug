@@ -314,6 +314,7 @@ impl api::Peripheral for Peripheral {
             .await?;
         match fut.await {
             CoreBluetoothReply::Ok => {}
+            CoreBluetoothReply::Err(msg) => return Err(Error::RuntimeError(msg)),
             reply => panic!("Unexpected reply: {:?}", reply),
         }
         Ok(())
@@ -333,6 +334,7 @@ impl api::Peripheral for Peripheral {
             .await?;
         match fut.await {
             CoreBluetoothReply::ReadResult(chars) => Ok(chars),
+            CoreBluetoothReply::Err(msg) => return Err(Error::RuntimeError(msg)),
             _ => {
                 panic!("Shouldn't get anything but read result!");
             }
@@ -353,6 +355,7 @@ impl api::Peripheral for Peripheral {
             .await?;
         match fut.await {
             CoreBluetoothReply::Ok => trace!("subscribed!"),
+            CoreBluetoothReply::Err(msg) => return Err(Error::RuntimeError(msg)),
             _ => panic!("Didn't subscribe!"),
         }
         Ok(())
@@ -372,6 +375,7 @@ impl api::Peripheral for Peripheral {
             .await?;
         match fut.await {
             CoreBluetoothReply::Ok => {}
+            CoreBluetoothReply::Err(msg) => return Err(Error::RuntimeError(msg)),
             _ => panic!("Didn't unsubscribe!"),
         }
         Ok(())

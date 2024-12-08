@@ -20,6 +20,7 @@ path = "src/lib.rs"
 
 [features]
 serde = ["uuid/serde", "serde_cr", "serde_bytes"]
+dbus-vendored = ["dbus/vendored"]
 
 [dependencies]
 async-trait = "0.1.83"

@@ -148,7 +148,7 @@ impl BLEDevice {
 
     pub async fn discover_services(&mut self) -> Result<&[GattDeviceService]> {
         let winrt_error = |e| Error::Other(format!("{:?}", e).into());
-        let service_result = self.get_gatt_services(BluetoothCacheMode::Cached).await?;
+        let service_result = self.get_gatt_services(BluetoothCacheMode::Uncached).await?;
         let status = service_result.Status().map_err(winrt_error)?;
         if status == GattCommunicationStatus::Success {
             // We need to convert the IVectorView to a Vec, because IVectorView is not Send and so

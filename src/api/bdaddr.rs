@@ -197,7 +197,6 @@ impl BDAddr {
 /// Different de-/serialization formats for [`BDAddr`].
 #[cfg(feature = "serde")]
 pub mod serde {
-    use std::borrow::Cow;
     use std::fmt::{self, Write as _};
 
     use serde::{

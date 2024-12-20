@@ -138,6 +138,17 @@ impl api::Peripheral for Peripheral {
         self.mac_address
     }
 
+    fn mtu(&self) -> u16 {
+        let services = self.services.lock().unwrap();
+        for (_, service) in services.iter() {
+            for (_, characteristic) in service.characteristics.iter() {
+                return characteristic.info.mtu.unwrap();
+            }
+        }
+        
+        api::DEFAULT_MTU_SIZE
+    }
+
     async fn properties(&self) -> Result<Option<PeripheralProperties>> {
         let device_info = self.device_info().await?;
         Ok(Some(PeripheralProperties {

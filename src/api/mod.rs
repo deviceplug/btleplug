@@ -43,6 +43,9 @@ pub use self::bdaddr::{BDAddr, ParseBDAddrError};
 
 use crate::platform::PeripheralId;
 
+/// The default MTU size for a peripheral.
+pub const DEFAULT_MTU_SIZE: u16 = 23;
+
 #[cfg_attr(
     feature = "serde",
     derive(Serialize, Deserialize),

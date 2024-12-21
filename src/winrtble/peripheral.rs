@@ -37,7 +37,7 @@ use std::{
     convert::TryInto,
     fmt::{self, Debug, Display, Formatter},
     pin::Pin,
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, AtomicU16, Ordering},
     sync::{Arc, RwLock},
 };
 use tokio::sync::broadcast;
@@ -72,6 +72,7 @@ struct Shared {
     device: tokio::sync::Mutex<Option<BLEDevice>>,
     adapter: Weak<AdapterManager<Peripheral>>,
     address: BDAddr,
+    mtu: AtomicU16,
     connected: AtomicBool,
     ble_services: DashMap<Uuid, BLEService>,
     notifications_channel: broadcast::Sender<ValueNotification>,
@@ -95,6 +96,7 @@ impl Peripheral {
                 adapter,
                 device: tokio::sync::Mutex::new(None),
                 address,
+                mtu: AtomicU16::new(api::DEFAULT_MTU_SIZE),
                 connected: AtomicBool::new(false),
                 ble_services: DashMap::new(),
                 notifications_channel: broadcast_sender,
@@ -343,6 +345,11 @@ impl ApiPeripheral for Peripheral {
         self.shared.address
     }
 
+    /// Returns the currently negotiated mtu size
+    fn mtu(&self) -> u16 {
+        self.shared.mtu.load(Ordering::Relaxed)
+    }
+
     /// Returns the set of properties associated with the peripheral. These may be updated over time
     /// as additional advertising reports are received.
     async fn properties(&self) -> Result<Option<PeripheralProperties>> {
@@ -366,12 +373,12 @@ impl ApiPeripheral for Peripheral {
     /// Ok there has been successful connection. Note that peripherals allow only one connection at
     /// a time. Operations that attempt to communicate with a device will fail until it is connected.
     async fn connect(&self) -> Result<()> {
-        let shared_clone = Arc::downgrade(&self.shared);
         let adapter_clone = self.shared.adapter.clone();
         let address = self.shared.address;
-        let device = BLEDevice::new(
-            self.shared.address,
-            Box::new(move |is_connected| {
+
+        let connection_status_changed = Box::new({
+            let shared_clone = Arc::downgrade(&self.shared);
+            move |is_connected| {
                 if let Some(shared) = shared_clone.upgrade() {
                     shared.connected.store(is_connected, Ordering::Relaxed);
                 }
@@ -381,7 +388,22 @@ impl ApiPeripheral for Peripheral {
                         adapter.emit(CentralEvent::DeviceDisconnected(address.into()));
                     }
                 }
-            }),
+            }
+        });
+
+        let max_pdu_size_changed = Box::new({
+            let shared_clone = Arc::downgrade(&self.shared);
+            move |mtu| {
+                if let Some(shared) = shared_clone.upgrade() {
+                    shared.mtu.store(mtu, Ordering::Relaxed);
+                }
+            }
+        });
+
+        let device = BLEDevice::new(
+            self.shared.address,
+            connection_status_changed,
+            max_pdu_size_changed,
         )
         .await?;
 

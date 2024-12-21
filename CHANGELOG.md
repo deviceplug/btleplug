@@ -1,3 +1,22 @@
+# 0.11.7 (2024-12-21)
+
+## Features
+
+- Deserialize BDAddr from non-borrowed strings
+  - Thanks icewind1991, ekuinox!
+- Add support for Extended Advertising on Android
+  - Thanks Jakouf!
+
+## Bugfixes
+
+- Call GetDefaultAdapter() instead of GetAdapter() on Android
+- Use BluetoothCacheMode::Uncached for services fetching on windows
+  - This *may* cause issues with connection times, we'll see how it works out
+- Characteristics with duplicate UUIDs (but differing handles) no longer overwrite each other
+  - Thanks blackspherefollower!
+- CoreBluetooth now fulfills all open characteristic futures on disconnect
+  - Thanks szymonlesisz!
+
 # 0.11.6 (2024-10-06)
 
 ## Features

@@ -64,6 +64,8 @@ support.
 | Get Characteristic Notification Event | X       | X           | X     | X       |
 | Read Descriptor                       | X       | X           | X     | X       |
 | Write Descriptor                      | X       | X           | X     | X       |
+| Retrieve MTU                          |         |             |       |         |
+| Retrieve Connection Interval          |         |             |       |         |
 
 ## Library Features
 
@@ -165,8 +167,8 @@ While we don't specifically support Flutter in this repo yet, there's a template
 
 Everyone has different bluetooth needs, so if btleplug doesn't fit yours, try these other libraries by the rust community!
 
-- [Bluey](https://github.com/rib/bluey) - Cross Platform BLE library that takes a different API
-  approach (less Bluez centric)
+- [Bluest](https://github.com/alexmoon/bluest) - Cross Platform BLE library (Windows/macOS/iOS/Linux)
+- [Bluey](https://github.com/rib/bluey) - Cross Platform BLE library (Windows/Android)
 - [Bluer](https://crates.io/crates/bluer) - Official Rust interface for Bluez on Linux, with more
   features since it only supports one platform (we use
   [Bluez-async](https://crates.io/crates/bluez-async) internally.)

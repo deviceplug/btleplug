@@ -6,7 +6,6 @@ use btleplug::api::{
 };
 use btleplug::platform::{Adapter, Manager};
 use futures::stream::StreamExt;
-use std::error::Error;
 
 async fn get_central(manager: &Manager) -> Adapter {
     let adapters = manager.adapters().await.unwrap();
@@ -14,7 +13,7 @@ async fn get_central(manager: &Manager) -> Adapter {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> anyhow::Result<()> {
     pretty_env_logger::init();
 
     let manager = Manager::new().await?;

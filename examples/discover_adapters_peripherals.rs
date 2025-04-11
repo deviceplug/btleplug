@@ -1,7 +1,6 @@
 // See the "macOS permissions note" in README.md before running this on macOS
 // Big Sur or later.
 
-use std::error::Error;
 use std::time::Duration;
 use tokio::time;
 
@@ -9,7 +8,7 @@ use btleplug::api::{Central, Manager as _, Peripheral, ScanFilter};
 use btleplug::platform::Manager;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> anyhow::Result<()> {
     pretty_env_logger::init();
 
     let manager = Manager::new().await?;

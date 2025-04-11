@@ -4,7 +4,6 @@
 use btleplug::api::{Central, CharPropFlags, Manager as _, Peripheral, ScanFilter};
 use btleplug::platform::Manager;
 use futures::stream::StreamExt;
-use std::error::Error;
 use std::time::Duration;
 use tokio::time;
 use uuid::Uuid;
@@ -15,7 +14,7 @@ const PERIPHERAL_NAME_MATCH_FILTER: &str = "Neuro";
 const NOTIFY_CHARACTERISTIC_UUID: Uuid = Uuid::from_u128(0x6e400002_b534_f393_67a9_e50e24dccA9e);
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> anyhow::Result<()> {
     pretty_env_logger::init();
 
     let manager = Manager::new().await?;

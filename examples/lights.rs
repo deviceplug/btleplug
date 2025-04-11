@@ -5,8 +5,7 @@ use btleplug::api::{
     bleuuid::uuid_from_u16, Central, Manager as _, Peripheral as _, ScanFilter, WriteType,
 };
 use btleplug::platform::{Adapter, Manager, Peripheral};
-use rand::{thread_rng, Rng};
-use std::error::Error;
+use rand::{rng, Rng};
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -30,7 +29,7 @@ async fn find_light(central: &Adapter) -> Option<Peripheral> {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> anyhow::Result<()> {
     pretty_env_logger::init();
 
     let manager = Manager::new().await.unwrap();
@@ -67,9 +66,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .expect("Unable to find characterics");
 
     // dance party
-    let mut rng = thread_rng();
+    let mut rng = rng();
     for _ in 0..20 {
-        let color_cmd = vec![0x56, rng.gen(), rng.gen(), rng.gen(), 0x00, 0xF0, 0xAA];
+        let color_cmd = vec![0x56, rng.random(), rng.random(), rng.random(), 0x00, 0xF0, 0xAA];
         light
             .write(&cmd_char, &color_cmd, WriteType::WithoutResponse)
             .await?;

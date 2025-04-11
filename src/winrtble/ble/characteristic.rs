@@ -29,9 +29,10 @@ use windows::{
             GattCommunicationStatus, GattValueChangedEventArgs, GattWriteOption,
         },
     },
-    Foundation::{EventRegistrationToken, TypedEventHandler},
+    Foundation::TypedEventHandler,
     Storage::Streams::{DataReader, DataWriter},
 };
+use windows::core::Ref;
 
 pub type NotifiyEventHandler = Box<dyn Fn(Vec<u8>) + Send>;
 
@@ -48,7 +49,7 @@ impl From<WriteType> for GattWriteOption {
 pub struct BLECharacteristic {
     characteristic: GattCharacteristic,
     pub descriptors: HashMap<Uuid, BLEDescriptor>,
-    notify_token: Option<EventRegistrationToken>,
+    notify_token: Option<i64>,
 }
 
 impl BLECharacteristic {
@@ -69,7 +70,7 @@ impl BLECharacteristic {
         let operation = self
             .characteristic
             .WriteValueWithOptionAsync(&writer.DetachBuffer()?, write_type.into())?;
-        let result = operation.await?;
+        let result = operation.get()?;
         if result == GattCommunicationStatus::Success {
             Ok(())
         } else {
@@ -83,7 +84,7 @@ impl BLECharacteristic {
         let result = self
             .characteristic
             .ReadValueWithCacheModeAsync(BluetoothCacheMode::Uncached)?
-            .await?;
+            .get()?;
         if result.Status()? == GattCommunicationStatus::Success {
             let value = result.Value()?;
             let reader = DataReader::FromBuffer(&value)?;
@@ -101,8 +102,8 @@ impl BLECharacteristic {
     pub async fn subscribe(&mut self, on_value_changed: NotifiyEventHandler) -> Result<()> {
         {
             let value_handler = TypedEventHandler::new(
-                move |_: &Option<GattCharacteristic>, args: &Option<GattValueChangedEventArgs>| {
-                    if let Some(args) = args {
+                move |_: Ref<GattCharacteristic>, args: Ref<GattValueChangedEventArgs>| {
+                    if let Ok(args) = args.ok() {
                         let value = args.CharacteristicValue()?;
                         let reader = DataReader::FromBuffer(&value)?;
                         let len = reader.UnconsumedBufferLength()? as usize;
@@ -125,7 +126,7 @@ impl BLECharacteristic {
         let status = self
             .characteristic
             .WriteClientCharacteristicConfigurationDescriptorAsync(config)?
-            .await?;
+            .get()?;
         trace!("subscribe {:?}", status);
         if status == GattCommunicationStatus::Success {
             Ok(())
@@ -145,7 +146,7 @@ impl BLECharacteristic {
         let status = self
             .characteristic
             .WriteClientCharacteristicConfigurationDescriptorAsync(config)?
-            .await?;
+            .get()?;
         trace!("unsubscribe {:?}", status);
         if status == GattCommunicationStatus::Success {
             Ok(())

@@ -31,11 +31,12 @@ impl api::Manager for Manager {
     type Adapter = Adapter;
 
     async fn adapters(&self) -> Result<Vec<Adapter>> {
-        let radios = Radio::GetRadiosAsync()?.await?;
-        Ok(radios
+        let radios = Radio::GetRadiosAsync()?
+            .get()?;
+        radios
             .into_iter()
             .filter(|radio| radio.Kind() == Ok(RadioKind::Bluetooth))
             .map(|radio| Adapter::new(radio))
-            .collect())
+            .collect()
     }
 }

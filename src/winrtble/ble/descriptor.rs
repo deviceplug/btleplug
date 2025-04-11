@@ -50,7 +50,7 @@ impl BLEDescriptor {
         let writer = DataWriter::new()?;
         writer.WriteBytes(data)?;
         let operation = self.descriptor.WriteValueAsync(&writer.DetachBuffer()?)?;
-        let result = operation.await?;
+        let result = operation.get()?;
         if result == GattCommunicationStatus::Success {
             Ok(())
         } else {
@@ -64,7 +64,7 @@ impl BLEDescriptor {
         let result = self
             .descriptor
             .ReadValueWithCacheModeAsync(BluetoothCacheMode::Uncached)?
-            .await?;
+            .get()?;
         if result.Status()? == GattCommunicationStatus::Success {
             let value = result.Value()?;
             let reader = DataReader::FromBuffer(&value)?;

@@ -21,14 +21,15 @@ use windows::{
             GattDeviceServicesResult,
         },
     },
-    Foundation::{EventRegistrationToken, TypedEventHandler},
+    Foundation::{TypedEventHandler},
 };
+use windows::core::Ref;
 
 pub type ConnectedEventHandler = Box<dyn Fn(bool) + Send>;
 
 pub struct BLEDevice {
     device: BluetoothLEDevice,
-    connection_token: EventRegistrationToken,
+    connection_token: i64,
     services: Vec<GattDeviceService>,
 }
 
@@ -39,10 +40,11 @@ impl BLEDevice {
     ) -> Result<Self> {
         let async_op = BluetoothLEDevice::FromBluetoothAddressAsync(address.into())
             .map_err(|_| Error::DeviceNotFound)?;
-        let device = async_op.await.map_err(|_| Error::DeviceNotFound)?;
+        let device = async_op.get()
+            .map_err(|_| Error::DeviceNotFound)?;
         let connection_status_handler =
-            TypedEventHandler::new(move |sender: &Option<BluetoothLEDevice>, _| {
-                if let Some(sender) = sender {
+            TypedEventHandler::new(move |sender: Ref<BluetoothLEDevice>, _| {
+                if let Ok(sender) = sender.ok() {
                     let is_connected = sender
                         .ConnectionStatus()
                         .ok()
@@ -73,7 +75,8 @@ impl BLEDevice {
             .device
             .GetGattServicesWithCacheModeAsync(cache_mode)
             .map_err(winrt_error)?;
-        let service_result = async_op.await.map_err(winrt_error)?;
+        let service_result = async_op.get()
+            .map_err(winrt_error)?;
         Ok(service_result)
     }
 
@@ -99,7 +102,7 @@ impl BLEDevice {
     ) -> Result<Vec<GattCharacteristic>> {
         let async_result = service
             .GetCharacteristicsWithCacheModeAsync(BluetoothCacheMode::Uncached)?
-            .await?;
+            .get()?;
 
         match async_result.Status() {
             Ok(GattCommunicationStatus::Success) => {
@@ -129,7 +132,7 @@ impl BLEDevice {
     ) -> Result<Vec<GattDescriptor>> {
         let async_result = characteristic
             .GetDescriptorsWithCacheModeAsync(BluetoothCacheMode::Uncached)?
-            .await?;
+            .get()?;
         let status = async_result.Status();
         if status == Ok(GattCommunicationStatus::Success) {
             let results = async_result.Descriptors()?;

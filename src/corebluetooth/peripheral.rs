@@ -208,7 +208,13 @@ impl api::Peripheral for Peripheral {
     }
 
     async fn properties(&self) -> Result<Option<PeripheralProperties>> {
-        Ok(Some(self.shared.properties.lock().unwrap().clone()))
+        Ok(Some(
+            self.shared
+                .properties
+                .lock()
+                .map_err(Into::<Error>::into)?
+                .clone()
+        ))
     }
 
     fn services(&self) -> BTreeSet<Service> {
@@ -246,7 +252,10 @@ impl api::Peripheral for Peripheral {
             .await?;
         match fut.await {
             CoreBluetoothReply::Connected(services) => {
-                *(self.shared.services.lock().unwrap()) = services;
+                *(self.shared
+                    .services
+                    .lock()
+                    .map_err(Into::<Error>::into)?) = services;
                 self.shared
                     .emit_event(CentralEvent::DeviceConnected(self.shared.uuid.into()));
             }

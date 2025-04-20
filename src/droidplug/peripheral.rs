@@ -137,6 +137,7 @@ fn get_poll_result<'a: 'b, 'b>(
         .result()?
 }
 
+#[derive(Debug)]
 struct PeripheralShared {
     services: BTreeSet<Service>,
     characteristics: BTreeSet<Characteristic>,
@@ -164,7 +165,7 @@ impl Peripheral {
         })
     }
 
-    pub(crate) fn report_properties(&self, mut properties: PeripheralProperties) {
+    pub(crate) fn report_properties(&self, properties: PeripheralProperties) {
         let mut guard = self.shared.lock().unwrap();
 
         guard.properties = Some(properties);

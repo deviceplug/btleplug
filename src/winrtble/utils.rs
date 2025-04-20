@@ -116,14 +116,14 @@ mod tests {
 
         let guid_converted = to_guid(&uuid);
 
-        let guid_expected = GUID::from(uuid_str);
+        let guid_expected = GUID::try_from(uuid_str).unwrap();
         assert_eq!(guid_converted, guid_expected);
     }
 
     #[test]
     fn check_guid_to_uuid_conversion() {
         let uuid_str = "10B201FF-5B3B-45A1-9508-CF3EFCD7BBAF";
-        let guid = GUID::from(uuid_str);
+        let guid = GUID::try_from(uuid_str).unwrap();
 
         let uuid_converted = to_uuid(&guid);
 

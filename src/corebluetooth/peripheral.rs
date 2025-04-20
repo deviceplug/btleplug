@@ -213,7 +213,7 @@ impl api::Peripheral for Peripheral {
                 .properties
                 .lock()
                 .map_err(Into::<Error>::into)?
-                .clone()
+                .clone(),
         ))
     }
 
@@ -252,10 +252,7 @@ impl api::Peripheral for Peripheral {
             .await?;
         match fut.await {
             CoreBluetoothReply::Connected(services) => {
-                *(self.shared
-                    .services
-                    .lock()
-                    .map_err(Into::<Error>::into)?) = services;
+                *(self.shared.services.lock().map_err(Into::<Error>::into)?) = services;
                 self.shared
                     .emit_event(CentralEvent::DeviceConnected(self.shared.uuid.into()));
             }

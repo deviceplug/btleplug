@@ -68,7 +68,15 @@ async fn main() -> anyhow::Result<()> {
     // dance party
     let mut rng = rng();
     for _ in 0..20 {
-        let color_cmd = vec![0x56, rng.random(), rng.random(), rng.random(), 0x00, 0xF0, 0xAA];
+        let color_cmd = vec![
+            0x56,
+            rng.random(),
+            rng.random(),
+            rng.random(),
+            0x00,
+            0xF0,
+            0xAA,
+        ];
         light
             .write(&cmd_char, &color_cmd, WriteType::WithoutResponse)
             .await?;

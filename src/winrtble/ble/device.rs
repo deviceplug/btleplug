@@ -41,7 +41,9 @@ impl BLEDevice {
     ) -> Result<Self> {
         let async_op = BluetoothLEDevice::FromBluetoothAddressAsync(address.into())
             .map_err(|_| Error::DeviceNotFound)?;
-        let device = async_op.into_future().await
+        let device = async_op
+            .into_future()
+            .await
             .map_err(|_| Error::DeviceNotFound)?;
         let connection_status_handler =
             TypedEventHandler::new(move |sender: Ref<BluetoothLEDevice>, _| {
@@ -76,8 +78,7 @@ impl BLEDevice {
             .device
             .GetGattServicesWithCacheModeAsync(cache_mode)
             .map_err(winrt_error)?;
-        let service_result = async_op.into_future().await
-            .map_err(winrt_error)?;
+        let service_result = async_op.into_future().await.map_err(winrt_error)?;
         Ok(service_result)
     }
 

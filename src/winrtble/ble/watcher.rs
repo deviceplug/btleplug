@@ -12,9 +12,10 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use crate::{api::ScanFilter, Error, Result};
-use windows::{Devices::Bluetooth::Advertisement::*, core::Ref, Foundation::TypedEventHandler};
+use windows::{core::Ref, Devices::Bluetooth::Advertisement::*, Foundation::TypedEventHandler};
 
-pub type AdvertisementEventHandler = Box<dyn Fn(&BluetoothLEAdvertisementReceivedEventArgs)-> windows::core::Result<()> + Send>;
+pub type AdvertisementEventHandler =
+    Box<dyn Fn(&BluetoothLEAdvertisementReceivedEventArgs) -> windows::core::Result<()> + Send>;
 
 #[derive(Debug)]
 pub struct BLEWatcher {
@@ -36,15 +37,11 @@ impl BLEWatcher {
 
     pub fn start(&self, filter: ScanFilter, on_received: AdvertisementEventHandler) -> Result<()> {
         let ScanFilter { services } = filter;
-        let ad = self
-            .watcher
-            .AdvertisementFilter()?
-            .Advertisement()?;
+        let ad = self.watcher.AdvertisementFilter()?.Advertisement()?;
         let ad_services = ad.ServiceUuids()?;
         ad_services.Clear()?;
         for service in services {
-            ad_services
-                .Append(windows::core::GUID::from(service.as_u128()))?;
+            ad_services.Append(windows::core::GUID::from(service.as_u128()))?;
         }
         self.watcher
             .SetScanningMode(BluetoothLEScanningMode::Active)?;

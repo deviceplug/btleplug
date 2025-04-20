@@ -218,8 +218,7 @@ impl api::Peripheral for Peripheral {
     }
 
     async fn properties(&self) -> Result<Option<PeripheralProperties>> {
-        let guard = self.shared.lock()
-            .map_err(Into::<Error>::into)?;
+        let guard = self.shared.lock().map_err(Into::<Error>::into)?;
         Ok((&guard.properties).clone())
     }
 
@@ -305,8 +304,7 @@ impl api::Peripheral for Peripheral {
                     characteristics,
                 })
             }
-            let mut guard = self.shared.lock()
-                .map_err(Into::<Error>::into)?;
+            let mut guard = self.shared.lock().map_err(Into::<Error>::into)?;
             guard.services = BTreeSet::from_iter(peripheral_services.clone());
             guard.characteristics = BTreeSet::from_iter(peripheral_characteristics.clone());
             Ok(())

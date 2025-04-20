@@ -97,8 +97,7 @@ impl Peripheral {
     }
 
     fn characteristic_info(&self, characteristic: &Characteristic) -> Result<CharacteristicInfo> {
-        let services = self.services.lock()
-            .map_err(Into::<Error>::into)?;
+        let services = self.services.lock().map_err(Into::<Error>::into)?;
         get_characteristic(
             &services,
             &characteristic.service_uuid,
@@ -109,8 +108,7 @@ impl Peripheral {
     }
 
     fn descriptor_info(&self, descriptor: &Descriptor) -> Result<DescriptorInfo> {
-        let services = self.services.lock()
-            .map_err(Into::<Error>::into)?;
+        let services = self.services.lock().map_err(Into::<Error>::into)?;
         let characteristic = get_characteristic(
             &services,
             &descriptor.service_uuid,
@@ -224,8 +222,7 @@ impl api::Peripheral for Peripheral {
                 },
             );
         }
-        *(self.services.lock()
-            .map_err(Into::<Error>::into)?) = services_internal;
+        *(self.services.lock().map_err(Into::<Error>::into)?) = services_internal;
         Ok(())
     }
 

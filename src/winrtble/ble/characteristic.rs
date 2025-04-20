@@ -19,8 +19,9 @@ use crate::{
 };
 
 use log::{debug, trace};
-use std::{future::IntoFuture, collections::HashMap};
+use std::{collections::HashMap, future::IntoFuture};
 use uuid::Uuid;
+use windows::core::Ref;
 use windows::{
     Devices::Bluetooth::{
         BluetoothCacheMode,
@@ -32,7 +33,6 @@ use windows::{
     Foundation::TypedEventHandler,
     Storage::Streams::{DataReader, DataWriter},
 };
-use windows::core::Ref;
 
 pub type NotifiyEventHandler = Box<dyn Fn(Vec<u8>) + Send>;
 

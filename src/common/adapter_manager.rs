@@ -73,6 +73,8 @@ where
             .collect()
     }
 
+    // Only used on windows and macOS/iOS, so turn off deadcode so we don't get warnings on android/linux.
+    #[allow(dead_code)]
     pub fn peripheral_mut(
         &self,
         id: &PeripheralId,

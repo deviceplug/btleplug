@@ -13,6 +13,7 @@
 
 use super::adapter::Adapter;
 use crate::{api, Result};
+use std::future::IntoFuture;
 use async_trait::async_trait;
 use windows::Devices::Radios::{Radio, RadioKind};
 
@@ -32,7 +33,7 @@ impl api::Manager for Manager {
 
     async fn adapters(&self) -> Result<Vec<Adapter>> {
         let radios = Radio::GetRadiosAsync()?
-            .get()?;
+            .into_future().await?;
         radios
             .into_iter()
             .filter(|radio| radio.Kind() == Ok(RadioKind::Bluetooth))

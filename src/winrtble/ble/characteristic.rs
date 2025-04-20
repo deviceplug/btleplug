@@ -19,7 +19,7 @@ use crate::{
 };
 
 use log::{debug, trace};
-use std::collections::HashMap;
+use std::{future::IntoFuture, collections::HashMap};
 use uuid::Uuid;
 use windows::{
     Devices::Bluetooth::{
@@ -70,7 +70,7 @@ impl BLECharacteristic {
         let operation = self
             .characteristic
             .WriteValueWithOptionAsync(&writer.DetachBuffer()?, write_type.into())?;
-        let result = operation.get()?;
+        let result = operation.into_future().await?;
         if result == GattCommunicationStatus::Success {
             Ok(())
         } else {
@@ -84,7 +84,8 @@ impl BLECharacteristic {
         let result = self
             .characteristic
             .ReadValueWithCacheModeAsync(BluetoothCacheMode::Uncached)?
-            .get()?;
+            .into_future()
+            .await?;
         if result.Status()? == GattCommunicationStatus::Success {
             let value = result.Value()?;
             let reader = DataReader::FromBuffer(&value)?;
@@ -126,7 +127,8 @@ impl BLECharacteristic {
         let status = self
             .characteristic
             .WriteClientCharacteristicConfigurationDescriptorAsync(config)?
-            .get()?;
+            .into_future()
+            .await?;
         trace!("subscribe {:?}", status);
         if status == GattCommunicationStatus::Success {
             Ok(())
@@ -146,7 +148,8 @@ impl BLECharacteristic {
         let status = self
             .characteristic
             .WriteClientCharacteristicConfigurationDescriptorAsync(config)?
-            .get()?;
+            .into_future()
+            .await?;
         trace!("unsubscribe {:?}", status);
         if status == GattCommunicationStatus::Success {
             Ok(())

@@ -13,7 +13,7 @@
 
 use super::super::utils;
 use crate::{api::Descriptor, Error, Result};
-
+use std::future::IntoFuture;
 use uuid::Uuid;
 use windows::{
     Devices::Bluetooth::{
@@ -50,7 +50,7 @@ impl BLEDescriptor {
         let writer = DataWriter::new()?;
         writer.WriteBytes(data)?;
         let operation = self.descriptor.WriteValueAsync(&writer.DetachBuffer()?)?;
-        let result = operation.get()?;
+        let result = operation.into_future().await?;
         if result == GattCommunicationStatus::Success {
             Ok(())
         } else {
@@ -64,7 +64,8 @@ impl BLEDescriptor {
         let result = self
             .descriptor
             .ReadValueWithCacheModeAsync(BluetoothCacheMode::Uncached)?
-            .get()?;
+            .into_future()
+            .await?;
         if result.Status()? == GattCommunicationStatus::Success {
             let value = result.Value()?;
             let reader = DataReader::FromBuffer(&value)?;

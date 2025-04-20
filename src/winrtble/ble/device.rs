@@ -13,7 +13,9 @@
 
 use crate::{api::BDAddr, winrtble::utils, Error, Result};
 use log::{debug, trace};
+use std::future::IntoFuture;
 use windows::{
+    core::Ref,
     Devices::Bluetooth::{
         BluetoothCacheMode, BluetoothConnectionStatus, BluetoothLEDevice,
         GenericAttributeProfile::{
@@ -21,9 +23,8 @@ use windows::{
             GattDeviceServicesResult,
         },
     },
-    Foundation::{TypedEventHandler},
+    Foundation::TypedEventHandler,
 };
-use windows::core::Ref;
 
 pub type ConnectedEventHandler = Box<dyn Fn(bool) + Send>;
 
@@ -40,7 +41,7 @@ impl BLEDevice {
     ) -> Result<Self> {
         let async_op = BluetoothLEDevice::FromBluetoothAddressAsync(address.into())
             .map_err(|_| Error::DeviceNotFound)?;
-        let device = async_op.get()
+        let device = async_op.into_future().await
             .map_err(|_| Error::DeviceNotFound)?;
         let connection_status_handler =
             TypedEventHandler::new(move |sender: Ref<BluetoothLEDevice>, _| {
@@ -75,7 +76,7 @@ impl BLEDevice {
             .device
             .GetGattServicesWithCacheModeAsync(cache_mode)
             .map_err(winrt_error)?;
-        let service_result = async_op.get()
+        let service_result = async_op.into_future().await
             .map_err(winrt_error)?;
         Ok(service_result)
     }
@@ -102,7 +103,8 @@ impl BLEDevice {
     ) -> Result<Vec<GattCharacteristic>> {
         let async_result = service
             .GetCharacteristicsWithCacheModeAsync(BluetoothCacheMode::Uncached)?
-            .get()?;
+            .into_future()
+            .await?;
 
         match async_result.Status() {
             Ok(GattCommunicationStatus::Success) => {
@@ -132,7 +134,8 @@ impl BLEDevice {
     ) -> Result<Vec<GattDescriptor>> {
         let async_result = characteristic
             .GetDescriptorsWithCacheModeAsync(BluetoothCacheMode::Uncached)?
-            .get()?;
+            .into_future()
+            .await?;
         let status = async_result.Status();
         if status == Ok(GattCommunicationStatus::Success) {
             let results = async_result.Descriptors()?;

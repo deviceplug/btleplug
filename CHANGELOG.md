@@ -1,3 +1,10 @@
+# 0.11.8 (2025-04-20)
+
+## Features
+
+- Update dependencies
+  - Including to windows-rs 0.61, which required some small code changes
+
 # 0.11.7 (2024-12-21)
 
 ## Features

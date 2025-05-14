@@ -345,12 +345,12 @@ declare_class!(
             &self,
             _central: &CBCentralManager,
             peripheral: &CBPeripheral,
-            _error: Option<&NSError>,
+            error: Option<&NSError>,
         ) {
             trace!(
                 "delegate_centralmanager_diddisconnectperipheral_error {} (error={:?})",
                 peripheral_debug(peripheral),
-                _error
+                error
             );
             let peripheral_uuid = nsuuid_to_uuid(unsafe { &peripheral.identifier() });
             self.send_event(CentralDelegateEvent::DisconnectedDevice { peripheral_uuid });

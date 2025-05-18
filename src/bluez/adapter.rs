@@ -113,6 +113,12 @@ impl Central for Adapter {
         Ok(format!("{} ({})", adapter_info.id, adapter_info.modalias))
     }
 
+    async fn adapter_mac(&self) -> Result<BDAddr> {
+        // let adapter_info = self.session.get_adapter_info(&self.adapter).await?;
+        // adapter_info
+        todo!();
+    }
+
     async fn adapter_state(&self) -> Result<CentralState> {
         let mut powered = false;
         if let Ok(info) = self.session.get_adapter_info(&self.adapter).await {

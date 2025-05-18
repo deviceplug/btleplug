@@ -137,6 +137,10 @@ impl Central for Adapter {
         Ok("CoreBluetooth".to_string())
     }
 
+    async fn adapter_mac(&self) -> Result<BDAddr> {
+        todo!();
+    }
+
     async fn adapter_state(&self) -> Result<CentralState> {
         let fut = CoreBluetoothReplyFuture::default();
         self.sender

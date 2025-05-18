@@ -14,9 +14,11 @@
 use super::adapter::Adapter;
 use crate::{api, Result};
 use async_trait::async_trait;
-use std::future::IntoFuture;
-use windows::Devices::Radios::{Radio, RadioKind};
-
+use windows::{
+    Devices::Bluetooth::BluetoothAdapter,
+    Devices::Enumeration::DeviceInformation,
+    core::HSTRING
+};
 /// Implementation of [api::Manager](crate::api::Manager).
 #[derive(Clone, Debug)]
 pub struct Manager {}
@@ -32,11 +34,20 @@ impl api::Manager for Manager {
     type Adapter = Adapter;
 
     async fn adapters(&self) -> Result<Vec<Adapter>> {
-        let radios = Radio::GetRadiosAsync()?.into_future().await?;
-        radios
+        // Get the selector for Bluetooth adapters
+        let selector = BluetoothAdapter::GetDeviceSelector()?;
+        
+        // Find all devices that match the selector
+        let devices = DeviceInformation::FindAllAsyncAqsFilter(&HSTRING::from(selector))?.await?;
+        
+        let futures = devices
             .into_iter()
-            .filter(|radio| radio.Kind() == Ok(RadioKind::Bluetooth))
-            .map(|radio| Adapter::new(radio))
-            .collect()
+            .map(|device| async move {
+                let device_id = device.Id()?;
+                let bt_adapter = BluetoothAdapter::FromIdAsync(&device_id)?.await?;
+                Adapter::new(bt_adapter).await
+            });
+        let adapters = futures::future::try_join_all(futures).await?;
+        Ok(adapters)
     }
 }

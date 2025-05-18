@@ -375,6 +375,9 @@ pub trait Central: Send + Sync + Clone {
     /// be useful for debug logs.
     async fn adapter_info(&self) -> Result<String>;
 
+    /// Get information about the Bluetooth adapter mac address.
+    async fn adapter_mac(&self) -> Result<BDAddr>;
+
     /// Get information about the Bluetooth adapter state.
     async fn adapter_state(&self) -> Result<CentralState>;
 }

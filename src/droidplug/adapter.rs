@@ -168,6 +168,10 @@ impl Central for Adapter {
         self.add(address.0)
     }
 
+    async fn adapter_mac(&self) -> Result<BDAddr> {
+        todo!();
+    }
+
     async fn adapter_state(&self) -> Result<CentralState> {
         Ok(CentralState::Unknown)
     }

@@ -19,12 +19,13 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::stream::Stream;
+use log::debug;
 use std::convert::TryInto;
 use std::fmt::{self, Debug, Formatter};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use windows::{
-    Devices::Radios::{Radio, RadioState},
+    Devices::{Bluetooth::BluetoothAdapter, Radios::{Radio, RadioState}},
     Foundation::TypedEventHandler,
 };
 
@@ -34,6 +35,7 @@ pub struct Adapter {
     watcher: Arc<Mutex<BLEWatcher>>,
     manager: Arc<AdapterManager<Peripheral>>,
     radio: Radio,
+    adapter: BluetoothAdapter,
 }
 
 // https://github.com/microsoft/windows-rs/blob/master/crates/libs/windows/src/Windows/Devices/Radios/mod.rs
@@ -47,7 +49,8 @@ fn get_central_state(radio: &Radio) -> CentralState {
 }
 
 impl Adapter {
-    pub(crate) fn new(radio: Radio) -> Result<Self> {
+    pub(crate) async fn new(adapter: BluetoothAdapter) -> Result<Self> {
+        let radio = adapter.GetRadioAsync()?.await?;
         let watcher = Arc::new(Mutex::new(BLEWatcher::new()?));
         let manager = Arc::new(AdapterManager::default());
 
@@ -66,6 +69,7 @@ impl Adapter {
             watcher,
             manager,
             radio,
+            adapter,
         })
     }
 }
@@ -129,8 +133,13 @@ impl Central for Adapter {
     }
 
     async fn adapter_info(&self) -> Result<String> {
-        // TODO: Get information about the adapter.
-        Ok("WinRT".to_string())
+        Ok(format!("DeviceId: {}\n", self.adapter.DeviceId()?.to_string()))
+    }
+
+    async fn adapter_mac(&self) -> Result<BDAddr> {
+        let address = self.adapter.BluetoothAddress()?;
+        let mac = BDAddr::try_from(address)?;
+        Ok(mac)
     }
 
     async fn adapter_state(&self) -> Result<CentralState> {

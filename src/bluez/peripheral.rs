@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use bluez_async::{
     BluetoothEvent, BluetoothSession, CharacteristicEvent, CharacteristicFlags, CharacteristicId,
-    CharacteristicInfo, DescriptorInfo, DeviceId, DeviceInfo, MacAddress, ServiceInfo,
+    CharacteristicInfo, DescriptorInfo, DeviceId, DeviceInfo, ServiceInfo,
     WriteOptions,
 };
 use futures::future::{join_all, ready};
@@ -325,12 +325,6 @@ impl From<WriteType> for bluez_async::WriteType {
             WriteType::WithoutResponse => bluez_async::WriteType::WithoutResponse,
             WriteType::WithResponse => bluez_async::WriteType::WithResponse,
         }
-    }
-}
-
-impl From<MacAddress> for BDAddr {
-    fn from(mac_address: MacAddress) -> Self {
-        <[u8; 6]>::into(mac_address.into())
     }
 }
 

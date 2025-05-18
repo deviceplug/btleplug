@@ -1,5 +1,5 @@
 use super::peripheral::{Peripheral, PeripheralId};
-use crate::api::{Central, CentralEvent, CentralState, ScanFilter};
+use crate::api::{BDAddr, Central, CentralEvent, CentralState, ScanFilter};
 use crate::{Error, Result};
 use async_trait::async_trait;
 use bluez_async::{
@@ -114,9 +114,8 @@ impl Central for Adapter {
     }
 
     async fn adapter_mac(&self) -> Result<BDAddr> {
-        // let adapter_info = self.session.get_adapter_info(&self.adapter).await?;
-        // adapter_info
-        todo!();
+        let adapter_info = self.session.get_adapter_info(&self.adapter).await?;
+        Ok(adapter_info.mac_address.into())
     }
 
     async fn adapter_state(&self) -> Result<CentralState> {

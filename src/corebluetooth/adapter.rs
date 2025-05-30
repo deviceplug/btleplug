@@ -118,6 +118,14 @@ impl Central for Adapter {
         Ok(())
     }
 
+    async fn connected_peripherals(&self, filter: ScanFilter) -> Result<()> {
+        self.sender
+            .to_owned()
+            .send(CoreBluetoothMessage::RetrieveConnectedPeripherals { filter })
+            .await?;
+        Ok(())
+    }
+
     async fn peripherals(&self) -> Result<Vec<Peripheral>> {
         Ok(self.manager.peripherals())
     }

@@ -14,7 +14,7 @@ use super::{
     future::{BtlePlugFuture, BtlePlugFutureStateShared},
     utils::{
         core_bluetooth::{cbuuid_to_uuid, uuid_to_cbuuid},
-        nsuuid_to_uuid,
+        nsstring_to_string, nsuuid_to_uuid,
     },
 };
 use crate::api::{CharPropFlags, Characteristic, Descriptor, ScanFilter, Service, WriteType};
@@ -399,6 +399,9 @@ pub enum CoreBluetoothMessage {
         filter: ScanFilter,
     },
     StopScanning,
+    RetrieveConnectedPeripherals {
+        filter: ScanFilter,
+    },
     ConnectDevice {
         peripheral_uuid: Uuid,
         future: CoreBluetoothReplyStateShared,
@@ -1169,6 +1172,9 @@ impl CoreBluetoothInternal {
                     },
                     CoreBluetoothMessage::StartScanning{filter} => self.start_discovery(filter),
                     CoreBluetoothMessage::StopScanning => self.stop_discovery(),
+                    CoreBluetoothMessage::RetrieveConnectedPeripherals{filter} => {
+                        self.retrieve_connected_peripherals(filter);
+                    },
                     CoreBluetoothMessage::ConnectDevice{peripheral_uuid, future} => {
                         trace!("got connectdevice msg!");
                         self.connect_peripheral(peripheral_uuid, future);
@@ -1238,6 +1244,51 @@ impl CoreBluetoothInternal {
     fn stop_discovery(&mut self) {
         trace!("BluetoothAdapter::stop_discovery");
         unsafe { self.manager.stopScan() };
+    }
+
+    fn retrieve_connected_peripherals(&mut self, filter: ScanFilter) {
+        trace!("BluetoothAdapter::retrieve_connected_peripherals");
+        let service_uuids = scan_filter_to_service_uuids(filter);
+        if service_uuids.is_none() {
+            warn!("MacOS requires a filter of services to be provided, so we cannot continue.");
+            return;
+        }
+        let peripherals = unsafe {
+            self.manager
+                .retrieveConnectedPeripheralsWithServices(service_uuids.as_deref().unwrap())
+        };
+
+        for peripheral in peripherals {
+            let uuid = nsuuid_to_uuid(unsafe { &peripheral.identifier() });
+            if self.peripherals.contains_key(&uuid) {
+                trace!("Peripheral {} already exists, skipping.", uuid);
+                continue;
+            }
+            trace!("Discovered connected peripheral: {}", uuid);
+            let (event_sender, event_receiver) = mpsc::channel(256);
+            let name: Option<String> = unsafe {
+                match peripheral.name() {
+                    Some(ns_name) => nsstring_to_string(ns_name.as_ref()),
+                    None => None,
+                }
+            };
+            self.peripherals.insert(
+                uuid,
+                PeripheralInternal::new(Retained::from(peripheral), event_sender),
+            );
+            let discovered_device = CoreBluetoothEvent::DeviceDiscovered {
+                uuid,
+                name,
+                event_receiver,
+            };
+            // Must use a synchronous sender.
+            match self.event_sender.try_send(discovered_device) {
+                Ok(_) => (),
+                Err(e) => {
+                    error!("Error sending discovered device event: {}", e);
+                }
+            }
+        }
     }
 }
 

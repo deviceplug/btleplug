@@ -359,6 +359,10 @@ pub trait Central: Send + Sync + Clone {
     /// Stops scanning for BLE devices.
     async fn stop_scan(&self) -> Result<()>;
 
+    /// Retrieve connected peripherals matching the given filter. Same filter and discovery rules
+    /// apply as for start_scan.
+    async fn connected_peripherals(&self, filter: ScanFilter) -> Result<()>;
+
     /// Returns the list of [`Peripheral`]s that have been discovered so far. Note that this list
     /// may contain peripherals that are no longer available.
     async fn peripherals(&self) -> Result<Vec<Self::Peripheral>>;

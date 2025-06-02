@@ -19,11 +19,15 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::stream::Stream;
+use log::trace;
 use std::convert::TryInto;
 use std::fmt::{self, Debug, Formatter};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use uuid::Uuid;
 use windows::{
+    Devices::Bluetooth::BluetoothLEDevice,
+    Devices::Enumeration::DeviceInformation,
     Devices::Radios::{Radio, RadioState},
     Foundation::TypedEventHandler,
 };
@@ -111,6 +115,76 @@ impl Central for Adapter {
     async fn stop_scan(&self) -> Result<()> {
         let watcher = self.watcher.lock().map_err(Into::<Error>::into)?;
         watcher.stop()?;
+        Ok(())
+    }
+
+    async fn connected_peripherals(&self, filter: ScanFilter) -> Result<()> {
+        let device_selector = BluetoothLEDevice::GetDeviceSelector()?;
+        let get_devices = match DeviceInformation::FindAllAsyncAqsFilter(&device_selector) {
+            Ok(devices) => devices,
+            Err(e) => {
+                return Err(Error::Other(format!("{:?}", e).into()));
+            }
+        };
+        let devices = match get_devices.get() {
+            Ok(devices) => devices,
+            Err(e) => {
+                return Err(Error::Other(format!("{:?}", e).into()));
+            }
+        };
+        let manager = self.manager.clone();
+
+        for device in devices {
+            let Ok(device_id) = device.Id() else {
+                continue;
+            };
+            let Ok(ble_device) = BluetoothLEDevice::FromIdAsync(&device_id) else {
+                continue;
+            };
+            let Ok(ble_device) = ble_device.get() else {
+                continue;
+            };
+            let Ok(services_result_op) = ble_device.GetGattServicesAsync() else {
+                continue;
+            };
+            let Ok(services_result) = services_result_op.get() else {
+                continue;
+            };
+            let Ok(services) = services_result.Services() else {
+                continue;
+            };
+
+            for service in services {
+                let Ok(s_uuid) = service.Uuid() else {
+                    continue;
+                };
+                let service_uuid = Uuid::from_u128(s_uuid.to_u128());
+                if !filter.services.is_empty() && !filter.services.contains(&service_uuid) {
+                    // Skip if services filter is provided, but it does not contain service_uuid.
+                    continue;
+                }
+                let Ok(bluetooth_address) = ble_device.BluetoothAddress() else {
+                    continue;
+                };
+                let address: BDAddr = match bluetooth_address.try_into() {
+                    Ok(address) => address,
+                    Err(_) => {
+                        continue;
+                    }
+                };
+                match manager.peripheral_mut(&address.into()) {
+                    Some(_) => {
+                        trace!("Skipping over existing peripheral: {:?}", address);
+                    }
+                    None => {
+                        let peripheral = Peripheral::new(Arc::downgrade(&manager), address);
+                        manager.add_peripheral(peripheral);
+                        manager.emit(CentralEvent::DeviceDiscovered(address.into()));
+                    }
+                }
+                return Ok(());
+            }
+        }
         Ok(())
     }
 

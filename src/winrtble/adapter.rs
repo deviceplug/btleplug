@@ -193,6 +193,7 @@ impl Central for Adapter {
             match manager.peripheral_mut(&address.into()) {
                 Some(_) => {
                     trace!("Skipping over existing peripheral: {:?}", address);
+                    manager.emit(CentralEvent::DeviceDiscovered(address.into()));
                 }
                 None => {
                     let peripheral = Peripheral::new(Arc::downgrade(&manager), address);

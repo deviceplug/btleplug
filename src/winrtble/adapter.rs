@@ -133,7 +133,8 @@ impl Central for Adapter {
             }
         };
         let manager = self.manager.clone();
-
+        let mut required_services = filter.clone().services;
+        required_services.sort();
         for device in devices {
             let Ok(device_id) = device.Id() else {
                 continue;
@@ -153,37 +154,53 @@ impl Central for Adapter {
             let Ok(services) = services_result.Services() else {
                 continue;
             };
-
+            // Verify all services in filter exist on the device.
+            let mut found_services: Vec<Uuid> = Vec::new();
             for service in services {
                 let Ok(s_uuid) = service.Uuid() else {
                     continue;
                 };
                 let service_uuid = Uuid::from_u128(s_uuid.to_u128());
-                if !filter.services.is_empty() && !filter.services.contains(&service_uuid) {
-                    // Skip if services filter is provided, but it does not contain service_uuid.
-                    continue;
+                if filter.services.contains(&service_uuid) {
+                    found_services.push(service_uuid);
                 }
-                let Ok(bluetooth_address) = ble_device.BluetoothAddress() else {
-                    continue;
-                };
-                let address: BDAddr = match bluetooth_address.try_into() {
-                    Ok(address) => address,
-                    Err(_) => {
-                        continue;
-                    }
-                };
-                match manager.peripheral_mut(&address.into()) {
-                    Some(_) => {
-                        trace!("Skipping over existing peripheral: {:?}", address);
-                    }
-                    None => {
-                        let peripheral = Peripheral::new(Arc::downgrade(&manager), address);
-                        manager.add_peripheral(peripheral);
-                        manager.emit(CentralEvent::DeviceDiscovered(address.into()));
-                    }
-                }
-                return Ok(());
             }
+            found_services.sort();
+            trace!(
+                "Found required services: {:?} of {:?}",
+                found_services.len(),
+                required_services.len()
+            );
+            if (required_services.len() != found_services.len())
+                || !(required_services
+                    .iter()
+                    .zip(found_services.iter())
+                    .all(|(l, r)| l == r))
+            {
+                trace!("Not all required services are accounted for, continuing...");
+                continue;
+            }
+
+            let Ok(bluetooth_address) = ble_device.BluetoothAddress() else {
+                continue;
+            };
+            let address: BDAddr = match bluetooth_address.try_into() {
+                Ok(address) => address,
+                Err(_) => {
+                    continue;
+                }
+            };
+            match manager.peripheral_mut(&address.into()) {
+                Some(_) => {
+                    trace!("Skipping over existing peripheral: {:?}", address);
+                }
+                None => {
+                    let peripheral = Peripheral::new(Arc::downgrade(&manager), address);
+                    manager.add_peripheral(peripheral);
+                    manager.emit(CentralEvent::DeviceDiscovered(address.into()));
+                }
+            }
+            return Ok(());
         }
         Ok(())
     }

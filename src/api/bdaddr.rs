@@ -76,6 +76,12 @@ impl From<[u8; 6]> for BDAddr {
     }
 }
 
+impl From<BDAddr> for [u8; 6] {
+    fn from(value: BDAddr) -> Self {
+        value.address
+    }
+}
+
 impl<'a> TryFrom<&'a [u8]> for BDAddr {
     type Error = ParseBDAddrError;
 

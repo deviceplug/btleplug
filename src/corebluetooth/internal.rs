@@ -38,6 +38,7 @@ use std::{
     fmt::{self, Debug, Formatter},
     ops::Deref,
     thread,
+    time::Duration,
 };
 use tokio::runtime;
 use uuid::Uuid;
@@ -887,6 +888,19 @@ impl CoreBluetoothInternal {
                 {
                     trace!("Writing value! With kind {:?}", kind);
                     unsafe {
+                        if kind == WriteType::WithoutResponse {
+                            // probably better idea would be to wait for the result of peripheral.peripheralIsReadyToSendWriteWithoutResponse
+                            let mut attempts = 0;
+                            while !peripheral.peripheral.canSendWriteWithoutResponse()
+                                && attempts < 100
+                            {
+                                attempts += 1;
+                                // min. connection interval time is 15ms. see the document:
+                                // https://developer.apple.com/library/archive/qa/qa1931/_index.html
+                                thread::sleep(Duration::from_millis(15));
+                            }
+                        }
+
                         peripheral.peripheral.writeValue_forCharacteristic_type(
                             &NSData::from_vec(data),
                             &characteristic.characteristic,

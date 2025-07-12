@@ -6,6 +6,7 @@ use super::peripheral::{Peripheral, PeripheralId};
 use crate::api::{Central, CentralEvent, CentralState, ScanFilter};
 use crate::common::adapter_manager::AdapterManager;
 use crate::{Error, Result};
+use crate::api::BDAddr;
 use async_trait::async_trait;
 use futures::channel::mpsc::{self, Sender};
 use futures::sink::SinkExt;

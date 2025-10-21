@@ -298,8 +298,13 @@ fn value_notification(
             event: CharacteristicEvent::Value { value },
         } if id.service().device() == *device_id => {
             let services = services.lock().unwrap();
-            let uuid = find_characteristic_by_id(&services, id)?.uuid;
-            Some(ValueNotification { uuid, value })
+            let info = find_characteristic_by_id(&services, id.clone())?;
+            let service = services.iter().find(|(_, s)| s.info.id == id.service())?.0;
+            Some(ValueNotification {
+                uuid: info.uuid,
+                service_uuid: *service,
+                value,
+            })
         }
         _ => None,
     }

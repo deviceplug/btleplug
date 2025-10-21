@@ -86,6 +86,8 @@ impl AddressType {
 pub struct ValueNotification {
     /// UUID of the characteristic that fired the notification.
     pub uuid: Uuid,
+    /// UUID of the service that contains the characteristic.
+    pub service_uuid: Uuid,
     /// The new value of the characteristic.
     pub value: Vec<u8>,
 }

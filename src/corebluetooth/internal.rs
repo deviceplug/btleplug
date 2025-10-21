@@ -157,7 +157,7 @@ pub enum CoreBluetoothReply {
 #[derive(Debug)]
 pub enum PeripheralEventInternal {
     Disconnected,
-    Notification(Uuid, Vec<u8>),
+    Notification(Uuid, Uuid, Vec<u8>),
     ManufacturerData(u16, Vec<u8>, i16),
     ServiceData(HashMap<Uuid, Vec<u8>>, i16),
     Services(Vec<Uuid>, i16),
@@ -818,6 +818,7 @@ impl CoreBluetoothInternal {
                         .event_sender
                         .send(PeripheralEventInternal::Notification(
                             characteristic_uuid,
+                            service_uuid,
                             data,
                         ))
                         .await

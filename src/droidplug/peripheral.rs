@@ -26,6 +26,7 @@ use std::{
     pin::Pin,
     sync::{Arc, Mutex},
 };
+use uuid::Uuid;
 
 use super::jni::{
     global_jvm,
@@ -367,7 +368,11 @@ impl api::Peripheral for Peripheral {
                     let characteristic = JBluetoothGattCharacteristic::from_env(&env, item)?;
                     let uuid = characteristic.get_uuid()?;
                     let value = characteristic.get_value()?;
-                    Ok(ValueNotification { uuid, value })
+                    Ok(ValueNotification {
+                        uuid,
+                        service_uuid: Uuid::default(),
+                        value,
+                    }) // TODO: get service UUID
                 }
                 Err(err) => Err(err),
             })

@@ -118,8 +118,12 @@ impl Peripheral {
 
             loop {
                 match event_receiver.next().await {
-                    Some(PeripheralEventInternal::Notification(uuid, data)) => {
-                        let notification = ValueNotification { uuid, value: data };
+                    Some(PeripheralEventInternal::Notification(uuid, service_uuid, data)) => {
+                        let notification = ValueNotification {
+                            uuid,
+                            service_uuid,
+                            value: data,
+                        };
 
                         // Note: we ignore send errors here which may happen while there are no
                         // receivers...

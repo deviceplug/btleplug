@@ -733,6 +733,7 @@ impl<'a: 'b, 'b> TryFrom<JScanResult<'a, 'b>> for (BDAddr, Option<PeripheralProp
                 address: addr,
                 address_type: None,
                 local_name: device_name,
+                advertisement_name: None,
                 tx_power_level,
                 manufacturer_data,
                 service_data,

@@ -94,6 +94,7 @@ impl Peripheral {
             address: BDAddr::default(),
             address_type: None,
             local_name,
+            advertisement_name: None,
             tx_power_level: None,
             rssi: None,
             manufacturer_data: HashMap::new(),

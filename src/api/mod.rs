@@ -179,8 +179,10 @@ pub struct PeripheralProperties {
     pub address: BDAddr,
     /// The type of address (either random or public)
     pub address_type: Option<AddressType>,
-    /// The local name. This is generally a human-readable string that identifies the type of device.
+    /// The GAP local name. This is generally a human-readable string that identifies the type of device.
     pub local_name: Option<String>,
+    /// The advertisement name. May be different than local_name.
+    pub advertisement_name: Option<String>,
     /// The transmission power level for the device
     pub tx_power_level: Option<i16>,
     /// The most recent Received Signal Strength Indicator for the device

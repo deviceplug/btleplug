@@ -117,6 +117,7 @@ impl Peripheral {
             address: self.address(),
             address_type: *self.shared.address_type.read().unwrap(),
             local_name: self.shared.local_name.read().unwrap().clone(),
+            advertisement_name: None,
             tx_power_level: *self.shared.last_tx_power_level.read().unwrap(),
             rssi: *self.shared.last_rssi.read().unwrap(),
             manufacturer_data: self.shared.latest_manufacturer_data.read().unwrap().clone(),

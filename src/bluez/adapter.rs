@@ -143,11 +143,10 @@ async fn central_event(
                 Some(CentralEvent::DeviceDiscovered(device.id.into()))
             }
             DeviceEvent::Connected { connected } => {
-                let device = session.get_device_info(&id).await.ok()?;
                 if connected {
-                    Some(CentralEvent::DeviceConnected(device.id.into()))
+                    Some(CentralEvent::DeviceConnected(id.into()))
                 } else {
-                    Some(CentralEvent::DeviceDisconnected(device.id.into()))
+                    Some(CentralEvent::DeviceDisconnected(id.into()))
                 }
             }
             DeviceEvent::Rssi { rssi: _ } => {

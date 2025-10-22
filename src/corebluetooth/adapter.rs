@@ -57,22 +57,28 @@ impl Adapter {
                 match msg {
                     CoreBluetoothEvent::DeviceDiscovered {
                         uuid,
-                        name,
+                        local_name,
+                        advertisement_name,
                         event_receiver,
                     } => {
                         manager_clone.add_peripheral(Peripheral::new(
                             uuid,
-                            name,
+                            local_name,
+                            advertisement_name,
                             Arc::downgrade(&manager_clone),
                             event_receiver,
                             adapter_sender_clone.clone(),
                         ));
                         manager_clone.emit(CentralEvent::DeviceDiscovered(uuid.into()));
                     }
-                    CoreBluetoothEvent::DeviceUpdated { uuid, name } => {
+                    CoreBluetoothEvent::DeviceUpdated {
+                        uuid,
+                        local_name,
+                        advertisement_name,
+                    } => {
                         let id = uuid.into();
                         if let Some(entry) = manager_clone.peripheral_mut(&id) {
-                            entry.value().update_name(&name);
+                            entry.value().update_name(local_name, advertisement_name);
                             manager_clone.emit(CentralEvent::DeviceUpdated(id));
                         }
                     }

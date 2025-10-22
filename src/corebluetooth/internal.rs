@@ -461,12 +461,14 @@ pub enum CoreBluetoothEvent {
     },
     DeviceDiscovered {
         uuid: Uuid,
-        name: Option<String>,
+        local_name: Option<String>,
+        advertisement_name: Option<String>,
         event_receiver: Receiver<PeripheralEventInternal>,
     },
     DeviceUpdated {
         uuid: Uuid,
-        name: String,
+        local_name: Option<String>,
+        advertisement_name: Option<String>,
     },
     DeviceDisconnected {
         uuid: Uuid,
@@ -569,26 +571,20 @@ impl CoreBluetoothInternal {
     async fn on_discovered_peripheral(
         &mut self,
         peripheral: Retained<CBPeripheral>,
-        local_name: Option<String>,
+        advertisement_name: Option<String>,
     ) {
         let uuid = nsuuid_to_uuid(unsafe { &peripheral.identifier() });
         let peripheral_name = unsafe { peripheral.name() };
-
-        let name = match (peripheral_name.map(|n| n.to_string()), local_name) {
-            (Some(p_name), Some(l_name)) if p_name != l_name => {
-                Some(format!("{p_name} [{l_name}]"))
-            }
-            (Some(p_name), Some(_)) => Some(p_name),
-            (Some(p_name), None) => Some(p_name),
-            (None, Some(l_name)) => Some(l_name),
-            (None, None) => None,
-        };
+        let local_name = peripheral_name
+            .map(|n| n.to_string())
+            .or(advertisement_name.clone());
 
         if self.peripherals.contains_key(&uuid) {
-            if let Some(name) = name {
+            if local_name.is_some() {
                 self.dispatch_event(CoreBluetoothEvent::DeviceUpdated {
                     uuid,
-                    name: name.to_string(),
+                    local_name,
+                    advertisement_name,
                 })
                 .await;
             }
@@ -599,7 +595,8 @@ impl CoreBluetoothInternal {
                 .insert(uuid, PeripheralInternal::new(peripheral, event_sender));
             self.dispatch_event(CoreBluetoothEvent::DeviceDiscovered {
                 uuid,
-                name: name.map(|name| name.to_string()),
+                local_name,
+                advertisement_name,
                 event_receiver,
             })
             .await;
@@ -1095,8 +1092,8 @@ impl CoreBluetoothInternal {
                     CentralDelegateEvent::DidUpdateState{state} => {
                         self.dispatch_event(CoreBluetoothEvent::DidUpdateState{state}).await
                     }
-                    CentralDelegateEvent::DiscoveredPeripheral{cbperipheral, local_name} => {
-                        self.on_discovered_peripheral(cbperipheral, local_name).await
+                    CentralDelegateEvent::DiscoveredPeripheral{cbperipheral, advertisement_name} => {
+                        self.on_discovered_peripheral(cbperipheral, advertisement_name).await
                     }
                     CentralDelegateEvent::DiscoveredServices{peripheral_uuid, services} => {
                         self.on_discovered_services(peripheral_uuid, services)

@@ -46,7 +46,7 @@ pub enum CentralDelegateEvent {
     },
     DiscoveredPeripheral {
         cbperipheral: Retained<CBPeripheral>,
-        local_name: Option<String>,
+        advertisement_name: Option<String>,
     },
     DiscoveredServices {
         peripheral_uuid: Uuid,
@@ -136,11 +136,11 @@ impl Debug for CentralDelegateEvent {
                 .finish(),
             CentralDelegateEvent::DiscoveredPeripheral {
                 cbperipheral,
-                local_name,
+                advertisement_name,
             } => f
                 .debug_struct("CentralDelegateEvent")
                 .field("cbperipheral", cbperipheral.deref())
-                .field("local_name", local_name)
+                .field("advertisement_name", advertisement_name)
                 .finish(),
             CentralDelegateEvent::DiscoveredServices {
                 peripheral_uuid,
@@ -385,14 +385,14 @@ declare_class!(
                 peripheral_debug(peripheral)
             );
 
-            let local_name = adv_data
+            let advertisement_name = adv_data
                 .get(unsafe { CBAdvertisementDataLocalNameKey })
                 .map(|name| (name as *const AnyObject as *const NSString))
                 .and_then(|name| unsafe { nsstring_to_string(name) });
 
             self.send_event(CentralDelegateEvent::DiscoveredPeripheral {
                 cbperipheral: peripheral.retain(),
-                local_name,
+                advertisement_name,
             });
 
             let rssi_value = rssi.as_i16();

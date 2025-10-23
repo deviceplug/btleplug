@@ -1,5 +1,5 @@
 use super::peripheral::{Peripheral, PeripheralId};
-use crate::api::{Central, CentralEvent, CentralState, ScanFilter};
+use crate::api::{Central, CentralEvent, CentralState, RetrievePeripheralsOptions, ScanFilter};
 use crate::{Error, Result};
 use async_trait::async_trait;
 use bluez_async::{
@@ -89,6 +89,13 @@ impl Central for Adapter {
             .into_iter()
             .map(|device| Peripheral::new(self.session.clone(), device))
             .collect())
+    }
+
+    async fn retrieve_peripherals(
+        &self,
+        options: RetrievePeripheralsOptions,
+    ) -> Result<Vec<Peripheral>> {
+        Err(Error::NotSupported("Not implemented".to_string()))
     }
 
     async fn peripheral(&self, id: &PeripheralId) -> Result<Peripheral> {

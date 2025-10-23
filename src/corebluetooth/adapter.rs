@@ -3,7 +3,7 @@ use super::internal::{
     CoreBluetoothReplyFuture,
 };
 use super::peripheral::{Peripheral, PeripheralId};
-use crate::api::{Central, CentralEvent, CentralState, ScanFilter};
+use crate::api::{Central, CentralEvent, CentralState, RetrievePeripheralsOptions, ScanFilter};
 use crate::common::adapter_manager::AdapterManager;
 use crate::{Error, Result};
 use async_trait::async_trait;
@@ -120,6 +120,13 @@ impl Central for Adapter {
 
     async fn peripherals(&self) -> Result<Vec<Peripheral>> {
         Ok(self.manager.peripherals())
+    }
+
+    async fn retrieve_peripherals(
+        &self,
+        options: RetrievePeripheralsOptions,
+    ) -> Result<Vec<Peripheral>> {
+        Err(Error::NotSupported("Not implemented".to_string()))
     }
 
     async fn peripheral(&self, id: &PeripheralId) -> Result<Peripheral> {

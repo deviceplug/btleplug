@@ -209,6 +209,15 @@ pub struct ScanFilter {
     pub services: Vec<Uuid>,
 }
 
+/// Parameters of retrieve_peripherals method.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RetrievePeripheralsOptions {
+    /// retrieve connected peripherals by services
+    services: Option<Vec<Uuid>>,
+    /// retrieve known peripherals by identifiers
+    identifiers: Option<Vec<PeripheralId>>,
+}
+
 /// The type of write operation to use.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WriteType {
@@ -362,6 +371,12 @@ pub trait Central: Send + Sync + Clone {
     /// Returns the list of [`Peripheral`]s that have been discovered so far. Note that this list
     /// may contain peripherals that are no longer available.
     async fn peripherals(&self) -> Result<Vec<Self::Peripheral>>;
+
+    /// Returns the list of known or connected [`Peripheral`]s
+    async fn retrieve_peripherals(
+        &self,
+        options: RetrievePeripheralsOptions,
+    ) -> Result<Vec<Self::Peripheral>>;
 
     /// Returns a particular [`Peripheral`] by its address if it has been discovered.
     async fn peripheral(&self, id: &PeripheralId) -> Result<Self::Peripheral>;

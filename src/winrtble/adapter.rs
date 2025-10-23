@@ -13,7 +13,7 @@
 
 use super::{ble::watcher::BLEWatcher, peripheral::Peripheral, peripheral::PeripheralId};
 use crate::{
-    api::{BDAddr, Central, CentralEvent, CentralState, ScanFilter},
+    api::{BDAddr, Central, CentralEvent, CentralState, RetrievePeripheralsOptions, ScanFilter},
     common::adapter_manager::AdapterManager,
     Error, Result,
 };
@@ -116,6 +116,13 @@ impl Central for Adapter {
 
     async fn peripherals(&self) -> Result<Vec<Peripheral>> {
         Ok(self.manager.peripherals())
+    }
+
+    async fn retrieve_peripherals(
+        &self,
+        options: RetrievePeripheralsOptions,
+    ) -> Result<Vec<Peripheral>> {
+        Err(Error::NotSupported("Not implemented".to_string()))
     }
 
     async fn peripheral(&self, id: &PeripheralId) -> Result<Peripheral> {

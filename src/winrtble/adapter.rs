@@ -19,18 +19,14 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::stream::Stream;
-use log::trace;
+use log::{debug, trace, warn};
 use std::convert::TryInto;
 use std::fmt::{self, Debug, Formatter};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
-use windows::{
-    Devices::Bluetooth::BluetoothLEDevice,
-    Devices::Enumeration::DeviceInformation,
-    Devices::Radios::{Radio, RadioState},
-    Foundation::TypedEventHandler,
-};
+use windows::Devices::Bluetooth::BluetoothLEDevice;
+use windows::Devices::Enumeration::DeviceInformation;
 
 /// Implementation of [api::Central](crate::api::Central).
 #[derive(Clone)]
@@ -119,90 +115,146 @@ impl Central for Adapter {
     }
 
     async fn connected_peripherals(&self, filter: ScanFilter) -> Result<()> {
-        let device_selector = BluetoothLEDevice::GetDeviceSelector()?;
-        let get_devices = match DeviceInformation::FindAllAsyncAqsFilter(&device_selector) {
-            Ok(devices) => devices,
-            Err(e) => {
-                return Err(Error::Other(format!("{:?}", e).into()));
-            }
-        };
-        let devices = match get_devices.get() {
-            Ok(devices) => devices,
-            Err(e) => {
-                return Err(Error::Other(format!("{:?}", e).into()));
-            }
-        };
+        let base_selector = BluetoothLEDevice::GetDeviceSelector()
+            .map_err(|e| Error::Other(format!("GetDeviceSelector failed: {:?}", e).into()))?;
+        let aqs = format!(
+            "{} AND System.Devices.Aep.IsConnected:=System.StructuredQueryType.Boolean#True",
+            base_selector.to_string()
+        );
+
+        // Query all BLE devices that are currently connected to the system
+        let devices = DeviceInformation::FindAllAsyncAqsFilter(&windows::core::HSTRING::from(aqs))
+            .map_err(|e| Error::Other(format!("FindAllAsyncAqsFilter failed: {:?}", e).into()))?
+            .get()
+            .map_err(|e| Error::Other(format!("FindAllAsync().get() failed: {:?}", e).into()))?;
+
         let manager = self.manager.clone();
-        let mut required_services = filter.clone().services;
-        required_services.sort();
+        let required_services: Vec<Uuid> = filter.services.clone();
+
+        debug!(
+            "Scanning for connected peripherals with {} service filters",
+            required_services.len()
+        );
+
+        // Iterate through each connected device
         for device in devices {
-            let Ok(device_id) = device.Id() else {
-                continue;
-            };
-            let Ok(ble_device) = BluetoothLEDevice::FromIdAsync(&device_id) else {
-                continue;
-            };
-            let Ok(ble_device) = ble_device.get() else {
-                continue;
-            };
-            let Ok(services_result_op) = ble_device.GetGattServicesAsync() else {
-                continue;
-            };
-            let Ok(services_result) = services_result_op.get() else {
-                continue;
-            };
-            let Ok(services) = services_result.Services() else {
-                continue;
-            };
-            // Verify all services in filter exist on the device.
-            let mut found_services: Vec<Uuid> = Vec::new();
-            for service in services {
-                let Ok(s_uuid) = service.Uuid() else {
+            let device_id = match device.Id() {
+                Ok(id) => id,
+                Err(e) => {
+                    warn!("Failed to get device ID: {:?}", e);
                     continue;
-                };
-                let service_uuid = Uuid::from_u128(s_uuid.to_u128());
-                if filter.services.contains(&service_uuid) {
-                    found_services.push(service_uuid);
+                }
+            };
+            debug!("Checking connected device: {:?}", device_id);
+
+            // BluetoothLEDevice from the device ID
+            let ble_device = match BluetoothLEDevice::FromIdAsync(&device_id) {
+                Ok(async_op) => match async_op.get() {
+                    Ok(dev) => dev,
+                    Err(e) => {
+                        warn!("FromIdAsync.get() failed for {:?}: {:?}", device_id, e);
+                        continue;
+                    }
+                },
+                Err(e) => {
+                    warn!("FromIdAsync failed for {:?}: {:?}", device_id, e);
+                    continue;
+                }
+            };
+
+            // Double-check the connection status
+            match ble_device.ConnectionStatus() {
+                Ok(status)
+                    if status
+                        == windows::Devices::Bluetooth::BluetoothConnectionStatus::Connected => {}
+                Ok(_) => {
+                    trace!("Device {:?} not connected, skipping", device_id);
+                    continue;
+                }
+                Err(e) => {
+                    warn!("Failed to get connection status: {:?}", e);
+                    continue;
                 }
             }
-            found_services.sort();
-            trace!(
-                "Found required services: {:?} of {:?}",
-                found_services.len(),
-                required_services.len()
-            );
-            if (required_services.len() != found_services.len())
-                || !(required_services
-                    .iter()
-                    .zip(found_services.iter())
-                    .all(|(l, r)| l == r))
-            {
-                trace!("Not all required services are accounted for, continuing...");
+
+            // Service filtering logic:
+            // - If no services specified in filter, accept all connected devices
+            // - Otherwise, accept only if the device has at least one matching service
+            let mut accept_device = required_services.is_empty();
+
+            if !accept_device {
+                // Query the device's GATT services to check for matches
+                let services_result = match ble_device.GetGattServicesAsync() {
+                    Ok(async_op) => async_op.get(),
+                    Err(e) => {
+                        warn!("GetGattServicesAsync failed: {:?}", e);
+                        continue;
+                    }
+                };
+
+                let services = match services_result {
+                    Ok(gatt_services) => match gatt_services.Services() {
+                        Ok(service_list) => service_list,
+                        Err(e) => {
+                            warn!("Failed to get Services list: {:?}", e);
+                            continue;
+                        }
+                    },
+                    Err(e) => {
+                        warn!("GetGattServicesAsync.get() failed: {:?}", e);
+                        continue;
+                    }
+                };
+
+                // Check if any of the device's services match the filter
+                for service in &services {
+                    if let Ok(guid) = service.Uuid() {
+                        let service_uuid = Uuid::from_u128(guid.to_u128());
+                        if required_services.contains(&service_uuid) {
+                            debug!("Found matching service: {:?}", service_uuid);
+                            accept_device = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if !accept_device {
+                debug!("Device does not match service filter, skipping");
                 continue;
             }
 
-            let Ok(bluetooth_address) = ble_device.BluetoothAddress() else {
-                continue;
-            };
-            let address: BDAddr = match bluetooth_address.try_into() {
-                Ok(address) => address,
-                Err(_) => {
+            // Convert Bluetooth address to BDAddr
+            let address = match ble_device.BluetoothAddress() {
+                Ok(addr) => match (addr as u64).try_into() {
+                    Ok(bd_addr) => bd_addr,
+                    Err(_) => {
+                        warn!("Failed to convert Bluetooth address: {}", addr);
+                        continue;
+                    }
+                },
+                Err(e) => {
+                    warn!("BluetoothAddress() failed: {:?}", e);
                     continue;
                 }
             };
+
+            // Update the peripheral in the manager
             match manager.peripheral_mut(&address.into()) {
                 Some(_) => {
-                    trace!("Skipping over existing peripheral: {:?}", address);
-                    manager.emit(CentralEvent::DeviceDiscovered(address.into()));
+                    debug!("Peripheral already exists in manager: {:?}", address);
+                    // manager.emit(CentralEvent::DeviceUpdated(address.into()));
                 }
                 None => {
+                    debug!("Adding new peripheral: {:?}", address);
                     let peripheral = Peripheral::new(Arc::downgrade(&manager), address);
                     manager.add_peripheral(peripheral);
                     manager.emit(CentralEvent::DeviceDiscovered(address.into()));
                 }
             }
-            return Ok(());
         }
+
+        debug!("Finished scanning for connected peripherals");
         Ok(())
     }
 

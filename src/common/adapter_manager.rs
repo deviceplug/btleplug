@@ -73,6 +73,10 @@ where
             .collect()
     }
 
+    pub fn clear_peripherals(&self) {
+        self.peripherals.clear();
+    }
+
     // Only used on windows and macOS/iOS, so turn off deadcode so we don't get warnings on android/linux.
     #[allow(dead_code)]
     pub fn peripheral_mut(

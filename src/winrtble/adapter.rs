@@ -68,6 +68,10 @@ impl Adapter {
             radio,
         })
     }
+
+    pub fn clear_cache(&self) {
+        self.manager.clear_peripherals();
+    }
 }
 
 impl Debug for Adapter {

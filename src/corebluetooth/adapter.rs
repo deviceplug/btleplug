@@ -92,6 +92,10 @@ impl Adapter {
             sender: adapter_sender,
         })
     }
+
+    pub fn clear_cache(&self) {
+        self.manager.clear_peripherals();
+    }
 }
 
 #[async_trait]

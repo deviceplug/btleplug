@@ -247,7 +247,7 @@ impl Central for Adapter {
             match manager.peripheral_mut(&address.into()) {
                 Some(_) => {
                     debug!("Peripheral already exists in manager: {:?}", address);
-                    // manager.emit(CentralEvent::DeviceUpdated(address.into()));
+                    manager.emit(CentralEvent::DeviceDiscovered(address.into()));
                 }
                 None => {
                     debug!("Adding new peripheral: {:?}", address);

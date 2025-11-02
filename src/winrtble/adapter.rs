@@ -19,7 +19,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::stream::Stream;
-use log::{debug, trace, warn};
+use log::trace;
 use std::convert::TryInto;
 use std::fmt::{self, Debug, Formatter};
 use std::pin::Pin;
@@ -139,7 +139,7 @@ impl Central for Adapter {
         let manager = self.manager.clone();
         let required_services: Vec<Uuid> = filter.services.clone();
 
-        debug!(
+        trace!(
             "Scanning for connected peripherals with {} service filters",
             required_services.len()
         );
@@ -149,23 +149,23 @@ impl Central for Adapter {
             let device_id = match device.Id() {
                 Ok(id) => id,
                 Err(e) => {
-                    warn!("Failed to get device ID: {:?}", e);
+                    trace!("Failed to get device ID: {:?}", e);
                     continue;
                 }
             };
-            debug!("Checking connected device: {:?}", device_id);
+            trace!("Checking connected device: {:?}", device_id);
 
             // BluetoothLEDevice from the device ID
             let ble_device = match BluetoothLEDevice::FromIdAsync(&device_id) {
                 Ok(async_op) => match async_op.get() {
                     Ok(dev) => dev,
                     Err(e) => {
-                        warn!("FromIdAsync.get() failed for {:?}: {:?}", device_id, e);
+                        trace!("FromIdAsync.get() failed for {:?}: {:?}", device_id, e);
                         continue;
                     }
                 },
                 Err(e) => {
-                    warn!("FromIdAsync failed for {:?}: {:?}", device_id, e);
+                    trace!("FromIdAsync failed for {:?}: {:?}", device_id, e);
                     continue;
                 }
             };
@@ -180,7 +180,7 @@ impl Central for Adapter {
                     continue;
                 }
                 Err(e) => {
-                    warn!("Failed to get connection status: {:?}", e);
+                    trace!("Failed to get connection status: {:?}", e);
                     continue;
                 }
             }
@@ -195,7 +195,7 @@ impl Central for Adapter {
                 let services_result = match ble_device.GetGattServicesAsync() {
                     Ok(async_op) => async_op.get(),
                     Err(e) => {
-                        warn!("GetGattServicesAsync failed: {:?}", e);
+                        trace!("GetGattServicesAsync failed: {:?}", e);
                         continue;
                     }
                 };
@@ -204,12 +204,12 @@ impl Central for Adapter {
                     Ok(gatt_services) => match gatt_services.Services() {
                         Ok(service_list) => service_list,
                         Err(e) => {
-                            warn!("Failed to get Services list: {:?}", e);
+                            trace!("Failed to get Services list: {:?}", e);
                             continue;
                         }
                     },
                     Err(e) => {
-                        warn!("GetGattServicesAsync.get() failed: {:?}", e);
+                        trace!("GetGattServicesAsync.get() failed: {:?}", e);
                         continue;
                     }
                 };
@@ -219,7 +219,7 @@ impl Central for Adapter {
                     if let Ok(guid) = service.Uuid() {
                         let service_uuid = Uuid::from_u128(guid.to_u128());
                         if required_services.contains(&service_uuid) {
-                            debug!("Found matching service: {:?}", service_uuid);
+                            trace!("Found matching service: {:?}", service_uuid);
                             accept_device = true;
                             break;
                         }
@@ -228,7 +228,7 @@ impl Central for Adapter {
             }
 
             if !accept_device {
-                debug!("Device does not match service filter, skipping");
+                trace!("Device does not match service filter, skipping");
                 continue;
             }
 
@@ -237,12 +237,12 @@ impl Central for Adapter {
                 Ok(addr) => match (addr as u64).try_into() {
                     Ok(bd_addr) => bd_addr,
                     Err(_) => {
-                        warn!("Failed to convert Bluetooth address: {}", addr);
+                        trace!("Failed to convert Bluetooth address: {}", addr);
                         continue;
                     }
                 },
                 Err(e) => {
-                    warn!("BluetoothAddress() failed: {:?}", e);
+                    trace!("BluetoothAddress() failed: {:?}", e);
                     continue;
                 }
             };
@@ -250,11 +250,11 @@ impl Central for Adapter {
             // Update the peripheral in the manager
             match manager.peripheral_mut(&address.into()) {
                 Some(_) => {
-                    debug!("Peripheral already exists in manager: {:?}", address);
+                    trace!("Peripheral already exists in manager: {:?}", address);
                     manager.emit(CentralEvent::DeviceDiscovered(address.into()));
                 }
                 None => {
-                    debug!("Adding new peripheral: {:?}", address);
+                    trace!("Adding new peripheral: {:?}", address);
                     let peripheral = Peripheral::new(Arc::downgrade(&manager), address);
                     manager.add_peripheral(peripheral);
                     manager.emit(CentralEvent::DeviceDiscovered(address.into()));
@@ -262,7 +262,7 @@ impl Central for Adapter {
             }
         }
 
-        debug!("Finished scanning for connected peripherals");
+        trace!("Finished scanning for connected peripherals");
         Ok(())
     }
 

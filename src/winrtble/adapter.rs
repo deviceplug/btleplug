@@ -233,7 +233,7 @@ impl Central for Adapter {
             }
 
             // Convert Bluetooth address to BDAddr
-            let address = match ble_device.BluetoothAddress() {
+            let address: BDAddr = match ble_device.BluetoothAddress() {
                 Ok(addr) => match (addr as u64).try_into() {
                     Ok(bd_addr) => bd_addr,
                     Err(_) => {

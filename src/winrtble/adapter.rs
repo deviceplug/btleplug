@@ -25,8 +25,12 @@ use std::fmt::{self, Debug, Formatter};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
-use windows::Devices::Bluetooth::BluetoothLEDevice;
-use windows::Devices::Enumeration::DeviceInformation;
+use windows::{
+    Devices::Bluetooth::BluetoothLEDevice,
+    Devices::Enumeration::DeviceInformation,
+    Devices::Radios::{Radio, RadioState},
+    Foundation::TypedEventHandler,
+};
 
 /// Implementation of [api::Central](crate::api::Central).
 #[derive(Clone)]

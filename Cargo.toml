@@ -59,6 +59,7 @@ objc2-foundation = { version = "0.2.2", default-features = false, features = [
     "NSString",
     "NSUUID",
     "NSValue",
+    "NSProcessInfo",
 ] }
 objc2-core-bluetooth = { version = "0.2.2", default-features = false, features = [
     "std",

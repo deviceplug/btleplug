@@ -9,6 +9,8 @@ static GLOBAL_JVM: OnceCell<JavaVM> = OnceCell::new();
 
 pub fn init(env: &JNIEnv) -> crate::Result<()> {
     if let Ok(()) = GLOBAL_JVM.set(env.get_java_vm()?) {
+        jni_utils::init(&env).unwrap();
+
         env.register_native_methods(
             "com/nonpolynomial/btleplug/android/impl/Adapter",
             &[

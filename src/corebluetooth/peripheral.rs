@@ -160,6 +160,10 @@ impl Peripheral {
                             services,
                         });
                     }
+                    Some(PeripheralEventInternal::ServicesModified) => {
+                        shared.services.lock().unwrap().clear();
+                        shared.emit_event(CentralEvent::DeviceServicesModified(shared.uuid.into()));
+                    }
                     Some(PeripheralEventInternal::Disconnected) => (),
                     None => {
                         info!("Event receiver died, breaking out of corebluetooth device loop.");
@@ -251,8 +255,7 @@ impl api::Peripheral for Peripheral {
             })
             .await?;
         match fut.await {
-            CoreBluetoothReply::Connected(services) => {
-                *(self.shared.services.lock().map_err(Into::<Error>::into)?) = services;
+            CoreBluetoothReply::Connected => {
                 self.shared
                     .emit_event(CentralEvent::DeviceConnected(self.shared.uuid.into()));
             }
@@ -285,8 +288,23 @@ impl api::Peripheral for Peripheral {
     }
 
     async fn discover_services(&self) -> Result<()> {
-        // TODO: Actually discover on this, rather than on connection
-        Ok(())
+        let fut = CoreBluetoothReplyFuture::default();
+        self.shared
+            .message_sender
+            .to_owned()
+            .send(CoreBluetoothMessage::DiscoverServices {
+                peripheral_uuid: self.shared.uuid,
+                future: fut.get_state_clone(),
+            })
+            .await?;
+        match fut.await {
+            CoreBluetoothReply::ServicesDiscovered(services) => {
+                *(self.shared.services.lock().unwrap()) = services.clone();
+                return Ok(());
+            }
+            CoreBluetoothReply::Err(msg) => return Err(Error::RuntimeError(msg)),
+            _ => panic!("Shouldn't get anything but discovered or err!"),
+        }
     }
 
     async fn write(

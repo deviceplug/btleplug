@@ -148,7 +148,8 @@ impl CharacteristicInternal {
 pub enum CoreBluetoothReply {
     AdapterState(CBManagerState),
     ReadResult(Vec<u8>),
-    Connected(BTreeSet<Service>),
+    Connected,
+    ServicesDiscovered(BTreeSet<Service>),
     State(CBPeripheralState),
     Ok,
     Err(String),
@@ -161,6 +162,7 @@ pub enum PeripheralEventInternal {
     ManufacturerData(u16, Vec<u8>, i16),
     ServiceData(HashMap<Uuid, Vec<u8>>, i16),
     Services(Vec<Uuid>, i16),
+    ServicesModified,
 }
 
 pub type CoreBluetoothReplyStateShared = BtlePlugFutureStateShared<CoreBluetoothReply>;
@@ -178,6 +180,7 @@ struct PeripheralInternal {
     pub event_sender: Sender<PeripheralEventInternal>,
     pub disconnected_future_state: Option<CoreBluetoothReplyStateShared>,
     pub connected_future_state: Option<CoreBluetoothReplyStateShared>,
+    pub services_discovered_future_state: Option<CoreBluetoothReplyStateShared>,
 }
 
 impl Debug for PeripheralInternal {
@@ -194,6 +197,10 @@ impl Debug for PeripheralInternal {
             )
             .field("event_sender", &self.event_sender)
             .field("connected_future_state", &self.connected_future_state)
+            .field(
+                "services_discovered_future_state",
+                &self.services_discovered_future_state,
+            )
             .finish()
     }
 }
@@ -209,6 +216,7 @@ impl PeripheralInternal {
             event_sender,
             connected_future_state: None,
             disconnected_future_state: None,
+            services_discovered_future_state: None,
         }
     }
 
@@ -285,7 +293,7 @@ impl PeripheralInternal {
         // back a Connected reply to the waiting future with all of the
         // characteristic info in it.
         if !self.services.values().any(|service| !service.discovered) {
-            if self.connected_future_state.is_none() {
+            if self.services_discovered_future_state.is_none() {
                 panic!("We should still have a future at this point!");
             }
             let services = self
@@ -317,12 +325,12 @@ impl PeripheralInternal {
                         .collect(),
                 })
                 .collect();
-            self.connected_future_state
+            self.services_discovered_future_state
                 .take()
                 .unwrap()
                 .lock()
                 .unwrap()
-                .set_reply(CoreBluetoothReply::Connected(services));
+                .set_reply(CoreBluetoothReply::ServicesDiscovered(services));
         }
     }
 
@@ -452,6 +460,10 @@ pub enum CoreBluetoothMessage {
         data: Vec<u8>,
         future: CoreBluetoothReplyStateShared,
     },
+    DiscoverServices {
+        peripheral_uuid: Uuid,
+        future: CoreBluetoothReplyStateShared,
+    },
 }
 
 #[derive(Debug)]
@@ -566,6 +578,23 @@ impl CoreBluetoothInternal {
         }
     }
 
+    async fn on_services_modified(&mut self, peripheral_uuid: Uuid) {
+        trace!(
+            "Peripheral modified services and must be rediscovered! {:?}",
+            peripheral_uuid
+        );
+        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
+            p.services.clear();
+            if let Err(e) = p
+                .event_sender
+                .send(PeripheralEventInternal::ServicesModified)
+                .await
+            {
+                error!("Error sending notification event: {}", e);
+            }
+        }
+    }
+
     async fn on_discovered_peripheral(
         &mut self,
         peripheral: Retained<CBPeripheral>,
@@ -673,9 +702,20 @@ impl CoreBluetoothInternal {
         }
     }
 
-    fn on_peripheral_connect(&mut self, _peripheral_uuid: Uuid) {
-        // Don't actually do anything here. The peripheral will fire the future
-        // itself when it receives all of its service/characteristic info.
+    fn on_peripheral_connect(&mut self, peripheral_uuid: Uuid) {
+        if self.peripherals.contains_key(&peripheral_uuid) {
+            let peripheral = self
+                .peripherals
+                .get_mut(&peripheral_uuid)
+                .expect("If we're here we should have an ID");
+            peripheral
+                .connected_future_state
+                .take()
+                .unwrap()
+                .lock()
+                .unwrap()
+                .set_reply(CoreBluetoothReply::Connected);
+        }
     }
 
     fn on_peripheral_connection_failed(
@@ -1085,6 +1125,15 @@ impl CoreBluetoothInternal {
         }
     }
 
+    fn discover_services(&mut self, peripheral_uuid: Uuid, fut: CoreBluetoothReplyStateShared) {
+        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
+            trace!("Discovering services!");
+            p.services_discovered_future_state = Some(fut);
+            // This will trigger the delegate_peripheral_diddiscoverservices in central_delegate.rs
+            unsafe { p.peripheral.discoverServices(None) };
+        }
+    }
+
     async fn wait_for_message(&mut self) {
         select! {
             delegate_msg = self.delegate_receiver.select_next_some() => {
@@ -1108,7 +1157,7 @@ impl CoreBluetoothInternal {
                         self.on_discovered_characteristic_descriptors(peripheral_uuid, service_uuid, characteristic_uuid, descriptors)
                     }
                     CentralDelegateEvent::ConnectedDevice{peripheral_uuid} => {
-                            self.on_peripheral_connect(peripheral_uuid)
+                        self.on_peripheral_connect(peripheral_uuid)
                     },
                     CentralDelegateEvent::ConnectionFailed{peripheral_uuid, error_description} => {
                         self.on_peripheral_connection_failed(peripheral_uuid, error_description)
@@ -1145,6 +1194,9 @@ impl CoreBluetoothInternal {
                     },
                     CentralDelegateEvent::Services{peripheral_uuid, service_uuids, rssi} => {
                         self.on_services(peripheral_uuid, service_uuids, rssi).await
+                    },
+                    CentralDelegateEvent::ServicesModified{peripheral_uuid} => {
+                        self.on_services_modified(peripheral_uuid).await
                     },
                     CentralDelegateEvent::DescriptorNotified{
                         peripheral_uuid,
@@ -1205,6 +1257,9 @@ impl CoreBluetoothInternal {
                         data,
                         future,
                     } => self.write_descriptor_value(peripheral_uuid, service_uuid, characteristic_uuid, descriptor_uuid, data, future),
+                    CoreBluetoothMessage::DiscoverServices{peripheral_uuid, future} => {
+                        self.discover_services(peripheral_uuid, future);
+                    }
                 };
             }
         }

@@ -319,6 +319,8 @@ pub enum CentralEvent {
     DeviceUpdated(PeripheralId),
     DeviceConnected(PeripheralId),
     DeviceDisconnected(PeripheralId),
+    /// Only emitted on the corebluetooth subsystem
+    DeviceServicesModified(PeripheralId),
     /// Emitted when a Manufacturer Data advertisement has been received from a device
     ManufacturerDataAdvertisement {
         id: PeripheralId,

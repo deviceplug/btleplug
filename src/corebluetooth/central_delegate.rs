@@ -68,6 +68,9 @@ pub enum CentralDelegateEvent {
         service_uuids: Vec<Uuid>,
         rssi: i16,
     },
+    ServicesModified {
+        peripheral_uuid: Uuid,
+    },
     // DiscoveredIncludedServices(Uuid, HashMap<Uuid, Retained<CBService>>),
     DiscoveredCharacteristics {
         peripheral_uuid: Uuid,
@@ -265,6 +268,10 @@ impl Debug for CentralDelegateEvent {
                 .field("service_uuids", service_uuids)
                 .field("rssi", rssi)
                 .finish(),
+            CentralDelegateEvent::ServicesModified { peripheral_uuid } => f
+                .debug_struct("ServicesModified")
+                .field("peripheral_uuid", peripheral_uuid)
+                .finish(),
             CentralDelegateEvent::DescriptorNotified {
                 peripheral_uuid,
                 service_uuid,
@@ -335,7 +342,6 @@ declare_class!(
                 peripheral_debug(peripheral)
             );
             unsafe { peripheral.setDelegate(Some(ProtocolObject::from_ref(self))) };
-            unsafe { peripheral.discoverServices(None) }
             let peripheral_uuid = nsuuid_to_uuid(unsafe { &peripheral.identifier() });
             self.send_event(CentralDelegateEvent::ConnectedDevice { peripheral_uuid });
         }
@@ -720,6 +726,23 @@ declare_class!(
                     descriptor_uuid: cbuuid_to_uuid(unsafe { &descriptor.UUID() }),
                 });
             }
+        }
+
+        #[method(peripheral:didModifyServices:)]
+        fn delegate_peripheral_didmodifyservices(
+            &self,
+            peripheral: &CBPeripheral,
+            _invalidated_services: &NSArray<CBService>,
+        ) {
+            trace!(
+                "delegate_peripheral_didmodifyservices {}",
+                peripheral_debug(peripheral),
+            );
+            // NOTE: This is a corebluetooth-only even that makes the peripheral unusable until service discovery has been performed again.
+            // https://developer.apple.com/documentation/corebluetooth/cbperipheraldelegate/peripheral(_:didmodifyservices:)?language=objc
+            self.send_event(CentralDelegateEvent::ServicesModified {
+                peripheral_uuid: nsuuid_to_uuid(unsafe { &peripheral.identifier() }),
+            });
         }
     }
 );

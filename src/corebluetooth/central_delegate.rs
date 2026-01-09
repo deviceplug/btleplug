@@ -738,8 +738,11 @@ declare_class!(
                 "delegate_peripheral_didmodifyservices {}",
                 peripheral_debug(peripheral),
             );
-            // NOTE: This is a corebluetooth-only even that makes the peripheral unusable until service discovery has been performed again.
+            // This is a corebluetooth-only event that makes peripheral services unusable until discovery has been performed again.
             // https://developer.apple.com/documentation/corebluetooth/cbperipheraldelegate/peripheral(_:didmodifyservices:)?language=objc
+            // Trigger the removal of internal corebluetooth peripheral discovered services. It is also expected that
+            // discover_services() will be performed again on the peripheral at the API level as soon as is practical.
+            // NOTE: the list of modified services does not appear to be particularly useful; a full service rediscovery is needed.
             self.send_event(CentralDelegateEvent::ServicesModified {
                 peripheral_uuid: nsuuid_to_uuid(unsafe { &peripheral.identifier() }),
             });

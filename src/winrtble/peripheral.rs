@@ -63,6 +63,8 @@ impl Display for PeripheralId {
     }
 }
 
+impl crate::api::PeripheralId for PeripheralId {}
+
 /// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone)]
 pub struct Peripheral {
@@ -305,7 +307,7 @@ impl Peripheral {
         }
     }
 
-    fn emit_event(&self, event: CentralEvent) {
+    fn emit_event(&self, event: CentralEvent<PeripheralId>) {
         if let Some(manager) = self.shared.adapter.upgrade() {
             manager.emit(event);
         } else {
@@ -354,6 +356,8 @@ impl Debug for Peripheral {
 
 #[async_trait]
 impl ApiPeripheral for Peripheral {
+    type ID = PeripheralId;
+
     fn id(&self) -> PeripheralId {
         PeripheralId(self.shared.address)
     }

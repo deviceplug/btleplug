@@ -42,8 +42,6 @@ use uuid::Uuid;
 
 pub use self::bdaddr::{BDAddr, ParseBDAddrError};
 
-use crate::platform::PeripheralId;
-
 /// The default MTU size for a peripheral.
 pub const DEFAULT_MTU_SIZE: u16 = 23;
 
@@ -254,8 +252,10 @@ pub enum WriteType {
 /// as well as functions for communication.
 #[async_trait]
 pub trait Peripheral: Send + Sync + Clone + Debug {
+    type ID: PeripheralId;
+
     /// Returns the unique identifier of the peripheral.
-    fn id(&self) -> PeripheralId;
+    fn id(&self) -> Self::ID;
 
     /// Returns the MAC address of the peripheral.
     fn address(&self) -> BDAddr;
@@ -380,6 +380,14 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     }
 }
 
+/// ID for a [`Peripheral`].
+///
+/// Different backends use different ID types.
+pub trait PeripheralId:
+    'static + Send + Sync + Clone + Debug + PartialEq + Eq + std::hash::Hash + std::fmt::Display
+{
+}
+
 #[cfg_attr(
     feature = "serde",
     derive(Serialize, Deserialize),
@@ -399,33 +407,33 @@ pub enum CentralState {
     serde(crate = "serde_cr")
 )]
 #[derive(Debug, Clone)]
-pub enum CentralEvent {
-    DeviceDiscovered(PeripheralId),
-    DeviceUpdated(PeripheralId),
-    DeviceConnected(PeripheralId),
-    DeviceDisconnected(PeripheralId),
+pub enum CentralEvent<ID: PeripheralId> {
+    DeviceDiscovered(ID),
+    DeviceUpdated(ID),
+    DeviceConnected(ID),
+    DeviceDisconnected(ID),
     /// Only emitted on the corebluetooth subsystem
-    DeviceServicesModified(PeripheralId),
+    DeviceServicesModified(ID),
     /// Emitted when a Manufacturer Data advertisement has been received from a device
     ManufacturerDataAdvertisement {
-        id: PeripheralId,
+        id: ID,
         manufacturer_data: HashMap<u16, Vec<u8>>,
     },
     /// Emitted when a Service Data advertisement has been received from a device
     ServiceDataAdvertisement {
-        id: PeripheralId,
+        id: ID,
         service_data: HashMap<Uuid, Vec<u8>>,
     },
     /// Emitted when the advertised services for a device has been updated
     ServicesAdvertisement {
-        id: PeripheralId,
+        id: ID,
         services: Vec<Uuid>,
     },
     /// Emitted when an RSSI (signal strength) update is received for a device.
     /// This may come from advertisements during scanning, or from an active
     /// `read_rssi()` call on connected platforms.
     RssiUpdate {
-        id: PeripheralId,
+        id: ID,
         rssi: i16,
     },
     StateUpdate(CentralState),
@@ -439,7 +447,11 @@ pub trait Central: Send + Sync + Clone {
 
     /// Retrieve a stream of `CentralEvent`s. This stream will receive notifications when events
     /// occur for this Central module. See [`CentralEvent`] for the full set of possible events.
-    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent> + Send>>>;
+    async fn events(
+        &self,
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = CentralEvent<<Self::Peripheral as Peripheral>::ID>> + Send>>,
+    >;
 
     /// Starts a scan for BLE devices. This scan will generally continue until explicitly stopped,
     /// although this may depend on your Bluetooth adapter. Discovered devices will be announced
@@ -458,10 +470,16 @@ pub trait Central: Send + Sync + Clone {
     async fn peripherals(&self) -> Result<Vec<Self::Peripheral>>;
 
     /// Returns a particular [`Peripheral`] by its address if it has been discovered.
-    async fn peripheral(&self, id: &PeripheralId) -> Result<Self::Peripheral>;
+    async fn peripheral(
+        &self,
+        id: &<Self::Peripheral as Peripheral>::ID,
+    ) -> Result<Self::Peripheral>;
 
     /// Add a [`Peripheral`] from a MAC address without a scan result. Not supported on all Bluetooth systems.
-    async fn add_peripheral(&self, address: &PeripheralId) -> Result<Self::Peripheral>;
+    async fn add_peripheral(
+        &self,
+        address: &<Self::Peripheral as Peripheral>::ID,
+    ) -> Result<Self::Peripheral>;
 
     /// Clears the list of [`Peripheral`]s that have been discovered so far. Connected peripherals
     /// should be disconnected before calling this method. On platforms that do not cache peripherals

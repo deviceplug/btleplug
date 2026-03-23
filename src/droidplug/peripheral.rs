@@ -51,6 +51,8 @@ impl Display for PeripheralId {
     }
 }
 
+impl crate::api::PeripheralId for PeripheralId {}
+
 fn get_poll_result<'a: 'b, 'b>(
     env: &'b JNIEnv<'a>,
     result: JPollResult<'a, 'b>,
@@ -229,7 +231,8 @@ impl Debug for Peripheral {
 
 #[async_trait]
 impl api::Peripheral for Peripheral {
-    /// Returns the unique identifier of the peripheral.
+    type ID = PeripheralId;
+
     fn id(&self) -> PeripheralId {
         PeripheralId(self.addr)
     }

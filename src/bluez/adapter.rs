@@ -33,7 +33,9 @@ fn get_central_state(powered: bool) -> CentralState {
 impl Central for Adapter {
     type Peripheral = Peripheral;
 
-    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent> + Send>>> {
+    async fn events(
+        &self,
+    ) -> Result<Pin<Box<dyn Stream<Item = CentralEvent<PeripheralId>> + Send>>> {
         // There's a race between getting this event stream and getting the current set of devices.
         // Get the stream first, on the basis that it's better to have a duplicate DeviceDiscovered
         // event than to miss one. It's unlikely to happen in any case.
@@ -145,7 +147,7 @@ async fn central_events(
     event: BluetoothEvent,
     session: BluetoothSession,
     adapter_id: AdapterId,
-) -> Option<Vec<CentralEvent>> {
+) -> Option<Vec<CentralEvent<PeripheralId>>> {
     match event {
         BluetoothEvent::Device {
             id,

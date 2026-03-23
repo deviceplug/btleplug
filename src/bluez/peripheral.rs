@@ -54,6 +54,8 @@ impl Display for PeripheralId {
     }
 }
 
+impl crate::api::PeripheralId for PeripheralId {}
+
 /// Implementation of [api::Peripheral](crate::api::Peripheral).
 #[derive(Clone, Debug)]
 pub struct Peripheral {
@@ -130,6 +132,8 @@ impl Peripheral {
 
 #[async_trait]
 impl api::Peripheral for Peripheral {
+    type ID = PeripheralId;
+
     fn id(&self) -> PeripheralId {
         PeripheralId(self.device.to_owned())
     }

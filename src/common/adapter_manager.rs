@@ -12,7 +12,6 @@
 //
 // Copyright (c) 2014 The Rust Project Developers
 use crate::api::{CentralEvent, Peripheral};
-use crate::platform::PeripheralId;
 use dashmap::{DashMap, mapref::one::RefMut};
 use futures::stream::{Stream, StreamExt};
 use log::trace;
@@ -25,8 +24,8 @@ pub struct AdapterManager<PeripheralType>
 where
     PeripheralType: Peripheral,
 {
-    peripherals: DashMap<PeripheralId, PeripheralType>,
-    events_channel: broadcast::Sender<CentralEvent>,
+    peripherals: DashMap<PeripheralType::ID, PeripheralType>,
+    events_channel: broadcast::Sender<CentralEvent<PeripheralType::ID>>,
 }
 
 impl<PeripheralType: Peripheral + 'static> Default for AdapterManager<PeripheralType> {
@@ -43,7 +42,7 @@ impl<PeripheralType> AdapterManager<PeripheralType>
 where
     PeripheralType: Peripheral + 'static,
 {
-    pub fn emit(&self, event: CentralEvent) {
+    pub fn emit(&self, event: CentralEvent<PeripheralType::ID>) {
         if let CentralEvent::DeviceDisconnected(ref id) = event {
             self.peripherals.remove(id);
         }
@@ -53,7 +52,9 @@ where
         }
     }
 
-    pub fn event_stream(&self) -> Pin<Box<dyn Stream<Item = CentralEvent> + Send>> {
+    pub fn event_stream(
+        &self,
+    ) -> Pin<Box<dyn Stream<Item = CentralEvent<PeripheralType::ID>> + Send>> {
         let receiver = self.events_channel.subscribe();
         Box::pin(BroadcastStream::new(receiver).filter_map(|x| async move { x.ok() }))
     }
@@ -81,12 +82,12 @@ where
     #[allow(dead_code)]
     pub fn peripheral_mut(
         &self,
-        id: &PeripheralId,
-    ) -> Option<RefMut<'_, PeripheralId, PeripheralType>> {
+        id: &PeripheralType::ID,
+    ) -> Option<RefMut<'_, PeripheralType::ID, PeripheralType>> {
         self.peripherals.get_mut(id)
     }
 
-    pub fn peripheral(&self, id: &PeripheralId) -> Option<PeripheralType> {
+    pub fn peripheral(&self, id: &PeripheralType::ID) -> Option<PeripheralType> {
         self.peripherals.get(id).map(|val| val.value().clone())
     }
 }

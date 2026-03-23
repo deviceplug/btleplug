@@ -45,6 +45,8 @@ use uuid::Uuid;
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PeripheralId(Uuid);
 
+impl crate::api::PeripheralId for PeripheralId {}
+
 impl Display for PeripheralId {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         Display::fmt(&self.0, f)
@@ -71,7 +73,7 @@ struct Shared {
 }
 
 impl Shared {
-    fn emit_event(&self, event: CentralEvent) {
+    fn emit_event(&self, event: CentralEvent<PeripheralId>) {
         match self.manager.upgrade() {
             Some(manager) => {
                 manager.emit(event);
@@ -231,6 +233,8 @@ impl Debug for Peripheral {
 
 #[async_trait]
 impl api::Peripheral for Peripheral {
+    type ID = PeripheralId;
+
     fn id(&self) -> PeripheralId {
         PeripheralId(self.shared.uuid)
     }

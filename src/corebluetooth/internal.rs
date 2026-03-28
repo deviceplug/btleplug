@@ -499,6 +499,7 @@ pub enum CoreBluetoothMessage {
         peripheral_uuid: Uuid,
         future: CoreBluetoothReplyStateShared,
     },
+    ClearPeripherals,
 }
 
 #[derive(Debug)]
@@ -1437,6 +1438,9 @@ impl CoreBluetoothInternal {
                     }
                     CoreBluetoothMessage::ReadRssi{peripheral_uuid, future} => {
                         self.read_rssi(peripheral_uuid, future)
+                    }
+                    CoreBluetoothMessage::ClearPeripherals => {
+                        self.peripherals.clear();
                     }
                 };
             }

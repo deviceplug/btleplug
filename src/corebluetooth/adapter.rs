@@ -219,6 +219,11 @@ impl Central for Adapter {
 
     async fn clear_peripherals(&self) -> Result<()> {
         self.manager.clear_peripherals();
+        self.sender
+            .to_owned()
+            .send(CoreBluetoothMessage::ClearPeripherals)
+            .await
+            .map_err(|e| Error::Other(Box::new(e)))?;
         Ok(())
     }
 

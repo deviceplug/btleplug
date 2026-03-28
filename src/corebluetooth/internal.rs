@@ -508,6 +508,7 @@ pub enum CoreBluetoothMessage {
         options: RetrievePeripheralsOptions,
         future: CoreBluetoothReplyStateShared,
     },
+    ClearPeripherals,
 }
 
 #[derive(Debug)]
@@ -1507,6 +1508,9 @@ impl CoreBluetoothInternal {
                     }
                     CoreBluetoothMessage::RetrievePeripherals { options, future } => {
                         self.retrieve_peripherals(options, future).await
+                    }
+                    CoreBluetoothMessage::ClearPeripherals => {
+                        self.peripherals.clear();
                     }
                 };
             }

@@ -67,7 +67,15 @@ where
     }
 
     pub fn clear_peripherals(&self) {
-        self.peripherals.clear();
+        // Retain peripherals that are currently connected.
+        // This ensures that stopping a scan or clearing discovered devices
+        // does not evict active connections — matching CoreBluetooth/BlueZ behavior.
+        self.peripherals.retain(|_id, peripheral| {
+            // is_connected() is async in the trait, but all platform implementations
+            // use an AtomicBool internally, so block_on is safe here.
+            // We use a short-lived runtime to avoid panics if already in an async context.
+            futures::executor::block_on(peripheral.is_connected()).unwrap_or(false)
+        });
     }
 
     pub fn peripherals(&self) -> Vec<PeripheralType> {

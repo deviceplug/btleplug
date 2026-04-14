@@ -51,6 +51,8 @@ impl BLEWatcher {
 
         // Pre-convert the filter UUIDs once so the handler closure is cheap.
         let filter_guids: Vec<windows::core::GUID> = services.iter().map(utils::to_guid).collect();
+        
+        let matching_devices = std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashSet::new()));
 
         let handler: TypedEventHandler<
             BluetoothLEAdvertisementWatcher,
@@ -60,17 +62,26 @@ impl BLEWatcher {
                 if let Ok(args) = args.ok() {
                     // Software service-UUID filter.
                     if !filter_guids.is_empty() {
+                        let address = args.BluetoothAddress().unwrap_or(0);
+                        let mut is_match = false;
+                        
                         if let Ok(ad) = args.Advertisement() {
                             if let Ok(ad_uuids) = ad.ServiceUuids() {
                                 let count = ad_uuids.Size().unwrap_or(0);
-                                let advertised: Vec<windows::core::GUID> =
-                                    (0..count).filter_map(|i| ad_uuids.GetAt(i).ok()).collect();
-                                let all_present =
-                                    filter_guids.iter().all(|g| advertised.contains(g));
-                                if !all_present {
-                                    return Ok(());
+                                if count > 0 {
+                                    let advertised: Vec<windows::core::GUID> =
+                                        (0..count).filter_map(|i| ad_uuids.GetAt(i).ok()).collect();
+                                    is_match = filter_guids.iter().all(|g| advertised.contains(g));
                                 }
                             }
+                        }
+
+                        let mut cache = matching_devices.lock().unwrap();
+                        if is_match {
+                            cache.insert(address);
+                        } else if !cache.contains(&address) {
+                            // If the current packet doesn't have the UUID and we haven't seen it before, drop it.
+                            return Ok(());
                         }
                     }
                     on_received(args)?;

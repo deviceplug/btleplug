@@ -202,7 +202,17 @@ impl Peripheral {
         advertisement_name: Option<String>,
     ) {
         if let Ok(mut props) = self.shared.properties.lock() {
-            props.local_name = local_name;
+            // Only update local_name if new value is present and is at least as informative
+            // (i.e. don't let a shorter GAP name overwrite a longer advertisement name)
+            if let Some(ref new_name) = local_name {
+                let should_update = match &props.local_name {
+                    None => true,
+                    Some(old) => new_name.len() >= old.len(),
+                };
+                if should_update {
+                    props.local_name = local_name;
+                }
+            }
             props.advertisement_name = advertisement_name;
         }
     }

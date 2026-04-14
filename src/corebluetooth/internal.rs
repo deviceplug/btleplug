@@ -663,9 +663,11 @@ impl CoreBluetoothInternal {
         let id = unsafe { peripheral.identifier() };
         let uuid = nsuuid_to_uuid(&id);
         let peripheral_name = unsafe { peripheral.name() };
-        let local_name = peripheral_name
-            .map(|n| n.to_string())
-            .or(advertisement_name.clone());
+        // Prefer advertisement_name (from scan response, usually COMPLETE_LOCAL_NAME)
+        // over peripheral.name() (GAP cache, often the truncated SHORT_LOCAL_NAME)
+        let local_name = advertisement_name
+            .clone()
+            .or_else(|| peripheral_name.map(|n| n.to_string()));
 
         if let std::collections::hash_map::Entry::Vacant(e) = self.peripherals.entry(uuid) {
             // Create our channels

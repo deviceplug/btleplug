@@ -191,15 +191,54 @@ impl Peripheral {
         if let Ok(data_sections) = advertisement.DataSections() {
             // See if we have any advertised service data before taking a lock to update...
             let mut found_service_data = false;
+            let mut manual_local_name: Option<String> = None;
+            let mut has_complete_name = false;
             for section in &data_sections {
                 match section.DataType().unwrap() {
                     advertisement_data_type::SERVICE_DATA_16_BIT_UUID
                     | advertisement_data_type::SERVICE_DATA_32_BIT_UUID
                     | advertisement_data_type::SERVICE_DATA_128_BIT_UUID => {
                         found_service_data = true;
-                        break;
+                    }
+                    advertisement_data_type::COMPLETE_LOCAL_NAME => {
+                        let data = utils::to_vec(&section.Data().unwrap());
+                        if let Ok(name) = String::from_utf8(data) {
+                            let name = name.trim_end_matches('\0').trim().to_string();
+                            if !name.is_empty() {
+                                manual_local_name = Some(name);
+                                has_complete_name = true;
+                            }
+                        }
+                    }
+                    advertisement_data_type::SHORT_LOCAL_NAME => {
+                        // Only use SHORT_LOCAL_NAME if we haven't already found a COMPLETE_LOCAL_NAME
+                        if !has_complete_name {
+                            let data = utils::to_vec(&section.Data().unwrap());
+                            if let Ok(name) = String::from_utf8(data) {
+                                let name = name.trim_end_matches('\0').trim().to_string();
+                                if !name.is_empty() {
+                                    manual_local_name = Some(name);
+                                }
+                            }
+                        }
                     }
                     _ => {}
+                }
+            }
+
+            if let Some(name) = manual_local_name {
+                if !name.is_empty() {
+                    let existing = self.shared.local_name.read().unwrap().clone();
+                    // Only update if: (1) no existing name, or (2) this is a COMPLETE_LOCAL_NAME,
+                    // or (3) new name is longer (prevents SHORT from overwriting COMPLETE across packets)
+                    let should_update = match &existing {
+                        None => true,
+                        Some(old) => has_complete_name || name.len() > old.len(),
+                    };
+                    if should_update {
+                        *self.shared.local_name.write().unwrap() = Some(name.clone());
+                        self.emit_event(CentralEvent::DeviceUpdated(self.shared.address.into()));
+                    }
                 }
             }
             if found_service_data {

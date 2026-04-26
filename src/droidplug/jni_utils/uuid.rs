@@ -2,7 +2,7 @@ use jni::{
     JNIEnv,
     errors::Result,
     objects::{AutoLocal, JMethodID, JObject},
-    signature::{JavaType, Primitive},
+    signature::{Primitive, ReturnType},
     sys::jlong,
 };
 use uuid::Uuid;
@@ -11,8 +11,8 @@ use uuid::Uuid;
 /// to convert to and from a [`Uuid`].
 pub struct JUuid<'a: 'b, 'b> {
     internal: JObject<'a>,
-    get_least_significant_bits: JMethodID<'a>,
-    get_most_significant_bits: JMethodID<'a>,
+    get_least_significant_bits: JMethodID,
+    get_most_significant_bits: JMethodID,
     env: &'b JNIEnv<'a>,
 }
 
@@ -38,7 +38,7 @@ impl<'a: 'b, 'b> JUuid<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.get_least_significant_bits,
-                JavaType::Primitive(Primitive::Long),
+                ReturnType::Primitive(Primitive::Long),
                 &[],
             )?
             .j()? as u64;
@@ -47,7 +47,7 @@ impl<'a: 'b, 'b> JUuid<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.get_most_significant_bits,
-                JavaType::Primitive(Primitive::Long),
+                ReturnType::Primitive(Primitive::Long),
                 &[],
             )?
             .j()? as u64;

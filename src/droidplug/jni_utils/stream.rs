@@ -2,8 +2,8 @@ use super::task::JPollResult;
 use ::jni::{
     JNIEnv, JavaVM,
     errors::{Error, Result},
-    objects::{GlobalRef, JClass, JMethodID, JObject},
-    signature::JavaType,
+    objects::{GlobalRef, JClass, JMethodID, JObject, JValue},
+    signature::ReturnType,
 };
 use futures::stream::Stream;
 use static_assertions::assert_impl_all;
@@ -19,7 +19,7 @@ use std::{
 /// For a [`Send`] version of this, use [`JSendStream`].
 pub struct JStream<'a: 'b, 'b> {
     internal: JObject<'a>,
-    poll_next: JMethodID<'a>,
+    poll_next: JMethodID,
     env: &'b JNIEnv<'a>,
 }
 
@@ -47,8 +47,8 @@ impl<'a: 'b, 'b> JStream<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.poll_next,
-                JavaType::Object("io/github/gedgygedgy/rust/task/PollResult".to_string()),
-                &[waker.into()],
+                ReturnType::Object,
+                &[JValue::from(waker).to_jni()],
             )?
             .l()?;
         let _auto_local = self.env.auto_local(result);
@@ -153,7 +153,7 @@ assert_impl_all!(JSendStream: Send);
 
 struct JStreamPoll<'a: 'b, 'b> {
     internal: JObject<'a>,
-    get: JMethodID<'a>,
+    get: JMethodID,
     env: &'b JNIEnv<'a>,
 }
 
@@ -177,12 +177,7 @@ impl<'a: 'b, 'b> JStreamPoll<'a, 'b> {
 
     pub fn get(&self) -> Result<JObject<'a>> {
         self.env
-            .call_method_unchecked(
-                self.internal,
-                self.get,
-                JavaType::Object("java/lang/Object".into()),
-                &[],
-            )?
+            .call_method_unchecked(self.internal, self.get, ReturnType::Object, &[])?
             .l()
     }
 }

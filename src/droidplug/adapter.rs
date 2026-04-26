@@ -55,7 +55,7 @@ impl Adapter {
             manager: Arc::new(AdapterManager::default()),
             internal,
         };
-        env.set_rust_field(obj, "handle", adapter.clone())?;
+        unsafe { env.set_rust_field(obj, "handle", adapter.clone()) }?;
 
         Ok(adapter)
     }
@@ -205,7 +205,7 @@ pub(crate) fn adapter_report_scan_result_internal(
     obj: JObject,
     scan_result: JObject,
 ) -> crate::Result<()> {
-    let adapter = env.get_rust_field::<_, _, Adapter>(obj, "handle")?;
+    let adapter = unsafe { env.get_rust_field::<_, _, Adapter>(obj, "handle") }?;
     adapter.report_scan_result(scan_result)?;
     Ok(())
 }
@@ -216,7 +216,7 @@ pub(crate) fn adapter_on_connection_state_changed_internal(
     addr: JString,
     connected: jboolean,
 ) -> crate::Result<()> {
-    let adapter = env.get_rust_field::<_, _, Adapter>(obj, "handle")?;
+    let adapter = unsafe { env.get_rust_field::<_, _, Adapter>(obj, "handle") }?;
     let addr_str = JavaStr::from_env(env, addr)?;
     let addr_str = addr_str.to_str().map_err(|e| Error::Other(e.into()))?;
     let addr = BDAddr::from_str(addr_str)?;

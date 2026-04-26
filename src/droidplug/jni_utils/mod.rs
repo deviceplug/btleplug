@@ -12,13 +12,14 @@ pub(crate) mod test_utils {
     use jni::{JNIEnv, JavaVM, objects::GlobalRef};
     use lazy_static::lazy_static;
     use std::{
+        cell::RefCell,
         sync::{Arc, Mutex},
         task::{Wake, Waker},
     };
 
     use jni::NativeMethod;
 
-    fn test_init(env: &JNIEnv) -> jni::errors::Result<()> {
+    fn test_init(env: &mut JNIEnv) -> jni::errors::Result<()> {
         use std::ffi::c_void;
         super::classcache::find_add_class(env, "io/github/gedgygedgy/rust/future/Future")?;
         super::classcache::find_add_class(env, "io/github/gedgygedgy/rust/future/FutureException")?;
@@ -31,7 +32,7 @@ pub(crate) mod test_utils {
         super::classcache::find_add_class(env, "io/github/gedgygedgy/rust/ops/FnBiFunctionImpl")?;
         super::classcache::find_add_class(env, "io/github/gedgygedgy/rust/ops/FnFunctionImpl")?;
 
-        let class = env.auto_local(env.find_class("io/github/gedgygedgy/rust/ops/FnAdapter")?);
+        let class = env.find_class("io/github/gedgygedgy/rust/ops/FnAdapter")?;
         env.register_native_methods(
             &class,
             &[
@@ -89,8 +90,8 @@ pub(crate) mod test_utils {
     }
 
     thread_local! {
-        pub static JVM_ENV: JNIEnv<'static> = {
-            let env = JVM.jvm.attach_current_thread_permanently().unwrap();
+        pub static JVM_ENV: RefCell<JNIEnv<'static>> = {
+            let mut env = JVM.jvm.attach_current_thread_permanently().unwrap();
 
             let thread = env
                 .call_static_method(
@@ -103,13 +104,13 @@ pub(crate) mod test_utils {
                 .l()
                 .unwrap();
             env.call_method(
-                thread,
+                &thread,
                 "setContextClassLoader",
                 "(Ljava/lang/ClassLoader;)V",
-                &[JVM.class_loader.as_obj().into()]
+                &[(&JVM.class_loader).into()]
             ).unwrap();
 
-            env
+            RefCell::new(env)
         }
     }
 
@@ -125,17 +126,18 @@ pub(crate) mod test_utils {
             jni_utils_jar.push("libs");
             jni_utils_jar.push("btleplug-jni.jar");
 
+            let classpath = format!(
+                "-Djava.class.path={}",
+                jni_utils_jar.to_str().unwrap()
+            );
             let jvm_args = InitArgsBuilder::new()
-                .option(&format!(
-                    "-Djava.class.path={}",
-                    jni_utils_jar.to_str().unwrap()
-                ))
+                .option(&classpath)
                 .build()
                 .unwrap();
             let jvm = JavaVM::new(jvm_args).unwrap();
 
-            let env = jvm.attach_current_thread_permanently().unwrap();
-            test_init(&env).unwrap();
+            let mut env = jvm.attach_current_thread_permanently().unwrap();
+            test_init(&mut env).unwrap();
 
             let thread = env
                 .call_static_method(
@@ -149,7 +151,7 @@ pub(crate) mod test_utils {
                 .unwrap();
             let class_loader = env
                 .call_method(
-                    thread,
+                    &thread,
                     "getContextClassLoader",
                     "()Ljava/lang/ClassLoader;",
                     &[],

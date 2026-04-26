@@ -1,7 +1,7 @@
 use jni::{
     JNIEnv,
     errors::Result,
-    objects::{AutoLocal, JMethodID, JObject},
+    objects::{JMethodID, JObject},
     signature::{Primitive, ReturnType},
     sys::jlong,
 };
@@ -9,57 +9,15 @@ use uuid::Uuid;
 
 /// Wrapper for [`JObject`]s that contain `java.util.UUID`. Provides methods
 /// to convert to and from a [`Uuid`].
-pub struct JUuid<'a: 'b, 'b> {
+pub struct JUuid<'a> {
     internal: JObject<'a>,
     get_least_significant_bits: JMethodID,
     get_most_significant_bits: JMethodID,
-    env: &'b JNIEnv<'a>,
 }
 
-impl<'a: 'b, 'b> JUuid<'a, 'b> {
-    pub fn from_env(env: &'b JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
-        let class = env.auto_local(env.find_class("java/util/UUID")?);
-        Self::from_env_impl(env, obj, class)
-    }
-
-    pub fn new(env: &'b JNIEnv<'a>, uuid: Uuid) -> Result<Self> {
-        let val = uuid.as_u128();
-        let least = (val & 0xFFFFFFFFFFFFFFFF) as jlong;
-        let most = ((val >> 64) & 0xFFFFFFFFFFFFFFFF) as jlong;
-
-        let class = env.auto_local(env.find_class("java/util/UUID")?);
-        let obj = env.new_object(&class, "(JJ)V", &[most.into(), least.into()])?;
-        Self::from_env_impl(env, obj, class)
-    }
-
-    pub fn as_uuid(&self) -> Result<Uuid> {
-        let least = self
-            .env
-            .call_method_unchecked(
-                self.internal,
-                self.get_least_significant_bits,
-                ReturnType::Primitive(Primitive::Long),
-                &[],
-            )?
-            .j()? as u64;
-        let most = self
-            .env
-            .call_method_unchecked(
-                self.internal,
-                self.get_most_significant_bits,
-                ReturnType::Primitive(Primitive::Long),
-                &[],
-            )?
-            .j()? as u64;
-        let val = ((most as u128) << 64) | (least as u128);
-        Ok(Uuid::from_u128(val))
-    }
-
-    fn from_env_impl(
-        env: &'b JNIEnv<'a>,
-        obj: JObject<'a>,
-        class: AutoLocal<'a, 'b>,
-    ) -> Result<Self> {
+impl<'a> JUuid<'a> {
+    pub fn from_env(env: &mut JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+        let class = env.find_class("java/util/UUID")?;
         let get_least_significant_bits =
             env.get_method_id(&class, "getLeastSignificantBits", "()J")?;
         let get_most_significant_bits =
@@ -68,12 +26,52 @@ impl<'a: 'b, 'b> JUuid<'a, 'b> {
             internal: obj,
             get_least_significant_bits,
             get_most_significant_bits,
-            env,
         })
+    }
+
+    pub fn new(env: &mut JNIEnv<'a>, uuid: Uuid) -> Result<Self> {
+        let val = uuid.as_u128();
+        let least = (val & 0xFFFFFFFFFFFFFFFF) as jlong;
+        let most = ((val >> 64) & 0xFFFFFFFFFFFFFFFF) as jlong;
+
+        let class = env.find_class("java/util/UUID")?;
+        let obj = env.new_object(&class, "(JJ)V", &[most.into(), least.into()])?;
+        let get_least_significant_bits =
+            env.get_method_id(&class, "getLeastSignificantBits", "()J")?;
+        let get_most_significant_bits =
+            env.get_method_id(&class, "getMostSignificantBits", "()J")?;
+        Ok(Self {
+            internal: obj,
+            get_least_significant_bits,
+            get_most_significant_bits,
+        })
+    }
+
+    pub fn as_uuid(&self, env: &mut JNIEnv<'a>) -> Result<Uuid> {
+        let least = unsafe {
+            env.call_method_unchecked(
+                &self.internal,
+                self.get_least_significant_bits,
+                ReturnType::Primitive(Primitive::Long),
+                &[],
+            )
+        }?
+        .j()? as u64;
+        let most = unsafe {
+            env.call_method_unchecked(
+                &self.internal,
+                self.get_most_significant_bits,
+                ReturnType::Primitive(Primitive::Long),
+                &[],
+            )
+        }?
+        .j()? as u64;
+        let val = ((most as u128) << 64) | (least as u128);
+        Ok(Uuid::from_u128(val))
     }
 }
 
-impl<'a: 'b, 'b> ::std::ops::Deref for JUuid<'a, 'b> {
+impl<'a> ::std::ops::Deref for JUuid<'a> {
     type Target = JObject<'a>;
 
     fn deref(&self) -> &Self::Target {
@@ -81,8 +79,8 @@ impl<'a: 'b, 'b> ::std::ops::Deref for JUuid<'a, 'b> {
     }
 }
 
-impl<'a: 'b, 'b> From<JUuid<'a, 'b>> for JObject<'a> {
-    fn from(other: JUuid<'a, 'b>) -> JObject<'a> {
+impl<'a> From<JUuid<'a>> for JObject<'a> {
+    fn from(other: JUuid<'a>) -> JObject<'a> {
         other.internal
     }
 }
@@ -115,7 +113,8 @@ mod test {
 
     #[test]
     fn test_uuid_new() {
-        test_utils::JVM_ENV.with(|env| {
+        test_utils::JVM_ENV.with(|cell| {
+            let env = &mut *cell.borrow_mut();
             for test in TESTS {
                 let most = test.most as jlong;
                 let least = test.least as jlong;
@@ -124,12 +123,12 @@ mod test {
                 let obj: JObject = uuid_obj.into();
 
                 let actual_most = env
-                    .call_method(obj, "getMostSignificantBits", "()J", &[])
+                    .call_method(&obj, "getMostSignificantBits", "()J", &[])
                     .unwrap()
                     .j()
                     .unwrap();
                 let actual_least = env
-                    .call_method(obj, "getLeastSignificantBits", "()J", &[])
+                    .call_method(&obj, "getLeastSignificantBits", "()J", &[])
                     .unwrap()
                     .j()
                     .unwrap();
@@ -141,7 +140,8 @@ mod test {
 
     #[test]
     fn test_uuid_as_uuid() {
-        test_utils::JVM_ENV.with(|env| {
+        test_utils::JVM_ENV.with(|cell| {
+            let env = &mut *cell.borrow_mut();
             for test in TESTS {
                 let most = test.most as jlong;
                 let least = test.least as jlong;
@@ -151,7 +151,7 @@ mod test {
                     .unwrap();
                 let uuid_obj = JUuid::from_env(env, obj).unwrap();
 
-                assert_eq!(uuid_obj.as_uuid().unwrap(), Uuid::from_u128(test.uuid));
+                assert_eq!(uuid_obj.as_uuid(env).unwrap(), Uuid::from_u128(test.uuid));
             }
         });
     }

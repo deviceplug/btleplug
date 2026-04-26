@@ -7,55 +7,40 @@ use ::jni::{
 use std::task::Waker;
 
 /// Wraps the given waker in a `io.github.gedgygedgy.rust.task.Waker` object.
-pub fn waker<'a: 'b, 'b>(env: &'b JNIEnv<'a>, waker: Waker) -> Result<JObject<'a>> {
+pub fn waker<'a>(env: &mut JNIEnv<'a>, waker: Waker) -> Result<JObject<'a>> {
     let runnable = super::ops::fn_once_runnable(env, |_e, _o| waker.wake())?;
 
+    let class = super::classcache::get_class("io/github/gedgygedgy/rust/task/Waker").unwrap();
     let obj = env.new_object(
-        JClass::from(
-            super::classcache::get_class("io/github/gedgygedgy/rust/task/Waker")
-                .unwrap()
-                .as_obj(),
-        ),
+        <&JClass>::from(class.as_obj()),
         "(Lio/github/gedgygedgy/rust/ops/FnRunnable;)V",
-        &[runnable.into()],
+        &[(&runnable).into()],
     )?;
     Ok(obj)
 }
 
 /// Wrapper for [`JObject`]s that implement
 /// `io.github.gedgygedgy.rust.task.PollResult`.
-pub struct JPollResult<'a: 'b, 'b> {
+pub struct JPollResult<'a> {
     internal: JObject<'a>,
     get: JMethodID,
-    env: &'b JNIEnv<'a>,
 }
 
-impl<'a: 'b, 'b> JPollResult<'a, 'b> {
-    pub fn from_env(env: &'b JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
-        let get = env.get_method_id(
-            JClass::from(
-                super::classcache::get_class("io/github/gedgygedgy/rust/task/PollResult")
-                    .unwrap()
-                    .as_obj(),
-            ),
-            "get",
-            "()Ljava/lang/Object;",
-        )?;
-        Ok(Self {
-            internal: obj,
-            get,
-            env,
-        })
+impl<'a> JPollResult<'a> {
+    pub fn from_env(env: &mut JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+        let class =
+            super::classcache::get_class("io/github/gedgygedgy/rust/task/PollResult").unwrap();
+        let get = env.get_method_id(<&JClass>::from(class.as_obj()), "get", "()Ljava/lang/Object;")?;
+        Ok(Self { internal: obj, get })
     }
 
-    pub fn get(&self) -> Result<JObject<'a>> {
-        self.env
-            .call_method_unchecked(self.internal, self.get, ReturnType::Object, &[])?
+    pub fn get(&self, env: &mut JNIEnv<'a>) -> Result<JObject<'a>> {
+        unsafe { env.call_method_unchecked(&self.internal, self.get, ReturnType::Object, &[]) }?
             .l()
     }
 }
 
-impl<'a: 'b, 'b> ::std::ops::Deref for JPollResult<'a, 'b> {
+impl<'a> ::std::ops::Deref for JPollResult<'a> {
     type Target = JObject<'a>;
 
     fn deref(&self) -> &Self::Target {
@@ -63,8 +48,8 @@ impl<'a: 'b, 'b> ::std::ops::Deref for JPollResult<'a, 'b> {
     }
 }
 
-impl<'a: 'b, 'b> From<JPollResult<'a, 'b>> for JObject<'a> {
-    fn from(other: JPollResult<'a, 'b>) -> JObject<'a> {
+impl<'a> From<JPollResult<'a>> for JObject<'a> {
+    fn from(other: JPollResult<'a>) -> JObject<'a> {
         other.internal
     }
 }
@@ -76,7 +61,9 @@ mod test {
 
     #[test]
     fn test_waker_wake() {
-        test_utils::JVM_ENV.with(|env| {
+        test_utils::JVM_ENV.with(|cell| {
+            let env = &mut *cell.borrow_mut();
+
             let data = Arc::new(test_utils::TestWakerData::new());
             assert_eq!(Arc::strong_count(&data), 1);
             assert_eq!(data.value(), false);
@@ -89,12 +76,12 @@ mod test {
             assert_eq!(Arc::strong_count(&data), 2);
             assert_eq!(data.value(), false);
 
-            env.call_method(jwaker, "wake", "()V", &[]).unwrap();
+            env.call_method(&jwaker, "wake", "()V", &[]).unwrap();
             assert_eq!(Arc::strong_count(&data), 1);
             assert_eq!(data.value(), true);
             data.set_value(false);
 
-            env.call_method(jwaker, "wake", "()V", &[]).unwrap();
+            env.call_method(&jwaker, "wake", "()V", &[]).unwrap();
             assert_eq!(Arc::strong_count(&data), 1);
             assert_eq!(data.value(), false);
         });
@@ -102,7 +89,9 @@ mod test {
 
     #[test]
     fn test_waker_close_wake() {
-        test_utils::JVM_ENV.with(|env| {
+        test_utils::JVM_ENV.with(|cell| {
+            let env = &mut *cell.borrow_mut();
+
             let data = Arc::new(test_utils::TestWakerData::new());
             assert_eq!(Arc::strong_count(&data), 1);
             assert_eq!(data.value(), false);
@@ -115,11 +104,11 @@ mod test {
             assert_eq!(Arc::strong_count(&data), 2);
             assert_eq!(data.value(), false);
 
-            env.call_method(jwaker, "close", "()V", &[]).unwrap();
+            env.call_method(&jwaker, "close", "()V", &[]).unwrap();
             assert_eq!(Arc::strong_count(&data), 1);
             assert_eq!(data.value(), false);
 
-            env.call_method(jwaker, "wake", "()V", &[]).unwrap();
+            env.call_method(&jwaker, "wake", "()V", &[]).unwrap();
             assert_eq!(Arc::strong_count(&data), 1);
             assert_eq!(data.value(), false);
         });

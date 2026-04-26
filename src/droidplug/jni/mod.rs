@@ -7,10 +7,12 @@ use std::ffi::c_void;
 
 static GLOBAL_JVM: OnceCell<JavaVM> = OnceCell::new();
 
-pub fn init(env: &JNIEnv) -> crate::Result<()> {
+pub fn init(env: &mut JNIEnv) -> crate::Result<()> {
     if let Ok(()) = GLOBAL_JVM.set(env.get_java_vm()?) {
+        let adapter_class =
+            env.find_class("com/nonpolynomial/btleplug/android/impl/Adapter")?;
         env.register_native_methods(
-            "com/nonpolynomial/btleplug/android/impl/Adapter",
+            &adapter_class,
             &[
                 NativeMethod {
                     name: "reportScanResult".into(),
@@ -97,8 +99,7 @@ pub fn init(env: &JNIEnv) -> crate::Result<()> {
         )?;
 
         // FnAdapter native method registration
-        let fn_adapter_class =
-            env.auto_local(env.find_class("io/github/gedgygedgy/rust/ops/FnAdapter")?);
+        let fn_adapter_class = env.find_class("io/github/gedgygedgy/rust/ops/FnAdapter")?;
         env.register_native_methods(
             &fn_adapter_class,
             &[
@@ -132,16 +133,17 @@ impl From<::jni::errors::Error> for crate::Error {
     }
 }
 
-extern "C" fn adapter_report_scan_result(env: JNIEnv, obj: JObject, scan_result: JObject) {
-    let _ = super::adapter::adapter_report_scan_result_internal(&env, obj, scan_result);
+extern "C" fn adapter_report_scan_result(mut env: JNIEnv, obj: JObject, scan_result: JObject) {
+    let _ = super::adapter::adapter_report_scan_result_internal(&mut env, &obj, scan_result);
 }
 
 extern "C" fn adapter_on_connection_state_changed(
-    env: JNIEnv,
+    mut env: JNIEnv,
     obj: JObject,
     addr: JString,
     connected: jboolean,
 ) {
-    let _ =
-        super::adapter::adapter_on_connection_state_changed_internal(&env, obj, addr, connected);
+    let _ = super::adapter::adapter_on_connection_state_changed_internal(
+        &mut env, &obj, addr, connected,
+    );
 }

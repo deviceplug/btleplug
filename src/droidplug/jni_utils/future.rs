@@ -1,67 +1,60 @@
-use super::task::JPollResult;
 use ::jni::{
     JNIEnv, JavaVM,
-    errors::{Error, Result},
-    objects::{GlobalRef, JClass, JMethodID, JObject, JValue},
+    errors::Result,
+    objects::{GlobalRef, JClass, JMethodID, JObject},
     signature::ReturnType,
+    sys::jvalue,
 };
 use static_assertions::assert_impl_all;
 use std::{
-    convert::TryFrom,
     future::Future,
     pin::Pin,
     task::{Context, Poll},
 };
 
 /// Wrapper for [`JObject`]s that implement
-/// `io.github.gedgygedgy.rust.future.Future`. Implements
-/// [`Future`](std::future::Future) to allow asynchronous Rust code to wait for
-/// a result from Java code.
+/// `io.github.gedgygedgy.rust.future.Future`. Provides a typed interface for
+/// calling the Java future's `poll` method.
 ///
-/// For a [`Send`] version of this, use [`JSendFuture`].
-pub struct JFuture<'a: 'b, 'b> {
+/// For an async [`Future`](std::future::Future) implementation, convert to
+/// [`JSendFuture`] via [`JSendFuture::new`].
+pub struct JFuture<'a> {
     internal: JObject<'a>,
-    poll: JMethodID,
-    env: &'b JNIEnv<'a>,
+    poll_id: JMethodID,
 }
 
-impl<'a: 'b, 'b> JFuture<'a, 'b> {
-    pub fn from_env(env: &'b JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
-        let poll = env.get_method_id(
-            JClass::from(
-                super::classcache::get_class("io/github/gedgygedgy/rust/future/Future")
-                    .unwrap()
-                    .as_obj(),
-            ),
+impl<'a> JFuture<'a> {
+    pub fn from_env(env: &mut JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+        let class =
+            super::classcache::get_class("io/github/gedgygedgy/rust/future/Future").unwrap();
+        let poll_id = env.get_method_id(
+            <&JClass>::from(class.as_obj()),
             "poll",
             "(Lio/github/gedgygedgy/rust/task/Waker;)Lio/github/gedgygedgy/rust/task/PollResult;",
         )?;
         Ok(Self {
             internal: obj,
-            poll,
-            env,
+            poll_id,
         })
     }
 
-    pub fn poll(&self, waker: JObject<'a>) -> Result<JPollResult<'a, 'b>> {
-        let result = self
-            .env
-            .call_method_unchecked(
-                self.internal,
-                self.poll,
+    pub fn poll(&self, env: &mut JNIEnv<'a>, waker: &JObject<'_>) -> Result<JObject<'a>> {
+        let result = unsafe {
+            env.call_method_unchecked(
+                &self.internal,
+                self.poll_id,
                 ReturnType::Object,
-                &[JValue::from(waker).to_jni()],
-            )?
-            .l()?;
-        JPollResult::from_env(self.env, result)
-    }
-
-    pub fn into_future(self) -> JFutureIntoFuture<'a, 'b> {
-        JFutureIntoFuture(self)
+                &[jvalue {
+                    l: waker.as_raw(),
+                }],
+            )
+        }?
+        .l()?;
+        Ok(result)
     }
 }
 
-impl<'a: 'b, 'b> ::std::ops::Deref for JFuture<'a, 'b> {
+impl<'a> ::std::ops::Deref for JFuture<'a> {
     type Target = JObject<'a>;
 
     fn deref(&self) -> &Self::Target {
@@ -69,67 +62,62 @@ impl<'a: 'b, 'b> ::std::ops::Deref for JFuture<'a, 'b> {
     }
 }
 
-impl<'a: 'b, 'b> From<JFuture<'a, 'b>> for JObject<'a> {
-    fn from(other: JFuture<'a, 'b>) -> JObject<'a> {
+impl<'a> From<JFuture<'a>> for JObject<'a> {
+    fn from(other: JFuture<'a>) -> JObject<'a> {
         other.internal
     }
 }
 
-pub struct JFutureIntoFuture<'a: 'b, 'b>(JFuture<'a, 'b>);
-
-impl<'a: 'b, 'b> JFutureIntoFuture<'a, 'b> {
-    fn poll_internal(&self, context: &mut Context<'_>) -> Result<Poll<JPollResult<'a, 'b>>> {
-        use super::task::waker;
-        let result = self.0.poll(waker(self.0.env, context.waker().clone())?)?;
-        Ok(
-            if self.0.env.is_same_object(result.clone(), JObject::null())? {
-                Poll::Pending
-            } else {
-                Poll::Ready(result)
-            },
-        )
-    }
-}
-
-impl<'a: 'b, 'b> Future for JFutureIntoFuture<'a, 'b> {
-    type Output = Result<JPollResult<'a, 'b>>;
-
-    fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.poll_internal(context) {
-            Ok(Poll::Ready(result)) => Poll::Ready(Ok(result)),
-            Ok(Poll::Pending) => Poll::Pending,
-            Err(err) => Poll::Ready(Err(err)),
-        }
-    }
-}
-
-impl<'a: 'b, 'b> From<JFutureIntoFuture<'a, 'b>> for JFuture<'a, 'b> {
-    fn from(fut: JFutureIntoFuture<'a, 'b>) -> Self {
-        fut.0
-    }
-}
-
-impl<'a: 'b, 'b> std::ops::Deref for JFutureIntoFuture<'a, 'b> {
-    type Target = JFuture<'a, 'b>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-/// [`Send`] version of [`JFuture`].
+/// [`Send`] version of [`JFuture`]. Implements [`Future`](std::future::Future)
+/// by obtaining a [`JNIEnv`] from the stored [`JavaVM`] on each poll.
 pub struct JSendFuture {
     internal: GlobalRef,
+    poll_id: JMethodID,
     vm: JavaVM,
 }
 
-impl<'a: 'b, 'b> TryFrom<JFuture<'a, 'b>> for JSendFuture {
-    type Error = Error;
-
-    fn try_from(future: JFuture<'a, 'b>) -> Result<Self> {
+impl JSendFuture {
+    pub fn new(env: &mut JNIEnv, future: &JFuture) -> Result<Self> {
         Ok(Self {
-            internal: future.env.new_global_ref(future.internal)?,
-            vm: future.env.get_java_vm()?,
+            internal: env.new_global_ref(&future.internal)?,
+            poll_id: future.poll_id,
+            vm: env.get_java_vm()?,
+        })
+    }
+
+    pub fn from_env(env: &mut JNIEnv, obj: &JObject) -> Result<Self> {
+        let class =
+            super::classcache::get_class("io/github/gedgygedgy/rust/future/Future").unwrap();
+        let poll_id = env.get_method_id(
+            <&JClass>::from(class.as_obj()),
+            "poll",
+            "(Lio/github/gedgygedgy/rust/task/Waker;)Lio/github/gedgygedgy/rust/task/PollResult;",
+        )?;
+        Ok(Self {
+            internal: env.new_global_ref(obj)?,
+            poll_id,
+            vm: env.get_java_vm()?,
+        })
+    }
+
+    fn poll_internal(&self, context: &mut Context<'_>) -> Result<Poll<Result<GlobalRef>>> {
+        let mut env = self.vm.get_env()?;
+        let jwaker = super::task::waker(&mut env, context.waker().clone())?;
+        let result = unsafe {
+            env.call_method_unchecked(
+                self.internal.as_obj(),
+                self.poll_id,
+                ReturnType::Object,
+                &[jvalue {
+                    l: jwaker.as_raw(),
+                }],
+            )
+        }?
+        .l()?;
+        Ok(if env.is_same_object(&result, JObject::null())? {
+            Poll::Pending
+        } else {
+            Poll::Ready(Ok(env.new_global_ref(result)?))
         })
     }
 }
@@ -139,16 +127,6 @@ impl ::std::ops::Deref for JSendFuture {
 
     fn deref(&self) -> &Self::Target {
         &self.internal
-    }
-}
-
-impl JSendFuture {
-    fn poll_internal(&self, context: &mut Context<'_>) -> Result<Poll<Result<GlobalRef>>> {
-        let env = self.vm.get_env()?;
-        let jfuture = JFuture::from_env(&env, self.internal.as_obj())?.into_future();
-        jfuture
-            .poll_internal(context)
-            .map(|result| result.map(|result| Ok(env.new_global_ref(result)?)))
     }
 }
 
@@ -167,7 +145,7 @@ assert_impl_all!(JSendFuture: Send);
 
 #[cfg(test)]
 mod test {
-    use super::super::{task::JPollResult, test_utils};
+    use super::super::test_utils;
     use super::{JFuture, JSendFuture};
     use std::{
         future::Future,
@@ -177,9 +155,12 @@ mod test {
 
     #[test]
     fn test_jfuture() {
+        use super::super::task::JPollResult;
         use std::sync::Arc;
 
-        test_utils::JVM_ENV.with(|env| {
+        test_utils::JVM_ENV.with(|cell| {
+            let env = &mut *cell.borrow_mut();
+
             let data = Arc::new(test_utils::TestWakerData::new());
             assert_eq!(Arc::strong_count(&data), 1);
             assert_eq!(data.value(), false);
@@ -191,7 +172,9 @@ mod test {
             let future_obj = env
                 .new_object("io/github/gedgygedgy/rust/future/SimpleFuture", "()V", &[])
                 .unwrap();
-            let mut future = JFuture::from_env(env, future_obj).unwrap().into_future();
+            let future_local = env.new_local_ref(&future_obj).unwrap();
+            let jfuture = JFuture::from_env(env, future_local).unwrap();
+            let mut future = JSendFuture::new(env, &jfuture).unwrap();
 
             assert!(
                 Future::poll(Pin::new(&mut future), &mut Context::from_waker(&waker)).is_pending()
@@ -206,17 +189,23 @@ mod test {
             assert_eq!(data.value(), false);
 
             let obj = env.new_object("java/lang/Object", "()V", &[]).unwrap();
-            env.call_method(future_obj, "wake", "(Ljava/lang/Object;)V", &[obj.into()])
-                .unwrap();
+            env.call_method(
+                &future_obj,
+                "wake",
+                "(Ljava/lang/Object;)V",
+                &[(&obj).into()],
+            )
+            .unwrap();
             assert_eq!(Arc::strong_count(&data), 2);
             assert_eq!(data.value(), true);
 
             let poll = Future::poll(Pin::new(&mut future), &mut Context::from_waker(&waker));
             if let Poll::Ready(result) = poll {
-                assert!(
-                    env.is_same_object(result.unwrap().get().unwrap(), obj)
-                        .unwrap()
-                );
+                let global = result.unwrap();
+                let local = env.new_local_ref(global.as_obj()).unwrap();
+                let poll_result = JPollResult::from_env(env, local).unwrap();
+                let result_obj = poll_result.get(env).unwrap();
+                assert!(env.is_same_object(&result_obj, &obj).unwrap());
             } else {
                 panic!("Poll result should be ready");
             }
@@ -225,10 +214,11 @@ mod test {
 
             let poll = Future::poll(Pin::new(&mut future), &mut Context::from_waker(&waker));
             if let Poll::Ready(result) = poll {
-                assert!(
-                    env.is_same_object(result.unwrap().get().unwrap(), obj)
-                        .unwrap()
-                );
+                let global = result.unwrap();
+                let local = env.new_local_ref(global.as_obj()).unwrap();
+                let poll_result = JPollResult::from_env(env, local).unwrap();
+                let result_obj = poll_result.get(env).unwrap();
+                assert!(env.is_same_object(&result_obj, &obj).unwrap());
             } else {
                 panic!("Poll result should be ready");
             }
@@ -239,29 +229,46 @@ mod test {
 
     #[test]
     fn test_jfuture_await() {
+        use super::super::task::JPollResult;
         use futures::{executor::block_on, join};
 
-        test_utils::JVM_ENV.with(|env| {
-            let future_obj = env
-                .new_object("io/github/gedgygedgy/rust/future/SimpleFuture", "()V", &[])
-                .unwrap();
-            let future = JFuture::from_env(env, future_obj).unwrap();
-            let obj = env.new_object("java/lang/Object", "()V", &[]).unwrap();
+        test_utils::JVM_ENV.with(|cell| {
+            let (future, future_obj_global, obj_global) = {
+                let env = &mut *cell.borrow_mut();
+                let future_obj = env
+                    .new_object("io/github/gedgygedgy/rust/future/SimpleFuture", "()V", &[])
+                    .unwrap();
+                let future_obj_global = env.new_global_ref(&future_obj).unwrap();
+                let future_local = env.new_local_ref(&future_obj).unwrap();
+                let jfuture = JFuture::from_env(env, future_local).unwrap();
+                let future = JSendFuture::new(env, &jfuture).unwrap();
+                let obj = env.new_object("java/lang/Object", "()V", &[]).unwrap();
+                let obj_global = env.new_global_ref(&obj).unwrap();
+                (future, future_obj_global, obj_global)
+            };
 
             block_on(async {
                 join!(
                     async {
-                        env.call_method(future_obj, "wake", "(Ljava/lang/Object;)V", &[obj.into()])
-                            .unwrap();
+                        let env = &mut *cell.borrow_mut();
+                        let future_local = env.new_local_ref(future_obj_global.as_obj()).unwrap();
+                        let obj_local = env.new_local_ref(obj_global.as_obj()).unwrap();
+                        env.call_method(
+                            &future_local,
+                            "wake",
+                            "(Ljava/lang/Object;)V",
+                            &[(&obj_local).into()],
+                        )
+                        .unwrap();
                     },
                     async {
-                        assert!(
-                            env.is_same_object(
-                                future.into_future().await.unwrap().get().unwrap(),
-                                obj
-                            )
-                            .unwrap()
-                        );
+                        let global = future.await.unwrap();
+                        let env = &mut *cell.borrow_mut();
+                        let local = env.new_local_ref(global.as_obj()).unwrap();
+                        let poll_result = JPollResult::from_env(env, local).unwrap();
+                        let result_obj = poll_result.get(env).unwrap();
+                        let obj_local = env.new_local_ref(obj_global.as_obj()).unwrap();
+                        assert!(env.is_same_object(&result_obj, &obj_local).unwrap());
                     }
                 );
             });
@@ -272,34 +279,53 @@ mod test {
     fn test_jfuture_await_throw() {
         use futures::{executor::block_on, join};
 
-        test_utils::JVM_ENV.with(|env| {
-            let future_obj = env
-                .new_object("io/github/gedgygedgy/rust/future/SimpleFuture", "()V", &[])
-                .unwrap();
-            let future = JFuture::from_env(env, future_obj).unwrap();
-            let ex = env.new_object("java/lang/Exception", "()V", &[]).unwrap();
+        test_utils::JVM_ENV.with(|cell| {
+            let (future, future_obj_global, ex_global) = {
+                let env = &mut *cell.borrow_mut();
+                let future_obj = env
+                    .new_object("io/github/gedgygedgy/rust/future/SimpleFuture", "()V", &[])
+                    .unwrap();
+                let future_obj_global = env.new_global_ref(&future_obj).unwrap();
+                let future_local = env.new_local_ref(&future_obj).unwrap();
+                let jfuture = JFuture::from_env(env, future_local).unwrap();
+                let future = JSendFuture::new(env, &jfuture).unwrap();
+                let ex = env.new_object("java/lang/Exception", "()V", &[]).unwrap();
+                let ex_global = env.new_global_ref(&ex).unwrap();
+                (future, future_obj_global, ex_global)
+            };
 
             block_on(async {
                 join!(
                     async {
+                        let env = &mut *cell.borrow_mut();
+                        let future_local = env.new_local_ref(future_obj_global.as_obj()).unwrap();
+                        let ex_local = env.new_local_ref(ex_global.as_obj()).unwrap();
                         env.call_method(
-                            future_obj,
+                            &future_local,
                             "wakeWithThrowable",
                             "(Ljava/lang/Throwable;)V",
-                            &[ex.into()],
+                            &[(&ex_local).into()],
                         )
                         .unwrap();
                     },
                     async {
-                        future.into_future().await.unwrap().get().unwrap_err();
+                        use super::super::task::JPollResult;
+
+                        let global = future.await.unwrap();
+                        let env = &mut *cell.borrow_mut();
+                        let local = env.new_local_ref(global.as_obj()).unwrap();
+                        let poll_result = JPollResult::from_env(env, local).unwrap();
+                        let _err = poll_result.get(env).unwrap_err();
+
                         let future_ex = env.exception_occurred().unwrap();
                         env.exception_clear().unwrap();
                         let actual_ex = env
-                            .call_method(future_ex, "getCause", "()Ljava/lang/Throwable;", &[])
+                            .call_method(&future_ex, "getCause", "()Ljava/lang/Throwable;", &[])
                             .unwrap()
                             .l()
                             .unwrap();
-                        assert!(env.is_same_object(actual_ex, ex).unwrap());
+                        let ex_local = env.new_local_ref(ex_global.as_obj()).unwrap();
+                        assert!(env.is_same_object(&actual_ex, &ex_local).unwrap());
                     }
                 );
             });
@@ -308,27 +334,44 @@ mod test {
 
     #[test]
     fn test_jsendfuture_await() {
+        use super::super::task::JPollResult;
         use futures::{executor::block_on, join};
-        use std::convert::TryInto;
 
-        test_utils::JVM_ENV.with(|env| {
-            let future_obj = env
-                .new_object("io/github/gedgygedgy/rust/future/SimpleFuture", "()V", &[])
-                .unwrap();
-            let future = JFuture::from_env(env, future_obj).unwrap();
-            let future: JSendFuture = future.try_into().unwrap();
-            let obj = env.new_object("java/lang/Object", "()V", &[]).unwrap();
+        test_utils::JVM_ENV.with(|cell| {
+            let (future, future_obj_global, obj_global) = {
+                let env = &mut *cell.borrow_mut();
+                let future_obj = env
+                    .new_object("io/github/gedgygedgy/rust/future/SimpleFuture", "()V", &[])
+                    .unwrap();
+                let future_obj_global = env.new_global_ref(&future_obj).unwrap();
+                let future = JSendFuture::from_env(env, &future_obj).unwrap();
+                let obj = env.new_object("java/lang/Object", "()V", &[]).unwrap();
+                let obj_global = env.new_global_ref(&obj).unwrap();
+                (future, future_obj_global, obj_global)
+            };
 
             block_on(async {
                 join!(
                     async {
-                        env.call_method(future_obj, "wake", "(Ljava/lang/Object;)V", &[obj.into()])
-                            .unwrap();
+                        let env = &mut *cell.borrow_mut();
+                        let future_local = env.new_local_ref(future_obj_global.as_obj()).unwrap();
+                        let obj_local = env.new_local_ref(obj_global.as_obj()).unwrap();
+                        env.call_method(
+                            &future_local,
+                            "wake",
+                            "(Ljava/lang/Object;)V",
+                            &[(&obj_local).into()],
+                        )
+                        .unwrap();
                     },
                     async {
                         let global_ref = future.await.unwrap();
-                        let jpoll = JPollResult::from_env(env, global_ref.as_obj()).unwrap();
-                        assert!(env.is_same_object(jpoll.get().unwrap(), obj).unwrap());
+                        let env = &mut *cell.borrow_mut();
+                        let local = env.new_local_ref(global_ref.as_obj()).unwrap();
+                        let jpoll = JPollResult::from_env(env, local).unwrap();
+                        let result_obj = jpoll.get(env).unwrap();
+                        let obj_local = env.new_local_ref(obj_global.as_obj()).unwrap();
+                        assert!(env.is_same_object(&result_obj, &obj_local).unwrap());
                     }
                 );
             });

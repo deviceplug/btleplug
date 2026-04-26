@@ -282,7 +282,7 @@ fn fn_adapter<'a: 'b, 'b>(
         "(Z)V",
         &[local.into()],
     )?;
-    env.set_rust_field::<_, _, FnWrapper>(obj, "data", SendSyncWrapper(arc))?;
+    unsafe { env.set_rust_field::<_, _, FnWrapper>(obj, "data", SendSyncWrapper(arc)) }?;
     Ok(obj)
 }
 
@@ -295,7 +295,7 @@ pub(crate) extern "C" fn fn_adapter_call_internal<'a>(
 ) -> JObject<'a> {
     use std::panic::AssertUnwindSafe;
 
-    let arc = if let Ok(f) = env.get_rust_field::<_, _, FnWrapper>(obj1, "data") {
+    let arc = if let Ok(f) = unsafe { env.get_rust_field::<_, _, FnWrapper>(obj1, "data") } {
         AssertUnwindSafe(f.0.clone())
     } else {
         return JObject::null();
@@ -306,6 +306,6 @@ pub(crate) extern "C" fn fn_adapter_call_internal<'a>(
 
 pub(crate) extern "C" fn fn_adapter_close_internal(env: JNIEnv, obj: JObject) {
     let _ = super::exceptions::throw_unwind(&env, || {
-        let _ = env.take_rust_field::<_, _, FnWrapper>(obj, "data");
+        let _ = unsafe { env.take_rust_field::<_, _, FnWrapper>(obj, "data") };
     });
 }

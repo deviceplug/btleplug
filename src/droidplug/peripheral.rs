@@ -390,7 +390,7 @@ impl api::Peripheral for Peripheral {
         self.with_obj(|env, _obj| {
             let result = JPollResult::from_env(env, result_ref.as_obj())?;
             let bytes = get_poll_result(env, result)?;
-            Ok(byte_array_to_vec(env, bytes.into_inner())?)
+            Ok(byte_array_to_vec(env, bytes.into_raw())?)
         })
     }
 
@@ -476,7 +476,7 @@ impl api::Peripheral for Peripheral {
         self.with_obj(|env, _obj| {
             let result = JPollResult::from_env(env, result_ref.as_obj())?;
             let bytes = get_poll_result(env, result)?;
-            Ok(byte_array_to_vec(env, bytes.into_inner())?)
+            Ok(byte_array_to_vec(env, bytes.into_raw())?)
         })
     }
 

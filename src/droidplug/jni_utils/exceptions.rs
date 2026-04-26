@@ -126,16 +126,16 @@ impl<'a: 'b, 'b> JPanicException<'a, 'b> {
             "(Ljava/lang/String;)V",
             &[msg.into()],
         )?;
-        env.set_rust_field(obj, "any", any)?;
+        unsafe { env.set_rust_field(obj, "any", any) }?;
         Self::from_env(env, obj.into())
     }
 
     pub fn get(&self) -> Result<MutexGuard<Box<dyn Any + Send + 'static>>, Error> {
-        self.env.get_rust_field(self.internal, "any")
+        unsafe { self.env.get_rust_field(self.internal, "any") }
     }
 
     pub fn take(&self) -> Result<Box<dyn Any + Send + 'static>, Error> {
-        self.env.take_rust_field(self.internal, "any")
+        unsafe { self.env.take_rust_field(self.internal, "any") }
     }
 
     pub fn resume_unwind(&self) -> Result<(), Error> {
@@ -542,7 +542,7 @@ mod test {
                 .l()
                 .unwrap();
             assert_eq!(
-                env.get_array_length(suppressed_list.into_inner()).unwrap(),
+                env.get_array_length(suppressed_list.into_raw()).unwrap(),
                 0
             );
 
@@ -579,11 +579,11 @@ mod test {
                 .l()
                 .unwrap();
             assert_eq!(
-                env.get_array_length(suppressed_list.into_inner()).unwrap(),
+                env.get_array_length(suppressed_list.into_raw()).unwrap(),
                 1
             );
             let suppressed_ex = env
-                .get_object_array_element(suppressed_list.into_inner(), 0)
+                .get_object_array_element(suppressed_list.into_raw(), 0)
                 .unwrap();
             assert!(env.is_same_object(old_ex, suppressed_ex).unwrap());
 

@@ -2,8 +2,8 @@ use crate::droidplug::jni_utils::{future::JFuture, stream::JStream, uuid::JUuid}
 use jni::{
     JNIEnv,
     errors::Result,
-    objects::{JClass, JList, JMap, JMethodID, JObject, JString},
-    signature::{JavaType, Primitive},
+    objects::{JClass, JList, JMap, JMethodID, JObject, JString, JValue},
+    signature::{Primitive, ReturnType},
     strings::JavaStr,
     sys::jint,
 };
@@ -14,21 +14,21 @@ use crate::api::{BDAddr, CharPropFlags, PeripheralProperties, ScanFilter};
 
 pub struct JPeripheral<'a: 'b, 'b> {
     internal: JObject<'a>,
-    connect: JMethodID<'a>,
-    disconnect: JMethodID<'a>,
-    is_connected: JMethodID<'a>,
-    discover_services: JMethodID<'a>,
-    read: JMethodID<'a>,
-    write: JMethodID<'a>,
-    set_characteristic_notification: JMethodID<'a>,
-    get_notifications: JMethodID<'a>,
-    read_descriptor: JMethodID<'a>,
-    write_descriptor: JMethodID<'a>,
-    get_device_name: JMethodID<'a>,
-    request_mtu: JMethodID<'a>,
-    get_connection_parameters: JMethodID<'a>,
-    request_connection_priority: JMethodID<'a>,
-    read_remote_rssi: JMethodID<'a>,
+    connect: JMethodID,
+    disconnect: JMethodID,
+    is_connected: JMethodID,
+    discover_services: JMethodID,
+    read: JMethodID,
+    write: JMethodID,
+    set_characteristic_notification: JMethodID,
+    get_notifications: JMethodID,
+    read_descriptor: JMethodID,
+    write_descriptor: JMethodID,
+    get_device_name: JMethodID,
+    request_mtu: JMethodID,
+    get_connection_parameters: JMethodID,
+    request_connection_priority: JMethodID,
+    read_remote_rssi: JMethodID,
     env: &'b JNIEnv<'a>,
 }
 
@@ -166,12 +166,7 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
     pub fn connect(&self) -> Result<JFuture<'a, 'b>> {
         let future_obj = self
             .env
-            .call_method_unchecked(
-                self.internal,
-                self.connect,
-                JavaType::Object("Lio/github/gedgygedgy/rust/future/Future;".to_string()),
-                &[],
-            )?
+            .call_method_unchecked(self.internal, self.connect, ReturnType::Object, &[])?
             .l()?;
         JFuture::from_env(self.env, future_obj)
     }
@@ -179,12 +174,7 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
     pub fn disconnect(&self) -> Result<JFuture<'a, 'b>> {
         let future_obj = self
             .env
-            .call_method_unchecked(
-                self.internal,
-                self.disconnect,
-                JavaType::Object("Lio/github/gedgygedgy/rust/future/Future;".to_string()),
-                &[],
-            )?
+            .call_method_unchecked(self.internal, self.disconnect, ReturnType::Object, &[])?
             .l()?;
         JFuture::from_env(self.env, future_obj)
     }
@@ -194,7 +184,7 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.is_connected,
-                JavaType::Primitive(Primitive::Boolean),
+                ReturnType::Primitive(Primitive::Boolean),
                 &[],
             )?
             .z()
@@ -206,7 +196,7 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.discover_services,
-                JavaType::Object("Lio/github/gedgygedgy/rust/future/Future;".to_string()),
+                ReturnType::Object,
                 &[],
             )?
             .l()?;
@@ -219,8 +209,8 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.read,
-                JavaType::Object("Lio/github/gedgygedgy/rust/future/Future;".to_string()),
-                &[uuid.into()],
+                ReturnType::Object,
+                &[JValue::from(uuid).to_jni()],
             )?
             .l()?;
         JFuture::from_env(self.env, future_obj)
@@ -237,8 +227,12 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.write,
-                JavaType::Object("Lio/github/gedgygedgy/rust/future/Future;".to_string()),
-                &[uuid.into(), data.into(), write_type.into()],
+                ReturnType::Object,
+                &[
+                    JValue::from(uuid).to_jni(),
+                    JValue::from(data).to_jni(),
+                    JValue::from(write_type).to_jni(),
+                ],
             )?
             .l()?;
         JFuture::from_env(self.env, future_obj)
@@ -254,8 +248,8 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.set_characteristic_notification,
-                JavaType::Object("Lio/github/gedgygedgy/rust/future/Future;".to_string()),
-                &[uuid.into(), enable.into()],
+                ReturnType::Object,
+                &[JValue::from(uuid).to_jni(), JValue::from(enable).to_jni()],
             )?
             .l()?;
         JFuture::from_env(self.env, future_obj)
@@ -267,7 +261,7 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.get_notifications,
-                JavaType::Object("Lio/github/gedgygedgy/rust/stream/Stream;".to_string()),
+                ReturnType::Object,
                 &[],
             )?
             .l()?;
@@ -284,8 +278,11 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.read_descriptor,
-                JavaType::Object("Lio/github/gedgygedgy/rust/future/Future;".to_string()),
-                &[characteristic.into(), uuid.into()],
+                ReturnType::Object,
+                &[
+                    JValue::from(characteristic).to_jni(),
+                    JValue::from(uuid).to_jni(),
+                ],
             )?
             .l()?;
         JFuture::from_env(self.env, future_obj)
@@ -294,12 +291,7 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
     pub fn get_device_name(&self) -> Result<Option<String>> {
         let obj = self
             .env
-            .call_method_unchecked(
-                self.internal,
-                self.get_device_name,
-                JavaType::Object("Ljava/lang/String;".to_string()),
-                &[],
-            )?
+            .call_method_unchecked(self.internal, self.get_device_name, ReturnType::Object, &[])?
             .l()?;
         if obj.is_null() {
             Ok(None)
@@ -314,8 +306,8 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.request_mtu,
-                JavaType::Object("Lio/github/gedgygedgy/rust/future/Future;".to_string()),
-                &[mtu.into()],
+                ReturnType::Object,
+                &[JValue::from(mtu).to_jni()],
             )?
             .l()
     }
@@ -326,14 +318,14 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.get_connection_parameters,
-                JavaType::Array(JavaType::Primitive(Primitive::Int).into()),
+                ReturnType::Array,
                 &[],
             )?
             .l()?;
         if obj.is_null() {
             return Ok(None);
         }
-        let arr = obj.into_inner();
+        let arr = obj.into_raw();
         let len = self.env.get_array_length(arr)?;
         if len < 3 {
             return Ok(None);
@@ -354,7 +346,7 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.read_remote_rssi,
-                JavaType::Object("Lio/github/gedgygedgy/rust/future/Future;".to_string()),
+                ReturnType::Object,
                 &[],
             )?
             .l()
@@ -365,8 +357,8 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.request_connection_priority,
-                JavaType::Primitive(Primitive::Boolean),
-                &[priority.into()],
+                ReturnType::Primitive(Primitive::Boolean),
+                &[JValue::from(priority).to_jni()],
             )?
             .z()
     }
@@ -382,8 +374,12 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.write_descriptor,
-                JavaType::Object("Lio/github/gedgygedgy/rust/future/Future;".to_string()),
-                &[characteristic.into(), uuid.into(), data.into()],
+                ReturnType::Object,
+                &[
+                    JValue::from(characteristic).to_jni(),
+                    JValue::from(uuid).to_jni(),
+                    JValue::from(data).to_jni(),
+                ],
             )?
             .l()?;
         JFuture::from_env(self.env, future_obj)
@@ -392,9 +388,9 @@ impl<'a: 'b, 'b> JPeripheral<'a, 'b> {
 
 pub struct JBluetoothGattService<'a: 'b, 'b> {
     internal: JObject<'a>,
-    get_uuid: JMethodID<'a>,
-    //is_primary: JMethodID<'a>,
-    get_characteristics: JMethodID<'a>,
+    get_uuid: JMethodID,
+    //is_primary: JMethodID,
+    get_characteristics: JMethodID,
     env: &'b JNIEnv<'a>,
 }
 
@@ -421,7 +417,7 @@ impl<'a: 'b, 'b> JBluetoothGattService<'a, 'b> {
         .call_method_unchecked(
             self.internal,
             self.is_primary,
-            JavaType::Primitive(Primitive::Boolean),
+            ReturnType::Primitive(Primitive::Boolean),
             &[],
         )?
         .z()
@@ -432,12 +428,7 @@ impl<'a: 'b, 'b> JBluetoothGattService<'a, 'b> {
     pub fn get_uuid(&self) -> Result<Uuid> {
         let obj = self
             .env
-            .call_method_unchecked(
-                self.internal,
-                self.get_uuid,
-                JavaType::Object("Ljava/util/UUID;".to_string()),
-                &[],
-            )?
+            .call_method_unchecked(self.internal, self.get_uuid, ReturnType::Object, &[])?
             .l()?;
         let uuid_obj = JUuid::from_env(self.env, obj)?;
         Ok(uuid_obj.as_uuid()?)
@@ -449,7 +440,7 @@ impl<'a: 'b, 'b> JBluetoothGattService<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.get_characteristics,
-                JavaType::Object("Ljava/util/List;".to_string()),
+                ReturnType::Object,
                 &[],
             )?
             .l()?;
@@ -464,10 +455,10 @@ impl<'a: 'b, 'b> JBluetoothGattService<'a, 'b> {
 
 pub struct JBluetoothGattCharacteristic<'a: 'b, 'b> {
     internal: JObject<'a>,
-    get_uuid: JMethodID<'a>,
-    get_properties: JMethodID<'a>,
-    get_value: JMethodID<'a>,
-    get_descriptors: JMethodID<'a>,
+    get_uuid: JMethodID,
+    get_properties: JMethodID,
+    get_value: JMethodID,
+    get_descriptors: JMethodID,
     env: &'b JNIEnv<'a>,
 }
 
@@ -493,12 +484,7 @@ impl<'a: 'b, 'b> JBluetoothGattCharacteristic<'a, 'b> {
     pub fn get_uuid(&self) -> Result<Uuid> {
         let obj = self
             .env
-            .call_method_unchecked(
-                self.internal,
-                self.get_uuid,
-                JavaType::Object("Ljava/util/UUID;".to_string()),
-                &[],
-            )?
+            .call_method_unchecked(self.internal, self.get_uuid, ReturnType::Object, &[])?
             .l()?;
         let uuid_obj = JUuid::from_env(self.env, obj)?;
         Ok(uuid_obj.as_uuid()?)
@@ -510,7 +496,7 @@ impl<'a: 'b, 'b> JBluetoothGattCharacteristic<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.get_properties,
-                JavaType::Primitive(Primitive::Int),
+                ReturnType::Primitive(Primitive::Int),
                 &[],
             )?
             .i()?;
@@ -520,25 +506,15 @@ impl<'a: 'b, 'b> JBluetoothGattCharacteristic<'a, 'b> {
     pub fn get_value(&self) -> Result<Vec<u8>> {
         let value = self
             .env
-            .call_method_unchecked(
-                self.internal,
-                self.get_value,
-                JavaType::Array(JavaType::Primitive(Primitive::Byte).into()),
-                &[],
-            )?
+            .call_method_unchecked(self.internal, self.get_value, ReturnType::Array, &[])?
             .l()?;
-        crate::droidplug::jni_utils::arrays::byte_array_to_vec(self.env, value.into_inner())
+        crate::droidplug::jni_utils::arrays::byte_array_to_vec(self.env, value.into_raw())
     }
 
     pub fn get_descriptors(&self) -> Result<Vec<JBluetoothGattDescriptor>> {
         let obj = self
             .env
-            .call_method_unchecked(
-                self.internal,
-                self.get_descriptors,
-                JavaType::Object("Ljava/util/List;".to_string()),
-                &[],
-            )?
+            .call_method_unchecked(self.internal, self.get_descriptors, ReturnType::Object, &[])?
             .l()?;
         let desc_list = JList::from_env(self.env, obj)?;
         let mut desc_vec = vec![];
@@ -551,7 +527,7 @@ impl<'a: 'b, 'b> JBluetoothGattCharacteristic<'a, 'b> {
 
 pub struct JBluetoothGattDescriptor<'a: 'b, 'b> {
     internal: JObject<'a>,
-    get_uuid: JMethodID<'a>,
+    get_uuid: JMethodID,
     env: &'b JNIEnv<'a>,
 }
 
@@ -570,12 +546,7 @@ impl<'a: 'b, 'b> JBluetoothGattDescriptor<'a, 'b> {
     pub fn get_uuid(&self) -> Result<Uuid> {
         let obj = self
             .env
-            .call_method_unchecked(
-                self.internal,
-                self.get_uuid,
-                JavaType::Object("Ljava/util/UUID;".to_string()),
-                &[],
-            )?
+            .call_method_unchecked(self.internal, self.get_uuid, ReturnType::Object, &[])?
             .l()?;
         let uuid_obj = JUuid::from_env(self.env, obj)?;
         Ok(uuid_obj.as_uuid()?)
@@ -584,7 +555,7 @@ impl<'a: 'b, 'b> JBluetoothGattDescriptor<'a, 'b> {
 
 pub struct JBluetoothDevice<'a: 'b, 'b> {
     internal: JObject<'a>,
-    get_address: JMethodID<'a>,
+    get_address: JMethodID,
     env: &'b JNIEnv<'a>,
 }
 
@@ -603,12 +574,7 @@ impl<'a: 'b, 'b> JBluetoothDevice<'a, 'b> {
     pub fn get_address(&self) -> Result<JString<'a>> {
         let obj = self
             .env
-            .call_method_unchecked(
-                self.internal,
-                self.get_address,
-                JavaType::Object("Ljava/lang/String;".to_string()),
-                &[],
-            )?
+            .call_method_unchecked(self.internal, self.get_address, ReturnType::Object, &[])?
             .l()?;
         Ok(obj.into())
     }
@@ -653,10 +619,10 @@ impl<'a> From<JScanFilter<'a>> for JObject<'a> {
 
 pub struct JScanResult<'a: 'b, 'b> {
     internal: JObject<'a>,
-    get_device: JMethodID<'a>,
-    get_scan_record: JMethodID<'a>,
-    get_tx_power: JMethodID<'a>,
-    get_rssi: JMethodID<'a>,
+    get_device: JMethodID,
+    get_scan_record: JMethodID,
+    get_tx_power: JMethodID,
+    get_rssi: JMethodID,
     env: &'b JNIEnv<'a>,
 }
 
@@ -686,12 +652,7 @@ impl<'a: 'b, 'b> JScanResult<'a, 'b> {
     pub fn get_device(&self) -> Result<JBluetoothDevice<'a, 'b>> {
         let obj = self
             .env
-            .call_method_unchecked(
-                self.internal,
-                self.get_device,
-                JavaType::Object("Landroid/bluetooth/BluetoothDevice;".to_string()),
-                &[],
-            )?
+            .call_method_unchecked(self.internal, self.get_device, ReturnType::Object, &[])?
             .l()?;
         JBluetoothDevice::from_env(self.env, obj)
     }
@@ -699,12 +660,7 @@ impl<'a: 'b, 'b> JScanResult<'a, 'b> {
     pub fn get_scan_record(&self) -> Result<JScanRecord<'a, 'b>> {
         let obj = self
             .env
-            .call_method_unchecked(
-                self.internal,
-                self.get_scan_record,
-                JavaType::Object("Landroid/bluetooth/le/ScanRecord;".to_string()),
-                &[],
-            )?
+            .call_method_unchecked(self.internal, self.get_scan_record, ReturnType::Object, &[])?
             .l()?;
         JScanRecord::from_env(self.env, obj)
     }
@@ -714,7 +670,7 @@ impl<'a: 'b, 'b> JScanResult<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.get_tx_power,
-                JavaType::Primitive(Primitive::Int),
+                ReturnType::Primitive(Primitive::Int),
                 &[],
             )?
             .i()
@@ -725,7 +681,7 @@ impl<'a: 'b, 'b> JScanResult<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.get_rssi,
-                JavaType::Primitive(Primitive::Int),
+                ReturnType::Primitive(Primitive::Int),
                 &[],
             )?
             .i()
@@ -800,7 +756,7 @@ impl<'a: 'b, 'b> TryFrom<JScanResult<'a, 'b>> for (BDAddr, Option<PeripheralProp
                     let index = index as u16;
                     let data = crate::droidplug::jni_utils::arrays::byte_array_to_vec(
                         result.env,
-                        data.into_inner(),
+                        data.into_raw(),
                     )?;
                     manufacturer_data.insert(index, data);
                 }
@@ -819,7 +775,7 @@ impl<'a: 'b, 'b> TryFrom<JScanResult<'a, 'b>> for (BDAddr, Option<PeripheralProp
                         .as_uuid()?;
                     let data = crate::droidplug::jni_utils::arrays::byte_array_to_vec(
                         result.env,
-                        value.into_inner(),
+                        value.into_raw(),
                     )?;
                     service_data.insert(uuid, data);
                 }
@@ -859,11 +815,11 @@ impl<'a: 'b, 'b> TryFrom<JScanResult<'a, 'b>> for (BDAddr, Option<PeripheralProp
 
 pub struct JScanRecord<'a: 'b, 'b> {
     internal: JObject<'a>,
-    get_device_name: JMethodID<'a>,
-    get_tx_power_level: JMethodID<'a>,
-    get_manufacturer_specific_data: JMethodID<'a>,
-    get_service_data: JMethodID<'a>,
-    get_service_uuids: JMethodID<'a>,
+    get_device_name: JMethodID,
+    get_tx_power_level: JMethodID,
+    get_manufacturer_specific_data: JMethodID,
+    get_service_data: JMethodID,
+    get_service_uuids: JMethodID,
     env: &'b JNIEnv<'a>,
 }
 
@@ -909,12 +865,7 @@ impl<'a: 'b, 'b> JScanRecord<'a, 'b> {
     pub fn get_device_name(&self) -> Result<JString<'a>> {
         let obj = self
             .env
-            .call_method_unchecked(
-                self.internal,
-                self.get_device_name,
-                JavaType::Object("Ljava/lang/String;".to_string()),
-                &[],
-            )?
+            .call_method_unchecked(self.internal, self.get_device_name, ReturnType::Object, &[])?
             .l()?;
         Ok(obj.into())
     }
@@ -924,7 +875,7 @@ impl<'a: 'b, 'b> JScanRecord<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.get_tx_power_level,
-                JavaType::Primitive(Primitive::Int),
+                ReturnType::Primitive(Primitive::Int),
                 &[],
             )?
             .i()
@@ -936,7 +887,7 @@ impl<'a: 'b, 'b> JScanRecord<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.get_manufacturer_specific_data,
-                JavaType::Object("Landroid/util/SparseArray;".to_string()),
+                ReturnType::Object,
                 &[],
             )?
             .l()?;
@@ -949,7 +900,7 @@ impl<'a: 'b, 'b> JScanRecord<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.get_service_data,
-                JavaType::Object("Ljava/util/Map;".to_string()),
+                ReturnType::Object,
                 &[],
             )?
             .l()?;
@@ -962,7 +913,7 @@ impl<'a: 'b, 'b> JScanRecord<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.get_service_uuids,
-                JavaType::Object("Ljava/util/List;".to_string()),
+                ReturnType::Object,
                 &[],
             )?
             .l()?;
@@ -973,9 +924,9 @@ impl<'a: 'b, 'b> JScanRecord<'a, 'b> {
 #[derive(Clone)]
 pub struct JSparseArray<'a: 'b, 'b> {
     internal: JObject<'a>,
-    size: JMethodID<'a>,
-    key_at: JMethodID<'a>,
-    value_at: JMethodID<'a>,
+    size: JMethodID,
+    key_at: JMethodID,
+    value_at: JMethodID,
     env: &'b JNIEnv<'a>,
 }
 
@@ -1014,7 +965,7 @@ impl<'a: 'b, 'b> JSparseArray<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.size,
-                JavaType::Primitive(Primitive::Int),
+                ReturnType::Primitive(Primitive::Int),
                 &[],
             )?
             .i()
@@ -1025,8 +976,8 @@ impl<'a: 'b, 'b> JSparseArray<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.key_at,
-                JavaType::Primitive(Primitive::Int),
-                &[index.into()],
+                ReturnType::Primitive(Primitive::Int),
+                &[JValue::from(index).to_jni()],
             )?
             .i()
     }
@@ -1036,8 +987,8 @@ impl<'a: 'b, 'b> JSparseArray<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.value_at,
-                JavaType::Object("Ljava/lang/Object;".to_string()),
-                &[index.into()],
+                ReturnType::Object,
+                &[JValue::from(index).to_jni()],
             )?
             .l()
     }
@@ -1078,7 +1029,7 @@ impl<'a: 'b, 'b> Iterator for JSparseArrayIter<'a, 'b> {
 }
 pub struct JParcelUuid<'a: 'b, 'b> {
     internal: JObject<'a>,
-    get_uuid: JMethodID<'a>,
+    get_uuid: JMethodID,
     env: &'b JNIEnv<'a>,
 }
 
@@ -1097,12 +1048,7 @@ impl<'a: 'b, 'b> JParcelUuid<'a, 'b> {
     pub fn get_uuid(&self) -> Result<JUuid<'a, 'b>> {
         let obj = self
             .env
-            .call_method_unchecked(
-                self.internal,
-                self.get_uuid,
-                JavaType::Object("Ljava/util/UUID;".to_string()),
-                &[],
-            )?
+            .call_method_unchecked(self.internal, self.get_uuid, ReturnType::Object, &[])?
             .l()?;
         JUuid::from_env(self.env, obj)
     }

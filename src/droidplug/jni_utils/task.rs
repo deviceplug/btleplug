@@ -2,7 +2,7 @@ use ::jni::{
     JNIEnv,
     errors::Result,
     objects::{JClass, JMethodID, JObject},
-    signature::JavaType,
+    signature::ReturnType,
 };
 use std::task::Waker;
 
@@ -26,7 +26,7 @@ pub fn waker<'a: 'b, 'b>(env: &'b JNIEnv<'a>, waker: Waker) -> Result<JObject<'a
 /// `io.github.gedgygedgy.rust.task.PollResult`.
 pub struct JPollResult<'a: 'b, 'b> {
     internal: JObject<'a>,
-    get: JMethodID<'a>,
+    get: JMethodID,
     env: &'b JNIEnv<'a>,
 }
 
@@ -50,12 +50,7 @@ impl<'a: 'b, 'b> JPollResult<'a, 'b> {
 
     pub fn get(&self) -> Result<JObject<'a>> {
         self.env
-            .call_method_unchecked(
-                self.internal,
-                self.get,
-                JavaType::Object("java/lang/Object".into()),
-                &[],
-            )?
+            .call_method_unchecked(self.internal, self.get, ReturnType::Object, &[])?
             .l()
     }
 }

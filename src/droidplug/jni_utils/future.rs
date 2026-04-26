@@ -2,8 +2,8 @@ use super::task::JPollResult;
 use ::jni::{
     JNIEnv, JavaVM,
     errors::{Error, Result},
-    objects::{GlobalRef, JClass, JMethodID, JObject},
-    signature::JavaType,
+    objects::{GlobalRef, JClass, JMethodID, JObject, JValue},
+    signature::ReturnType,
 };
 use static_assertions::assert_impl_all;
 use std::{
@@ -21,7 +21,7 @@ use std::{
 /// For a [`Send`] version of this, use [`JSendFuture`].
 pub struct JFuture<'a: 'b, 'b> {
     internal: JObject<'a>,
-    poll: JMethodID<'a>,
+    poll: JMethodID,
     env: &'b JNIEnv<'a>,
 }
 
@@ -49,8 +49,8 @@ impl<'a: 'b, 'b> JFuture<'a, 'b> {
             .call_method_unchecked(
                 self.internal,
                 self.poll,
-                JavaType::Object("io/github/gedgygedgy/rust/task/PollResult".into()),
-                &[waker.into()],
+                ReturnType::Object,
+                &[JValue::from(waker).to_jni()],
             )?
             .l()?;
         JPollResult::from_env(self.env, result)

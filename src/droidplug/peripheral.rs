@@ -29,8 +29,6 @@ use std::{
     sync::atomic::{AtomicU16, Ordering},
     sync::{Arc, Mutex},
 };
-use uuid::Uuid;
-
 use super::jni::{
     global_jvm,
     objects::{JBluetoothGattCharacteristic, JBluetoothGattService, JPeripheral},
@@ -72,7 +70,7 @@ fn get_poll_result<'a>(
                     .call_method(&ex, "getCause", "()Ljava/lang/Throwable;", &[])?
                     .l()?;
 
-                let check = |name: &str| -> jni::errors::Result<bool> {
+                let mut check = |name: &str| -> jni::errors::Result<bool> {
                     let cls = super::jni_utils::classcache::get_class(name).unwrap();
                     env.is_instance_of(&cause, <&JClass>::from(cls.as_obj()))
                 };
@@ -136,7 +134,7 @@ pub struct Peripheral {
 }
 
 impl Peripheral {
-    pub(crate) fn new(env: &mut JNIEnv, adapter: JObject, addr: BDAddr) -> Result<Self> {
+    pub(crate) fn new<'a>(env: &mut JNIEnv<'a>, adapter: JObject<'a>, addr: BDAddr) -> Result<Self> {
         let obj = JPeripheral::new(env, adapter, addr)?;
         let internal = env.new_global_ref(&*obj)?;
         Ok(Self {
@@ -159,7 +157,7 @@ impl Peripheral {
 
     fn with_obj<T, E>(
         &self,
-        f: impl FnOnce(&mut JNIEnv, &JPeripheral) -> std::result::Result<T, E>,
+        f: impl for<'env> FnOnce(&mut JNIEnv<'env>, &JPeripheral<'env>) -> std::result::Result<T, E>,
     ) -> std::result::Result<T, E>
     where
         E: From<::jni::errors::Error>,

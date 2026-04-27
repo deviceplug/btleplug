@@ -57,10 +57,10 @@ impl Adapter {
         Ok(adapter)
     }
 
-    pub fn report_scan_result(
+    pub fn report_scan_result<'a>(
         &self,
-        env: &mut JNIEnv,
-        scan_result: JObject,
+        env: &mut JNIEnv<'a>,
+        scan_result: JObject<'a>,
     ) -> Result<Peripheral> {
         let scan_result = JScanResult::from_env(env, scan_result)?;
         let (addr, properties): (BDAddr, Option<PeripheralProperties>) =
@@ -201,10 +201,10 @@ impl Central for Adapter {
     }
 }
 
-pub(crate) fn adapter_report_scan_result_internal(
-    env: &mut JNIEnv,
+pub(crate) fn adapter_report_scan_result_internal<'a>(
+    env: &mut JNIEnv<'a>,
     obj: &JObject,
-    scan_result: JObject,
+    scan_result: JObject<'a>,
 ) -> crate::Result<()> {
     let adapter = unsafe { env.get_rust_field::<_, _, Adapter>(obj, "handle") }?;
     let adapter_clone = adapter.clone();
@@ -219,10 +219,9 @@ pub(crate) fn adapter_on_connection_state_changed_internal(
     addr: JString,
     connected: jboolean,
 ) -> crate::Result<()> {
+    let addr_str: String = env.get_string(&addr)?.into();
+    let addr = BDAddr::from_str(&addr_str)?;
     let adapter = unsafe { env.get_rust_field::<_, _, Adapter>(obj, "handle") }?;
-    let addr_str = env.get_string(&addr)?;
-    let addr_str = addr_str.to_str().map_err(|e| Error::Other(e.into()))?;
-    let addr = BDAddr::from_str(addr_str)?;
     adapter.manager.emit(if connected != 0 {
         CentralEvent::DeviceConnected(PeripheralId(addr))
     } else {

@@ -133,7 +133,7 @@ impl From<::jni::errors::Error> for crate::Error {
     }
 }
 
-extern "C" fn adapter_report_scan_result(mut env: JNIEnv, obj: JObject, scan_result: JObject) {
+extern "C" fn adapter_report_scan_result<'a>(mut env: JNIEnv<'a>, obj: JObject, scan_result: JObject<'a>) {
     let _ = super::adapter::adapter_report_scan_result_internal(&mut env, &obj, scan_result);
 }
 

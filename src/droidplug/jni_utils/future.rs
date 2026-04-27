@@ -2,6 +2,7 @@ use ::jni::{
     Env, JavaVM,
     bind_java_type,
     errors::Result,
+    jni_sig, jni_str,
     objects::{Global, JObject},
 };
 use static_assertions::assert_impl_all;
@@ -13,9 +14,17 @@ use std::{
 
 bind_java_type! {
     pub JFuture => io.github.gedgygedgy.rust.future.Future,
-    methods {
-        fn poll(waker: JObject) -> JObject,
-    },
+}
+
+impl<'local> JFuture<'local> {
+    pub fn poll(&self, env: &mut Env<'local>, waker: &JObject<'local>) -> Result<JObject<'local>> {
+        env.call_method(
+            self,
+            jni_str!("poll"),
+            jni_sig!("(Lio/github/gedgygedgy/rust/task/Waker;)Lio/github/gedgygedgy/rust/task/PollResult;"),
+            &[waker.into()],
+        )?.l()
+    }
 }
 
 bind_java_type! {

@@ -33,24 +33,36 @@ pub async fn get_adapter() -> &'static Adapter {
             std::thread::Builder::new()
                 .name("btleplug-test-adapter".into())
                 .spawn(move || {
-                    let rt = tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .expect("failed to create adapter runtime");
-                    rt.block_on(async {
-                        let manager = Manager::new().await.expect("failed to create BLE manager");
-                        let adapters = manager.adapters().await.expect("failed to get adapters");
-                        // Leak the manager so it (and the underlying CBCentralManager)
-                        // lives forever. OnceCell keeps the Adapter alive; we need the
-                        // Manager alive too since the Adapter borrows from it internally
-                        // on some platforms.
-                        std::mem::forget(manager);
-                        let adapter = adapters.into_iter().next().expect("no BLE adapters found");
-                        tx.send(adapter).ok();
-                        // Block forever so the runtime (and its spawned event loop)
-                        // stays alive.
-                        std::future::pending::<()>().await;
-                    });
+                    log::info!("adapter thread: starting");
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        let rt = tokio::runtime::Builder::new_current_thread()
+                            .enable_all()
+                            .build()
+                            .expect("failed to create adapter runtime");
+                        rt.block_on(async {
+                            log::info!("adapter thread: creating manager");
+                            let manager = Manager::new().await.expect("failed to create BLE manager");
+                            log::info!("adapter thread: getting adapters");
+                            let adapters = manager.adapters().await.expect("failed to get adapters");
+                            log::info!("adapter thread: got {} adapters", adapters.len());
+                            std::mem::forget(manager);
+                            let adapter = adapters.into_iter().next().expect("no BLE adapters found");
+                            log::info!("adapter thread: sending adapter");
+                            tx.send(adapter).ok();
+                            log::info!("adapter thread: blocking forever");
+                            std::future::pending::<()>().await;
+                        });
+                    }));
+                    if let Err(panic) = result {
+                        let msg = if let Some(s) = panic.downcast_ref::<&str>() {
+                            s.to_string()
+                        } else if let Some(s) = panic.downcast_ref::<String>() {
+                            s.clone()
+                        } else {
+                            "unknown panic".to_string()
+                        };
+                        log::error!("adapter thread PANICKED: {}", msg);
+                    }
                 })
                 .expect("failed to spawn adapter thread");
             rx.await

@@ -3,6 +3,7 @@ use ::jni::{
     Env, JavaVM,
     bind_java_type,
     errors::Result,
+    jni_sig, jni_str,
     objects::{Global, JObject},
 };
 use futures::stream::Stream;
@@ -14,9 +15,17 @@ use std::{
 
 bind_java_type! {
     pub JStream => io.github.gedgygedgy.rust.stream.Stream,
-    methods {
-        fn poll_next(waker: JObject) -> JObject,
-    },
+}
+
+impl<'local> JStream<'local> {
+    pub fn poll_next(&self, env: &mut Env<'local>, waker: &JObject<'local>) -> Result<JObject<'local>> {
+        env.call_method(
+            self,
+            jni_str!("pollNext"),
+            jni_sig!("(Lio/github/gedgygedgy/rust/task/Waker;)Lio/github/gedgygedgy/rust/task/PollResult;"),
+            &[waker.into()],
+        )?.l()
+    }
 }
 
 bind_java_type! {

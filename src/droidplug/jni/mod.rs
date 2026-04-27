@@ -1,6 +1,6 @@
 pub mod objects;
 
-use ::jni::{Env, NativeMethod, jni_str, native_method, objects::{JObject, Reference}};
+use ::jni::{Env, EnvUnowned, NativeMethod, jni_str, native_method, objects::{JObject, Reference}};
 use jni::{objects::JString, sys::jboolean};
 use std::ffi::c_void;
 use std::sync::Once;
@@ -18,17 +18,21 @@ pub fn init(env: &mut Env) -> crate::Result<()> {
 }
 
 fn init_inner(env: &mut Env) -> crate::Result<()> {
+    // Seed the JavaVM singleton so JavaVM::singleton() works from any thread.
+    env.get_java_vm()?;
     {
         let adapter_class =
             env.find_class(jni_str!("com/nonpolynomial/btleplug/android/impl/Adapter"))?;
         unsafe { env.register_native_methods(
             &adapter_class,
             &[
-                native_method! {
-                    name = "reportScanResult",
-                    sig = (scan_result: JObject) -> (),
-                    fn = adapter_report_scan_result,
-                },
+                // Can't use native_method! here — JObject maps to Ljava/lang/Object; but the
+                // Java side declares the parameter as ScanResult. JNI requires exact signature match.
+                NativeMethod::from_raw_parts(
+                    jni_str!("reportScanResult"),
+                    jni_str!("(Landroid/bluetooth/le/ScanResult;)V"),
+                    adapter_report_scan_result as *mut c_void,
+                ),
                 native_method! {
                     name = "onConnectionStateChanged",
                     sig = (addr: JString, connected: jboolean) -> (),
@@ -96,13 +100,16 @@ impl From<::jni::errors::Error> for crate::Error {
     }
 }
 
-fn adapter_report_scan_result<'local>(
-    env: &mut Env<'local>,
+extern "C" fn adapter_report_scan_result<'local>(
+    mut env: EnvUnowned<'local>,
     obj: JObject<'local>,
     scan_result: JObject<'local>,
-) -> jni::errors::Result<()> {
-    let _ = super::adapter::adapter_report_scan_result_internal(env, &obj, scan_result);
-    Ok(())
+) {
+    let outcome = env.with_env(|env| {
+        let _ = super::adapter::adapter_report_scan_result_internal(env, &obj, scan_result);
+        Ok::<_, jni::errors::Error>(())
+    });
+    let _ = outcome.into_outcome();
 }
 
 fn adapter_on_connection_state_changed<'local>(

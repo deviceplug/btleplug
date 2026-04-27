@@ -4,7 +4,7 @@ use jni::{
     bind_java_type,
     errors::Result,
     jni_sig, jni_str,
-    objects::{JObject, JString},
+    objects::{JObject, JString, Reference},
     sys::jint,
 };
 use std::{collections::HashMap, iter::Iterator};
@@ -40,61 +40,53 @@ bind_java_type! {
     pub JScanFilterClass => "com.nonpolynomial.btleplug.android.impl.ScanFilter",
 }
 
+// JPeripheral: bind_java_type! for class definition only. Methods use domain-specific
+// Java types (UUID, Future, Stream, byte[]) whose JNI signatures can't be expressed
+// through the macro's Rust-to-JNI type mapping (JObject → Ljava/lang/Object; is wrong).
 bind_java_type! {
     pub JPeripheral => "com.nonpolynomial.btleplug.android.impl.Peripheral",
-    constructors {
-        fn with_adapter(adapter: JObject, address: JString),
-    },
     methods {
-        priv fn connect_raw { name = "connect", sig = () -> JObject },
-        priv fn disconnect_raw { name = "disconnect", sig = () -> JObject },
         fn is_connected() -> jboolean,
-        priv fn discover_services_raw { name = "discoverServices", sig = () -> JObject },
-        priv fn read_raw { name = "read", sig = (uuid: JObject) -> JObject },
-        priv fn write_raw { name = "write", sig = (uuid: JObject, data: JObject, write_type: jint) -> JObject },
-        priv fn set_characteristic_notification_raw {
-            name = "setCharacteristicNotification",
-            sig = (uuid: JObject, enable: jboolean) -> JObject,
-        },
-        priv fn get_notifications_raw { name = "getNotifications", sig = () -> JObject },
-        priv fn read_descriptor_raw { name = "readDescriptor", sig = (characteristic: JObject, uuid: JObject) -> JObject },
-        priv fn write_descriptor_raw {
-            name = "writeDescriptor",
-            sig = (characteristic: JObject, uuid: JObject, data: JObject) -> JObject,
-        },
-        priv fn get_device_name_raw { name = "getDeviceName", sig = () -> JObject },
-        fn request_mtu(mtu: jint) -> JObject,
-        priv fn get_connection_parameters_raw { name = "getConnectionParameters", sig = () -> JObject },
         fn request_connection_priority(priority: jint) -> jboolean,
-        fn read_remote_rssi() -> JObject,
     },
 }
 
 impl JPeripheral<'_> {
     pub fn create<'local>(env: &mut Env<'local>, adapter: JObject<'local>, addr: BDAddr) -> Result<JPeripheral<'local>> {
         let addr_jstr = env.new_string(format!("{:X}", addr))?;
-        JPeripheral::with_adapter(env, &adapter, &addr_jstr)
+        let class = JPeripheral::lookup_class(env, &Default::default())?;
+        let obj = env.new_object(
+            &*class,
+            jni_sig!("(Lcom/nonpolynomial/btleplug/android/impl/Adapter;Ljava/lang/String;)V"),
+            &[(&adapter).into(), (&addr_jstr).into()],
+        )?;
+        env.cast_local::<JPeripheral>(obj)
     }
 }
 
 impl<'local> JPeripheral<'local> {
     pub fn connect(&self, env: &mut Env<'local>) -> Result<JFuture<'local>> {
-        let raw = self.connect_raw(env)?;
+        let raw = env.call_method(self, jni_str!("connect"),
+            jni_sig!("()Lio/github/gedgygedgy/rust/future/Future;"), &[])?.l()?;
         env.cast_local::<JFuture>(raw)
     }
 
     pub fn disconnect(&self, env: &mut Env<'local>) -> Result<JFuture<'local>> {
-        let raw = self.disconnect_raw(env)?;
+        let raw = env.call_method(self, jni_str!("disconnect"),
+            jni_sig!("()Lio/github/gedgygedgy/rust/future/Future;"), &[])?.l()?;
         env.cast_local::<JFuture>(raw)
     }
 
     pub fn discover_services(&self, env: &mut Env<'local>) -> Result<JFuture<'local>> {
-        let raw = self.discover_services_raw(env)?;
+        let raw = env.call_method(self, jni_str!("discoverServices"),
+            jni_sig!("()Lio/github/gedgygedgy/rust/future/Future;"), &[])?.l()?;
         env.cast_local::<JFuture>(raw)
     }
 
     pub fn read(&self, env: &mut Env<'local>, uuid: &JUuid<'local>) -> Result<JFuture<'local>> {
-        let raw = self.read_raw(env, uuid)?;
+        let raw = env.call_method(self, jni_str!("read"),
+            jni_sig!("(Ljava/util/UUID;)Lio/github/gedgygedgy/rust/future/Future;"),
+            &[uuid.into()])?.l()?;
         env.cast_local::<JFuture>(raw)
     }
 
@@ -105,7 +97,9 @@ impl<'local> JPeripheral<'local> {
         data: &JObject<'local>,
         write_type: jint,
     ) -> Result<JFuture<'local>> {
-        let raw = self.write_raw(env, uuid, data, write_type)?;
+        let raw = env.call_method(self, jni_str!("write"),
+            jni_sig!("(Ljava/util/UUID;[BI)Lio/github/gedgygedgy/rust/future/Future;"),
+            &[uuid.into(), data.into(), write_type.into()])?.l()?;
         env.cast_local::<JFuture>(raw)
     }
 
@@ -115,12 +109,15 @@ impl<'local> JPeripheral<'local> {
         uuid: &JUuid<'local>,
         enable: bool,
     ) -> Result<JFuture<'local>> {
-        let raw = self.set_characteristic_notification_raw(env, uuid, enable)?;
+        let raw = env.call_method(self, jni_str!("setCharacteristicNotification"),
+            jni_sig!("(Ljava/util/UUID;Z)Lio/github/gedgygedgy/rust/future/Future;"),
+            &[uuid.into(), enable.into()])?.l()?;
         env.cast_local::<JFuture>(raw)
     }
 
     pub fn get_notifications(&self, env: &mut Env<'local>) -> Result<JStream<'local>> {
-        let raw = self.get_notifications_raw(env)?;
+        let raw = env.call_method(self, jni_str!("getNotifications"),
+            jni_sig!("()Lio/github/gedgygedgy/rust/stream/Stream;"), &[])?.l()?;
         env.cast_local::<JStream>(raw)
     }
 
@@ -130,7 +127,9 @@ impl<'local> JPeripheral<'local> {
         characteristic: &JUuid<'local>,
         uuid: &JUuid<'local>,
     ) -> Result<JFuture<'local>> {
-        let raw = self.read_descriptor_raw(env, characteristic, uuid)?;
+        let raw = env.call_method(self, jni_str!("readDescriptor"),
+            jni_sig!("(Ljava/util/UUID;Ljava/util/UUID;)Lio/github/gedgygedgy/rust/future/Future;"),
+            &[characteristic.into(), uuid.into()])?.l()?;
         env.cast_local::<JFuture>(raw)
     }
 
@@ -141,12 +140,15 @@ impl<'local> JPeripheral<'local> {
         uuid: &JUuid<'local>,
         data: &JObject<'local>,
     ) -> Result<JFuture<'local>> {
-        let raw = self.write_descriptor_raw(env, characteristic, uuid, data)?;
+        let raw = env.call_method(self, jni_str!("writeDescriptor"),
+            jni_sig!("(Ljava/util/UUID;Ljava/util/UUID;[B)Lio/github/gedgygedgy/rust/future/Future;"),
+            &[characteristic.into(), uuid.into(), data.into()])?.l()?;
         env.cast_local::<JFuture>(raw)
     }
 
     pub fn get_device_name(&self, env: &mut Env<'local>) -> Result<Option<String>> {
-        let obj = self.get_device_name_raw(env)?;
+        let obj = env.call_method(self, jni_str!("getDeviceName"),
+            jni_sig!("()Ljava/lang/String;"), &[])?.l()?;
         if obj.is_null() {
             Ok(None)
         } else {
@@ -156,11 +158,19 @@ impl<'local> JPeripheral<'local> {
         }
     }
 
+    pub fn request_mtu(&self, env: &mut Env<'local>, mtu: jint) -> Result<JFuture<'local>> {
+        let raw = env.call_method(self, jni_str!("requestMtu"),
+            jni_sig!("(I)Lio/github/gedgygedgy/rust/future/Future;"),
+            &[mtu.into()])?.l()?;
+        env.cast_local::<JFuture>(raw)
+    }
+
     pub fn get_connection_parameters(
         &self,
         env: &mut Env<'local>,
     ) -> Result<Option<crate::api::ConnectionParameters>> {
-        let obj = self.get_connection_parameters_raw(env)?;
+        let obj = env.call_method(self, jni_str!("getConnectionParameters"),
+            jni_sig!("()[I"), &[])?.l()?;
         if obj.is_null() {
             return Ok(None);
         }
@@ -177,14 +187,19 @@ impl<'local> JPeripheral<'local> {
             supervision_timeout_us: (buf[2] as u32) * 10_000,
         }))
     }
+
+    pub fn read_remote_rssi(&self, env: &mut Env<'local>) -> Result<JFuture<'local>> {
+        let raw = env.call_method(self, jni_str!("readRemoteRssi"),
+            jni_sig!("()Lio/github/gedgygedgy/rust/future/Future;"), &[])?.l()?;
+        env.cast_local::<JFuture>(raw)
+    }
 }
+
+// Android SDK types: class definition only, methods use manual JNI signatures
+// because return types (UUID, List, byte[]) don't map to JObject.
 
 bind_java_type! {
     pub JBluetoothGattService => android.bluetooth.BluetoothGattService,
-    methods {
-        fn get_uuid_obj { name = "getUuid", sig = () -> JObject },
-        fn get_characteristics_obj { name = "getCharacteristics", sig = () -> JObject },
-    },
 }
 
 impl<'local> JBluetoothGattService<'local> {
@@ -193,7 +208,8 @@ impl<'local> JBluetoothGattService<'local> {
     }
 
     pub fn get_uuid(&self, env: &mut Env<'local>) -> Result<Uuid> {
-        let obj = self.get_uuid_obj(env)?;
+        let obj = env.call_method(self, jni_str!("getUuid"),
+            jni_sig!("()Ljava/util/UUID;"), &[])?.l()?;
         let uuid_obj = env.cast_local::<JUuid>(obj)?;
         uuid_obj.as_uuid(env)
     }
@@ -202,7 +218,8 @@ impl<'local> JBluetoothGattService<'local> {
         &self,
         env: &mut Env<'local>,
     ) -> Result<Vec<JBluetoothGattCharacteristic<'local>>> {
-        let obj = self.get_characteristics_obj(env)?;
+        let obj = env.call_method(self, jni_str!("getCharacteristics"),
+            jni_sig!("()Ljava/util/List;"), &[])?.l()?;
         let size = env.call_method(&obj, jni_str!("size"), jni_sig!("()I"), &[])?.i()?;
         let mut chr_vec = Vec::with_capacity(size as usize);
         for i in 0..size {
@@ -218,16 +235,14 @@ impl<'local> JBluetoothGattService<'local> {
 bind_java_type! {
     pub JBluetoothGattCharacteristic => android.bluetooth.BluetoothGattCharacteristic,
     methods {
-        fn get_uuid_obj { name = "getUuid", sig = () -> JObject },
         fn get_properties_raw { name = "getProperties", sig = () -> jint },
-        fn get_value_obj { name = "getValue", sig = () -> JObject },
-        fn get_descriptors_obj { name = "getDescriptors", sig = () -> JObject },
     },
 }
 
 impl<'local> JBluetoothGattCharacteristic<'local> {
     pub fn get_uuid(&self, env: &mut Env<'local>) -> Result<Uuid> {
-        let obj = self.get_uuid_obj(env)?;
+        let obj = env.call_method(self, jni_str!("getUuid"),
+            jni_sig!("()Ljava/util/UUID;"), &[])?.l()?;
         let uuid_obj = env.cast_local::<JUuid>(obj)?;
         uuid_obj.as_uuid(env)
     }
@@ -238,7 +253,8 @@ impl<'local> JBluetoothGattCharacteristic<'local> {
     }
 
     pub fn get_value(&self, env: &mut Env<'local>) -> Result<Vec<u8>> {
-        let value = self.get_value_obj(env)?;
+        let value = env.call_method(self, jni_str!("getValue"),
+            jni_sig!("()[B"), &[])?.l()?;
         let value_arr = unsafe { jni::objects::JByteArray::from_raw(env, value.into_raw()) };
         crate::droidplug::jni_utils::arrays::byte_array_to_vec(env, &value_arr)
     }
@@ -247,7 +263,8 @@ impl<'local> JBluetoothGattCharacteristic<'local> {
         &self,
         env: &mut Env<'local>,
     ) -> Result<Vec<JBluetoothGattDescriptor<'local>>> {
-        let obj = self.get_descriptors_obj(env)?;
+        let obj = env.call_method(self, jni_str!("getDescriptors"),
+            jni_sig!("()Ljava/util/List;"), &[])?.l()?;
         let size = env.call_method(&obj, jni_str!("size"), jni_sig!("()I"), &[])?.i()?;
         let mut desc_vec = Vec::with_capacity(size as usize);
         for i in 0..size {
@@ -262,14 +279,12 @@ impl<'local> JBluetoothGattCharacteristic<'local> {
 
 bind_java_type! {
     pub JBluetoothGattDescriptor => android.bluetooth.BluetoothGattDescriptor,
-    methods {
-        fn get_uuid_obj { name = "getUuid", sig = () -> JObject },
-    },
 }
 
 impl<'local> JBluetoothGattDescriptor<'local> {
     pub fn get_uuid(&self, env: &mut Env<'local>) -> Result<Uuid> {
-        let obj = self.get_uuid_obj(env)?;
+        let obj = env.call_method(self, jni_str!("getUuid"),
+            jni_sig!("()Ljava/util/UUID;"), &[])?.l()?;
         let uuid_obj = env.cast_local::<JUuid>(obj)?;
         uuid_obj.as_uuid(env)
     }
@@ -297,7 +312,7 @@ impl<'a> JScanFilter<'a> {
             let uuid_str = env.new_string(uuid.to_string())?;
             uuids.set_element(env, idx, &uuid_str)?;
         }
-        let class = <JScanFilterClass as jni::objects::Reference>::lookup_class(
+        let class = <JScanFilterClass as Reference>::lookup_class(
             env,
             &Default::default(),
         )?;
@@ -319,8 +334,6 @@ impl<'a> From<JScanFilter<'a>> for JObject<'a> {
 bind_java_type! {
     pub JScanResult => android.bluetooth.le.ScanResult,
     methods {
-        fn get_device_obj { name = "getDevice", sig = () -> JObject },
-        fn get_scan_record_obj { name = "getScanRecord", sig = () -> JObject },
         fn get_tx_power() -> jint,
         fn get_rssi() -> jint,
     },
@@ -328,12 +341,14 @@ bind_java_type! {
 
 impl<'local> JScanResult<'local> {
     pub fn get_device(&self, env: &mut Env<'local>) -> Result<JBluetoothDevice<'local>> {
-        let obj = self.get_device_obj(env)?;
+        let obj = env.call_method(self, jni_str!("getDevice"),
+            jni_sig!("()Landroid/bluetooth/BluetoothDevice;"), &[])?.l()?;
         env.cast_local::<JBluetoothDevice>(obj)
     }
 
     pub fn get_scan_record(&self, env: &mut Env<'local>) -> Result<JObject<'local>> {
-        self.get_scan_record_obj(env)
+        env.call_method(self, jni_str!("getScanRecord"),
+            jni_sig!("()Landroid/bluetooth/le/ScanRecord;"), &[])?.l()
     }
 
     pub fn to_peripheral_properties(
@@ -472,12 +487,30 @@ impl<'local> JScanResult<'local> {
 bind_java_type! {
     pub JScanRecord => android.bluetooth.le.ScanRecord,
     methods {
-        fn get_device_name() -> JObject,
         fn get_tx_power_level() -> jint,
-        fn get_manufacturer_specific_data() -> JObject,
-        fn get_service_data() -> JObject,
-        fn get_service_uuids() -> JObject,
     },
+}
+
+impl<'local> JScanRecord<'local> {
+    pub fn get_device_name(&self, env: &mut Env<'local>) -> Result<JObject<'local>> {
+        env.call_method(self, jni_str!("getDeviceName"),
+            jni_sig!("()Ljava/lang/String;"), &[])?.l()
+    }
+
+    pub fn get_manufacturer_specific_data(&self, env: &mut Env<'local>) -> Result<JObject<'local>> {
+        env.call_method(self, jni_str!("getManufacturerSpecificData"),
+            jni_sig!("()Landroid/util/SparseArray;"), &[])?.l()
+    }
+
+    pub fn get_service_data(&self, env: &mut Env<'local>) -> Result<JObject<'local>> {
+        env.call_method(self, jni_str!("getServiceData"),
+            jni_sig!("()Ljava/util/Map;"), &[])?.l()
+    }
+
+    pub fn get_service_uuids(&self, env: &mut Env<'local>) -> Result<JObject<'local>> {
+        env.call_method(self, jni_str!("getServiceUuids"),
+            jni_sig!("()Ljava/util/List;"), &[])?.l()
+    }
 }
 
 bind_java_type! {
@@ -491,14 +524,12 @@ bind_java_type! {
 
 bind_java_type! {
     pub JParcelUuid => android.os.ParcelUuid,
-    methods {
-        fn get_uuid_obj { name = "getUuid", sig = () -> JObject },
-    },
 }
 
 impl<'local> JParcelUuid<'local> {
     pub fn get_uuid(&self, env: &mut Env<'local>) -> Result<JUuid<'local>> {
-        let obj = self.get_uuid_obj(env)?;
+        let obj = env.call_method(self, jni_str!("getUuid"),
+            jni_sig!("()Ljava/util/UUID;"), &[])?.l()?;
         env.cast_local::<JUuid>(obj)
     }
 }

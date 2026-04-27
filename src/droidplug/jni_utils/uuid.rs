@@ -1,86 +1,37 @@
 use jni::{
     Env,
+    bind_java_type,
     errors::Result,
-    jni_str, jni_sig,
-    objects::{JMethodID, JObject},
-    signature::{Primitive, ReturnType},
     sys::jlong,
 };
 use uuid::Uuid;
 
-pub struct JUuid<'a> {
-    internal: JObject<'a>,
-    get_least_significant_bits: JMethodID,
-    get_most_significant_bits: JMethodID,
+bind_java_type! {
+    pub JUuid => java.util.UUID,
+    constructors {
+        fn with_bits(most_significant_bits: jlong, least_significant_bits: jlong),
+    },
+    methods {
+        fn get_least_significant_bits() -> jlong,
+        fn get_most_significant_bits() -> jlong,
+    },
 }
 
-impl<'a> JUuid<'a> {
-    pub fn from_env(env: &mut Env<'a>, obj: JObject<'a>) -> Result<Self> {
-        let class = env.find_class(jni_str!("java/util/UUID"))?;
-        let get_least_significant_bits =
-            env.get_method_id(&class, jni_str!("getLeastSignificantBits"), jni_sig!("()J"))?;
-        let get_most_significant_bits =
-            env.get_method_id(&class, jni_str!("getMostSignificantBits"), jni_sig!("()J"))?;
-        Ok(Self {
-            internal: obj,
-            get_least_significant_bits,
-            get_most_significant_bits,
-        })
-    }
-
-    pub fn new(env: &mut Env<'a>, uuid: Uuid) -> Result<Self> {
+impl JUuid<'_> {
+    pub fn new<'local>(env: &mut Env<'local>, uuid: Uuid) -> Result<JUuid<'local>> {
         let val = uuid.as_u128();
         let least = (val & 0xFFFFFFFFFFFFFFFF) as jlong;
         let most = ((val >> 64) & 0xFFFFFFFFFFFFFFFF) as jlong;
-
-        let class = env.find_class(jni_str!("java/util/UUID"))?;
-        let obj = env.new_object(&class, jni_sig!("(JJ)V"), &[most.into(), least.into()])?;
-        let get_least_significant_bits =
-            env.get_method_id(&class, jni_str!("getLeastSignificantBits"), jni_sig!("()J"))?;
-        let get_most_significant_bits =
-            env.get_method_id(&class, jni_str!("getMostSignificantBits"), jni_sig!("()J"))?;
-        Ok(Self {
-            internal: obj,
-            get_least_significant_bits,
-            get_most_significant_bits,
-        })
+        JUuid::with_bits(env, most, least)
     }
+}
 
-    pub fn as_uuid(&self, env: &mut Env<'a>) -> Result<Uuid> {
-        let least = unsafe {
-            env.call_method_unchecked(
-                &self.internal,
-                self.get_least_significant_bits,
-                ReturnType::Primitive(Primitive::Long),
-                &[],
-            )
-        }?
-        .j()? as u64;
-        let most = unsafe {
-            env.call_method_unchecked(
-                &self.internal,
-                self.get_most_significant_bits,
-                ReturnType::Primitive(Primitive::Long),
-                &[],
-            )
-        }?
-        .j()? as u64;
+impl<'local> JUuid<'local> {
+    pub fn as_uuid(&self, env: &mut Env<'local>) -> Result<Uuid> {
+        let least = self.get_least_significant_bits(env)? as u64;
+        let most = self.get_most_significant_bits(env)? as u64;
         let val = ((most as u128) << 64) | (least as u128);
         Ok(Uuid::from_u128(val))
-    }
-}
-
-impl<'a> ::std::ops::Deref for JUuid<'a> {
-    type Target = JObject<'a>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.internal
-    }
-}
-
-impl<'a> From<JUuid<'a>> for JObject<'a> {
-    fn from(other: JUuid<'a>) -> JObject<'a> {
-        other.internal
     }
 }
 
@@ -147,7 +98,7 @@ mod test {
                 let obj = env
                     .new_object(jni_str!("java/util/UUID"), jni_sig!("(JJ)V"), &[most.into(), least.into()])
                     .unwrap();
-                let uuid_obj = JUuid::from_env(env, obj).unwrap();
+                let uuid_obj = env.cast_local::<JUuid>(obj).unwrap();
 
                 assert_eq!(uuid_obj.as_uuid(env).unwrap(), Uuid::from_u128(test.uuid));
             }

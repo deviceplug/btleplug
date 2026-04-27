@@ -1,6 +1,6 @@
 use super::{
     jni::{
-        global_jvm,
+        jvm,
         objects::{JScanFilter, JScanResult},
     },
     peripheral::{Peripheral, PeripheralId},
@@ -40,7 +40,7 @@ impl Debug for Adapter {
 
 impl Adapter {
     pub(crate) fn new() -> Result<Self> {
-        global_jvm().attach_current_thread(|env| {
+        jvm()?.attach_current_thread(|env| {
             let obj = env.new_object(
                 jni_str!("com/nonpolynomial/btleplug/android/impl/Adapter"),
                 jni_sig!("()V"),
@@ -63,7 +63,7 @@ impl Adapter {
         scan_result: JObject<'a>,
 
     ) -> Result<Peripheral> {
-        let scan_result = JScanResult::from_env(env, scan_result)?;
+        let scan_result = env.cast_local::<JScanResult>(scan_result)?;
         let (addr, properties): (BDAddr, Option<PeripheralProperties>) =
             scan_result.to_peripheral_properties(env)?;
 
@@ -87,7 +87,7 @@ impl Adapter {
     }
 
     fn add(&self, address: BDAddr) -> Result<Peripheral> {
-        global_jvm().attach_current_thread(|env| {
+        jvm()?.attach_current_thread(|env| {
             let local_adapter = env.new_local_ref(self.internal.as_obj())?;
             let peripheral = Peripheral::new(env, local_adapter, address)?;
             self.manager.add_peripheral(peripheral.clone());
@@ -136,7 +136,7 @@ impl Central for Adapter {
     }
 
     async fn start_scan(&self, filter: ScanFilter) -> Result<()> {
-        global_jvm().attach_current_thread(|env| {
+        jvm()?.attach_current_thread(|env| {
         let filter = JScanFilter::new(env, filter)?;
         let filter_obj: JObject = filter.into();
         match env.call_method(
@@ -175,7 +175,7 @@ impl Central for Adapter {
     }
 
     async fn stop_scan(&self) -> Result<()> {
-        global_jvm().attach_current_thread(|env| {
+        jvm()?.attach_current_thread(|env| {
             env.call_method(self.internal.as_obj(), jni_str!("stopScan"), jni_sig!("()V"), &[])?;
             Ok(())
         })

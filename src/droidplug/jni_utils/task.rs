@@ -1,9 +1,9 @@
 use ::jni::{
     Env,
+    bind_java_type,
     errors::Result,
-    jni_sig, jni_str,
-    objects::{JMethodID, JObject},
-    signature::ReturnType,
+    jni_sig,
+    objects::JObject,
 };
 use std::task::Waker;
 
@@ -19,37 +19,11 @@ pub fn waker<'a>(env: &mut Env<'a>, waker: Waker) -> Result<JObject<'a>> {
     Ok(obj)
 }
 
-pub struct JPollResult<'a> {
-    internal: JObject<'a>,
-    get: JMethodID,
-}
-
-impl<'a> JPollResult<'a> {
-    pub fn from_env(env: &mut Env<'a>, obj: JObject<'a>) -> Result<Self> {
-        let class =
-            super::classcache::get_class("io/github/gedgygedgy/rust/task/PollResult").unwrap();
-        let get = env.get_method_id(class.as_ref(), jni_str!("get"), jni_sig!("()Ljava/lang/Object;"))?;
-        Ok(Self { internal: obj, get })
-    }
-
-    pub fn get(&self, env: &mut Env<'a>) -> Result<JObject<'a>> {
-        unsafe { env.call_method_unchecked(&self.internal, self.get, ReturnType::Object, &[]) }?
-            .l()
-    }
-}
-
-impl<'a> ::std::ops::Deref for JPollResult<'a> {
-    type Target = JObject<'a>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.internal
-    }
-}
-
-impl<'a> From<JPollResult<'a>> for JObject<'a> {
-    fn from(other: JPollResult<'a>) -> JObject<'a> {
-        other.internal
-    }
+bind_java_type! {
+    pub JPollResult => io.github.gedgygedgy.rust.task.PollResult,
+    methods {
+        fn get() -> JObject,
+    },
 }
 
 #[cfg(test)]

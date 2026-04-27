@@ -482,7 +482,7 @@ mod test {
                 .l()
                 .unwrap();
             let msg = env.cast_local::<JString>(msg_obj).unwrap();
-            let chars = env.get_string(&msg).unwrap();
+            let chars = msg.mutf8_chars(env).unwrap();
             assert_eq!(String::from(chars), STATIC_MSG);
             Ok(())
         }).unwrap();
@@ -508,7 +508,7 @@ mod test {
                 .l()
                 .unwrap();
             let msg = env.cast_local::<JString>(msg_obj).unwrap();
-            let chars = env.get_string(&msg).unwrap();
+            let chars = msg.mutf8_chars(env).unwrap();
             assert_eq!(String::from(chars), STRING_MSG);
 
             let any: Box<dyn Any + Send> = ex.take(env).unwrap();
@@ -574,7 +574,7 @@ mod test {
                 .unwrap();
             let suppressed_array =
                 unsafe { jni::objects::JObjectArray::<JObject>::from_raw(env, suppressed_list.into_raw()) };
-            assert_eq!(env.get_array_length(&suppressed_array).unwrap(), 0);
+            assert_eq!(suppressed_array.len(env).unwrap(), 0);
 
             let ex = super::JPanicException::from_env(ex);
             let any = ex.take(env).unwrap();
@@ -609,8 +609,8 @@ mod test {
                 .unwrap();
             let suppressed_array =
                 unsafe { jni::objects::JObjectArray::<JObject>::from_raw(env, suppressed_list.into_raw()) };
-            assert_eq!(env.get_array_length(&suppressed_array).unwrap(), 1);
-            let suppressed_ex = env.get_object_array_element(&suppressed_array, 0).unwrap();
+            assert_eq!(suppressed_array.len(env).unwrap(), 1);
+            let suppressed_ex = suppressed_array.get_element(env, 0).unwrap();
             assert!(env.is_same_object(&old_ex, &suppressed_ex).unwrap());
 
             let ex = super::JPanicException::from_env(ex);

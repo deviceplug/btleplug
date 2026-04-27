@@ -1,6 +1,6 @@
 pub mod objects;
 
-use ::jni::{Env, EnvUnowned, JavaVM, NativeMethod, jni_str, jni_sig, objects::JObject};
+use ::jni::{Env, EnvUnowned, JavaVM, NativeMethod, jni_str, objects::JObject};
 use jni::{objects::JString, sys::jboolean};
 use once_cell::sync::OnceCell;
 use std::ffi::c_void;

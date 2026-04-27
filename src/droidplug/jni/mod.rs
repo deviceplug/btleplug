@@ -14,16 +14,16 @@ pub fn init(env: &mut Env) -> crate::Result<()> {
         unsafe { env.register_native_methods(
             &adapter_class,
             &[
-                NativeMethod {
-                    name: jni_str!("reportScanResult").into(),
-                    sig: jni_sig!("(Landroid/bluetooth/le/ScanResult;)V").into(),
-                    fn_ptr: adapter_report_scan_result as *mut c_void,
-                },
-                NativeMethod {
-                    name: jni_str!("onConnectionStateChanged").into(),
-                    sig: jni_sig!("(Ljava/lang/String;Z)V").into(),
-                    fn_ptr: adapter_on_connection_state_changed as *mut c_void,
-                },
+                NativeMethod::from_raw_parts(
+                    jni_str!("reportScanResult"),
+                    jni_str!("(Landroid/bluetooth/le/ScanResult;)V"),
+                    adapter_report_scan_result as *mut c_void,
+                ),
+                NativeMethod::from_raw_parts(
+                    jni_str!("onConnectionStateChanged"),
+                    jni_str!("(Ljava/lang/String;Z)V"),
+                    adapter_on_connection_state_changed as *mut c_void,
+                ),
             ],
         )? };
         super::jni_utils::classcache::find_add_class(
@@ -103,18 +103,16 @@ pub fn init(env: &mut Env) -> crate::Result<()> {
         unsafe { env.register_native_methods(
             &fn_adapter_class,
             &[
-                NativeMethod {
-                    name: jni_str!("callInternal").into(),
-                    sig:
-                        jni_sig!("(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;")
-                            .into(),
-                    fn_ptr: super::jni_utils::ops::fn_adapter_call_internal as *mut c_void,
-                },
-                NativeMethod {
-                    name: jni_str!("closeInternal").into(),
-                    sig: jni_sig!("()V").into(),
-                    fn_ptr: super::jni_utils::ops::fn_adapter_close_internal as *mut c_void,
-                },
+                NativeMethod::from_raw_parts(
+                    jni_str!("callInternal"),
+                    jni_str!("(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"),
+                    super::jni_utils::ops::fn_adapter_call_internal as *mut c_void,
+                ),
+                NativeMethod::from_raw_parts(
+                    jni_str!("closeInternal"),
+                    jni_str!("()V"),
+                    super::jni_utils::ops::fn_adapter_close_internal as *mut c_void,
+                ),
             ],
         )? };
 

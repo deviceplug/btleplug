@@ -16,7 +16,7 @@ use async_trait::async_trait;
 use futures::stream::Stream;
 use jni::{
     Env, jni_sig, jni_str,
-    objects::{Global, JClass, JObject, JString, JValue},
+    objects::{Global, JObject, JString, JValue},
 };
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -57,22 +57,22 @@ fn get_poll_result<'a>(
     match poll_result.get(env) {
         Ok(obj) => Ok(obj),
         Err(jni::errors::Error::JavaException) => {
-            let ex = env.exception_occurred()?;
-            env.exception_clear()?;
+            let ex = env.exception_occurred().unwrap();
+            env.exception_clear();
 
             let future_exception_class = super::jni_utils::classcache::get_class(
                 "io/github/gedgygedgy/rust/future/FutureException",
             )
             .unwrap();
 
-            if env.is_instance_of(&ex, <&JClass>::from(future_exception_class.as_obj()))? {
+            if env.is_instance_of(&ex, future_exception_class.as_ref())? {
                 let cause = env
                     .call_method(&ex, jni_str!("getCause"), jni_sig!("()Ljava/lang/Throwable;"), &[])?
                     .l()?;
 
                 let mut check = |name: &str| -> jni::errors::Result<bool> {
                     let cls = super::jni_utils::classcache::get_class(name).unwrap();
-                    env.is_instance_of(&cause, <&JClass>::from(cls.as_obj()))
+                    env.is_instance_of(&cause, cls.as_ref())
                 };
 
                 if check("com/nonpolynomial/btleplug/android/impl/NotConnectedException")? {
@@ -105,11 +105,11 @@ fn get_poll_result<'a>(
                     let msgstr: String = env.get_string(&jstr)?.into();
                     Err(Error::RuntimeError(msgstr))
                 } else {
-                    env.throw(&ex)?;
+                    let _ = env.throw(&ex);
                     Err(jni::errors::Error::JavaException.into())
                 }
             } else {
-                env.throw(&ex)?;
+                let _ = env.throw(&ex);
                 Err(jni::errors::Error::JavaException.into())
             }
         }

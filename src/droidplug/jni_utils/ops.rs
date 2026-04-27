@@ -1,8 +1,8 @@
 use ::jni::{
-    JNIEnv,
+    Env, EnvUnowned,
     errors::Result,
     jni_sig, jni_str,
-    objects::{JClass, JObject},
+    objects::JObject,
 };
 use std::sync::{Arc, Mutex};
 
@@ -27,21 +27,21 @@ macro_rules! define_fn_adapter {
         closure: $closure:expr,
     ) => {
         fn $foi<'local>(
-            env: &mut JNIEnv<'local>,
+            env: &mut Env<'local>,
             $closure_name: impl for<'c, 'd> FnOnce$args -> $ret + 'static,
             local: bool,
         ) -> Result<JObject<'local>> {
             let adapter = fn_once_adapter(env, $closure, local)?;
             let class = super::classcache::get_class($ic).unwrap();
             env.new_object(
-                <&JClass>::from(class.as_obj()),
+                class.as_ref(),
                 jni_sig!("(Lio/github/gedgygedgy/rust/ops/FnAdapter;)V"),
                 &[(&adapter).into()],
             )
         }
 
         pub fn $fo<'local>(
-            env: &mut JNIEnv<'local>,
+            env: &mut Env<'local>,
             f: impl for<'c, 'd> FnOnce$args -> $ret + Send + 'static,
         ) -> Result<JObject<'local>> {
             $foi(env, f, false)
@@ -49,21 +49,21 @@ macro_rules! define_fn_adapter {
 
         #[allow(dead_code)]
         pub fn $fol<'local>(
-            env: &mut JNIEnv<'local>,
+            env: &mut Env<'local>,
             f: impl for<'c, 'd> FnOnce$args -> $ret + 'static,
         ) -> Result<JObject<'local>> {
             $foi(env, f, true)
         }
 
         fn $fmi<'local>(
-            env: &mut JNIEnv<'local>,
+            env: &mut Env<'local>,
             mut $closure_name: impl for<'c, 'd> FnMut$args -> $ret + 'static,
             local: bool,
         ) -> Result<JObject<'local>> {
             let adapter = fn_mut_adapter(env, $closure, local)?;
             let class = super::classcache::get_class($ic).unwrap();
             env.new_object(
-                <&JClass>::from(class.as_obj()),
+                class.as_ref(),
                 jni_sig!("(Lio/github/gedgygedgy/rust/ops/FnAdapter;)V"),
                 &[(&adapter).into()],
             )
@@ -71,7 +71,7 @@ macro_rules! define_fn_adapter {
 
         #[allow(dead_code)]
         pub fn $fm<'local>(
-            env: &mut JNIEnv<'local>,
+            env: &mut Env<'local>,
             f: impl for<'c, 'd> FnMut$args -> $ret + Send + 'static,
         ) -> Result<JObject<'local>> {
             $fmi(env, f, false)
@@ -79,21 +79,21 @@ macro_rules! define_fn_adapter {
 
         #[allow(dead_code)]
         pub fn $fml<'local>(
-            env: &mut JNIEnv<'local>,
+            env: &mut Env<'local>,
             f: impl for<'c, 'd> FnMut$args -> $ret + 'static,
         ) -> Result<JObject<'local>> {
             $fmi(env, f, true)
         }
 
         fn $fi<'local>(
-            env: &mut JNIEnv<'local>,
+            env: &mut Env<'local>,
             $closure_name: impl for<'c, 'd> Fn$args -> $ret + 'static,
             local: bool,
         ) -> Result<JObject<'local>> {
             let adapter = fn_adapter(env, $closure, local)?;
             let class = super::classcache::get_class($ic).unwrap();
             env.new_object(
-                <&JClass>::from(class.as_obj()),
+                class.as_ref(),
                 jni_sig!("(Lio/github/gedgygedgy/rust/ops/FnAdapter;)V"),
                 &[(&adapter).into()],
             )
@@ -101,7 +101,7 @@ macro_rules! define_fn_adapter {
 
         #[allow(dead_code)]
         pub fn $f<'local>(
-            env: &mut JNIEnv<'local>,
+            env: &mut Env<'local>,
             f: impl for<'c, 'd> Fn$args -> $ret + Send + Sync + 'static,
         ) -> Result<JObject<'local>> {
             $fi(env, f, false)
@@ -109,7 +109,7 @@ macro_rules! define_fn_adapter {
 
         #[allow(dead_code)]
         pub fn $fl<'local>(
-            env: &mut JNIEnv<'local>,
+            env: &mut Env<'local>,
             f: impl for<'c, 'd> Fn$args -> $ret + 'static,
         ) -> Result<JObject<'local>> {
             $fi(env, f, true)
@@ -133,7 +133,7 @@ define_fn_adapter! {
     doc_fn_once: "fn_once_runnable",
     doc_fn: "fn_runnable",
     doc_noop: "be a no-op",
-    signature: f: impl for<'c, 'd> Fn(&'d mut JNIEnv<'c>, JObject<'c>) -> (),
+    signature: f: impl for<'c, 'd> Fn(&'d mut Env<'c>, JObject<'c>) -> (),
     closure: move |env, _obj1, obj2, _arg1, _arg2| {
         f(env, obj2);
         JObject::null()
@@ -156,7 +156,7 @@ define_fn_adapter! {
     doc_fn_once: "fn_once_bi_function",
     doc_fn: "fn_bi_funciton",
     doc_noop: "return `null`",
-    signature: f: impl for<'c, 'd> Fn(&'d mut JNIEnv<'c>, JObject<'c>, JObject<'c>, JObject<'c>) -> JObject<'c>,
+    signature: f: impl for<'c, 'd> Fn(&'d mut Env<'c>, JObject<'c>, JObject<'c>, JObject<'c>) -> JObject<'c>,
     closure: move |env, _obj1, obj2, arg1, arg2| {
         f(env, obj2, arg1, arg2)
     },
@@ -178,7 +178,7 @@ define_fn_adapter! {
     doc_fn_once: "fn_once_function",
     doc_fn: "fn_function",
     doc_noop: "return `null`",
-    signature: f: impl for<'c, 'd> Fn(&'d mut JNIEnv<'c>, JObject<'c>, JObject<'c>) -> JObject<'c>,
+    signature: f: impl for<'c, 'd> Fn(&'d mut Env<'c>, JObject<'c>, JObject<'c>) -> JObject<'c>,
     closure: move |env, _obj1, obj2, arg1, _arg2| {
         f(env, obj2, arg1)
     },
@@ -192,7 +192,7 @@ unsafe impl<T> Sync for SendSyncWrapper<T> {}
 type FnWrapper = SendSyncWrapper<
     Arc<
         dyn for<'a, 'b> Fn(
-                &'b mut JNIEnv<'a>,
+                &'b mut Env<'a>,
                 JObject<'a>,
                 JObject<'a>,
                 JObject<'a>,
@@ -203,9 +203,9 @@ type FnWrapper = SendSyncWrapper<
 >;
 
 fn fn_once_adapter<'local>(
-    env: &mut JNIEnv<'local>,
+    env: &mut Env<'local>,
     f: impl for<'c, 'd> FnOnce(
-        &'d mut JNIEnv<'c>,
+        &'d mut Env<'c>,
         JObject<'c>,
         JObject<'c>,
         JObject<'c>,
@@ -233,9 +233,9 @@ fn fn_once_adapter<'local>(
 }
 
 fn fn_mut_adapter<'local>(
-    env: &mut JNIEnv<'local>,
+    env: &mut Env<'local>,
     f: impl for<'c, 'd> FnMut(
-        &'d mut JNIEnv<'c>,
+        &'d mut Env<'c>,
         JObject<'c>,
         JObject<'c>,
         JObject<'c>,
@@ -256,9 +256,9 @@ fn fn_mut_adapter<'local>(
 }
 
 fn fn_adapter<'local>(
-    env: &mut JNIEnv<'local>,
+    env: &mut Env<'local>,
     f: impl for<'c, 'd> Fn(
-        &'d mut JNIEnv<'c>,
+        &'d mut Env<'c>,
         JObject<'c>,
         JObject<'c>,
         JObject<'c>,
@@ -269,7 +269,7 @@ fn fn_adapter<'local>(
 ) -> Result<JObject<'local>> {
     let arc: Arc<
         dyn for<'c, 'd> Fn(
-            &'d mut JNIEnv<'c>,
+            &'d mut Env<'c>,
             JObject<'c>,
             JObject<'c>,
             JObject<'c>,
@@ -279,7 +279,7 @@ fn fn_adapter<'local>(
 
     let class = super::classcache::get_class("io/github/gedgygedgy/rust/ops/FnAdapter").unwrap();
     let obj = env.new_object(
-        <&JClass>::from(class.as_obj()),
+        class.as_ref(),
         jni_sig!("(Z)V"),
         &[local.into()],
     )?;
@@ -288,7 +288,7 @@ fn fn_adapter<'local>(
 }
 
 pub(crate) extern "C" fn fn_adapter_call_internal<'local>(
-    mut env: JNIEnv<'local>,
+    mut env: EnvUnowned<'local>,
     obj1: JObject<'local>,
     obj2: JObject<'local>,
     arg1: JObject<'local>,
@@ -296,28 +296,38 @@ pub(crate) extern "C" fn fn_adapter_call_internal<'local>(
 ) -> JObject<'local> {
     use std::panic::{AssertUnwindSafe, catch_unwind};
 
-    let arc =
-        if let Ok(f) = unsafe { env.get_rust_field::<_, _, FnWrapper>(&obj1, jni_str!("data")) } {
-            AssertUnwindSafe(f.0.clone())
-        } else {
-            return JObject::null();
-        };
-    match catch_unwind(AssertUnwindSafe(|| arc(&mut env, obj1, obj2, arg1, arg2))) {
-        Ok(result) => result,
-        Err(panic) => {
-            let _ = super::exceptions::throw_panic(&mut env, panic);
-            JObject::null()
+    let outcome = env.with_env(|env| -> std::result::Result<JObject<'local>, jni::errors::Error> {
+        let arc =
+            if let Ok(f) = unsafe { env.get_rust_field::<_, _, FnWrapper>(&obj1, jni_str!("data")) } {
+                AssertUnwindSafe(f.0.clone())
+            } else {
+                return Ok(JObject::null());
+            };
+        match catch_unwind(AssertUnwindSafe(|| arc(env, obj1, obj2, arg1, arg2))) {
+            Ok(result) => Ok(result),
+            Err(panic) => {
+                let _ = super::exceptions::throw_panic(env, panic);
+                Ok(JObject::null())
+            }
         }
+    });
+    match outcome.into_outcome() {
+        jni::Outcome::Ok(obj) => obj,
+        _ => JObject::null(),
     }
 }
 
-pub(crate) extern "C" fn fn_adapter_close_internal(mut env: JNIEnv, obj: JObject) {
+pub(crate) extern "C" fn fn_adapter_close_internal(mut env: EnvUnowned, obj: JObject) {
     use std::panic::{AssertUnwindSafe, catch_unwind};
 
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        let _ = unsafe { env.take_rust_field::<_, _, FnWrapper>(&obj, jni_str!("data")) };
-    }));
-    if let Err(panic) = result {
-        let _ = super::exceptions::throw_panic(&mut env, panic);
-    }
+    let outcome = env.with_env(|env| {
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            let _ = unsafe { env.take_rust_field::<_, _, FnWrapper>(&obj, jni_str!("data")) };
+        }));
+        if let Err(panic) = result {
+            let _ = super::exceptions::throw_panic(env, panic);
+        }
+        Ok::<(), jni::errors::Error>(())
+    });
+    let _ = outcome.into_outcome();
 }

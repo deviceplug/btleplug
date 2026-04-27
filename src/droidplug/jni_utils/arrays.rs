@@ -2,12 +2,12 @@ use jni::{
     Env,
     errors::Result,
     objects::JByteArray,
-    sys::{jbyte, jint},
+    sys::jbyte,
 };
 use std::slice;
 
 pub fn slice_to_byte_array<'local>(env: &mut Env<'local>, slice: &[u8]) -> Result<JByteArray<'local>> {
-    let obj = env.new_byte_array(slice.len() as jint)?;
+    let obj = env.new_byte_array(slice.len())?;
     let slice = unsafe { &*(slice as *const [u8] as *const [jbyte]) };
     env.set_byte_array_region(&obj, 0, slice)?;
     Ok(obj)

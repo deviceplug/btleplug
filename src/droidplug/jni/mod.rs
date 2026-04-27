@@ -1,6 +1,6 @@
 pub mod objects;
 
-use ::jni::{Env, JNIEnv, JavaVM, NativeMethod, jni_str, jni_sig, objects::JObject};
+use ::jni::{Env, EnvUnowned, JavaVM, NativeMethod, jni_str, jni_sig, objects::JObject};
 use jni::{objects::JString, sys::jboolean};
 use once_cell::sync::OnceCell;
 use std::ffi::c_void;
@@ -134,17 +134,25 @@ impl From<::jni::errors::Error> for crate::Error {
     }
 }
 
-extern "C" fn adapter_report_scan_result<'a>(mut env: JNIEnv<'a>, obj: JObject, scan_result: JObject<'a>) {
-    let _ = super::adapter::adapter_report_scan_result_internal(&mut env, &obj, scan_result);
+extern "C" fn adapter_report_scan_result<'a>(mut env: EnvUnowned<'a>, obj: JObject, scan_result: JObject<'a>) {
+    let outcome = env.with_env(|env| {
+        let _ = super::adapter::adapter_report_scan_result_internal(env, &obj, scan_result);
+        Ok::<(), jni::errors::Error>(())
+    });
+    let _ = outcome.into_outcome();
 }
 
 extern "C" fn adapter_on_connection_state_changed(
-    mut env: JNIEnv,
+    mut env: EnvUnowned,
     obj: JObject,
     addr: JString,
     connected: jboolean,
 ) {
-    let _ = super::adapter::adapter_on_connection_state_changed_internal(
-        &mut env, &obj, addr, connected,
-    );
+    let outcome = env.with_env(|env| {
+        let _ = super::adapter::adapter_on_connection_state_changed_internal(
+            env, &obj, addr, connected,
+        );
+        Ok::<(), jni::errors::Error>(())
+    });
+    let _ = outcome.into_outcome();
 }

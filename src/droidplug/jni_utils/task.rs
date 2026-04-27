@@ -2,7 +2,7 @@ use ::jni::{
     Env,
     errors::Result,
     jni_sig, jni_str,
-    objects::{JClass, JMethodID, JObject},
+    objects::{JMethodID, JObject},
     signature::ReturnType,
 };
 use std::task::Waker;
@@ -12,7 +12,7 @@ pub fn waker<'a>(env: &mut Env<'a>, waker: Waker) -> Result<JObject<'a>> {
 
     let class = super::classcache::get_class("io/github/gedgygedgy/rust/task/Waker").unwrap();
     let obj = env.new_object(
-        <&JClass>::from(class.as_obj()),
+        class.as_ref(),
         jni_sig!("(Lio/github/gedgygedgy/rust/ops/FnRunnable;)V"),
         &[(&runnable).into()],
     )?;
@@ -28,7 +28,7 @@ impl<'a> JPollResult<'a> {
     pub fn from_env(env: &mut Env<'a>, obj: JObject<'a>) -> Result<Self> {
         let class =
             super::classcache::get_class("io/github/gedgygedgy/rust/task/PollResult").unwrap();
-        let get = env.get_method_id(<&JClass>::from(class.as_obj()), jni_str!("get"), jni_sig!("()Ljava/lang/Object;"))?;
+        let get = env.get_method_id(class.as_ref(), jni_str!("get"), jni_sig!("()Ljava/lang/Object;"))?;
         Ok(Self { internal: obj, get })
     }
 

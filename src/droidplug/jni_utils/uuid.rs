@@ -1,6 +1,7 @@
 use jni::{
     Env,
     errors::Result,
+    jni_str, jni_sig,
     objects::{JMethodID, JObject},
     signature::{Primitive, ReturnType},
     sys::jlong,
@@ -15,11 +16,11 @@ pub struct JUuid<'a> {
 
 impl<'a> JUuid<'a> {
     pub fn from_env(env: &mut Env<'a>, obj: JObject<'a>) -> Result<Self> {
-        let class = env.find_class("java/util/UUID")?;
+        let class = env.find_class(jni_str!("java/util/UUID"))?;
         let get_least_significant_bits =
-            env.get_method_id(&class, "getLeastSignificantBits", "()J")?;
+            env.get_method_id(&class, jni_str!("getLeastSignificantBits"), jni_sig!("()J"))?;
         let get_most_significant_bits =
-            env.get_method_id(&class, "getMostSignificantBits", "()J")?;
+            env.get_method_id(&class, jni_str!("getMostSignificantBits"), jni_sig!("()J"))?;
         Ok(Self {
             internal: obj,
             get_least_significant_bits,
@@ -32,12 +33,12 @@ impl<'a> JUuid<'a> {
         let least = (val & 0xFFFFFFFFFFFFFFFF) as jlong;
         let most = ((val >> 64) & 0xFFFFFFFFFFFFFFFF) as jlong;
 
-        let class = env.find_class("java/util/UUID")?;
-        let obj = env.new_object(&class, "(JJ)V", &[most.into(), least.into()])?;
+        let class = env.find_class(jni_str!("java/util/UUID"))?;
+        let obj = env.new_object(&class, jni_sig!("(JJ)V"), &[most.into(), least.into()])?;
         let get_least_significant_bits =
-            env.get_method_id(&class, "getLeastSignificantBits", "()J")?;
+            env.get_method_id(&class, jni_str!("getLeastSignificantBits"), jni_sig!("()J"))?;
         let get_most_significant_bits =
-            env.get_method_id(&class, "getMostSignificantBits", "()J")?;
+            env.get_method_id(&class, jni_str!("getMostSignificantBits"), jni_sig!("()J"))?;
         Ok(Self {
             internal: obj,
             get_least_significant_bits,
@@ -87,7 +88,7 @@ impl<'a> From<JUuid<'a>> for JObject<'a> {
 mod test {
     use super::super::test_utils;
     use super::JUuid;
-    use jni::{objects::JObject, sys::jlong};
+    use jni::{jni_str, jni_sig, objects::JObject, sys::jlong};
     use uuid::Uuid;
 
     struct UuidTest {
@@ -121,12 +122,12 @@ mod test {
                 let obj: JObject = uuid_obj.into();
 
                 let actual_most = env
-                    .call_method(&obj, "getMostSignificantBits", "()J", &[])
+                    .call_method(&obj, jni_str!("getMostSignificantBits"), jni_sig!("()J"), &[])
                     .unwrap()
                     .j()
                     .unwrap();
                 let actual_least = env
-                    .call_method(&obj, "getLeastSignificantBits", "()J", &[])
+                    .call_method(&obj, jni_str!("getLeastSignificantBits"), jni_sig!("()J"), &[])
                     .unwrap()
                     .j()
                     .unwrap();
@@ -145,7 +146,7 @@ mod test {
                 let least = test.least as jlong;
 
                 let obj = env
-                    .new_object("java/util/UUID", "(JJ)V", &[most.into(), least.into()])
+                    .new_object(jni_str!("java/util/UUID"), jni_sig!("(JJ)V"), &[most.into(), least.into()])
                     .unwrap();
                 let uuid_obj = JUuid::from_env(env, obj).unwrap();
 

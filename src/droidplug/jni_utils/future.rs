@@ -1,6 +1,7 @@
 use ::jni::{
     Env, JavaVM,
     errors::Result,
+    jni_sig, jni_str,
     objects::{Global, JClass, JMethodID, JObject},
     signature::ReturnType,
     sys::jvalue,
@@ -23,8 +24,8 @@ impl<'a> JFuture<'a> {
             super::classcache::get_class("io/github/gedgygedgy/rust/future/Future").unwrap();
         let poll_id = env.get_method_id(
             <&JClass>::from(class.as_obj()),
-            "poll",
-            "(Lio/github/gedgygedgy/rust/task/Waker;)Lio/github/gedgygedgy/rust/task/PollResult;",
+            jni_str!("poll"),
+            jni_sig!("(Lio/github/gedgygedgy/rust/task/Waker;)Lio/github/gedgygedgy/rust/task/PollResult;"),
         )?;
         Ok(Self {
             internal: obj,
@@ -82,8 +83,8 @@ impl JSendFuture {
             super::classcache::get_class("io/github/gedgygedgy/rust/future/Future").unwrap();
         let poll_id = env.get_method_id(
             <&JClass>::from(class.as_obj()),
-            "poll",
-            "(Lio/github/gedgygedgy/rust/task/Waker;)Lio/github/gedgygedgy/rust/task/PollResult;",
+            jni_str!("poll"),
+            jni_sig!("(Lio/github/gedgygedgy/rust/task/Waker;)Lio/github/gedgygedgy/rust/task/PollResult;"),
         )?;
         Ok(Self {
             internal: env.new_global_ref(obj)?,
@@ -139,6 +140,7 @@ assert_impl_all!(JSendFuture: Send);
 mod test {
     use super::super::test_utils;
     use super::{JFuture, JSendFuture};
+    use jni::{jni_sig, jni_str};
     use std::{
         future::Future,
         pin::Pin,
@@ -162,7 +164,7 @@ mod test {
             assert_eq!(data.value(), false);
 
             let future_obj = env
-                .new_object("io/github/gedgygedgy/rust/future/SimpleFuture", "()V", &[])
+                .new_object(jni_str!("io/github/gedgygedgy/rust/future/SimpleFuture"), jni_sig!("()V"), &[])
                 .unwrap();
             let future_local = env.new_local_ref(&future_obj).unwrap();
             let jfuture = JFuture::from_env(env, future_local).unwrap();
@@ -180,11 +182,11 @@ mod test {
             assert_eq!(Arc::strong_count(&data), 3);
             assert_eq!(data.value(), false);
 
-            let obj = env.new_object("java/lang/Object", "()V", &[]).unwrap();
+            let obj = env.new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[]).unwrap();
             env.call_method(
                 &future_obj,
-                "wake",
-                "(Ljava/lang/Object;)V",
+                jni_str!("wake"),
+                jni_sig!("(Ljava/lang/Object;)V"),
                 &[(&obj).into()],
             )
             .unwrap();
@@ -228,13 +230,13 @@ mod test {
             let (future, future_obj_global, obj_global) = {
                 let env = &mut *cell.borrow_mut();
                 let future_obj = env
-                    .new_object("io/github/gedgygedgy/rust/future/SimpleFuture", "()V", &[])
+                    .new_object(jni_str!("io/github/gedgygedgy/rust/future/SimpleFuture"), jni_sig!("()V"), &[])
                     .unwrap();
                 let future_obj_global = env.new_global_ref(&future_obj).unwrap();
                 let future_local = env.new_local_ref(&future_obj).unwrap();
                 let jfuture = JFuture::from_env(env, future_local).unwrap();
                 let future = JSendFuture::new(env, &jfuture).unwrap();
-                let obj = env.new_object("java/lang/Object", "()V", &[]).unwrap();
+                let obj = env.new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[]).unwrap();
                 let obj_global = env.new_global_ref(&obj).unwrap();
                 (future, future_obj_global, obj_global)
             };
@@ -247,8 +249,8 @@ mod test {
                         let obj_local = env.new_local_ref(obj_global.as_obj()).unwrap();
                         env.call_method(
                             &future_local,
-                            "wake",
-                            "(Ljava/lang/Object;)V",
+                            jni_str!("wake"),
+                            jni_sig!("(Ljava/lang/Object;)V"),
                             &[(&obj_local).into()],
                         )
                         .unwrap();
@@ -275,13 +277,13 @@ mod test {
             let (future, future_obj_global, ex_global) = {
                 let env = &mut *cell.borrow_mut();
                 let future_obj = env
-                    .new_object("io/github/gedgygedgy/rust/future/SimpleFuture", "()V", &[])
+                    .new_object(jni_str!("io/github/gedgygedgy/rust/future/SimpleFuture"), jni_sig!("()V"), &[])
                     .unwrap();
                 let future_obj_global = env.new_global_ref(&future_obj).unwrap();
                 let future_local = env.new_local_ref(&future_obj).unwrap();
                 let jfuture = JFuture::from_env(env, future_local).unwrap();
                 let future = JSendFuture::new(env, &jfuture).unwrap();
-                let ex = env.new_object("java/lang/Exception", "()V", &[]).unwrap();
+                let ex = env.new_object(jni_str!("java/lang/Exception"), jni_sig!("()V"), &[]).unwrap();
                 let ex_global = env.new_global_ref(&ex).unwrap();
                 (future, future_obj_global, ex_global)
             };
@@ -294,8 +296,8 @@ mod test {
                         let ex_local = env.new_local_ref(ex_global.as_obj()).unwrap();
                         env.call_method(
                             &future_local,
-                            "wakeWithThrowable",
-                            "(Ljava/lang/Throwable;)V",
+                            jni_str!("wakeWithThrowable"),
+                            jni_sig!("(Ljava/lang/Throwable;)V"),
                             &[(&ex_local).into()],
                         )
                         .unwrap();
@@ -312,7 +314,7 @@ mod test {
                         let future_ex = env.exception_occurred().unwrap();
                         env.exception_clear().unwrap();
                         let actual_ex = env
-                            .call_method(&future_ex, "getCause", "()Ljava/lang/Throwable;", &[])
+                            .call_method(&future_ex, jni_str!("getCause"), jni_sig!("()Ljava/lang/Throwable;"), &[])
                             .unwrap()
                             .l()
                             .unwrap();
@@ -333,11 +335,11 @@ mod test {
             let (future, future_obj_global, obj_global) = {
                 let env = &mut *cell.borrow_mut();
                 let future_obj = env
-                    .new_object("io/github/gedgygedgy/rust/future/SimpleFuture", "()V", &[])
+                    .new_object(jni_str!("io/github/gedgygedgy/rust/future/SimpleFuture"), jni_sig!("()V"), &[])
                     .unwrap();
                 let future_obj_global = env.new_global_ref(&future_obj).unwrap();
                 let future = JSendFuture::from_env(env, &future_obj).unwrap();
-                let obj = env.new_object("java/lang/Object", "()V", &[]).unwrap();
+                let obj = env.new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[]).unwrap();
                 let obj_global = env.new_global_ref(&obj).unwrap();
                 (future, future_obj_global, obj_global)
             };
@@ -350,8 +352,8 @@ mod test {
                         let obj_local = env.new_local_ref(obj_global.as_obj()).unwrap();
                         env.call_method(
                             &future_local,
-                            "wake",
-                            "(Ljava/lang/Object;)V",
+                            jni_str!("wake"),
+                            jni_sig!("(Ljava/lang/Object;)V"),
                             &[(&obj_local).into()],
                         )
                         .unwrap();

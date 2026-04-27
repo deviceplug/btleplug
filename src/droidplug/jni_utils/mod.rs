@@ -9,7 +9,7 @@ pub mod uuid;
 
 #[cfg(test)]
 pub(crate) mod test_utils {
-    use jni::{JNIEnv, JavaVM, objects::GlobalRef};
+    use jni::{JNIEnv, JavaVM, jni_str, jni_sig, objects::GlobalRef};
     use lazy_static::lazy_static;
     use std::{
         cell::RefCell,
@@ -32,24 +32,24 @@ pub(crate) mod test_utils {
         super::classcache::find_add_class(env, "io/github/gedgygedgy/rust/ops/FnBiFunctionImpl")?;
         super::classcache::find_add_class(env, "io/github/gedgygedgy/rust/ops/FnFunctionImpl")?;
 
-        let class = env.find_class("io/github/gedgygedgy/rust/ops/FnAdapter")?;
-        env.register_native_methods(
+        let class = env.find_class(jni_str!("io/github/gedgygedgy/rust/ops/FnAdapter"))?;
+        unsafe { env.register_native_methods(
             &class,
             &[
                 NativeMethod {
-                    name: "callInternal".into(),
+                    name: jni_str!("callInternal").into(),
                     sig:
-                        "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"
+                        jni_sig!("(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;")
                             .into(),
                     fn_ptr: super::ops::fn_adapter_call_internal as *mut c_void,
                 },
                 NativeMethod {
-                    name: "closeInternal".into(),
-                    sig: "()V".into(),
+                    name: jni_str!("closeInternal").into(),
+                    sig: jni_sig!("()V").into(),
                     fn_ptr: super::ops::fn_adapter_close_internal as *mut c_void,
                 },
             ],
-        )?;
+        )? };
         Ok(())
     }
 
@@ -95,9 +95,9 @@ pub(crate) mod test_utils {
 
             let thread = env
                 .call_static_method(
-                    "java/lang/Thread",
-                    "currentThread",
-                    "()Ljava/lang/Thread;",
+                    jni_str!("java/lang/Thread"),
+                    jni_str!("currentThread"),
+                    jni_sig!("()Ljava/lang/Thread;"),
                     &[],
                 )
                 .unwrap()
@@ -105,8 +105,8 @@ pub(crate) mod test_utils {
                 .unwrap();
             env.call_method(
                 &thread,
-                "setContextClassLoader",
-                "(Ljava/lang/ClassLoader;)V",
+                jni_str!("setContextClassLoader"),
+                jni_sig!("(Ljava/lang/ClassLoader;)V"),
                 &[(&JVM.class_loader).into()]
             ).unwrap();
 
@@ -141,9 +141,9 @@ pub(crate) mod test_utils {
 
             let thread = env
                 .call_static_method(
-                    "java/lang/Thread",
-                    "currentThread",
-                    "()Ljava/lang/Thread;",
+                    jni_str!("java/lang/Thread"),
+                    jni_str!("currentThread"),
+                    jni_sig!("()Ljava/lang/Thread;"),
                     &[],
                 )
                 .unwrap()
@@ -152,8 +152,8 @@ pub(crate) mod test_utils {
             let class_loader = env
                 .call_method(
                     &thread,
-                    "getContextClassLoader",
-                    "()Ljava/lang/ClassLoader;",
+                    jni_str!("getContextClassLoader"),
+                    jni_sig!("()Ljava/lang/ClassLoader;"),
                     &[],
                 )
                 .unwrap()

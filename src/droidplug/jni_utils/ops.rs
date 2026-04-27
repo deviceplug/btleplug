@@ -1,6 +1,7 @@
 use ::jni::{
     JNIEnv,
     errors::Result,
+    jni_sig, jni_str,
     objects::{JClass, JObject},
 };
 use std::sync::{Arc, Mutex};
@@ -34,7 +35,7 @@ macro_rules! define_fn_adapter {
             let class = super::classcache::get_class($ic).unwrap();
             env.new_object(
                 <&JClass>::from(class.as_obj()),
-                "(Lio/github/gedgygedgy/rust/ops/FnAdapter;)V",
+                jni_sig!("(Lio/github/gedgygedgy/rust/ops/FnAdapter;)V"),
                 &[(&adapter).into()],
             )
         }
@@ -63,7 +64,7 @@ macro_rules! define_fn_adapter {
             let class = super::classcache::get_class($ic).unwrap();
             env.new_object(
                 <&JClass>::from(class.as_obj()),
-                "(Lio/github/gedgygedgy/rust/ops/FnAdapter;)V",
+                jni_sig!("(Lio/github/gedgygedgy/rust/ops/FnAdapter;)V"),
                 &[(&adapter).into()],
             )
         }
@@ -93,7 +94,7 @@ macro_rules! define_fn_adapter {
             let class = super::classcache::get_class($ic).unwrap();
             env.new_object(
                 <&JClass>::from(class.as_obj()),
-                "(Lio/github/gedgygedgy/rust/ops/FnAdapter;)V",
+                jni_sig!("(Lio/github/gedgygedgy/rust/ops/FnAdapter;)V"),
                 &[(&adapter).into()],
             )
         }
@@ -279,10 +280,10 @@ fn fn_adapter<'local>(
     let class = super::classcache::get_class("io/github/gedgygedgy/rust/ops/FnAdapter").unwrap();
     let obj = env.new_object(
         <&JClass>::from(class.as_obj()),
-        "(Z)V",
+        jni_sig!("(Z)V"),
         &[local.into()],
     )?;
-    unsafe { env.set_rust_field::<_, _, FnWrapper>(&obj, "data", SendSyncWrapper(arc)) }?;
+    unsafe { env.set_rust_field::<_, _, FnWrapper>(&obj, jni_str!("data"), SendSyncWrapper(arc)) }?;
     Ok(obj)
 }
 
@@ -296,7 +297,7 @@ pub(crate) extern "C" fn fn_adapter_call_internal<'local>(
     use std::panic::{AssertUnwindSafe, catch_unwind};
 
     let arc =
-        if let Ok(f) = unsafe { env.get_rust_field::<_, _, FnWrapper>(&obj1, "data") } {
+        if let Ok(f) = unsafe { env.get_rust_field::<_, _, FnWrapper>(&obj1, jni_str!("data")) } {
             AssertUnwindSafe(f.0.clone())
         } else {
             return JObject::null();
@@ -314,7 +315,7 @@ pub(crate) extern "C" fn fn_adapter_close_internal(mut env: JNIEnv, obj: JObject
     use std::panic::{AssertUnwindSafe, catch_unwind};
 
     let result = catch_unwind(AssertUnwindSafe(|| {
-        let _ = unsafe { env.take_rust_field::<_, _, FnWrapper>(&obj, "data") };
+        let _ = unsafe { env.take_rust_field::<_, _, FnWrapper>(&obj, jni_str!("data")) };
     }));
     if let Err(panic) = result {
         let _ = super::exceptions::throw_panic(&mut env, panic);

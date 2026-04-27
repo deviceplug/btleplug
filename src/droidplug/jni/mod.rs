@@ -1,6 +1,6 @@
 pub mod objects;
 
-use ::jni::{Env, JNIEnv, JavaVM, NativeMethod, objects::JObject};
+use ::jni::{Env, JNIEnv, JavaVM, NativeMethod, jni_str, jni_sig, objects::JObject};
 use jni::{objects::JString, sys::jboolean};
 use once_cell::sync::OnceCell;
 use std::ffi::c_void;
@@ -10,22 +10,22 @@ static GLOBAL_JVM: OnceCell<JavaVM> = OnceCell::new();
 pub fn init(env: &mut Env) -> crate::Result<()> {
     if let Ok(()) = GLOBAL_JVM.set(env.get_java_vm()?) {
         let adapter_class =
-            env.find_class("com/nonpolynomial/btleplug/android/impl/Adapter")?;
-        env.register_native_methods(
+            env.find_class(jni_str!("com/nonpolynomial/btleplug/android/impl/Adapter"))?;
+        unsafe { env.register_native_methods(
             &adapter_class,
             &[
                 NativeMethod {
-                    name: "reportScanResult".into(),
-                    sig: "(Landroid/bluetooth/le/ScanResult;)V".into(),
+                    name: jni_str!("reportScanResult").into(),
+                    sig: jni_sig!("(Landroid/bluetooth/le/ScanResult;)V").into(),
                     fn_ptr: adapter_report_scan_result as *mut c_void,
                 },
                 NativeMethod {
-                    name: "onConnectionStateChanged".into(),
-                    sig: "(Ljava/lang/String;Z)V".into(),
+                    name: jni_str!("onConnectionStateChanged").into(),
+                    sig: jni_sig!("(Ljava/lang/String;Z)V").into(),
                     fn_ptr: adapter_on_connection_state_changed as *mut c_void,
                 },
             ],
-        )?;
+        )? };
         super::jni_utils::classcache::find_add_class(
             env,
             "com/nonpolynomial/btleplug/android/impl/Peripheral",
@@ -99,24 +99,25 @@ pub fn init(env: &mut Env) -> crate::Result<()> {
         )?;
 
         // FnAdapter native method registration
-        let fn_adapter_class = env.find_class("io/github/gedgygedgy/rust/ops/FnAdapter")?;
-        env.register_native_methods(
+        let fn_adapter_class = env.find_class(jni_str!("io/github/gedgygedgy/rust/ops/FnAdapter"))?;
+        unsafe { env.register_native_methods(
             &fn_adapter_class,
             &[
                 NativeMethod {
-                    name: "callInternal".into(),
+                    name: jni_str!("callInternal").into(),
                     sig:
-                        "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"
+                        jni_sig!("(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;")
                             .into(),
                     fn_ptr: super::jni_utils::ops::fn_adapter_call_internal as *mut c_void,
                 },
                 NativeMethod {
-                    name: "closeInternal".into(),
-                    sig: "()V".into(),
+                    name: jni_str!("closeInternal").into(),
+                    sig: jni_sig!("()V").into(),
                     fn_ptr: super::jni_utils::ops::fn_adapter_close_internal as *mut c_void,
                 },
             ],
-        )?;
+        )? };
+
     }
     Ok(())
 }

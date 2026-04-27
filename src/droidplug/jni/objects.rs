@@ -195,7 +195,7 @@ impl<'a> JPeripheral<'a> {
                 self.read,
                 ReturnType::Object,
                 &[jvalue {
-                    l: uuid.as_obj().as_raw(),
+                    l: uuid.as_raw(),
                 }],
             )
         }?
@@ -217,7 +217,7 @@ impl<'a> JPeripheral<'a> {
                 ReturnType::Object,
                 &[
                     jvalue {
-                        l: uuid.as_obj().as_raw(),
+                        l: uuid.as_raw(),
                     },
                     jvalue {
                         l: data.as_raw(),
@@ -243,7 +243,7 @@ impl<'a> JPeripheral<'a> {
                 ReturnType::Object,
                 &[
                     jvalue {
-                        l: uuid.as_obj().as_raw(),
+                        l: uuid.as_raw(),
                     },
                     jvalue {
                         z: enable as u8,
@@ -281,10 +281,10 @@ impl<'a> JPeripheral<'a> {
                 ReturnType::Object,
                 &[
                     jvalue {
-                        l: characteristic.as_obj().as_raw(),
+                        l: characteristic.as_raw(),
                     },
                     jvalue {
-                        l: uuid.as_obj().as_raw(),
+                        l: uuid.as_raw(),
                     },
                 ],
             )
@@ -396,10 +396,10 @@ impl<'a> JPeripheral<'a> {
                 ReturnType::Object,
                 &[
                     jvalue {
-                        l: characteristic.as_obj().as_raw(),
+                        l: characteristic.as_raw(),
                     },
                     jvalue {
-                        l: uuid.as_obj().as_raw(),
+                        l: uuid.as_raw(),
                     },
                     jvalue {
                         l: data.as_raw(),

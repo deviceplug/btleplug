@@ -58,7 +58,7 @@ fn runtime() -> &'static Runtime {
 const TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(55);
 
 /// Run a test function on the global runtime, converting panics to JNI exceptions.
-fn run_test(env: &JNIEnv, test_name: &str, f: impl std::future::Future<Output = ()>) {
+fn run_test(env: &mut JNIEnv, test_name: &str, f: impl std::future::Future<Output = ()>) {
     log::info!("[START] {}", test_name);
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         runtime().block_on(async {
@@ -86,7 +86,7 @@ fn run_test(env: &JNIEnv, test_name: &str, f: impl std::future::Future<Output = 
 /// Initialize btleplug's Android/JNI layer. Must be called once before any tests.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_nonpolynomial_btleplug_test_NativeTests_initBtleplug(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
 ) {
     android_logger::init_once(
@@ -94,7 +94,7 @@ pub extern "system" fn Java_com_nonpolynomial_btleplug_test_NativeTests_initBtle
             .with_max_level(log::LevelFilter::Debug)
             .with_tag("btleplug-test"),
     );
-    btleplug::platform::init(&env).expect("failed to initialize btleplug");
+    btleplug::platform::init(&mut env).expect("failed to initialize btleplug");
 }
 
 // ── Test JNI exports ────────────────────────────────────────────────
@@ -105,8 +105,8 @@ pub extern "system" fn Java_com_nonpolynomial_btleplug_test_NativeTests_initBtle
 macro_rules! jni_test {
     ($jni_name:ident, $test_fn:path) => {
         #[unsafe(no_mangle)]
-        pub extern "system" fn $jni_name(env: JNIEnv, _class: JClass) {
-            run_test(&env, stringify!($test_fn), $test_fn());
+        pub extern "system" fn $jni_name(mut env: JNIEnv, _class: JClass) {
+            run_test(&mut env, stringify!($test_fn), $test_fn());
         }
     };
 }

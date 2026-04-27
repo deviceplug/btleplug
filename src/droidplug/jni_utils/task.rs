@@ -60,9 +60,7 @@ mod test {
 
     #[test]
     fn test_waker_wake() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
-
+        test_utils::with_env(|env| {
             let data = Arc::new(test_utils::TestWakerData::new());
             assert_eq!(Arc::strong_count(&data), 1);
             assert_eq!(data.value(), false);
@@ -83,14 +81,13 @@ mod test {
             env.call_method(&jwaker, jni_str!("wake"), jni_sig!("()V"), &[]).unwrap();
             assert_eq!(Arc::strong_count(&data), 1);
             assert_eq!(data.value(), false);
-        });
+            Ok(())
+        }).unwrap();
     }
 
     #[test]
     fn test_waker_close_wake() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
-
+        test_utils::with_env(|env| {
             let data = Arc::new(test_utils::TestWakerData::new());
             assert_eq!(Arc::strong_count(&data), 1);
             assert_eq!(data.value(), false);
@@ -110,6 +107,7 @@ mod test {
             env.call_method(&jwaker, jni_str!("wake"), jni_sig!("()V"), &[]).unwrap();
             assert_eq!(Arc::strong_count(&data), 1);
             assert_eq!(data.value(), false);
-        });
+            Ok(())
+        }).unwrap();
     }
 }

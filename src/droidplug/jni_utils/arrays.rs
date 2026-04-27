@@ -30,27 +30,27 @@ mod test {
 
     #[test]
     fn test_slice_to_byte_array() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
+        test_utils::with_env(|env| {
             let obj = super::slice_to_byte_array(env, &[1, 2, 3, 4, 5]).unwrap();
             assert_eq!(env.get_array_length(&obj).unwrap(), 5);
 
             let mut bytes = [0i8; 5];
             env.get_byte_array_region(&obj, 0, &mut bytes).unwrap();
             assert_eq!(bytes, [1, 2, 3, 4, 5]);
-        });
+            Ok(())
+        }).unwrap();
     }
 
     #[test]
     fn test_byte_array_to_vec() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
+        test_utils::with_env(|env| {
             let obj = env.new_byte_array(5).unwrap();
             env.set_byte_array_region(&obj, 0, &[1, 2, 3, 4, 5])
                 .unwrap();
 
             let vec = super::byte_array_to_vec(env, &obj).unwrap();
             assert_eq!(vec, vec![1, 2, 3, 4, 5]);
-        });
+            Ok(())
+        }).unwrap();
     }
 }

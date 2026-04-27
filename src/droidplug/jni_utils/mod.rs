@@ -9,17 +9,17 @@ pub mod uuid;
 
 #[cfg(test)]
 pub(crate) mod test_utils {
-    use jni::{JNIEnv, JavaVM, jni_str, jni_sig, objects::GlobalRef};
+    use jni::{Env, JavaVM, jni_str, jni_sig, objects::Global, objects::JObject};
     use lazy_static::lazy_static;
     use std::{
-        cell::RefCell,
+        cell::Cell,
         sync::{Arc, Mutex},
         task::{Wake, Waker},
     };
 
     use jni::NativeMethod;
 
-    fn test_init(env: &mut JNIEnv) -> jni::errors::Result<()> {
+    fn test_init(env: &mut Env) -> jni::errors::Result<()> {
         use std::ffi::c_void;
         super::classcache::find_add_class(env, "io/github/gedgygedgy/rust/future/Future")?;
         super::classcache::find_add_class(env, "io/github/gedgygedgy/rust/future/FutureException")?;
@@ -86,32 +86,37 @@ pub(crate) mod test_utils {
 
     struct GlobalJVM {
         jvm: JavaVM,
-        class_loader: GlobalRef,
+        class_loader: Global<JObject<'static>>,
     }
 
     thread_local! {
-        pub static JVM_ENV: RefCell<JNIEnv<'static>> = {
-            let mut env = JVM.jvm.attach_current_thread_permanently().unwrap();
+        static CLASS_LOADER_SET: Cell<bool> = const { Cell::new(false) };
+    }
 
-            let thread = env
-                .call_static_method(
-                    jni_str!("java/lang/Thread"),
-                    jni_str!("currentThread"),
-                    jni_sig!("()Ljava/lang/Thread;"),
-                    &[],
-                )
-                .unwrap()
-                .l()
-                .unwrap();
-            env.call_method(
-                &thread,
-                jni_str!("setContextClassLoader"),
-                jni_sig!("(Ljava/lang/ClassLoader;)V"),
-                &[(&JVM.class_loader).into()]
-            ).unwrap();
-
-            RefCell::new(env)
-        }
+    pub fn with_env<F, T>(f: F) -> jni::errors::Result<T>
+    where
+        F: FnOnce(&mut Env) -> jni::errors::Result<T>,
+    {
+        JVM.jvm.attach_current_thread(|env| {
+            if !CLASS_LOADER_SET.with(|c| c.get()) {
+                let thread = env
+                    .call_static_method(
+                        jni_str!("java/lang/Thread"),
+                        jni_str!("currentThread"),
+                        jni_sig!("()Ljava/lang/Thread;"),
+                        &[],
+                    )?
+                    .l()?;
+                env.call_method(
+                    &thread,
+                    jni_str!("setContextClassLoader"),
+                    jni_sig!("(Ljava/lang/ClassLoader;)V"),
+                    &[JVM.class_loader.as_obj().into()],
+                )?;
+                CLASS_LOADER_SET.with(|c| c.set(true));
+            }
+            f(env)
+        })
     }
 
     lazy_static! {
@@ -136,30 +141,31 @@ pub(crate) mod test_utils {
                 .unwrap();
             let jvm = JavaVM::new(jvm_args).unwrap();
 
-            let mut env = jvm.attach_current_thread_permanently().unwrap();
-            test_init(&mut env).unwrap();
+            let class_loader = jvm.attach_current_thread(|env| {
+                test_init(env).unwrap();
 
-            let thread = env
-                .call_static_method(
-                    jni_str!("java/lang/Thread"),
-                    jni_str!("currentThread"),
-                    jni_sig!("()Ljava/lang/Thread;"),
-                    &[],
-                )
-                .unwrap()
-                .l()
-                .unwrap();
-            let class_loader = env
-                .call_method(
-                    &thread,
-                    jni_str!("getContextClassLoader"),
-                    jni_sig!("()Ljava/lang/ClassLoader;"),
-                    &[],
-                )
-                .unwrap()
-                .l()
-                .unwrap();
-            let class_loader = env.new_global_ref(class_loader).unwrap();
+                let thread = env
+                    .call_static_method(
+                        jni_str!("java/lang/Thread"),
+                        jni_str!("currentThread"),
+                        jni_sig!("()Ljava/lang/Thread;"),
+                        &[],
+                    )
+                    .unwrap()
+                    .l()
+                    .unwrap();
+                let class_loader = env
+                    .call_method(
+                        &thread,
+                        jni_str!("getContextClassLoader"),
+                        jni_sig!("()Ljava/lang/ClassLoader;"),
+                        &[],
+                    )
+                    .unwrap()
+                    .l()
+                    .unwrap();
+                Ok::<_, jni::errors::Error>(env.new_global_ref(class_loader).unwrap())
+            }).unwrap();
 
             GlobalJVM { jvm, class_loader }
         };

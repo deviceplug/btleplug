@@ -112,8 +112,7 @@ mod test {
 
     #[test]
     fn test_uuid_new() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
+        test_utils::with_env(|env| {
             for test in TESTS {
                 let most = test.most as jlong;
                 let least = test.least as jlong;
@@ -134,13 +133,13 @@ mod test {
                 assert_eq!(actual_most, most);
                 assert_eq!(actual_least, least);
             }
-        });
+            Ok(())
+        }).unwrap();
     }
 
     #[test]
     fn test_uuid_as_uuid() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
+        test_utils::with_env(|env| {
             for test in TESTS {
                 let most = test.most as jlong;
                 let least = test.least as jlong;
@@ -152,6 +151,7 @@ mod test {
 
                 assert_eq!(uuid_obj.as_uuid(env).unwrap(), Uuid::from_u128(test.uuid));
             }
-        });
+            Ok(())
+        }).unwrap();
     }
 }

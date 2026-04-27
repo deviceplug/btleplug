@@ -1,5 +1,5 @@
 use jni::{
-    JNIEnv,
+    Env,
     descriptors::Desc,
     errors::Error,
     objects::{JClass, JObject, JThrowable},
@@ -21,8 +21,8 @@ pub struct TryCatchResult<T> {
 /// to be thrown, it will be stored in the resulting [`TryCatchResult`] for
 /// matching with [`catch`](TryCatchResult::catch).
 pub fn try_block<T>(
-    env: &mut JNIEnv,
-    block: impl FnOnce(&mut JNIEnv) -> Result<T, Error>,
+    env: &mut Env,
+    block: impl FnOnce(&mut Env) -> Result<T, Error>,
 ) -> TryCatchResult<T> {
     TryCatchResult {
         try_result: (|| {
@@ -39,9 +39,9 @@ pub fn try_block<T>(
 impl<T> TryCatchResult<T> {
     pub fn catch<'local>(
         self,
-        env: &mut JNIEnv<'local>,
+        env: &mut Env<'local>,
         class: impl Desc<'local, JClass<'local>>,
-        block: impl FnOnce(&mut JNIEnv<'local>, JThrowable<'local>) -> Result<T, Error>,
+        block: impl FnOnce(&mut Env<'local>, JThrowable<'local>) -> Result<T, Error>,
     ) -> Self {
         match (self.try_result, self.catch_result) {
             (Err(e), _) => Self {
@@ -102,7 +102,7 @@ impl<'a> JPanicException<'a> {
         Self { internal: obj }
     }
 
-    pub fn new(env: &mut JNIEnv<'a>, any: Box<dyn Any + Send + 'static>) -> Result<Self, Error> {
+    pub fn new(env: &mut Env<'a>, any: Box<dyn Any + Send + 'static>) -> Result<Self, Error> {
         let msg = if let Some(s) = any.downcast_ref::<&str>() {
             env.new_string(s)?.into()
         } else if let Some(s) = any.downcast_ref::<String>() {
@@ -124,16 +124,16 @@ impl<'a> JPanicException<'a> {
 
     pub fn get<'b>(
         &self,
-        env: &'b mut JNIEnv,
+        env: &'b mut Env,
     ) -> Result<MutexGuard<'b, Box<dyn Any + Send + 'static>>, Error> {
         unsafe { env.get_rust_field(&self.internal, "any") }
     }
 
-    pub fn take(&self, env: &mut JNIEnv) -> Result<Box<dyn Any + Send + 'static>, Error> {
+    pub fn take(&self, env: &mut Env) -> Result<Box<dyn Any + Send + 'static>, Error> {
         unsafe { env.take_rust_field(&self.internal, "any") }
     }
 
-    pub fn resume_unwind(&self, env: &mut JNIEnv) -> Result<(), Error> {
+    pub fn resume_unwind(&self, env: &mut Env) -> Result<(), Error> {
         resume_unwind(self.take(env)?);
     }
 }
@@ -156,7 +156,7 @@ impl<'a> ::std::ops::Deref for JPanicException<'a> {
 /// `io.github.gedgygedgy.rust.panic.PanicException` and throws it. If a Java
 /// exception is already pending, it will be added as a suppressed exception.
 pub fn throw_panic(
-    env: &mut JNIEnv,
+    env: &mut Env,
     panic: Box<dyn Any + Send>,
 ) -> Result<(), Error> {
     let old_ex = if env.exception_check()? {
@@ -184,7 +184,7 @@ pub fn throw_panic(
 /// Calls the given closure. If it panics, catch the unwind, wrap it in a
 /// `io.github.gedgygedgy.rust.panic.PanicException`, and throw it.
 pub fn throw_unwind<R>(
-    env: &mut JNIEnv,
+    env: &mut Env,
     f: impl FnOnce() -> R + UnwindSafe,
 ) -> Result<R, Result<(), Error>> {
     catch_unwind(f).map_err(|e| throw_panic(env, e))
@@ -192,13 +192,13 @@ pub fn throw_unwind<R>(
 
 #[cfg(test)]
 mod test {
-    use jni::{JNIEnv, errors::Error, objects::{JObject, JThrowable}};
+    use jni::{Env, errors::Error, objects::{JObject, JThrowable}};
 
     use super::super::test_utils;
     use super::try_block;
 
     fn test_catch(
-        env: &mut JNIEnv,
+        env: &mut Env,
         throw_class: Option<&str>,
         try_result: Result<i32, Error>,
         rethrow: bool,

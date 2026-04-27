@@ -13,8 +13,8 @@ use crate::{
 use async_trait::async_trait;
 use futures::stream::Stream;
 use jni::{
-    JNIEnv,
-    objects::{GlobalRef, JClass, JObject, JString},
+    Env,
+    objects::{Global, JClass, JObject, JString},
     sys::jboolean,
 };
 use std::{
@@ -27,7 +27,7 @@ use std::{
 #[derive(Clone)]
 pub struct Adapter {
     manager: Arc<AdapterManager<Peripheral>>,
-    internal: GlobalRef,
+    internal: Arc<Global<JObject<'static>>>,
 }
 
 impl Debug for Adapter {
@@ -47,7 +47,7 @@ impl Adapter {
             "()V",
             &[],
         )?;
-        let internal = env.new_global_ref(&obj)?;
+        let internal = Arc::new(env.new_global_ref(&obj)?);
         let adapter = Self {
             manager: Arc::new(AdapterManager::default()),
             internal,
@@ -59,8 +59,9 @@ impl Adapter {
 
     pub fn report_scan_result<'a>(
         &self,
-        env: &mut JNIEnv<'a>,
+        env: &mut Env<'a>,
         scan_result: JObject<'a>,
+
     ) -> Result<Peripheral> {
         let scan_result = JScanResult::from_env(env, scan_result)?;
         let (addr, properties): (BDAddr, Option<PeripheralProperties>) =
@@ -87,7 +88,7 @@ impl Adapter {
 
     fn add(&self, address: BDAddr) -> Result<Peripheral> {
         let mut env = global_jvm().get_env()?;
-        let local_adapter = env.new_local_ref(&self.internal)?;
+        let local_adapter = env.new_local_ref(self.internal.as_obj())?;
         let peripheral = Peripheral::new(&mut env, local_adapter, address)?;
         self.manager.add_peripheral(peripheral.clone());
         Ok(peripheral)
@@ -138,7 +139,7 @@ impl Central for Adapter {
         let filter = JScanFilter::new(&mut env, filter)?;
         let filter_obj: JObject = filter.into();
         match env.call_method(
-            &self.internal,
+            self.internal.as_obj(),
             "startScan",
             "(Lcom/nonpolynomial/btleplug/android/impl/ScanFilter;)V",
             &[(&filter_obj).into()],
@@ -173,7 +174,7 @@ impl Central for Adapter {
 
     async fn stop_scan(&self) -> Result<()> {
         let mut env = global_jvm().get_env()?;
-        env.call_method(&self.internal, "stopScan", "()V", &[])?;
+        env.call_method(self.internal.as_obj(), "stopScan", "()V", &[])?;
         Ok(())
     }
 
@@ -202,7 +203,7 @@ impl Central for Adapter {
 }
 
 pub(crate) fn adapter_report_scan_result_internal<'a>(
-    env: &mut JNIEnv<'a>,
+    env: &mut Env<'a>,
     obj: &JObject,
     scan_result: JObject<'a>,
 ) -> crate::Result<()> {
@@ -214,7 +215,7 @@ pub(crate) fn adapter_report_scan_result_internal<'a>(
 }
 
 pub(crate) fn adapter_on_connection_state_changed_internal(
-    env: &mut JNIEnv,
+    env: &mut Env,
     obj: &JObject,
     addr: JString,
     connected: jboolean,

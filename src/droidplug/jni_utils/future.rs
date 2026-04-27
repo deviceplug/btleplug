@@ -1,7 +1,7 @@
 use ::jni::{
-    JNIEnv, JavaVM,
+    Env, JavaVM,
     errors::Result,
-    objects::{GlobalRef, JClass, JMethodID, JObject},
+    objects::{Global, JClass, JMethodID, JObject},
     signature::ReturnType,
     sys::jvalue,
 };
@@ -12,19 +12,13 @@ use std::{
     task::{Context, Poll},
 };
 
-/// Wrapper for [`JObject`]s that implement
-/// `io.github.gedgygedgy.rust.future.Future`. Provides a typed interface for
-/// calling the Java future's `poll` method.
-///
-/// For an async [`Future`](std::future::Future) implementation, convert to
-/// [`JSendFuture`] via [`JSendFuture::new`].
 pub struct JFuture<'a> {
     internal: JObject<'a>,
     poll_id: JMethodID,
 }
 
 impl<'a> JFuture<'a> {
-    pub fn from_env(env: &mut JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+    pub fn from_env(env: &mut Env<'a>, obj: JObject<'a>) -> Result<Self> {
         let class =
             super::classcache::get_class("io/github/gedgygedgy/rust/future/Future").unwrap();
         let poll_id = env.get_method_id(
@@ -38,7 +32,7 @@ impl<'a> JFuture<'a> {
         })
     }
 
-    pub fn poll(&self, env: &mut JNIEnv<'a>, waker: &JObject<'_>) -> Result<JObject<'a>> {
+    pub fn poll(&self, env: &mut Env<'a>, waker: &JObject<'_>) -> Result<JObject<'a>> {
         let result = unsafe {
             env.call_method_unchecked(
                 &self.internal,
@@ -68,16 +62,14 @@ impl<'a> From<JFuture<'a>> for JObject<'a> {
     }
 }
 
-/// [`Send`] version of [`JFuture`]. Implements [`Future`](std::future::Future)
-/// by obtaining a [`JNIEnv`] from the stored [`JavaVM`] on each poll.
 pub struct JSendFuture {
-    internal: GlobalRef,
+    internal: Global<JObject<'static>>,
     poll_id: JMethodID,
     vm: JavaVM,
 }
 
 impl JSendFuture {
-    pub fn new(env: &mut JNIEnv, future: &JFuture) -> Result<Self> {
+    pub fn new(env: &mut Env, future: &JFuture) -> Result<Self> {
         Ok(Self {
             internal: env.new_global_ref(&future.internal)?,
             poll_id: future.poll_id,
@@ -85,7 +77,7 @@ impl JSendFuture {
         })
     }
 
-    pub fn from_env(env: &mut JNIEnv, obj: &JObject) -> Result<Self> {
+    pub fn from_env(env: &mut Env, obj: &JObject) -> Result<Self> {
         let class =
             super::classcache::get_class("io/github/gedgygedgy/rust/future/Future").unwrap();
         let poll_id = env.get_method_id(
@@ -100,7 +92,7 @@ impl JSendFuture {
         })
     }
 
-    fn poll_internal(&self, context: &mut Context<'_>) -> Result<Poll<Result<GlobalRef>>> {
+    fn poll_internal(&self, context: &mut Context<'_>) -> Result<Poll<Result<Global<JObject<'static>>>>> {
         let mut env = self.vm.get_env()?;
         let jwaker = super::task::waker(&mut env, context.waker().clone())?;
         let result = unsafe {
@@ -123,7 +115,7 @@ impl JSendFuture {
 }
 
 impl ::std::ops::Deref for JSendFuture {
-    type Target = GlobalRef;
+    type Target = Global<JObject<'static>>;
 
     fn deref(&self) -> &Self::Target {
         &self.internal
@@ -131,7 +123,7 @@ impl ::std::ops::Deref for JSendFuture {
 }
 
 impl Future for JSendFuture {
-    type Output = Result<GlobalRef>;
+    type Output = Result<Global<JObject<'static>>>;
 
     fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
         match self.poll_internal(context) {

@@ -2,7 +2,7 @@ pub mod adapter;
 pub mod manager;
 pub mod peripheral;
 
-use ::jni::JNIEnv;
+use ::jni::Env;
 use once_cell::sync::OnceCell;
 
 mod jni;
@@ -10,7 +10,7 @@ mod jni_utils;
 
 static GLOBAL_ADAPTER: OnceCell<adapter::Adapter> = OnceCell::new();
 
-pub fn init(env: &mut JNIEnv) -> crate::Result<()> {
+pub fn init(env: &mut Env) -> crate::Result<()> {
     self::jni::init(env)?;
     GLOBAL_ADAPTER.get_or_try_init(|| adapter::Adapter::new())?;
     Ok(())

@@ -3,7 +3,7 @@ use jni::{
     Env,
     bind_java_type,
     errors::Result,
-    jni_sig,
+    jni_sig, jni_str,
     objects::{JObject, JString},
     sys::jint,
 };
@@ -13,56 +13,58 @@ use uuid::Uuid;
 use crate::api::{BDAddr, CharPropFlags, PeripheralProperties, ScanFilter};
 
 bind_java_type! {
-    pub JNotConnectedException => com.nonpolynomial.btleplug.android.impl.NotConnectedException,
+    pub JNotConnectedException => "com.nonpolynomial.btleplug.android.impl.NotConnectedException",
 }
 
 bind_java_type! {
-    pub JPermissionDeniedException => com.nonpolynomial.btleplug.android.impl.PermissionDeniedException,
+    pub JPermissionDeniedException => "com.nonpolynomial.btleplug.android.impl.PermissionDeniedException",
 }
 
 bind_java_type! {
-    pub JUnexpectedCallbackException => com.nonpolynomial.btleplug.android.impl.UnexpectedCallbackException,
+    pub JUnexpectedCallbackException => "com.nonpolynomial.btleplug.android.impl.UnexpectedCallbackException",
 }
 
 bind_java_type! {
-    pub JUnexpectedCharacteristicException => com.nonpolynomial.btleplug.android.impl.UnexpectedCharacteristicException,
+    pub JUnexpectedCharacteristicException => "com.nonpolynomial.btleplug.android.impl.UnexpectedCharacteristicException",
 }
 
 bind_java_type! {
-    pub JNoSuchCharacteristicException => com.nonpolynomial.btleplug.android.impl.NoSuchCharacteristicException,
+    pub JNoSuchCharacteristicException => "com.nonpolynomial.btleplug.android.impl.NoSuchCharacteristicException",
 }
 
 bind_java_type! {
-    pub JNoBluetoothAdapterException => com.nonpolynomial.btleplug.android.impl.NoBluetoothAdapterException,
+    pub JNoBluetoothAdapterException => "com.nonpolynomial.btleplug.android.impl.NoBluetoothAdapterException",
 }
 
 bind_java_type! {
-    pub JScanFilterClass => com.nonpolynomial.btleplug.android.impl.ScanFilter,
+    pub JScanFilterClass => "com.nonpolynomial.btleplug.android.impl.ScanFilter",
 }
 
 bind_java_type! {
-    pub JPeripheral => com.nonpolynomial.btleplug.android.impl.Peripheral,
+    pub JPeripheral => "com.nonpolynomial.btleplug.android.impl.Peripheral",
     constructors {
         fn with_adapter(adapter: JObject, address: JString),
     },
     methods {
-        priv fn connect_raw() -> JObject { name = "connect" },
-        priv fn disconnect_raw() -> JObject { name = "disconnect" },
+        priv fn connect_raw { name = "connect", sig = () -> JObject },
+        priv fn disconnect_raw { name = "disconnect", sig = () -> JObject },
         fn is_connected() -> jboolean,
-        priv fn discover_services_raw() -> JObject { name = "discoverServices" },
-        priv fn read_raw(uuid: JObject) -> JObject { name = "read" },
-        priv fn write_raw(uuid: JObject, data: JObject, write_type: jint) -> JObject { name = "write" },
-        priv fn set_characteristic_notification_raw(uuid: JObject, enable: jboolean) -> JObject {
+        priv fn discover_services_raw { name = "discoverServices", sig = () -> JObject },
+        priv fn read_raw { name = "read", sig = (uuid: JObject) -> JObject },
+        priv fn write_raw { name = "write", sig = (uuid: JObject, data: JObject, write_type: jint) -> JObject },
+        priv fn set_characteristic_notification_raw {
             name = "setCharacteristicNotification",
+            sig = (uuid: JObject, enable: jboolean) -> JObject,
         },
-        priv fn get_notifications_raw() -> JObject { name = "getNotifications" },
-        priv fn read_descriptor_raw(characteristic: JObject, uuid: JObject) -> JObject { name = "readDescriptor" },
-        priv fn write_descriptor_raw(characteristic: JObject, uuid: JObject, data: JObject) -> JObject {
+        priv fn get_notifications_raw { name = "getNotifications", sig = () -> JObject },
+        priv fn read_descriptor_raw { name = "readDescriptor", sig = (characteristic: JObject, uuid: JObject) -> JObject },
+        priv fn write_descriptor_raw {
             name = "writeDescriptor",
+            sig = (characteristic: JObject, uuid: JObject, data: JObject) -> JObject,
         },
-        priv fn get_device_name_raw() -> JObject { name = "getDeviceName" },
+        priv fn get_device_name_raw { name = "getDeviceName", sig = () -> JObject },
         fn request_mtu(mtu: jint) -> JObject,
-        priv fn get_connection_parameters_raw() -> JObject { name = "getConnectionParameters" },
+        priv fn get_connection_parameters_raw { name = "getConnectionParameters", sig = () -> JObject },
         fn request_connection_priority(priority: jint) -> jboolean,
         fn read_remote_rssi() -> JObject,
     },
@@ -77,19 +79,23 @@ impl JPeripheral<'_> {
 
 impl<'local> JPeripheral<'local> {
     pub fn connect(&self, env: &mut Env<'local>) -> Result<JFuture<'local>> {
-        env.cast_local::<JFuture>(self.connect_raw(env)?)
+        let raw = self.connect_raw(env)?;
+        env.cast_local::<JFuture>(raw)
     }
 
     pub fn disconnect(&self, env: &mut Env<'local>) -> Result<JFuture<'local>> {
-        env.cast_local::<JFuture>(self.disconnect_raw(env)?)
+        let raw = self.disconnect_raw(env)?;
+        env.cast_local::<JFuture>(raw)
     }
 
     pub fn discover_services(&self, env: &mut Env<'local>) -> Result<JFuture<'local>> {
-        env.cast_local::<JFuture>(self.discover_services_raw(env)?)
+        let raw = self.discover_services_raw(env)?;
+        env.cast_local::<JFuture>(raw)
     }
 
     pub fn read(&self, env: &mut Env<'local>, uuid: &JUuid<'local>) -> Result<JFuture<'local>> {
-        env.cast_local::<JFuture>(self.read_raw(env, uuid)?)
+        let raw = self.read_raw(env, uuid)?;
+        env.cast_local::<JFuture>(raw)
     }
 
     pub fn write(
@@ -99,7 +105,8 @@ impl<'local> JPeripheral<'local> {
         data: &JObject<'local>,
         write_type: jint,
     ) -> Result<JFuture<'local>> {
-        env.cast_local::<JFuture>(self.write_raw(env, uuid, data, write_type)?)
+        let raw = self.write_raw(env, uuid, data, write_type)?;
+        env.cast_local::<JFuture>(raw)
     }
 
     pub fn set_characteristic_notification(
@@ -108,11 +115,13 @@ impl<'local> JPeripheral<'local> {
         uuid: &JUuid<'local>,
         enable: bool,
     ) -> Result<JFuture<'local>> {
-        env.cast_local::<JFuture>(self.set_characteristic_notification_raw(env, uuid, enable)?)
+        let raw = self.set_characteristic_notification_raw(env, uuid, enable)?;
+        env.cast_local::<JFuture>(raw)
     }
 
     pub fn get_notifications(&self, env: &mut Env<'local>) -> Result<JStream<'local>> {
-        env.cast_local::<JStream>(self.get_notifications_raw(env)?)
+        let raw = self.get_notifications_raw(env)?;
+        env.cast_local::<JStream>(raw)
     }
 
     pub fn read_descriptor(
@@ -121,7 +130,8 @@ impl<'local> JPeripheral<'local> {
         characteristic: &JUuid<'local>,
         uuid: &JUuid<'local>,
     ) -> Result<JFuture<'local>> {
-        env.cast_local::<JFuture>(self.read_descriptor_raw(env, characteristic, uuid)?)
+        let raw = self.read_descriptor_raw(env, characteristic, uuid)?;
+        env.cast_local::<JFuture>(raw)
     }
 
     pub fn write_descriptor(
@@ -131,7 +141,8 @@ impl<'local> JPeripheral<'local> {
         uuid: &JUuid<'local>,
         data: &JObject<'local>,
     ) -> Result<JFuture<'local>> {
-        env.cast_local::<JFuture>(self.write_descriptor_raw(env, characteristic, uuid, data)?)
+        let raw = self.write_descriptor_raw(env, characteristic, uuid, data)?;
+        env.cast_local::<JFuture>(raw)
     }
 
     pub fn get_device_name(&self, env: &mut Env<'local>) -> Result<Option<String>> {
@@ -171,12 +182,8 @@ impl<'local> JPeripheral<'local> {
 bind_java_type! {
     pub JBluetoothGattService => android.bluetooth.BluetoothGattService,
     methods {
-        fn get_uuid_obj() -> JObject {
-            name = "getUuid",
-        },
-        fn get_characteristics_obj() -> JObject {
-            name = "getCharacteristics",
-        },
+        fn get_uuid_obj { name = "getUuid", sig = () -> JObject },
+        fn get_characteristics_obj { name = "getCharacteristics", sig = () -> JObject },
     },
 }
 
@@ -211,18 +218,10 @@ impl<'local> JBluetoothGattService<'local> {
 bind_java_type! {
     pub JBluetoothGattCharacteristic => android.bluetooth.BluetoothGattCharacteristic,
     methods {
-        fn get_uuid_obj() -> JObject {
-            name = "getUuid",
-        },
-        fn get_properties_raw() -> jint {
-            name = "getProperties",
-        },
-        fn get_value_obj() -> JObject {
-            name = "getValue",
-        },
-        fn get_descriptors_obj() -> JObject {
-            name = "getDescriptors",
-        },
+        fn get_uuid_obj { name = "getUuid", sig = () -> JObject },
+        fn get_properties_raw { name = "getProperties", sig = () -> jint },
+        fn get_value_obj { name = "getValue", sig = () -> JObject },
+        fn get_descriptors_obj { name = "getDescriptors", sig = () -> JObject },
     },
 }
 
@@ -264,9 +263,7 @@ impl<'local> JBluetoothGattCharacteristic<'local> {
 bind_java_type! {
     pub JBluetoothGattDescriptor => android.bluetooth.BluetoothGattDescriptor,
     methods {
-        fn get_uuid_obj() -> JObject {
-            name = "getUuid",
-        },
+        fn get_uuid_obj { name = "getUuid", sig = () -> JObject },
     },
 }
 
@@ -322,12 +319,8 @@ impl<'a> From<JScanFilter<'a>> for JObject<'a> {
 bind_java_type! {
     pub JScanResult => android.bluetooth.le.ScanResult,
     methods {
-        fn get_device_obj() -> JObject {
-            name = "getDevice",
-        },
-        fn get_scan_record_obj() -> JObject {
-            name = "getScanRecord",
-        },
+        fn get_device_obj { name = "getDevice", sig = () -> JObject },
+        fn get_scan_record_obj { name = "getScanRecord", sig = () -> JObject },
         fn get_tx_power() -> jint,
         fn get_rssi() -> jint,
     },
@@ -499,9 +492,7 @@ bind_java_type! {
 bind_java_type! {
     pub JParcelUuid => android.os.ParcelUuid,
     methods {
-        fn get_uuid_obj() -> JObject {
-            name = "getUuid",
-        },
+        fn get_uuid_obj { name = "getUuid", sig = () -> JObject },
     },
 }
 

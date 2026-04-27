@@ -1,14 +1,24 @@
 pub mod objects;
 
-use ::jni::{Env, EnvUnowned, JavaVM, NativeMethod, jni_str, objects::JObject};
+use ::jni::{Env, EnvUnowned, NativeMethod, jni_str, objects::JObject};
 use jni::{objects::JString, sys::jboolean};
-use once_cell::sync::OnceCell;
 use std::ffi::c_void;
+use std::sync::Once;
 
-static GLOBAL_JVM: OnceCell<JavaVM> = OnceCell::new();
+static INIT: Once = Once::new();
 
 pub fn init(env: &mut Env) -> crate::Result<()> {
-    if let Ok(()) = GLOBAL_JVM.set(env.get_java_vm()?) {
+    let mut init_result: crate::Result<()> = Ok(());
+    INIT.call_once(|| {
+        if let Err(e) = init_inner(env) {
+            init_result = Err(e);
+        }
+    });
+    init_result
+}
+
+fn init_inner(env: &mut Env) -> crate::Result<()> {
+    {
         let adapter_class =
             env.find_class(jni_str!("com/nonpolynomial/btleplug/android/impl/Adapter"))?;
         unsafe { env.register_native_methods(
@@ -120,10 +130,8 @@ pub fn init(env: &mut Env) -> crate::Result<()> {
     Ok(())
 }
 
-pub fn global_jvm() -> &'static JavaVM {
-    GLOBAL_JVM.get().expect(
-        "Droidplug has not been initialized. Please initialize it with btleplug::platform::init().",
-    )
+pub fn jvm() -> crate::Result<jni::JavaVM> {
+    jni::JavaVM::singleton().map_err(|e| crate::Error::Other(Box::new(e)))
 }
 
 impl From<::jni::errors::Error> for crate::Error {

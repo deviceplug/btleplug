@@ -30,7 +30,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use super::jni::{
-    global_jvm,
+    jvm,
     objects::{JBluetoothGattCharacteristic, JBluetoothGattService, JPeripheral},
 };
 
@@ -52,7 +52,7 @@ fn get_poll_result<'a>(
     result_ref: &Global<JObject<'static>>,
 ) -> Result<JObject<'a>> {
     let result_obj = env.new_local_ref(result_ref)?;
-    let poll_result = JPollResult::from_env(env, result_obj)?;
+    let poll_result = env.cast_local::<JPollResult>(result_obj)?;
 
     match poll_result.get(env) {
         Ok(obj) => Ok(obj),
@@ -135,7 +135,7 @@ pub struct Peripheral {
 
 impl Peripheral {
     pub(crate) fn new<'a>(env: &mut Env<'a>, adapter: JObject<'a>, addr: BDAddr) -> Result<Self> {
-        let obj = JPeripheral::new(env, adapter, addr)?;
+        let obj = JPeripheral::create(env, adapter, addr)?;
         let internal = Arc::new(env.new_global_ref(&*obj)?);
         Ok(Self {
             addr,
@@ -162,9 +162,9 @@ impl Peripheral {
     where
         E: From<::jni::errors::Error>,
     {
-        global_jvm().attach_current_thread(|env| {
+        jvm()?.attach_current_thread(|env| {
             let local_obj = env.new_local_ref(self.internal.as_obj())?;
-            let obj = JPeripheral::from_env(env, local_obj)?;
+            let obj = env.cast_local::<JPeripheral>(local_obj)?;
             f(env, &obj)
         })
     }
@@ -241,7 +241,7 @@ impl api::Peripheral for Peripheral {
         {
             let mtu_future = self.with_obj(|env, obj| {
                 let mtu_obj = obj.request_mtu(env, 517)?;
-                let mtu_future = JFuture::from_env(env, mtu_obj)?;
+                let mtu_future = env.cast_local::<JFuture>(mtu_obj)?;
                 JSendFuture::new(env, &mtu_future)
             })?;
             let mtu_result_ref = mtu_future.await?;
@@ -287,7 +287,7 @@ impl api::Peripheral for Peripheral {
                 let svc_obj = env
                     .call_method(&obj, jni_str!("get"), jni_sig!("(I)Ljava/lang/Object;"), &[JValue::from(i)])?
                     .l()?;
-                let service = JBluetoothGattService::from_env(env, svc_obj)?;
+                let service = env.cast_local::<JBluetoothGattService>(svc_obj)?;
                 let mut characteristics = BTreeSet::<Characteristic>::new();
                 for characteristic in service.get_characteristics(env)? {
                     let mut descriptors = BTreeSet::new();
@@ -381,10 +381,10 @@ impl api::Peripheral for Peripheral {
         let stream = stream
             .map(move |item| match item {
                 Ok(item) => {
-                    global_jvm().attach_current_thread(|env| {
+                    jvm()?.attach_current_thread(|env| {
                         let local_obj = env.new_local_ref(item.as_obj())?;
                         let characteristic =
-                            JBluetoothGattCharacteristic::from_env(env, local_obj)?;
+                            env.cast_local::<JBluetoothGattCharacteristic>(local_obj)?;
                         let uuid = characteristic.get_uuid(env)?;
                         let value = characteristic.get_value(env)?;
                         let service_uuid = shared
@@ -414,7 +414,7 @@ impl api::Peripheral for Peripheral {
     async fn read_rssi(&self) -> Result<i16> {
         let future = self.with_obj(|env, obj| {
             let rssi_obj = obj.read_remote_rssi(env)?;
-            let rssi_future = JFuture::from_env(env, rssi_obj)?;
+            let rssi_future = env.cast_local::<JFuture>(rssi_obj)?;
             JSendFuture::new(env, &rssi_future)
         })?;
         let result_ref = future.await?;

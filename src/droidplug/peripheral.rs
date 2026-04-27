@@ -162,10 +162,11 @@ impl Peripheral {
     where
         E: From<::jni::errors::Error>,
     {
-        let mut env = global_jvm().get_env()?;
-        let local_obj = env.new_local_ref(self.internal.as_obj())?;
-        let obj = JPeripheral::from_env(&mut env, local_obj)?;
-        f(&mut env, &obj)
+        global_jvm().attach_current_thread(|env| {
+            let local_obj = env.new_local_ref(self.internal.as_obj())?;
+            let obj = JPeripheral::from_env(env, local_obj)?;
+            f(env, &obj)
+        })
     }
 
     async fn set_characteristic_notification(
@@ -376,27 +377,28 @@ impl api::Peripheral for Peripheral {
         let stream = stream
             .map(move |item| match item {
                 Ok(item) => {
-                    let mut env = global_jvm().get_env()?;
-                    let local_obj = env.new_local_ref(item.as_obj())?;
-                    let characteristic =
-                        JBluetoothGattCharacteristic::from_env(&mut env, local_obj)?;
-                    let uuid = characteristic.get_uuid(&mut env)?;
-                    let value = characteristic.get_value(&mut env)?;
-                    let service_uuid = shared
-                        .lock()
-                        .ok()
-                        .and_then(|guard| {
-                            guard
-                                .services
-                                .iter()
-                                .find(|s| s.characteristics.iter().any(|c| c.uuid == uuid))
-                                .map(|s| s.uuid)
+                    global_jvm().attach_current_thread(|env| {
+                        let local_obj = env.new_local_ref(item.as_obj())?;
+                        let characteristic =
+                            JBluetoothGattCharacteristic::from_env(env, local_obj)?;
+                        let uuid = characteristic.get_uuid(env)?;
+                        let value = characteristic.get_value(env)?;
+                        let service_uuid = shared
+                            .lock()
+                            .ok()
+                            .and_then(|guard| {
+                                guard
+                                    .services
+                                    .iter()
+                                    .find(|s| s.characteristics.iter().any(|c| c.uuid == uuid))
+                                    .map(|s| s.uuid)
+                            })
+                            .unwrap_or_default();
+                        Ok(ValueNotification {
+                            uuid,
+                            service_uuid,
+                            value,
                         })
-                        .unwrap_or_default();
-                    Ok(ValueNotification {
-                        uuid,
-                        service_uuid,
-                        value,
                     })
                 }
                 Err(err) => Err(err),

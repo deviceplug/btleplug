@@ -275,8 +275,7 @@ mod test {
 
     #[test]
     fn test_catch_first() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
+        test_utils::with_env(|env| {
             assert_eq!(
                 test_catch(
                     env,
@@ -288,13 +287,13 @@ mod test {
                 1
             );
             assert!(!env.exception_check().unwrap());
-        });
+            Ok(())
+        }).unwrap();
     }
 
     #[test]
     fn test_catch_second() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
+        test_utils::with_env(|env| {
             assert_eq!(
                 test_catch(
                     env,
@@ -306,13 +305,13 @@ mod test {
                 2
             );
             assert!(!env.exception_check().unwrap());
-        });
+            Ok(())
+        }).unwrap();
     }
 
     #[test]
     fn test_catch_third() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
+        test_utils::with_env(|env| {
             assert_eq!(
                 test_catch(
                     env,
@@ -324,22 +323,22 @@ mod test {
                 3
             );
             assert!(!env.exception_check().unwrap());
-        });
+            Ok(())
+        }).unwrap();
     }
 
     #[test]
     fn test_catch_ok() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
+        test_utils::with_env(|env| {
             assert_eq!(test_catch(env, None, Ok(0), false).unwrap(), 0);
             assert!(!env.exception_check().unwrap());
-        });
+            Ok(())
+        }).unwrap();
     }
 
     #[test]
     fn test_catch_none() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
+        test_utils::with_env(|env| {
             if let Error::JavaException = test_catch(
                 env,
                 Some("java/lang/SecurityException"),
@@ -358,13 +357,13 @@ mod test {
             } else {
                 panic!("No JavaException");
             }
-        });
+            Ok(())
+        }).unwrap();
     }
 
     #[test]
     fn test_catch_other() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
+        test_utils::with_env(|env| {
             if let Error::InvalidCtorReturn =
                 test_catch(env, None, Err(Error::InvalidCtorReturn), false).unwrap_err()
             {
@@ -372,13 +371,13 @@ mod test {
             } else {
                 panic!("InvalidCtorReturn not found");
             }
-        });
+            Ok(())
+        }).unwrap();
     }
 
     #[test]
     fn test_catch_bogus_exception() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
+        test_utils::with_env(|env| {
             if let Error::JavaException =
                 test_catch(env, None, Err(Error::JavaException), false).unwrap_err()
             {
@@ -386,13 +385,13 @@ mod test {
             } else {
                 panic!("JavaException not found");
             }
-        });
+            Ok(())
+        }).unwrap();
     }
 
     #[test]
     fn test_catch_prior_exception() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
+        test_utils::with_env(|env| {
             let ex = JThrowable::from(
                 env.new_object(jni_str!("java/lang/IllegalArgumentException"), jni_sig!("()V"), &[])
                     .unwrap(),
@@ -407,13 +406,13 @@ mod test {
             } else {
                 panic!("JavaException not found");
             }
-        });
+            Ok(())
+        }).unwrap();
     }
 
     #[test]
     fn test_catch_rethrow() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
+        test_utils::with_env(|env| {
             if let Error::JavaException = test_catch(
                 env,
                 Some("java/lang/StringIndexOutOfBoundsException"),
@@ -432,13 +431,13 @@ mod test {
             } else {
                 panic!("JavaException not found");
             }
-        });
+            Ok(())
+        }).unwrap();
     }
 
     #[test]
     fn test_catch_bogus_rethrow() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
+        test_utils::with_env(|env| {
             if let Error::JavaException = test_catch(
                 env,
                 Some("java/lang/ArrayIndexOutOfBoundsException"),
@@ -451,14 +450,13 @@ mod test {
             } else {
                 panic!("JavaException not found");
             }
-        });
+            Ok(())
+        }).unwrap();
     }
 
     #[test]
     fn test_panic_exception_static_str() {
-        test_utils::JVM_ENV.with(|cell| {
-            let mut guard = cell.borrow_mut();
-            let env = &mut *guard;
+        test_utils::with_env(|env| {
             use jni::objects::JString;
 
             const STATIC_MSG: &str = "This is a &'static str";
@@ -477,14 +475,13 @@ mod test {
                 .into();
             let str = env.get_string(&msg).unwrap();
             assert_eq!(<String as From<jni::strings::JavaStr>>::from(str), STATIC_MSG);
-        });
+            Ok(())
+        }).unwrap();
     }
 
     #[test]
     fn test_panic_exception_string() {
-        test_utils::JVM_ENV.with(|cell| {
-            let mut guard = cell.borrow_mut();
-            let env = &mut *guard;
+        test_utils::with_env(|env| {
             use jni::objects::JString;
             use std::any::Any;
 
@@ -507,14 +504,13 @@ mod test {
 
             let any: Box<dyn Any + Send> = ex.take(env).unwrap();
             assert_eq!(*any.downcast::<String>().unwrap(), STRING_MSG);
-        });
+            Ok(())
+        }).unwrap();
     }
 
     #[test]
     fn test_panic_exception_other() {
-        test_utils::JVM_ENV.with(|cell| {
-            let mut guard = cell.borrow_mut();
-            let env = &mut *guard;
+        test_utils::with_env(|env| {
             use jni::objects::JObject;
             use std::any::Any;
 
@@ -534,23 +530,23 @@ mod test {
 
             let any: Box<dyn Any + Send> = ex.take(env).unwrap();
             assert_eq!(*any.downcast::<i32>().unwrap(), 42);
-        });
+            Ok(())
+        }).unwrap();
     }
 
     #[test]
     fn test_throw_unwind_ok() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
+        test_utils::with_env(|env| {
             let result = super::throw_unwind(env, || 42).unwrap();
             assert_eq!(result, 42);
             assert!(!env.exception_check().unwrap());
-        });
+            Ok(())
+        }).unwrap();
     }
 
     #[test]
     fn test_throw_unwind_panic() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
+        test_utils::with_env(|env| {
             super::throw_unwind(env, || panic!("This is a panic"))
                 .unwrap_err()
                 .unwrap();
@@ -576,13 +572,13 @@ mod test {
             let any = ex.take(env).unwrap();
             let str = any.downcast::<&str>().unwrap();
             assert_eq!(*str, "This is a panic");
-        });
+            Ok(())
+        }).unwrap();
     }
 
     #[test]
     fn test_throw_unwind_panic_suppress() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
+        test_utils::with_env(|env| {
             let old_ex =
                 JThrowable::from(env.new_object(jni_str!("java/lang/Exception"), jni_sig!("()V"), &[]).unwrap());
             env.throw(&old_ex).unwrap();
@@ -614,16 +610,17 @@ mod test {
             let any = ex.take(env).unwrap();
             let str = any.downcast::<&str>().unwrap();
             assert_eq!(*str, "This is a panic");
-        });
+            Ok(())
+        }).unwrap();
     }
 
     #[test]
     #[should_panic(expected = "This is a panic")]
     fn test_panic_exception_resume_unwind() {
-        test_utils::JVM_ENV.with(|cell| {
-            let env = &mut *cell.borrow_mut();
+        test_utils::with_env(|env| {
             let ex = super::JPanicException::new(env, Box::new("This is a panic")).unwrap();
             ex.resume_unwind(env).unwrap();
-        });
+            Ok(())
+        }).unwrap();
     }
 }

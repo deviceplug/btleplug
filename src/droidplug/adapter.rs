@@ -40,21 +40,21 @@ impl Debug for Adapter {
 
 impl Adapter {
     pub(crate) fn new() -> Result<Self> {
-        let mut env = global_jvm().get_env()?;
+        global_jvm().attach_current_thread(|env| {
+            let obj = env.new_object(
+                jni_str!("com/nonpolynomial/btleplug/android/impl/Adapter"),
+                jni_sig!("()V"),
+                &[],
+            )?;
+            let internal = Arc::new(env.new_global_ref(&obj)?);
+            let adapter = Self {
+                manager: Arc::new(AdapterManager::default()),
+                internal,
+            };
+            unsafe { env.set_rust_field(&obj, jni_str!("handle"), adapter.clone()) }?;
 
-        let obj = env.new_object(
-            jni_str!("com/nonpolynomial/btleplug/android/impl/Adapter"),
-            jni_sig!("()V"),
-            &[],
-        )?;
-        let internal = Arc::new(env.new_global_ref(&obj)?);
-        let adapter = Self {
-            manager: Arc::new(AdapterManager::default()),
-            internal,
-        };
-        unsafe { env.set_rust_field(&obj, jni_str!("handle"), adapter.clone()) }?;
-
-        Ok(adapter)
+            Ok(adapter)
+        })
     }
 
     pub fn report_scan_result<'a>(
@@ -87,11 +87,12 @@ impl Adapter {
     }
 
     fn add(&self, address: BDAddr) -> Result<Peripheral> {
-        let mut env = global_jvm().get_env()?;
-        let local_adapter = env.new_local_ref(self.internal.as_obj())?;
-        let peripheral = Peripheral::new(&mut env, local_adapter, address)?;
-        self.manager.add_peripheral(peripheral.clone());
-        Ok(peripheral)
+        global_jvm().attach_current_thread(|env| {
+            let local_adapter = env.new_local_ref(self.internal.as_obj())?;
+            let peripheral = Peripheral::new(env, local_adapter, address)?;
+            self.manager.add_peripheral(peripheral.clone());
+            Ok(peripheral)
+        })
     }
 
     fn report_properties(
@@ -135,8 +136,8 @@ impl Central for Adapter {
     }
 
     async fn start_scan(&self, filter: ScanFilter) -> Result<()> {
-        let mut env = global_jvm().get_env()?;
-        let filter = JScanFilter::new(&mut env, filter)?;
+        global_jvm().attach_current_thread(|env| {
+        let filter = JScanFilter::new(env, filter)?;
         let filter_obj: JObject = filter.into();
         match env.call_method(
             self.internal.as_obj(),
@@ -170,12 +171,14 @@ impl Central for Adapter {
             }
             Err(e) => Err(e.into()),
         }
+        })
     }
 
     async fn stop_scan(&self) -> Result<()> {
-        let mut env = global_jvm().get_env()?;
-        env.call_method(self.internal.as_obj(), jni_str!("stopScan"), jni_sig!("()V"), &[])?;
-        Ok(())
+        global_jvm().attach_current_thread(|env| {
+            env.call_method(self.internal.as_obj(), jni_str!("stopScan"), jni_sig!("()V"), &[])?;
+            Ok(())
+        })
     }
 
     async fn peripherals(&self) -> Result<Vec<Peripheral>> {

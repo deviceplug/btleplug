@@ -101,8 +101,8 @@ fn adapter_report_scan_result<'local>(
     obj: JObject<'local>,
     scan_result: JObject<'local>,
 ) -> jni::errors::Result<()> {
-    super::adapter::adapter_report_scan_result_internal(env, &obj, scan_result)
-        .map_err(|e| jni::errors::Error::Other(Box::new(e)))
+    let _ = super::adapter::adapter_report_scan_result_internal(env, &obj, scan_result);
+    Ok(())
 }
 
 fn adapter_on_connection_state_changed<'local>(
@@ -111,6 +111,6 @@ fn adapter_on_connection_state_changed<'local>(
     addr: JString<'local>,
     connected: jboolean,
 ) -> jni::errors::Result<()> {
-    super::adapter::adapter_on_connection_state_changed_internal(env, &obj, addr, connected)
-        .map_err(|e| jni::errors::Error::Other(Box::new(e)))
+    let _ = super::adapter::adapter_on_connection_state_changed_internal(env, &obj, addr, connected);
+    Ok(())
 }

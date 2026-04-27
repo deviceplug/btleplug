@@ -151,13 +151,10 @@ impl Peripheral {
         guard.properties = Some(properties);
     }
 
-    fn with_obj<T, E>(
+    fn with_obj<T>(
         &self,
-        f: impl for<'env> FnOnce(&mut Env<'env>, &JPeripheral<'env>) -> std::result::Result<T, E>,
-    ) -> std::result::Result<T, E>
-    where
-        E: From<::jni::errors::Error>,
-    {
+        f: impl for<'env> FnOnce(&mut Env<'env>, &JPeripheral<'env>) -> Result<T>,
+    ) -> Result<T> {
         jvm()?.attach_current_thread(|env| {
             let local_obj = env.new_local_ref(self.internal.as_obj())?;
             let obj = env.cast_local::<JPeripheral>(local_obj)?;
@@ -173,7 +170,7 @@ impl Peripheral {
         let future = self.with_obj(|env, obj| {
             let uuid_obj = JUuid::new(env, characteristic.uuid)?;
             let future = obj.set_characteristic_notification(env, &uuid_obj, enable)?;
-            JSendFuture::new(env, &future)
+            Ok(JSendFuture::new(env, &future)?)
         })?;
         let result_ref = future.await?;
         self.with_obj(|env, _obj| get_poll_result(env, &result_ref).map(|_| {}))
@@ -218,7 +215,7 @@ impl api::Peripheral for Peripheral {
         {
             let future = self.with_obj(|env, obj| {
                 let future = obj.connect(env)?;
-                JSendFuture::new(env, &future)
+                Ok(JSendFuture::new(env, &future)?)
             })?;
             let result_ref = future.await?;
             self.with_obj(|env, _obj| get_poll_result(env, &result_ref).map(|_| {}))?;
@@ -238,7 +235,7 @@ impl api::Peripheral for Peripheral {
             let mtu_future = self.with_obj(|env, obj| {
                 let mtu_obj = obj.request_mtu(env, 517)?;
                 let mtu_future = env.cast_local::<JFuture>(mtu_obj)?;
-                JSendFuture::new(env, &mtu_future)
+                Ok(JSendFuture::new(env, &mtu_future)?)
             })?;
             let mtu_result_ref = mtu_future.await?;
             self.with_obj(|env, _obj| -> Result<()> {
@@ -254,7 +251,7 @@ impl api::Peripheral for Peripheral {
     async fn disconnect(&self) -> Result<()> {
         let future = self.with_obj(|env, obj| {
             let future = obj.disconnect(env)?;
-            JSendFuture::new(env, &future)
+            Ok(JSendFuture::new(env, &future)?)
         })?;
         let result_ref = future.await?;
         self.with_obj(|env, _obj| get_poll_result(env, &result_ref).map(|_| {}))
@@ -268,7 +265,7 @@ impl api::Peripheral for Peripheral {
     async fn discover_services(&self) -> Result<()> {
         let future = self.with_obj(|env, obj| {
             let future = obj.discover_services(env)?;
-            JSendFuture::new(env, &future)
+            Ok(JSendFuture::new(env, &future)?)
         })?;
         let result_ref = future.await?;
         self.with_obj(|env, _obj| {
@@ -337,7 +334,7 @@ impl api::Peripheral for Peripheral {
                 WriteType::WithoutResponse => 1,
             };
             let future = obj.write(env, &uuid, &data_obj.into(), write_type)?;
-            JSendFuture::new(env, &future)
+            Ok(JSendFuture::new(env, &future)?)
         })?;
         let result_ref = future.await?;
         self.with_obj(|env, _obj| get_poll_result(env, &result_ref).map(|_| {}))
@@ -347,7 +344,7 @@ impl api::Peripheral for Peripheral {
         let future = self.with_obj(|env, obj| {
             let uuid = JUuid::new(env, characteristic.uuid)?;
             let future = obj.read(env, &uuid)?;
-            JSendFuture::new(env, &future)
+            Ok(JSendFuture::new(env, &future)?)
         })?;
         let result_ref = future.await?;
         self.with_obj(|env, _obj| {
@@ -372,12 +369,13 @@ impl api::Peripheral for Peripheral {
         let shared = self.shared.clone();
         let stream = self.with_obj(|env, obj| {
             let stream = obj.get_notifications(env)?;
-            JSendStream::new(env, &stream)
+            Ok(JSendStream::new(env, &stream)?)
         })?;
         let stream = stream
             .map(move |item| match item {
                 Ok(item) => {
-                    jvm()?.attach_current_thread(|env| {
+                    let vm = jvm()?;
+                    let result: crate::Result<_> = vm.attach_current_thread(|env| -> jni::errors::Result<_> {
                         let local_obj = env.new_local_ref(item.as_obj())?;
                         let characteristic =
                             env.cast_local::<JBluetoothGattCharacteristic>(local_obj)?;
@@ -399,9 +397,10 @@ impl api::Peripheral for Peripheral {
                             service_uuid,
                             value,
                         })
-                    })
+                    }).map_err(Into::into);
+                    result
                 }
-                Err(err) => Err(err),
+                Err(err) => Err(err.into()),
             })
             .filter_map(|item| async { item.ok() });
         Ok(Box::pin(stream))
@@ -411,7 +410,7 @@ impl api::Peripheral for Peripheral {
         let future = self.with_obj(|env, obj| {
             let rssi_obj = obj.read_remote_rssi(env)?;
             let rssi_future = env.cast_local::<JFuture>(rssi_obj)?;
-            JSendFuture::new(env, &rssi_future)
+            Ok(JSendFuture::new(env, &rssi_future)?)
         })?;
         let result_ref = future.await?;
         self.with_obj(|env, _obj| {
@@ -427,7 +426,7 @@ impl api::Peripheral for Peripheral {
             let uuid = JUuid::new(env, descriptor.uuid)?;
             let data_obj = super::jni_utils::arrays::slice_to_byte_array(env, data)?;
             let future = obj.write_descriptor(env, &characteristic, &uuid, &data_obj.into())?;
-            JSendFuture::new(env, &future)
+            Ok(JSendFuture::new(env, &future)?)
         })?;
         let result_ref = future.await?;
         self.with_obj(|env, _obj| get_poll_result(env, &result_ref).map(|_| {}))
@@ -438,7 +437,7 @@ impl api::Peripheral for Peripheral {
             let characteristic = JUuid::new(env, descriptor.characteristic_uuid)?;
             let uuid = JUuid::new(env, descriptor.uuid)?;
             let future = obj.read_descriptor(env, &characteristic, &uuid)?;
-            JSendFuture::new(env, &future)
+            Ok(JSendFuture::new(env, &future)?)
         })?;
         let result_ref = future.await?;
         self.with_obj(|env, _obj| {

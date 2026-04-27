@@ -20,7 +20,7 @@ bind_java_type! {
 }
 
 bind_java_type! {
-    JStreamPoll => io.github.gedgygedgy.rust.stream.StreamPoll,
+    pub JStreamPoll => io.github.gedgygedgy.rust.stream.StreamPoll,
     methods {
         fn get() -> JObject,
     },

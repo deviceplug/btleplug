@@ -60,42 +60,38 @@ fn get_poll_result<'a>(
             let ex = env.exception_occurred().unwrap();
             env.exception_clear();
 
-            let future_exception_class = super::jni_utils::classcache::get_class(
-                "io/github/gedgygedgy/rust/future/FutureException",
-            )
-            .unwrap();
+            use jni::objects::Reference;
+            use super::jni::objects::*;
 
-            if env.is_instance_of(&ex, future_exception_class.as_ref())? {
+            let future_ex_class = <super::jni_utils::future::JFutureException as Reference>::lookup_class(
+                env, &Default::default(),
+            )?;
+
+            if env.is_instance_of(&ex, &*future_ex_class)? {
                 let cause = env
                     .call_method(&ex, jni_str!("getCause"), jni_sig!("()Ljava/lang/Throwable;"), &[])?
                     .l()?;
 
-                let mut check = |name: &str| -> jni::errors::Result<bool> {
-                    let cls = super::jni_utils::classcache::get_class(name).unwrap();
-                    env.is_instance_of(&cause, cls.as_ref())
-                };
+                macro_rules! check_exception {
+                    ($type:ty, $env:expr, $cause:expr) => {
+                        $env.is_instance_of(
+                            $cause,
+                            &*<$type as Reference>::lookup_class($env, &Default::default())?,
+                        )?
+                    };
+                }
 
-                if check("com/nonpolynomial/btleplug/android/impl/NotConnectedException")? {
+                if check_exception!(JNotConnectedException, env, &cause) {
                     Err(Error::NotConnected)
-                } else if check(
-                    "com/nonpolynomial/btleplug/android/impl/PermissionDeniedException",
-                )? {
+                } else if check_exception!(JPermissionDeniedException, env, &cause) {
                     Err(Error::PermissionDenied)
-                } else if check(
-                    "com/nonpolynomial/btleplug/android/impl/UnexpectedCallbackException",
-                )? {
+                } else if check_exception!(JUnexpectedCallbackException, env, &cause) {
                     Err(Error::UnexpectedCallback)
-                } else if check(
-                    "com/nonpolynomial/btleplug/android/impl/UnexpectedCharacteristicException",
-                )? {
+                } else if check_exception!(JUnexpectedCharacteristicException, env, &cause) {
                     Err(Error::UnexpectedCharacteristic)
-                } else if check(
-                    "com/nonpolynomial/btleplug/android/impl/NoSuchCharacteristicException",
-                )? {
+                } else if check_exception!(JNoSuchCharacteristicException, env, &cause) {
                     Err(Error::NoSuchCharacteristic)
-                } else if check(
-                    "com/nonpolynomial/btleplug/android/impl/NoBluetoothAdapterException",
-                )? {
+                } else if check_exception!(JNoBluetoothAdapterException, env, &cause) {
                     Err(Error::NoAdapterAvailable)
                 } else if env.is_instance_of(&cause, jni_str!("java/lang/RuntimeException"))? {
                     let msg = env

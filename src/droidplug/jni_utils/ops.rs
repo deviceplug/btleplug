@@ -1,10 +1,27 @@
 use ::jni::{
     Env, EnvUnowned,
+    bind_java_type,
     errors::Result,
     jni_sig, jni_str,
-    objects::JObject,
+    objects::{JObject, Reference},
 };
 use std::sync::{Arc, Mutex};
+
+bind_java_type! {
+    pub JFnAdapter => io.github.gedgygedgy.rust.ops.FnAdapter,
+}
+
+bind_java_type! {
+    pub JFnRunnableImpl => io.github.gedgygedgy.rust.ops.FnRunnableImpl,
+}
+
+bind_java_type! {
+    pub JFnBiFunctionImpl => io.github.gedgygedgy.rust.ops.FnBiFunctionImpl,
+}
+
+bind_java_type! {
+    pub JFnFunctionImpl => io.github.gedgygedgy.rust.ops.FnFunctionImpl,
+}
 
 macro_rules! define_fn_adapter {
     (
@@ -17,7 +34,7 @@ macro_rules! define_fn_adapter {
         fn: $f:ident,
         fn_local: $fl:ident,
         fn_internal: $fi:ident,
-        impl_class: $ic:literal,
+        impl_type: $it:ty,
         doc_class: $dc:literal,
         doc_method: $dm:literal,
         doc_fn_once: $dfo:literal,
@@ -32,9 +49,9 @@ macro_rules! define_fn_adapter {
             local: bool,
         ) -> Result<JObject<'local>> {
             let adapter = fn_once_adapter(env, $closure, local)?;
-            let class = super::classcache::get_class($ic).unwrap();
+            let class = <$it as Reference>::lookup_class(env, &Default::default())?;
             env.new_object(
-                class.as_ref(),
+                &*class,
                 jni_sig!("(Lio/github/gedgygedgy/rust/ops/FnAdapter;)V"),
                 &[(&adapter).into()],
             )
@@ -61,9 +78,9 @@ macro_rules! define_fn_adapter {
             local: bool,
         ) -> Result<JObject<'local>> {
             let adapter = fn_mut_adapter(env, $closure, local)?;
-            let class = super::classcache::get_class($ic).unwrap();
+            let class = <$it as Reference>::lookup_class(env, &Default::default())?;
             env.new_object(
-                class.as_ref(),
+                &*class,
                 jni_sig!("(Lio/github/gedgygedgy/rust/ops/FnAdapter;)V"),
                 &[(&adapter).into()],
             )
@@ -91,9 +108,9 @@ macro_rules! define_fn_adapter {
             local: bool,
         ) -> Result<JObject<'local>> {
             let adapter = fn_adapter(env, $closure, local)?;
-            let class = super::classcache::get_class($ic).unwrap();
+            let class = <$it as Reference>::lookup_class(env, &Default::default())?;
             env.new_object(
-                class.as_ref(),
+                &*class,
                 jni_sig!("(Lio/github/gedgygedgy/rust/ops/FnAdapter;)V"),
                 &[(&adapter).into()],
             )
@@ -127,7 +144,7 @@ define_fn_adapter! {
     fn: fn_runnable,
     fn_local: fn_runnable_local,
     fn_internal: fn_runnable_internal,
-    impl_class: "io/github/gedgygedgy/rust/ops/FnRunnableImpl",
+    impl_type: JFnRunnableImpl,
     doc_class: "io.github.gedgygedgy.rust.ops.FnRunnable",
     doc_method: "run()",
     doc_fn_once: "fn_once_runnable",
@@ -150,7 +167,7 @@ define_fn_adapter! {
     fn: fn_bi_function,
     fn_local: fn_bi_function_local,
     fn_internal: fn_bi_function_internal,
-    impl_class: "io/github/gedgygedgy/rust/ops/FnBiFunctionImpl",
+    impl_type: JFnBiFunctionImpl,
     doc_class: "io.github.gedgygedgy.rust.ops.FnBiFunction",
     doc_method: "apply()",
     doc_fn_once: "fn_once_bi_function",
@@ -172,7 +189,7 @@ define_fn_adapter! {
     fn: fn_function,
     fn_local: fn_function_local,
     fn_internal: fn_function_internal,
-    impl_class: "io/github/gedgygedgy/rust/ops/FnFunctionImpl",
+    impl_type: JFnFunctionImpl,
     doc_class: "io.github.gedgygedgy.rust.ops.FnFunction",
     doc_method: "apply()",
     doc_fn_once: "fn_once_function",
@@ -277,9 +294,9 @@ fn fn_adapter<'local>(
         ) -> JObject<'c>,
     > = Arc::from(f);
 
-    let class = super::classcache::get_class("io/github/gedgygedgy/rust/ops/FnAdapter").unwrap();
+    let class = <JFnAdapter as Reference>::lookup_class(env, &Default::default())?;
     let obj = env.new_object(
-        class.as_ref(),
+        &*class,
         jni_sig!("(Z)V"),
         &[local.into()],
     )?;

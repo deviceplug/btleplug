@@ -3,16 +3,20 @@ use ::jni::{
     bind_java_type,
     errors::Result,
     jni_sig,
-    objects::JObject,
+    objects::{JObject, Reference},
 };
 use std::task::Waker;
+
+bind_java_type! {
+    pub JWaker => io.github.gedgygedgy.rust.task.Waker,
+}
 
 pub fn waker<'a>(env: &mut Env<'a>, waker: Waker) -> Result<JObject<'a>> {
     let runnable = super::ops::fn_once_runnable(env, |_e, _o| waker.wake())?;
 
-    let class = super::classcache::get_class("io/github/gedgygedgy/rust/task/Waker").unwrap();
+    let class = <JWaker as Reference>::lookup_class(env, &Default::default())?;
     let obj = env.new_object(
-        class.as_ref(),
+        &*class,
         jni_sig!("(Lio/github/gedgygedgy/rust/ops/FnRunnable;)V"),
         &[(&runnable).into()],
     )?;

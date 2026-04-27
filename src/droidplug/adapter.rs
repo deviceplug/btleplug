@@ -150,12 +150,12 @@ impl Central for Adapter {
                 let ex = env.exception_occurred().unwrap();
                 env.exception_clear();
 
-                let no_adapter_class = super::jni_utils::classcache::get_class(
-                    "com/nonpolynomial/btleplug/android/impl/NoBluetoothAdapterException",
-                )
-                .unwrap();
+                let no_adapter_class = <super::jni::objects::JNoBluetoothAdapterException as jni::objects::Reference>::lookup_class(
+                    env,
+                    &Default::default(),
+                )?;
 
-                if env.is_instance_of(&ex, no_adapter_class.as_ref())? {
+                if env.is_instance_of(&ex, &*no_adapter_class)? {
                     Err(Error::NoAdapterAvailable)
                 } else if env.is_instance_of(&ex, jni_str!("java/lang/RuntimeException"))? {
                     let msg = env

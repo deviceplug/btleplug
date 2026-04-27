@@ -1,6 +1,6 @@
 pub mod objects;
 
-use ::jni::{Env, NativeMethod, jni_str, native_method, objects::JObject};
+use ::jni::{Env, NativeMethod, jni_str, native_method, objects::{JObject, Reference}};
 use jni::{objects::JString, sys::jboolean};
 use std::ffi::c_void;
 use std::sync::Once;
@@ -36,82 +36,38 @@ fn init_inner(env: &mut Env) -> crate::Result<()> {
                 },
             ],
         )? };
-        super::jni_utils::classcache::find_add_class(
-            env,
-            "com/nonpolynomial/btleplug/android/impl/Peripheral",
-        )?;
-        super::jni_utils::classcache::find_add_class(
-            env,
-            "com/nonpolynomial/btleplug/android/impl/ScanFilter",
-        )?;
-        super::jni_utils::classcache::find_add_class(
-            env,
-            "com/nonpolynomial/btleplug/android/impl/NotConnectedException",
-        )?;
-        super::jni_utils::classcache::find_add_class(
-            env,
-            "com/nonpolynomial/btleplug/android/impl/PermissionDeniedException",
-        )?;
-        super::jni_utils::classcache::find_add_class(
-            env,
-            "com/nonpolynomial/btleplug/android/impl/UnexpectedCallbackException",
-        )?;
-        super::jni_utils::classcache::find_add_class(
-            env,
-            "com/nonpolynomial/btleplug/android/impl/UnexpectedCharacteristicException",
-        )?;
-        super::jni_utils::classcache::find_add_class(
-            env,
-            "com/nonpolynomial/btleplug/android/impl/NoSuchCharacteristicException",
-        )?;
-        super::jni_utils::classcache::find_add_class(
-            env,
-            "com/nonpolynomial/btleplug/android/impl/NoBluetoothAdapterException",
-        )?;
+        use objects::*;
+        use super::jni_utils::{
+            future::{JFuture, JFutureException},
+            ops::{JFnAdapter, JFnRunnableImpl, JFnBiFunctionImpl, JFnFunctionImpl},
+            stream::{JStream, JStreamPoll},
+            task::{JPollResult, JWaker},
+        };
 
-        // jni-utils class caching
-        super::jni_utils::classcache::find_add_class(
-            env,
-            "io/github/gedgygedgy/rust/future/Future",
-        )?;
-        super::jni_utils::classcache::find_add_class(
-            env,
-            "io/github/gedgygedgy/rust/future/FutureException",
-        )?;
-        super::jni_utils::classcache::find_add_class(
-            env,
-            "io/github/gedgygedgy/rust/ops/FnAdapter",
-        )?;
-        super::jni_utils::classcache::find_add_class(
-            env,
-            "io/github/gedgygedgy/rust/stream/Stream",
-        )?;
-        super::jni_utils::classcache::find_add_class(
-            env,
-            "io/github/gedgygedgy/rust/stream/StreamPoll",
-        )?;
-        super::jni_utils::classcache::find_add_class(env, "io/github/gedgygedgy/rust/task/Waker")?;
-        super::jni_utils::classcache::find_add_class(
-            env,
-            "io/github/gedgygedgy/rust/task/PollResult",
-        )?;
-        super::jni_utils::classcache::find_add_class(
-            env,
-            "io/github/gedgygedgy/rust/ops/FnRunnableImpl",
-        )?;
-        super::jni_utils::classcache::find_add_class(
-            env,
-            "io/github/gedgygedgy/rust/ops/FnBiFunctionImpl",
-        )?;
-        super::jni_utils::classcache::find_add_class(
-            env,
-            "io/github/gedgygedgy/rust/ops/FnFunctionImpl",
-        )?;
+        let loader = jni::objects::LoaderContext::default();
+        <JPeripheral as Reference>::lookup_class(env, &loader)?;
+        <JScanFilterClass as Reference>::lookup_class(env, &loader)?;
+        <JNotConnectedException as Reference>::lookup_class(env, &loader)?;
+        <JPermissionDeniedException as Reference>::lookup_class(env, &loader)?;
+        <JUnexpectedCallbackException as Reference>::lookup_class(env, &loader)?;
+        <JUnexpectedCharacteristicException as Reference>::lookup_class(env, &loader)?;
+        <JNoSuchCharacteristicException as Reference>::lookup_class(env, &loader)?;
+        <JNoBluetoothAdapterException as Reference>::lookup_class(env, &loader)?;
+        <JFuture as Reference>::lookup_class(env, &loader)?;
+        <JFutureException as Reference>::lookup_class(env, &loader)?;
+        <JFnAdapter as Reference>::lookup_class(env, &loader)?;
+        <JStream as Reference>::lookup_class(env, &loader)?;
+        <JStreamPoll as Reference>::lookup_class(env, &loader)?;
+        <JWaker as Reference>::lookup_class(env, &loader)?;
+        <JPollResult as Reference>::lookup_class(env, &loader)?;
+        <JFnRunnableImpl as Reference>::lookup_class(env, &loader)?;
+        <JFnBiFunctionImpl as Reference>::lookup_class(env, &loader)?;
+        <JFnFunctionImpl as Reference>::lookup_class(env, &loader)?;
 
         // FnAdapter native method registration
-        let fn_adapter_class = env.find_class(jni_str!("io/github/gedgygedgy/rust/ops/FnAdapter"))?;
+        let fn_adapter_class = <JFnAdapter as Reference>::lookup_class(env, &loader)?;
         unsafe { env.register_native_methods(
-            &fn_adapter_class,
+            &*fn_adapter_class,
             &[
                 NativeMethod::from_raw_parts(
                     jni_str!("callInternal"),

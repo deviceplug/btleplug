@@ -18,6 +18,10 @@ bind_java_type! {
     },
 }
 
+bind_java_type! {
+    pub JFutureException => io.github.gedgygedgy.rust.future.FutureException,
+}
+
 pub struct JSendFuture {
     internal: Global<JObject<'static>>,
     vm: JavaVM,

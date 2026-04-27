@@ -3,7 +3,7 @@ use jni::{
     Env,
     bind_java_type,
     errors::Result,
-    jni_sig, jni_str,
+    jni_sig,
     objects::{JObject, JString},
     sys::jint,
 };
@@ -11,6 +11,34 @@ use std::{collections::HashMap, iter::Iterator};
 use uuid::Uuid;
 
 use crate::api::{BDAddr, CharPropFlags, PeripheralProperties, ScanFilter};
+
+bind_java_type! {
+    pub JNotConnectedException => com.nonpolynomial.btleplug.android.impl.NotConnectedException,
+}
+
+bind_java_type! {
+    pub JPermissionDeniedException => com.nonpolynomial.btleplug.android.impl.PermissionDeniedException,
+}
+
+bind_java_type! {
+    pub JUnexpectedCallbackException => com.nonpolynomial.btleplug.android.impl.UnexpectedCallbackException,
+}
+
+bind_java_type! {
+    pub JUnexpectedCharacteristicException => com.nonpolynomial.btleplug.android.impl.UnexpectedCharacteristicException,
+}
+
+bind_java_type! {
+    pub JNoSuchCharacteristicException => com.nonpolynomial.btleplug.android.impl.NoSuchCharacteristicException,
+}
+
+bind_java_type! {
+    pub JNoBluetoothAdapterException => com.nonpolynomial.btleplug.android.impl.NoBluetoothAdapterException,
+}
+
+bind_java_type! {
+    pub JScanFilterClass => com.nonpolynomial.btleplug.android.impl.ScanFilter,
+}
 
 bind_java_type! {
     pub JPeripheral => com.nonpolynomial.btleplug.android.impl.Peripheral,
@@ -272,12 +300,12 @@ impl<'a> JScanFilter<'a> {
             let uuid_str = env.new_string(uuid.to_string())?;
             uuids.set_element(env, idx, &uuid_str)?;
         }
-        let class_static = crate::droidplug::jni_utils::classcache::get_class(
-            "com/nonpolynomial/btleplug/android/impl/ScanFilter",
-        )
-        .unwrap();
+        let class = <JScanFilterClass as jni::objects::Reference>::lookup_class(
+            env,
+            &Default::default(),
+        )?;
         let obj = env.new_object(
-            &**class_static,
+            &*class,
             jni_sig!("([Ljava/lang/String;)V"),
             &[(&uuids).into()],
         )?;

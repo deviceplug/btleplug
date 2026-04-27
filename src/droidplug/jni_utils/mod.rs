@@ -1,5 +1,4 @@
 pub mod arrays;
-pub mod classcache;
 pub mod exceptions;
 pub mod future;
 pub mod ops;
@@ -9,32 +8,38 @@ pub mod uuid;
 
 #[cfg(test)]
 pub(crate) mod test_utils {
-    use jni::{Env, JavaVM, jni_str, jni_sig, objects::Global, objects::JObject};
+    use jni::{Env, JavaVM, NativeMethod, jni_str, jni_sig, objects::{Global, JObject, Reference}};
     use lazy_static::lazy_static;
     use std::{
         cell::Cell,
+        ffi::c_void,
         sync::{Arc, Mutex},
         task::{Wake, Waker},
     };
 
-    use jni::NativeMethod;
-
     fn test_init(env: &mut Env) -> jni::errors::Result<()> {
-        use std::ffi::c_void;
-        super::classcache::find_add_class(env, "io/github/gedgygedgy/rust/future/Future")?;
-        super::classcache::find_add_class(env, "io/github/gedgygedgy/rust/future/FutureException")?;
-        super::classcache::find_add_class(env, "io/github/gedgygedgy/rust/ops/FnAdapter")?;
-        super::classcache::find_add_class(env, "io/github/gedgygedgy/rust/stream/Stream")?;
-        super::classcache::find_add_class(env, "io/github/gedgygedgy/rust/stream/StreamPoll")?;
-        super::classcache::find_add_class(env, "io/github/gedgygedgy/rust/task/Waker")?;
-        super::classcache::find_add_class(env, "io/github/gedgygedgy/rust/task/PollResult")?;
-        super::classcache::find_add_class(env, "io/github/gedgygedgy/rust/ops/FnRunnableImpl")?;
-        super::classcache::find_add_class(env, "io/github/gedgygedgy/rust/ops/FnBiFunctionImpl")?;
-        super::classcache::find_add_class(env, "io/github/gedgygedgy/rust/ops/FnFunctionImpl")?;
+        use super::{
+            future::{JFuture, JFutureException},
+            ops::{JFnAdapter, JFnRunnableImpl, JFnBiFunctionImpl, JFnFunctionImpl},
+            stream::{JStream, JStreamPoll},
+            task::{JPollResult, JWaker},
+        };
 
-        let class = env.find_class(jni_str!("io/github/gedgygedgy/rust/ops/FnAdapter"))?;
+        let loader = jni::objects::LoaderContext::default();
+        <JFuture as Reference>::lookup_class(env, &loader)?;
+        <JFutureException as Reference>::lookup_class(env, &loader)?;
+        <JFnAdapter as Reference>::lookup_class(env, &loader)?;
+        <JStream as Reference>::lookup_class(env, &loader)?;
+        <JStreamPoll as Reference>::lookup_class(env, &loader)?;
+        <JWaker as Reference>::lookup_class(env, &loader)?;
+        <JPollResult as Reference>::lookup_class(env, &loader)?;
+        <JFnRunnableImpl as Reference>::lookup_class(env, &loader)?;
+        <JFnBiFunctionImpl as Reference>::lookup_class(env, &loader)?;
+        <JFnFunctionImpl as Reference>::lookup_class(env, &loader)?;
+
+        let fn_adapter_class = <JFnAdapter as Reference>::lookup_class(env, &loader)?;
         unsafe { env.register_native_methods(
-            &class,
+            &*fn_adapter_class,
             &[
                 NativeMethod::from_raw_parts(
                     jni_str!("callInternal"),

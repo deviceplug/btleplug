@@ -3,7 +3,7 @@ use jni::{
     Env,
     errors::Result,
     jni_sig, jni_str,
-    objects::{JClass, JMethodID, JObject, JString},
+    objects::{JMethodID, JObject, JString},
     signature::{Primitive, ReturnType},
     sys::{jint, jvalue},
 };
@@ -51,7 +51,7 @@ impl<'a> JPeripheral<'a> {
             "com/nonpolynomial/btleplug/android/impl/Peripheral",
         )
         .unwrap();
-        let class = <&JClass>::from(class_static.as_obj());
+        let class = &**class_static;
 
         let connect = env.get_method_id(
             class,
@@ -141,7 +141,7 @@ impl<'a> JPeripheral<'a> {
         )
         .unwrap();
         let obj = env.new_object(
-            <&JClass>::from(class_static.as_obj()),
+            &**class_static,
             jni_sig!("(Lcom/nonpolynomial/btleplug/android/impl/Adapter;Ljava/lang/String;)V"),
             &[(&adapter).into(), (&addr_jstr).into()],
         )?;
@@ -247,7 +247,7 @@ impl<'a> JPeripheral<'a> {
                         l: uuid.as_raw(),
                     },
                     jvalue {
-                        z: enable as u8,
+                        z: enable,
                     },
                 ],
             )
@@ -307,9 +307,9 @@ impl<'a> JPeripheral<'a> {
         if obj.is_null() {
             Ok(None)
         } else {
-            let jstr: JString = obj.into();
-            let name_str = env.get_string(&jstr)?;
-            Ok(Some(name_str.into()))
+            let jstr = env.cast_local::<JString>(obj)?;
+            let name_str = jstr.mutf8_chars(env)?;
+            Ok(Some(String::from(name_str)))
         }
     }
 
@@ -341,13 +341,13 @@ impl<'a> JPeripheral<'a> {
         if obj.is_null() {
             return Ok(None);
         }
-        let arr = unsafe { jni::objects::JIntArray::from_raw(obj.into_raw()) };
-        let len = env.get_array_length(&arr)?;
+        let arr = unsafe { jni::objects::JIntArray::from_raw(env, obj.into_raw()) };
+        let len = arr.len(env)?;
         if len < 3 {
             return Ok(None);
         }
         let mut buf = [0i32; 3];
-        env.get_int_array_region(&arr, 0, &mut buf)?;
+        arr.get_region(env, 0, &mut buf)?;
         Ok(Some(crate::api::ConnectionParameters {
             interval_us: (buf[0] as u32) * 1250,
             latency: buf[1] as u16,
@@ -523,7 +523,7 @@ impl<'a> JBluetoothGattCharacteristic<'a> {
             env.call_method_unchecked(&self.internal, self.get_value, ReturnType::Array, &[])
         }?
         .l()?;
-        let value_arr = unsafe { jni::objects::JByteArray::from_raw(value.into_raw()) };
+        let value_arr = unsafe { jni::objects::JByteArray::from_raw(env, value.into_raw()) };
         crate::droidplug::jni_utils::arrays::byte_array_to_vec(env, &value_arr)
     }
 
@@ -599,7 +599,7 @@ impl<'a> JBluetoothDevice<'a> {
             env.call_method_unchecked(&self.internal, self.get_address, ReturnType::Object, &[])
         }?
         .l()?;
-        Ok(obj.into())
+        env.cast_local::<JString>(obj)
     }
 }
 
@@ -609,22 +609,21 @@ pub struct JScanFilter<'a> {
 
 impl<'a> JScanFilter<'a> {
     pub fn new(env: &mut Env<'a>, filter: ScanFilter) -> Result<Self> {
-        let string_class = env.find_class(jni_str!("java/lang/String"))?;
-        let uuids = env.new_object_array(
-            filter.services.len() as i32,
-            &string_class,
-            &JObject::null(),
+        let uuids = jni::objects::JObjectArray::<JString>::new(
+            env,
+            filter.services.len(),
+            &JString::default(),
         )?;
         for (idx, uuid) in filter.services.into_iter().enumerate() {
             let uuid_str = env.new_string(uuid.to_string())?;
-            env.set_object_array_element(&uuids, idx as i32, &uuid_str)?;
+            uuids.set_element(env, idx, &uuid_str)?;
         }
         let class_static = crate::droidplug::jni_utils::classcache::get_class(
             "com/nonpolynomial/btleplug/android/impl/ScanFilter",
         )
         .unwrap();
         let obj = env.new_object(
-            <&JClass>::from(class_static.as_obj()),
+            &**class_static,
             jni_sig!("([Ljava/lang/String;)V"),
             &[(&uuids).into()],
         )?;
@@ -721,12 +720,8 @@ impl<'a> JScanResult<'a> {
 
         let device = self.get_device(env)?;
         let addr_jstr = device.get_address(env)?;
-        let addr_str = env.get_string(&addr_jstr)?;
-        let addr = BDAddr::from_str(
-            addr_str
-                .to_str()
-                .map_err(|e| crate::Error::Other(e.into()))?,
-        )?;
+        let addr_str = String::from(addr_jstr.mutf8_chars(env)?);
+        let addr = BDAddr::from_str(&addr_str)?;
 
         let record = self.get_scan_record(env)?;
         let record_is_null = env.is_same_object(&*record, JObject::null())?;
@@ -737,10 +732,10 @@ impl<'a> JScanResult<'a> {
             let device_name = if env.is_same_object(&device_name_obj, JObject::null())? {
                 None
             } else {
-                let device_name_jstr: JString = device_name_obj.into();
-                let device_name_str = env.get_string(&device_name_jstr)?;
+                let device_name_jstr = env.cast_local::<JString>(device_name_obj)?;
+                let device_name_str = String::from(device_name_jstr.mutf8_chars(env)?);
                 Some(
-                    String::from_utf8_lossy(device_name_str.to_bytes())
+                    device_name_str
                         .chars()
                         .filter(|&c| c != '\u{fffd}')
                         .collect(),
@@ -765,7 +760,7 @@ impl<'a> JScanResult<'a> {
                     let key = manufacturer_specific_data_obj.key_at(env, i)?;
                     let value = manufacturer_specific_data_obj.value_at(env, i)?;
                     let value_arr =
-                        unsafe { jni::objects::JByteArray::from_raw(value.into_raw()) };
+                        unsafe { jni::objects::JByteArray::from_raw(env, value.into_raw()) };
                     let data =
                         crate::droidplug::jni_utils::arrays::byte_array_to_vec(env, &value_arr)?;
                     manufacturer_data.insert(key as u16, data);
@@ -803,7 +798,7 @@ impl<'a> JScanResult<'a> {
                     let juuid = parcel_uuid.get_uuid(env)?;
                     let uuid = juuid.as_uuid(env)?;
                     let value_arr =
-                        unsafe { jni::objects::JByteArray::from_raw(value.into_raw()) };
+                        unsafe { jni::objects::JByteArray::from_raw(env, value.into_raw()) };
                     let data =
                         crate::droidplug::jni_utils::arrays::byte_array_to_vec(env, &value_arr)?;
                     service_data.insert(uuid, data);

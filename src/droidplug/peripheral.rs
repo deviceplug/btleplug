@@ -101,8 +101,8 @@ fn get_poll_result<'a>(
                     let msg = env
                         .call_method(&cause, jni_str!("getMessage"), jni_sig!("()Ljava/lang/String;"), &[])?
                         .l()?;
-                    let jstr: JString = msg.into();
-                    let msgstr: String = env.get_string(&jstr)?.into();
+                    let jstr = env.cast_local::<JString>(msg)?;
+                    let msgstr = String::from(jstr.mutf8_chars(env)?);
                     Err(Error::RuntimeError(msgstr))
                 } else {
                     let _ = env.throw(&ex);
@@ -219,12 +219,14 @@ impl api::Peripheral for Peripheral {
     }
 
     async fn connect(&self) -> Result<()> {
-        let future = self.with_obj(|env, obj| {
-            let future = obj.connect(env)?;
-            JSendFuture::new(env, &future)
-        })?;
-        let result_ref = future.await?;
-        self.with_obj(|env, _obj| get_poll_result(env, &result_ref).map(|_| {}))?;
+        {
+            let future = self.with_obj(|env, obj| {
+                let future = obj.connect(env)?;
+                JSendFuture::new(env, &future)
+            })?;
+            let result_ref = future.await?;
+            self.with_obj(|env, _obj| get_poll_result(env, &result_ref).map(|_| {}))?;
+        }
         // Query the system-cached device name and update local_name
         self.with_obj(|env, obj| -> std::result::Result<(), Error> {
             if let Ok(Some(name)) = obj.get_device_name(env) {
@@ -236,18 +238,20 @@ impl api::Peripheral for Peripheral {
             Ok(())
         })?;
         // Auto-negotiate maximum MTU (517) after connection
-        let mtu_future = self.with_obj(|env, obj| {
-            let mtu_obj = obj.request_mtu(env, 517)?;
-            let mtu_future = JFuture::from_env(env, mtu_obj)?;
-            JSendFuture::new(env, &mtu_future)
-        })?;
-        let mtu_result_ref = mtu_future.await?;
-        self.with_obj(|env, _obj| -> Result<()> {
-            let mtu_obj = get_poll_result(env, &mtu_result_ref)?;
-            let mtu_val = env.call_method(&mtu_obj, jni_str!("intValue"), jni_sig!("()I"), &[])?.i()?;
-            self.mtu.store(mtu_val as u16, Ordering::Relaxed);
-            Ok(())
-        })?;
+        {
+            let mtu_future = self.with_obj(|env, obj| {
+                let mtu_obj = obj.request_mtu(env, 517)?;
+                let mtu_future = JFuture::from_env(env, mtu_obj)?;
+                JSendFuture::new(env, &mtu_future)
+            })?;
+            let mtu_result_ref = mtu_future.await?;
+            self.with_obj(|env, _obj| -> Result<()> {
+                let mtu_obj = get_poll_result(env, &mtu_result_ref)?;
+                let mtu_val = env.call_method(&mtu_obj, jni_str!("intValue"), jni_sig!("()I"), &[])?.i()?;
+                self.mtu.store(mtu_val as u16, Ordering::Relaxed);
+                Ok(())
+            })?;
+        }
         Ok(())
     }
 
@@ -352,7 +356,7 @@ impl api::Peripheral for Peripheral {
         let result_ref = future.await?;
         self.with_obj(|env, _obj| {
             let bytes_obj = get_poll_result(env, &result_ref)?;
-            let bytes_arr = unsafe { jni::objects::JByteArray::from_raw(bytes_obj.into_raw()) };
+            let bytes_arr = unsafe { jni::objects::JByteArray::from_raw(env, bytes_obj.into_raw()) };
             Ok(byte_array_to_vec(env, &bytes_arr)?)
         })
     }
@@ -443,7 +447,7 @@ impl api::Peripheral for Peripheral {
         let result_ref = future.await?;
         self.with_obj(|env, _obj| {
             let bytes_obj = get_poll_result(env, &result_ref)?;
-            let bytes_arr = unsafe { jni::objects::JByteArray::from_raw(bytes_obj.into_raw()) };
+            let bytes_arr = unsafe { jni::objects::JByteArray::from_raw(env, bytes_obj.into_raw()) };
             Ok(byte_array_to_vec(env, &bytes_arr)?)
         })
     }

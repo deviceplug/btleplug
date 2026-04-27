@@ -161,8 +161,8 @@ impl Central for Adapter {
                     let msg = env
                         .call_method(&ex, jni_str!("getMessage"), jni_sig!("()Ljava/lang/String;"), &[])?
                         .l()?;
-                    let jstr: JString = msg.into();
-                    let msgstr: String = env.get_string(&jstr)?.into();
+                    let jstr = env.cast_local::<JString>(msg)?;
+                    let msgstr = String::from(jstr.mutf8_chars(env)?);
                     Err(Error::RuntimeError(msgstr))
                 } else {
                     let _ = env.throw(&ex);
@@ -223,10 +223,10 @@ pub(crate) fn adapter_on_connection_state_changed_internal(
     addr: JString,
     connected: jboolean,
 ) -> crate::Result<()> {
-    let addr_str: String = env.get_string(&addr)?.into();
+    let addr_str = String::from(addr.mutf8_chars(env)?);
     let addr = BDAddr::from_str(&addr_str)?;
     let adapter = unsafe { env.get_rust_field::<_, _, Adapter>(obj, jni_str!("handle")) }?;
-    adapter.manager.emit(if connected != 0 {
+    adapter.manager.emit(if connected {
         CentralEvent::DeviceConnected(PeripheralId(addr))
     } else {
         CentralEvent::DeviceDisconnected(PeripheralId(addr))

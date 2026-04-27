@@ -314,7 +314,7 @@ mod test {
                         let _err = poll_result.get(env).unwrap_err();
 
                         let future_ex = env.exception_occurred().unwrap();
-                        env.exception_clear().unwrap();
+                        env.exception_clear();
                         let actual_ex = env
                             .call_method(&future_ex, jni_str!("getCause"), jni_sig!("()Ljava/lang/Throwable;"), &[])
                             .unwrap()

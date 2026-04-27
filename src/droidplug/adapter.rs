@@ -14,7 +14,7 @@ use async_trait::async_trait;
 use futures::stream::Stream;
 use jni::{
     Env, jni_sig, jni_str,
-    objects::{Global, JClass, JObject, JString},
+    objects::{Global, JObject, JString},
     sys::jboolean,
 };
 use std::{
@@ -147,15 +147,15 @@ impl Central for Adapter {
         ) {
             Ok(_) => Ok(()),
             Err(jni::errors::Error::JavaException) => {
-                let ex = env.exception_occurred()?;
-                env.exception_clear()?;
+                let ex = env.exception_occurred().unwrap();
+                env.exception_clear();
 
                 let no_adapter_class = super::jni_utils::classcache::get_class(
                     "com/nonpolynomial/btleplug/android/impl/NoBluetoothAdapterException",
                 )
                 .unwrap();
 
-                if env.is_instance_of(&ex, <&JClass>::from(no_adapter_class.as_obj()))? {
+                if env.is_instance_of(&ex, no_adapter_class.as_ref())? {
                     Err(Error::NoAdapterAvailable)
                 } else if env.is_instance_of(&ex, jni_str!("java/lang/RuntimeException"))? {
                     let msg = env
@@ -165,7 +165,7 @@ impl Central for Adapter {
                     let msgstr: String = env.get_string(&jstr)?.into();
                     Err(Error::RuntimeError(msgstr))
                 } else {
-                    env.throw(&ex)?;
+                    let _ = env.throw(&ex);
                     Err(jni::errors::Error::JavaException.into())
                 }
             }

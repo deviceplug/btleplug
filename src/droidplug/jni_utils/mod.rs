@@ -36,18 +36,16 @@ pub(crate) mod test_utils {
         unsafe { env.register_native_methods(
             &class,
             &[
-                NativeMethod {
-                    name: jni_str!("callInternal").into(),
-                    sig:
-                        jni_sig!("(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;")
-                            .into(),
-                    fn_ptr: super::ops::fn_adapter_call_internal as *mut c_void,
-                },
-                NativeMethod {
-                    name: jni_str!("closeInternal").into(),
-                    sig: jni_sig!("()V").into(),
-                    fn_ptr: super::ops::fn_adapter_close_internal as *mut c_void,
-                },
+                NativeMethod::from_raw_parts(
+                    jni_str!("callInternal"),
+                    jni_str!("(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"),
+                    super::ops::fn_adapter_call_internal as *mut c_void,
+                ),
+                NativeMethod::from_raw_parts(
+                    jni_str!("closeInternal"),
+                    jni_str!("()V"),
+                    super::ops::fn_adapter_close_internal as *mut c_void,
+                ),
             ],
         )? };
         Ok(())

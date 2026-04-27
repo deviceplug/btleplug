@@ -2,7 +2,7 @@ use ::jni::{
     Env, JavaVM,
     errors::Result,
     jni_sig, jni_str,
-    objects::{Global, JClass, JMethodID, JObject},
+    objects::{Global, JMethodID, JObject},
     signature::ReturnType,
     sys::jvalue,
 };
@@ -23,7 +23,7 @@ impl<'a> JFuture<'a> {
         let class =
             super::classcache::get_class("io/github/gedgygedgy/rust/future/Future").unwrap();
         let poll_id = env.get_method_id(
-            <&JClass>::from(class.as_obj()),
+            class.as_ref(),
             jni_str!("poll"),
             jni_sig!("(Lio/github/gedgygedgy/rust/task/Waker;)Lio/github/gedgygedgy/rust/task/PollResult;"),
         )?;
@@ -82,7 +82,7 @@ impl JSendFuture {
         let class =
             super::classcache::get_class("io/github/gedgygedgy/rust/future/Future").unwrap();
         let poll_id = env.get_method_id(
-            <&JClass>::from(class.as_obj()),
+            class.as_ref(),
             jni_str!("poll"),
             jni_sig!("(Lio/github/gedgygedgy/rust/task/Waker;)Lio/github/gedgygedgy/rust/task/PollResult;"),
         )?;

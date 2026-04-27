@@ -3,7 +3,7 @@ use ::jni::{
     Env, JavaVM,
     errors::Result,
     jni_sig, jni_str,
-    objects::{Global, JClass, JMethodID, JObject},
+    objects::{Global, JMethodID, JObject},
     signature::ReturnType,
     sys::jvalue,
 };
@@ -24,7 +24,7 @@ impl<'a> JStream<'a> {
         let class =
             super::classcache::get_class("io/github/gedgygedgy/rust/stream/Stream").unwrap();
         let poll_next_id = env.get_method_id(
-            <&JClass>::from(class.as_obj()),
+            class.as_ref(),
             jni_str!("pollNext"),
             jni_sig!("(Lio/github/gedgygedgy/rust/task/Waker;)Lio/github/gedgygedgy/rust/task/PollResult;"),
         )?;
@@ -87,7 +87,7 @@ impl JSendStream {
         let class =
             super::classcache::get_class("io/github/gedgygedgy/rust/stream/Stream").unwrap();
         let poll_next_id = env.get_method_id(
-            <&JClass>::from(class.as_obj()),
+            class.as_ref(),
             jni_str!("pollNext"),
             jni_sig!("(Lio/github/gedgygedgy/rust/task/Waker;)Lio/github/gedgygedgy/rust/task/PollResult;"),
         )?;
@@ -165,7 +165,7 @@ impl<'a> JStreamPoll<'a> {
         let class =
             super::classcache::get_class("io/github/gedgygedgy/rust/stream/StreamPoll").unwrap();
         let get = env.get_method_id(
-            <&JClass>::from(class.as_obj()),
+            class.as_ref(),
             jni_str!("get"),
             jni_sig!("()Ljava/lang/Object;"),
         )?;

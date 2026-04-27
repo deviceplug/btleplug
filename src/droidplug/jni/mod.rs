@@ -1,13 +1,13 @@
 pub mod objects;
 
-use ::jni::{JNIEnv, JavaVM, NativeMethod, objects::JObject};
+use ::jni::{Env, JNIEnv, JavaVM, NativeMethod, objects::JObject};
 use jni::{objects::JString, sys::jboolean};
 use once_cell::sync::OnceCell;
 use std::ffi::c_void;
 
 static GLOBAL_JVM: OnceCell<JavaVM> = OnceCell::new();
 
-pub fn init(env: &mut JNIEnv) -> crate::Result<()> {
+pub fn init(env: &mut Env) -> crate::Result<()> {
     if let Ok(()) = GLOBAL_JVM.set(env.get_java_vm()?) {
         let adapter_class =
             env.find_class("com/nonpolynomial/btleplug/android/impl/Adapter")?;

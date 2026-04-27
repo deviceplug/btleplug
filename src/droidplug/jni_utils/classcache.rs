@@ -1,18 +1,20 @@
 use dashmap::DashMap;
-use jni::{JNIEnv, errors::Result, objects::GlobalRef};
+use jni::{Env, errors::Result, objects::{Global, JObject}};
 use once_cell::sync::OnceCell;
+use std::sync::Arc;
 
-static CLASSCACHE: OnceCell<DashMap<String, GlobalRef>> = OnceCell::new();
+static CLASSCACHE: OnceCell<DashMap<String, Arc<Global<JObject<'static>>>>> = OnceCell::new();
 
-pub fn find_add_class(env: &mut JNIEnv, classname: &str) -> Result<()> {
+pub fn find_add_class(env: &mut Env, classname: &str) -> Result<()> {
     let cache = CLASSCACHE.get_or_init(|| DashMap::new());
     let cls = env.find_class(classname)?;
-    let global = env.new_global_ref(cls)?;
-    cache.insert(classname.to_owned(), global);
+    let cls_obj: JObject = cls.into();
+    let global = env.new_global_ref(&cls_obj)?;
+    cache.insert(classname.to_owned(), Arc::new(global));
     Ok(())
 }
 
-pub fn get_class(classname: &str) -> Option<GlobalRef> {
+pub fn get_class(classname: &str) -> Option<Arc<Global<JObject<'static>>>> {
     let cache = CLASSCACHE.get_or_init(|| DashMap::new());
     cache.get(classname).map(|pair| pair.value().clone())
 }

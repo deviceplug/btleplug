@@ -15,8 +15,8 @@ use crate::{
 use async_trait::async_trait;
 use futures::stream::Stream;
 use jni::{
-    JNIEnv,
-    objects::{GlobalRef, JClass, JObject, JString, JValue},
+    Env,
+    objects::{Global, JClass, JObject, JString, JValue},
 };
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -48,8 +48,8 @@ impl Display for PeripheralId {
 }
 
 fn get_poll_result<'a>(
-    env: &mut JNIEnv<'a>,
-    result_ref: &GlobalRef,
+    env: &mut Env<'a>,
+    result_ref: &Global<JObject<'static>>,
 ) -> Result<JObject<'a>> {
     let result_obj = env.new_local_ref(result_ref)?;
     let poll_result = JPollResult::from_env(env, result_obj)?;
@@ -128,15 +128,15 @@ struct PeripheralShared {
 #[derive(Clone)]
 pub struct Peripheral {
     addr: BDAddr,
-    internal: GlobalRef,
+    internal: Arc<Global<JObject<'static>>>,
     shared: Arc<Mutex<PeripheralShared>>,
     mtu: Arc<AtomicU16>,
 }
 
 impl Peripheral {
-    pub(crate) fn new<'a>(env: &mut JNIEnv<'a>, adapter: JObject<'a>, addr: BDAddr) -> Result<Self> {
+    pub(crate) fn new<'a>(env: &mut Env<'a>, adapter: JObject<'a>, addr: BDAddr) -> Result<Self> {
         let obj = JPeripheral::new(env, adapter, addr)?;
-        let internal = env.new_global_ref(&*obj)?;
+        let internal = Arc::new(env.new_global_ref(&*obj)?);
         Ok(Self {
             addr,
             internal,
@@ -157,13 +157,13 @@ impl Peripheral {
 
     fn with_obj<T, E>(
         &self,
-        f: impl for<'env> FnOnce(&mut JNIEnv<'env>, &JPeripheral<'env>) -> std::result::Result<T, E>,
+        f: impl for<'env> FnOnce(&mut Env<'env>, &JPeripheral<'env>) -> std::result::Result<T, E>,
     ) -> std::result::Result<T, E>
     where
         E: From<::jni::errors::Error>,
     {
         let mut env = global_jvm().get_env()?;
-        let local_obj = env.new_local_ref(&self.internal)?;
+        let local_obj = env.new_local_ref(self.internal.as_obj())?;
         let obj = JPeripheral::from_env(&mut env, local_obj)?;
         f(&mut env, &obj)
     }

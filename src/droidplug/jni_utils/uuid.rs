@@ -1,5 +1,5 @@
 use jni::{
-    JNIEnv,
+    Env,
     errors::Result,
     objects::{JMethodID, JObject},
     signature::{Primitive, ReturnType},
@@ -7,8 +7,6 @@ use jni::{
 };
 use uuid::Uuid;
 
-/// Wrapper for [`JObject`]s that contain `java.util.UUID`. Provides methods
-/// to convert to and from a [`Uuid`].
 pub struct JUuid<'a> {
     internal: JObject<'a>,
     get_least_significant_bits: JMethodID,
@@ -16,7 +14,7 @@ pub struct JUuid<'a> {
 }
 
 impl<'a> JUuid<'a> {
-    pub fn from_env(env: &mut JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+    pub fn from_env(env: &mut Env<'a>, obj: JObject<'a>) -> Result<Self> {
         let class = env.find_class("java/util/UUID")?;
         let get_least_significant_bits =
             env.get_method_id(&class, "getLeastSignificantBits", "()J")?;
@@ -29,7 +27,7 @@ impl<'a> JUuid<'a> {
         })
     }
 
-    pub fn new(env: &mut JNIEnv<'a>, uuid: Uuid) -> Result<Self> {
+    pub fn new(env: &mut Env<'a>, uuid: Uuid) -> Result<Self> {
         let val = uuid.as_u128();
         let least = (val & 0xFFFFFFFFFFFFFFFF) as jlong;
         let most = ((val >> 64) & 0xFFFFFFFFFFFFFFFF) as jlong;
@@ -47,7 +45,7 @@ impl<'a> JUuid<'a> {
         })
     }
 
-    pub fn as_uuid(&self, env: &mut JNIEnv<'a>) -> Result<Uuid> {
+    pub fn as_uuid(&self, env: &mut Env<'a>) -> Result<Uuid> {
         let least = unsafe {
             env.call_method_unchecked(
                 &self.internal,

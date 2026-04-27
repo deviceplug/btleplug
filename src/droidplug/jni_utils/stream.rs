@@ -1,8 +1,8 @@
 use super::task::JPollResult;
 use ::jni::{
-    JNIEnv, JavaVM,
+    Env, JavaVM,
     errors::Result,
-    objects::{GlobalRef, JClass, JMethodID, JObject},
+    objects::{Global, JClass, JMethodID, JObject},
     signature::ReturnType,
     sys::jvalue,
 };
@@ -13,19 +13,13 @@ use std::{
     task::{Context, Poll},
 };
 
-/// Wrapper for [`JObject`]s that implement
-/// `io.github.gedgygedgy.rust.stream.Stream`. Provides a typed interface for
-/// calling the Java stream's `pollNext` method.
-///
-/// For an async [`Stream`] implementation, convert to [`JSendStream`] via
-/// [`JSendStream::new`].
 pub struct JStream<'a> {
     internal: JObject<'a>,
     poll_next_id: JMethodID,
 }
 
 impl<'a> JStream<'a> {
-    pub fn from_env(env: &mut JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+    pub fn from_env(env: &mut Env<'a>, obj: JObject<'a>) -> Result<Self> {
         let class =
             super::classcache::get_class("io/github/gedgygedgy/rust/stream/Stream").unwrap();
         let poll_next_id = env.get_method_id(
@@ -41,7 +35,7 @@ impl<'a> JStream<'a> {
 
     pub fn poll_next_with_env(
         &self,
-        env: &mut JNIEnv<'a>,
+        env: &mut Env<'a>,
         waker: &JObject<'_>,
     ) -> Result<JObject<'a>> {
         let result = unsafe {
@@ -73,16 +67,14 @@ impl<'a> From<JStream<'a>> for JObject<'a> {
     }
 }
 
-/// [`Send`] version of [`JStream`]. Implements [`Stream`] by obtaining a
-/// [`JNIEnv`] from the stored [`JavaVM`] on each poll.
 pub struct JSendStream {
-    internal: GlobalRef,
+    internal: Global<JObject<'static>>,
     poll_next_id: JMethodID,
     vm: JavaVM,
 }
 
 impl JSendStream {
-    pub fn new(env: &mut JNIEnv, stream: &JStream) -> Result<Self> {
+    pub fn new(env: &mut Env, stream: &JStream) -> Result<Self> {
         Ok(Self {
             internal: env.new_global_ref(&stream.internal)?,
             poll_next_id: stream.poll_next_id,
@@ -90,7 +82,7 @@ impl JSendStream {
         })
     }
 
-    pub fn from_env(env: &mut JNIEnv, obj: &JObject) -> Result<Self> {
+    pub fn from_env(env: &mut Env, obj: &JObject) -> Result<Self> {
         let class =
             super::classcache::get_class("io/github/gedgygedgy/rust/stream/Stream").unwrap();
         let poll_next_id = env.get_method_id(
@@ -108,7 +100,7 @@ impl JSendStream {
     fn poll_next_internal(
         &self,
         context: &mut Context<'_>,
-    ) -> Result<Poll<Option<Result<GlobalRef>>>> {
+    ) -> Result<Poll<Option<Result<Global<JObject<'static>>>>>> {
         let mut env = self.vm.get_env()?;
         let jwaker = super::task::waker(&mut env, context.waker().clone())?;
         let result = unsafe {
@@ -141,7 +133,7 @@ impl JSendStream {
 }
 
 impl ::std::ops::Deref for JSendStream {
-    type Target = GlobalRef;
+    type Target = Global<JObject<'static>>;
 
     fn deref(&self) -> &Self::Target {
         &self.internal
@@ -149,7 +141,7 @@ impl ::std::ops::Deref for JSendStream {
 }
 
 impl Stream for JSendStream {
-    type Item = Result<GlobalRef>;
+    type Item = Result<Global<JObject<'static>>>;
 
     fn poll_next(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match self.poll_next_internal(context) {
@@ -167,7 +159,7 @@ struct JStreamPoll<'a> {
 }
 
 impl<'a> JStreamPoll<'a> {
-    pub fn from_env(env: &mut JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+    pub fn from_env(env: &mut Env<'a>, obj: JObject<'a>) -> Result<Self> {
         let class =
             super::classcache::get_class("io/github/gedgygedgy/rust/stream/StreamPoll").unwrap();
         let get = env.get_method_id(
@@ -178,7 +170,7 @@ impl<'a> JStreamPoll<'a> {
         Ok(Self { internal: obj, get })
     }
 
-    pub fn get(&self, env: &mut JNIEnv<'a>) -> Result<JObject<'a>> {
+    pub fn get(&self, env: &mut Env<'a>) -> Result<JObject<'a>> {
         unsafe { env.call_method_unchecked(&self.internal, self.get, ReturnType::Object, &[]) }?
             .l()
     }

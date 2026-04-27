@@ -1,6 +1,6 @@
 use crate::droidplug::jni_utils::{future::JFuture, stream::JStream, uuid::JUuid};
 use jni::{
-    JNIEnv,
+    Env,
     errors::Result,
     objects::{JClass, JMethodID, JObject, JString},
     signature::{Primitive, ReturnType},
@@ -45,7 +45,7 @@ impl<'a> From<JPeripheral<'a>> for JObject<'a> {
 }
 
 impl<'a> JPeripheral<'a> {
-    pub fn from_env(env: &mut JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+    pub fn from_env(env: &mut Env<'a>, obj: JObject<'a>) -> Result<Self> {
         let class_static = crate::droidplug::jni_utils::classcache::get_class(
             "com/nonpolynomial/btleplug/android/impl/Peripheral",
         )
@@ -133,7 +133,7 @@ impl<'a> JPeripheral<'a> {
         })
     }
 
-    pub fn new(env: &mut JNIEnv<'a>, adapter: JObject<'a>, addr: BDAddr) -> Result<Self> {
+    pub fn new(env: &mut Env<'a>, adapter: JObject<'a>, addr: BDAddr) -> Result<Self> {
         let addr_jstr = env.new_string(format!("{:X}", addr))?;
         let class_static = crate::droidplug::jni_utils::classcache::get_class(
             "com/nonpolynomial/btleplug/android/impl/Peripheral",
@@ -147,7 +147,7 @@ impl<'a> JPeripheral<'a> {
         Self::from_env(env, obj)
     }
 
-    pub fn connect(&self, env: &mut JNIEnv<'a>) -> Result<JFuture<'a>> {
+    pub fn connect(&self, env: &mut Env<'a>) -> Result<JFuture<'a>> {
         let future_obj = unsafe {
             env.call_method_unchecked(&self.internal, self.connect, ReturnType::Object, &[])
         }?
@@ -155,7 +155,7 @@ impl<'a> JPeripheral<'a> {
         JFuture::from_env(env, future_obj)
     }
 
-    pub fn disconnect(&self, env: &mut JNIEnv<'a>) -> Result<JFuture<'a>> {
+    pub fn disconnect(&self, env: &mut Env<'a>) -> Result<JFuture<'a>> {
         let future_obj = unsafe {
             env.call_method_unchecked(&self.internal, self.disconnect, ReturnType::Object, &[])
         }?
@@ -163,7 +163,7 @@ impl<'a> JPeripheral<'a> {
         JFuture::from_env(env, future_obj)
     }
 
-    pub fn is_connected(&self, env: &mut JNIEnv<'a>) -> Result<bool> {
+    pub fn is_connected(&self, env: &mut Env<'a>) -> Result<bool> {
         unsafe {
             env.call_method_unchecked(
                 &self.internal,
@@ -175,7 +175,7 @@ impl<'a> JPeripheral<'a> {
         .z()
     }
 
-    pub fn discover_services(&self, env: &mut JNIEnv<'a>) -> Result<JFuture<'a>> {
+    pub fn discover_services(&self, env: &mut Env<'a>) -> Result<JFuture<'a>> {
         let future_obj = unsafe {
             env.call_method_unchecked(
                 &self.internal,
@@ -188,7 +188,7 @@ impl<'a> JPeripheral<'a> {
         JFuture::from_env(env, future_obj)
     }
 
-    pub fn read(&self, env: &mut JNIEnv<'a>, uuid: &JUuid<'a>) -> Result<JFuture<'a>> {
+    pub fn read(&self, env: &mut Env<'a>, uuid: &JUuid<'a>) -> Result<JFuture<'a>> {
         let future_obj = unsafe {
             env.call_method_unchecked(
                 &self.internal,
@@ -205,7 +205,7 @@ impl<'a> JPeripheral<'a> {
 
     pub fn write(
         &self,
-        env: &mut JNIEnv<'a>,
+        env: &mut Env<'a>,
         uuid: &JUuid<'a>,
         data: &JObject<'a>,
         write_type: jint,
@@ -232,7 +232,7 @@ impl<'a> JPeripheral<'a> {
 
     pub fn set_characteristic_notification(
         &self,
-        env: &mut JNIEnv<'a>,
+        env: &mut Env<'a>,
         uuid: &JUuid<'a>,
         enable: bool,
     ) -> Result<JFuture<'a>> {
@@ -255,7 +255,7 @@ impl<'a> JPeripheral<'a> {
         JFuture::from_env(env, future_obj)
     }
 
-    pub fn get_notifications(&self, env: &mut JNIEnv<'a>) -> Result<JStream<'a>> {
+    pub fn get_notifications(&self, env: &mut Env<'a>) -> Result<JStream<'a>> {
         let stream_obj = unsafe {
             env.call_method_unchecked(
                 &self.internal,
@@ -270,7 +270,7 @@ impl<'a> JPeripheral<'a> {
 
     pub fn read_descriptor(
         &self,
-        env: &mut JNIEnv<'a>,
+        env: &mut Env<'a>,
         characteristic: &JUuid<'a>,
         uuid: &JUuid<'a>,
     ) -> Result<JFuture<'a>> {
@@ -293,7 +293,7 @@ impl<'a> JPeripheral<'a> {
         JFuture::from_env(env, future_obj)
     }
 
-    pub fn get_device_name(&self, env: &mut JNIEnv<'a>) -> Result<Option<String>> {
+    pub fn get_device_name(&self, env: &mut Env<'a>) -> Result<Option<String>> {
         let obj = unsafe {
             env.call_method_unchecked(
                 &self.internal,
@@ -312,7 +312,7 @@ impl<'a> JPeripheral<'a> {
         }
     }
 
-    pub fn request_mtu(&self, env: &mut JNIEnv<'a>, mtu: jint) -> Result<JObject<'a>> {
+    pub fn request_mtu(&self, env: &mut Env<'a>, mtu: jint) -> Result<JObject<'a>> {
         unsafe {
             env.call_method_unchecked(
                 &self.internal,
@@ -326,7 +326,7 @@ impl<'a> JPeripheral<'a> {
 
     pub fn get_connection_parameters(
         &self,
-        env: &mut JNIEnv<'a>,
+        env: &mut Env<'a>,
     ) -> Result<Option<crate::api::ConnectionParameters>> {
         let obj = unsafe {
             env.call_method_unchecked(
@@ -354,7 +354,7 @@ impl<'a> JPeripheral<'a> {
         }))
     }
 
-    pub fn read_remote_rssi(&self, env: &mut JNIEnv<'a>) -> Result<JObject<'a>> {
+    pub fn read_remote_rssi(&self, env: &mut Env<'a>) -> Result<JObject<'a>> {
         unsafe {
             env.call_method_unchecked(
                 &self.internal,
@@ -368,7 +368,7 @@ impl<'a> JPeripheral<'a> {
 
     pub fn request_connection_priority(
         &self,
-        env: &mut JNIEnv<'a>,
+        env: &mut Env<'a>,
         priority: jint,
     ) -> Result<bool> {
         unsafe {
@@ -384,7 +384,7 @@ impl<'a> JPeripheral<'a> {
 
     pub fn write_descriptor(
         &self,
-        env: &mut JNIEnv<'a>,
+        env: &mut Env<'a>,
         characteristic: &JUuid<'a>,
         uuid: &JUuid<'a>,
         data: &JObject<'a>,
@@ -419,7 +419,7 @@ pub struct JBluetoothGattService<'a> {
 }
 
 impl<'a> JBluetoothGattService<'a> {
-    pub fn from_env(env: &mut JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+    pub fn from_env(env: &mut Env<'a>, obj: JObject<'a>) -> Result<Self> {
         let class = env.find_class("android/bluetooth/BluetoothGattService")?;
 
         let get_uuid = env.get_method_id(&class, "getUuid", "()Ljava/util/UUID;")?;
@@ -436,7 +436,7 @@ impl<'a> JBluetoothGattService<'a> {
         Ok(true)
     }
 
-    pub fn get_uuid(&self, env: &mut JNIEnv<'a>) -> Result<Uuid> {
+    pub fn get_uuid(&self, env: &mut Env<'a>) -> Result<Uuid> {
         let obj = unsafe {
             env.call_method_unchecked(&self.internal, self.get_uuid, ReturnType::Object, &[])
         }?
@@ -447,7 +447,7 @@ impl<'a> JBluetoothGattService<'a> {
 
     pub fn get_characteristics(
         &self,
-        env: &mut JNIEnv<'a>,
+        env: &mut Env<'a>,
     ) -> Result<Vec<JBluetoothGattCharacteristic<'a>>> {
         let obj = unsafe {
             env.call_method_unchecked(
@@ -479,7 +479,7 @@ pub struct JBluetoothGattCharacteristic<'a> {
 }
 
 impl<'a> JBluetoothGattCharacteristic<'a> {
-    pub fn from_env(env: &mut JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+    pub fn from_env(env: &mut Env<'a>, obj: JObject<'a>) -> Result<Self> {
         let class = env.find_class("android/bluetooth/BluetoothGattCharacteristic")?;
 
         let get_uuid = env.get_method_id(&class, "getUuid", "()Ljava/util/UUID;")?;
@@ -495,7 +495,7 @@ impl<'a> JBluetoothGattCharacteristic<'a> {
         })
     }
 
-    pub fn get_uuid(&self, env: &mut JNIEnv<'a>) -> Result<Uuid> {
+    pub fn get_uuid(&self, env: &mut Env<'a>) -> Result<Uuid> {
         let obj = unsafe {
             env.call_method_unchecked(&self.internal, self.get_uuid, ReturnType::Object, &[])
         }?
@@ -504,7 +504,7 @@ impl<'a> JBluetoothGattCharacteristic<'a> {
         uuid_obj.as_uuid(env)
     }
 
-    pub fn get_properties(&self, env: &mut JNIEnv<'a>) -> Result<CharPropFlags> {
+    pub fn get_properties(&self, env: &mut Env<'a>) -> Result<CharPropFlags> {
         let flags = unsafe {
             env.call_method_unchecked(
                 &self.internal,
@@ -517,7 +517,7 @@ impl<'a> JBluetoothGattCharacteristic<'a> {
         Ok(CharPropFlags::from_bits_truncate(flags as u8))
     }
 
-    pub fn get_value(&self, env: &mut JNIEnv<'a>) -> Result<Vec<u8>> {
+    pub fn get_value(&self, env: &mut Env<'a>) -> Result<Vec<u8>> {
         let value = unsafe {
             env.call_method_unchecked(&self.internal, self.get_value, ReturnType::Array, &[])
         }?
@@ -528,7 +528,7 @@ impl<'a> JBluetoothGattCharacteristic<'a> {
 
     pub fn get_descriptors(
         &self,
-        env: &mut JNIEnv<'a>,
+        env: &mut Env<'a>,
     ) -> Result<Vec<JBluetoothGattDescriptor<'a>>> {
         let obj = unsafe {
             env.call_method_unchecked(
@@ -557,7 +557,7 @@ pub struct JBluetoothGattDescriptor<'a> {
 }
 
 impl<'a> JBluetoothGattDescriptor<'a> {
-    pub fn from_env(env: &mut JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+    pub fn from_env(env: &mut Env<'a>, obj: JObject<'a>) -> Result<Self> {
         let class = env.find_class("android/bluetooth/BluetoothGattDescriptor")?;
 
         let get_uuid = env.get_method_id(&class, "getUuid", "()Ljava/util/UUID;")?;
@@ -567,7 +567,7 @@ impl<'a> JBluetoothGattDescriptor<'a> {
         })
     }
 
-    pub fn get_uuid(&self, env: &mut JNIEnv<'a>) -> Result<Uuid> {
+    pub fn get_uuid(&self, env: &mut Env<'a>) -> Result<Uuid> {
         let obj = unsafe {
             env.call_method_unchecked(&self.internal, self.get_uuid, ReturnType::Object, &[])
         }?
@@ -583,7 +583,7 @@ pub struct JBluetoothDevice<'a> {
 }
 
 impl<'a> JBluetoothDevice<'a> {
-    pub fn from_env(env: &mut JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+    pub fn from_env(env: &mut Env<'a>, obj: JObject<'a>) -> Result<Self> {
         let class = env.find_class("android/bluetooth/BluetoothDevice")?;
 
         let get_address = env.get_method_id(&class, "getAddress", "()Ljava/lang/String;")?;
@@ -593,7 +593,7 @@ impl<'a> JBluetoothDevice<'a> {
         })
     }
 
-    pub fn get_address(&self, env: &mut JNIEnv<'a>) -> Result<JString<'a>> {
+    pub fn get_address(&self, env: &mut Env<'a>) -> Result<JString<'a>> {
         let obj = unsafe {
             env.call_method_unchecked(&self.internal, self.get_address, ReturnType::Object, &[])
         }?
@@ -607,7 +607,7 @@ pub struct JScanFilter<'a> {
 }
 
 impl<'a> JScanFilter<'a> {
-    pub fn new(env: &mut JNIEnv<'a>, filter: ScanFilter) -> Result<Self> {
+    pub fn new(env: &mut Env<'a>, filter: ScanFilter) -> Result<Self> {
         let string_class = env.find_class("java/lang/String")?;
         let uuids = env.new_object_array(
             filter.services.len() as i32,
@@ -646,7 +646,7 @@ pub struct JScanResult<'a> {
 }
 
 impl<'a> JScanResult<'a> {
-    pub fn from_env(env: &mut JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+    pub fn from_env(env: &mut Env<'a>, obj: JObject<'a>) -> Result<Self> {
         let class = env.find_class("android/bluetooth/le/ScanResult")?;
 
         let get_device =
@@ -667,7 +667,7 @@ impl<'a> JScanResult<'a> {
         })
     }
 
-    pub fn get_device(&self, env: &mut JNIEnv<'a>) -> Result<JBluetoothDevice<'a>> {
+    pub fn get_device(&self, env: &mut Env<'a>) -> Result<JBluetoothDevice<'a>> {
         let obj = unsafe {
             env.call_method_unchecked(&self.internal, self.get_device, ReturnType::Object, &[])
         }?
@@ -675,7 +675,7 @@ impl<'a> JScanResult<'a> {
         JBluetoothDevice::from_env(env, obj)
     }
 
-    pub fn get_scan_record(&self, env: &mut JNIEnv<'a>) -> Result<JScanRecord<'a>> {
+    pub fn get_scan_record(&self, env: &mut Env<'a>) -> Result<JScanRecord<'a>> {
         let obj = unsafe {
             env.call_method_unchecked(
                 &self.internal,
@@ -688,7 +688,7 @@ impl<'a> JScanResult<'a> {
         JScanRecord::from_env(env, obj)
     }
 
-    pub fn get_tx_power(&self, env: &mut JNIEnv<'a>) -> Result<jint> {
+    pub fn get_tx_power(&self, env: &mut Env<'a>) -> Result<jint> {
         unsafe {
             env.call_method_unchecked(
                 &self.internal,
@@ -700,7 +700,7 @@ impl<'a> JScanResult<'a> {
         .i()
     }
 
-    pub fn get_rssi(&self, env: &mut JNIEnv<'a>) -> Result<jint> {
+    pub fn get_rssi(&self, env: &mut Env<'a>) -> Result<jint> {
         unsafe {
             env.call_method_unchecked(
                 &self.internal,
@@ -714,7 +714,7 @@ impl<'a> JScanResult<'a> {
 
     pub fn to_peripheral_properties(
         &self,
-        env: &mut JNIEnv<'a>,
+        env: &mut Env<'a>,
     ) -> std::result::Result<(BDAddr, Option<PeripheralProperties>), crate::Error> {
         use std::str::FromStr;
 
@@ -872,7 +872,7 @@ impl<'a> ::std::ops::Deref for JScanRecord<'a> {
 }
 
 impl<'a> JScanRecord<'a> {
-    pub fn from_env(env: &mut JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+    pub fn from_env(env: &mut Env<'a>, obj: JObject<'a>) -> Result<Self> {
         let class = env.find_class("android/bluetooth/le/ScanRecord")?;
 
         let get_device_name = env.get_method_id(&class, "getDeviceName", "()Ljava/lang/String;")?;
@@ -895,7 +895,7 @@ impl<'a> JScanRecord<'a> {
         })
     }
 
-    pub fn get_device_name(&self, env: &mut JNIEnv<'a>) -> Result<JObject<'a>> {
+    pub fn get_device_name(&self, env: &mut Env<'a>) -> Result<JObject<'a>> {
         unsafe {
             env.call_method_unchecked(
                 &self.internal,
@@ -907,7 +907,7 @@ impl<'a> JScanRecord<'a> {
         .l()
     }
 
-    pub fn get_tx_power_level(&self, env: &mut JNIEnv<'a>) -> Result<jint> {
+    pub fn get_tx_power_level(&self, env: &mut Env<'a>) -> Result<jint> {
         unsafe {
             env.call_method_unchecked(
                 &self.internal,
@@ -921,7 +921,7 @@ impl<'a> JScanRecord<'a> {
 
     pub fn get_manufacturer_specific_data(
         &self,
-        env: &mut JNIEnv<'a>,
+        env: &mut Env<'a>,
     ) -> Result<JSparseArray<'a>> {
         let obj = unsafe {
             env.call_method_unchecked(
@@ -935,7 +935,7 @@ impl<'a> JScanRecord<'a> {
         JSparseArray::from_env(env, obj)
     }
 
-    pub fn get_service_data(&self, env: &mut JNIEnv<'a>) -> Result<JObject<'a>> {
+    pub fn get_service_data(&self, env: &mut Env<'a>) -> Result<JObject<'a>> {
         unsafe {
             env.call_method_unchecked(
                 &self.internal,
@@ -947,7 +947,7 @@ impl<'a> JScanRecord<'a> {
         .l()
     }
 
-    pub fn get_service_uuids(&self, env: &mut JNIEnv<'a>) -> Result<JObject<'a>> {
+    pub fn get_service_uuids(&self, env: &mut Env<'a>) -> Result<JObject<'a>> {
         unsafe {
             env.call_method_unchecked(
                 &self.internal,
@@ -982,7 +982,7 @@ impl<'a> ::std::ops::Deref for JSparseArray<'a> {
 }
 
 impl<'a> JSparseArray<'a> {
-    pub fn from_env(env: &mut JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+    pub fn from_env(env: &mut Env<'a>, obj: JObject<'a>) -> Result<Self> {
         let class = env.find_class("android/util/SparseArray")?;
 
         let size = env.get_method_id(&class, "size", "()I")?;
@@ -996,7 +996,7 @@ impl<'a> JSparseArray<'a> {
         })
     }
 
-    pub fn size(&self, env: &mut JNIEnv<'a>) -> Result<jint> {
+    pub fn size(&self, env: &mut Env<'a>) -> Result<jint> {
         unsafe {
             env.call_method_unchecked(
                 &self.internal,
@@ -1008,7 +1008,7 @@ impl<'a> JSparseArray<'a> {
         .i()
     }
 
-    pub fn key_at(&self, env: &mut JNIEnv<'a>, index: jint) -> Result<jint> {
+    pub fn key_at(&self, env: &mut Env<'a>, index: jint) -> Result<jint> {
         unsafe {
             env.call_method_unchecked(
                 &self.internal,
@@ -1020,7 +1020,7 @@ impl<'a> JSparseArray<'a> {
         .i()
     }
 
-    pub fn value_at(&self, env: &mut JNIEnv<'a>, index: jint) -> Result<JObject<'a>> {
+    pub fn value_at(&self, env: &mut Env<'a>, index: jint) -> Result<JObject<'a>> {
         unsafe {
             env.call_method_unchecked(
                 &self.internal,
@@ -1039,7 +1039,7 @@ pub struct JParcelUuid<'a> {
 }
 
 impl<'a> JParcelUuid<'a> {
-    pub fn from_env(env: &mut JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+    pub fn from_env(env: &mut Env<'a>, obj: JObject<'a>) -> Result<Self> {
         let class = env.find_class("android/os/ParcelUuid")?;
 
         let get_uuid = env.get_method_id(&class, "getUuid", "()Ljava/util/UUID;")?;
@@ -1049,7 +1049,7 @@ impl<'a> JParcelUuid<'a> {
         })
     }
 
-    pub fn get_uuid(&self, env: &mut JNIEnv<'a>) -> Result<JUuid<'a>> {
+    pub fn get_uuid(&self, env: &mut Env<'a>) -> Result<JUuid<'a>> {
         let obj = unsafe {
             env.call_method_unchecked(&self.internal, self.get_uuid, ReturnType::Object, &[])
         }?

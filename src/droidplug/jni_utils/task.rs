@@ -1,13 +1,12 @@
 use ::jni::{
-    JNIEnv,
+    Env,
     errors::Result,
     objects::{JClass, JMethodID, JObject},
     signature::ReturnType,
 };
 use std::task::Waker;
 
-/// Wraps the given waker in a `io.github.gedgygedgy.rust.task.Waker` object.
-pub fn waker<'a>(env: &mut JNIEnv<'a>, waker: Waker) -> Result<JObject<'a>> {
+pub fn waker<'a>(env: &mut Env<'a>, waker: Waker) -> Result<JObject<'a>> {
     let runnable = super::ops::fn_once_runnable(env, |_e, _o| waker.wake())?;
 
     let class = super::classcache::get_class("io/github/gedgygedgy/rust/task/Waker").unwrap();
@@ -19,22 +18,20 @@ pub fn waker<'a>(env: &mut JNIEnv<'a>, waker: Waker) -> Result<JObject<'a>> {
     Ok(obj)
 }
 
-/// Wrapper for [`JObject`]s that implement
-/// `io.github.gedgygedgy.rust.task.PollResult`.
 pub struct JPollResult<'a> {
     internal: JObject<'a>,
     get: JMethodID,
 }
 
 impl<'a> JPollResult<'a> {
-    pub fn from_env(env: &mut JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
+    pub fn from_env(env: &mut Env<'a>, obj: JObject<'a>) -> Result<Self> {
         let class =
             super::classcache::get_class("io/github/gedgygedgy/rust/task/PollResult").unwrap();
         let get = env.get_method_id(<&JClass>::from(class.as_obj()), "get", "()Ljava/lang/Object;")?;
         Ok(Self { internal: obj, get })
     }
 
-    pub fn get(&self, env: &mut JNIEnv<'a>) -> Result<JObject<'a>> {
+    pub fn get(&self, env: &mut Env<'a>) -> Result<JObject<'a>> {
         unsafe { env.call_method_unchecked(&self.internal, self.get, ReturnType::Object, &[]) }?
             .l()
     }

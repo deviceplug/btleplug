@@ -15,7 +15,7 @@ use crate::{
 use async_trait::async_trait;
 use futures::stream::Stream;
 use jni::{
-    Env,
+    Env, jni_sig, jni_str,
     objects::{Global, JClass, JObject, JString, JValue},
 };
 #[cfg(feature = "serde")]
@@ -67,7 +67,7 @@ fn get_poll_result<'a>(
 
             if env.is_instance_of(&ex, <&JClass>::from(future_exception_class.as_obj()))? {
                 let cause = env
-                    .call_method(&ex, "getCause", "()Ljava/lang/Throwable;", &[])?
+                    .call_method(&ex, jni_str!("getCause"), jni_sig!("()Ljava/lang/Throwable;"), &[])?
                     .l()?;
 
                 let mut check = |name: &str| -> jni::errors::Result<bool> {
@@ -97,9 +97,9 @@ fn get_poll_result<'a>(
                     "com/nonpolynomial/btleplug/android/impl/NoBluetoothAdapterException",
                 )? {
                     Err(Error::NoAdapterAvailable)
-                } else if env.is_instance_of(&cause, "java/lang/RuntimeException")? {
+                } else if env.is_instance_of(&cause, jni_str!("java/lang/RuntimeException"))? {
                     let msg = env
-                        .call_method(&cause, "getMessage", "()Ljava/lang/String;", &[])?
+                        .call_method(&cause, jni_str!("getMessage"), jni_sig!("()Ljava/lang/String;"), &[])?
                         .l()?;
                     let jstr: JString = msg.into();
                     let msgstr: String = env.get_string(&jstr)?.into();
@@ -243,7 +243,7 @@ impl api::Peripheral for Peripheral {
         let mtu_result_ref = mtu_future.await?;
         self.with_obj(|env, _obj| -> Result<()> {
             let mtu_obj = get_poll_result(env, &mtu_result_ref)?;
-            let mtu_val = env.call_method(&mtu_obj, "intValue", "()I", &[])?.i()?;
+            let mtu_val = env.call_method(&mtu_obj, jni_str!("intValue"), jni_sig!("()I"), &[])?.i()?;
             self.mtu.store(mtu_val as u16, Ordering::Relaxed);
             Ok(())
         })?;
@@ -274,13 +274,13 @@ impl api::Peripheral for Peripheral {
             use std::iter::FromIterator;
 
             let obj = get_poll_result(env, &result_ref)?;
-            let size = env.call_method(&obj, "size", "()I", &[])?.i()?;
+            let size = env.call_method(&obj, jni_str!("size"), jni_sig!("()I"), &[])?.i()?;
             let mut peripheral_services = Vec::new();
             let mut peripheral_characteristics = Vec::new();
 
             for i in 0..size {
                 let svc_obj = env
-                    .call_method(&obj, "get", "(I)Ljava/lang/Object;", &[JValue::from(i)])?
+                    .call_method(&obj, jni_str!("get"), jni_sig!("(I)Ljava/lang/Object;"), &[JValue::from(i)])?
                     .l()?;
                 let service = JBluetoothGattService::from_env(env, svc_obj)?;
                 let mut characteristics = BTreeSet::<Characteristic>::new();
@@ -414,7 +414,7 @@ impl api::Peripheral for Peripheral {
         let result_ref = future.await?;
         self.with_obj(|env, _obj| {
             let rssi_obj = get_poll_result(env, &result_ref)?;
-            let rssi_val = env.call_method(&rssi_obj, "intValue", "()I", &[])?.i()?;
+            let rssi_val = env.call_method(&rssi_obj, jni_str!("intValue"), jni_sig!("()I"), &[])?.i()?;
             Ok(rssi_val as i16)
         })
     }

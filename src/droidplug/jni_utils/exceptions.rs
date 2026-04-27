@@ -2,6 +2,7 @@ use jni::{
     Env,
     descriptors::Desc,
     errors::Error,
+    jni_str, jni_sig,
     objects::{JClass, JObject, JThrowable},
 };
 use std::{
@@ -112,11 +113,11 @@ impl<'a> JPanicException<'a> {
         };
 
         let obj = env.new_object(
-            "io/github/gedgygedgy/rust/panic/PanicException",
-            "(Ljava/lang/String;)V",
+            jni_str!("io/github/gedgygedgy/rust/panic/PanicException"),
+            jni_sig!("(Ljava/lang/String;)V"),
             &[(&msg).into()],
         )?;
-        unsafe { env.set_rust_field(&obj, "any", any) }?;
+        unsafe { env.set_rust_field(&obj, jni_str!("any"), any) }?;
         Ok(Self {
             internal: obj.into(),
         })
@@ -126,11 +127,11 @@ impl<'a> JPanicException<'a> {
         &self,
         env: &'b mut Env,
     ) -> Result<MutexGuard<'b, Box<dyn Any + Send + 'static>>, Error> {
-        unsafe { env.get_rust_field(&self.internal, "any") }
+        unsafe { env.get_rust_field(&self.internal, jni_str!("any")) }
     }
 
     pub fn take(&self, env: &mut Env) -> Result<Box<dyn Any + Send + 'static>, Error> {
-        unsafe { env.take_rust_field(&self.internal, "any") }
+        unsafe { env.take_rust_field(&self.internal, jni_str!("any")) }
     }
 
     pub fn resume_unwind(&self, env: &mut Env) -> Result<(), Error> {
@@ -171,8 +172,8 @@ pub fn throw_panic(
     if let Some(old_ex) = old_ex {
         env.call_method(
             &*ex,
-            "addSuppressed",
-            "(Ljava/lang/Throwable;)V",
+            jni_str!("addSuppressed"),
+            jni_sig!("(Ljava/lang/Throwable;)V"),
             &[(&old_ex).into()],
         )?;
     }
@@ -192,7 +193,7 @@ pub fn throw_unwind<R>(
 
 #[cfg(test)]
 mod test {
-    use jni::{Env, errors::Error, objects::{JObject, JThrowable}};
+    use jni::{Env, errors::Error, jni_str, jni_sig, objects::{JObject, JThrowable}, strings::JNIString};
 
     use super::super::test_utils;
     use super::try_block;
@@ -211,14 +212,14 @@ mod test {
             None
         };
         let illegal_argument_exception = env
-            .find_class("java/lang/IllegalArgumentException")
+            .find_class(jni_str!("java/lang/IllegalArgumentException"))
             .unwrap();
         if let Some(ref ex) = old_ex {
             env.throw(ex).unwrap();
         }
 
         let ex = throw_class.map(|c| {
-            let obj = env.new_object(c, "()V", &[]).unwrap();
+            let obj = env.new_object(JNIString::from(c), jni_sig!("()V"), &[]).unwrap();
             JThrowable::from(obj)
         });
 
@@ -235,7 +236,7 @@ mod test {
         })
         .catch(
             env,
-            "java/lang/ArrayIndexOutOfBoundsException",
+            jni_str!("java/lang/ArrayIndexOutOfBoundsException"),
             |env, caught| {
                 assert!(!env.exception_check().unwrap());
                 assert!(env.is_same_object(&caught, ex.as_ref().unwrap()).unwrap());
@@ -248,7 +249,7 @@ mod test {
         )
         .catch(
             env,
-            "java/lang/IndexOutOfBoundsException",
+            jni_str!("java/lang/IndexOutOfBoundsException"),
             |env, caught| {
                 assert!(!env.exception_check().unwrap());
                 assert!(env.is_same_object(&caught, ex.as_ref().unwrap()).unwrap());
@@ -262,7 +263,7 @@ mod test {
         )
         .catch(
             env,
-            "java/lang/StringIndexOutOfBoundsException",
+            jni_str!("java/lang/StringIndexOutOfBoundsException"),
             |env, caught| {
                 assert!(!env.exception_check().unwrap());
                 assert!(env.is_same_object(&caught, ex.as_ref().unwrap()).unwrap());
@@ -351,7 +352,7 @@ mod test {
                 let ex = env.exception_occurred().unwrap();
                 env.exception_clear().unwrap();
                 assert!(
-                    env.is_instance_of(&ex, "java/lang/SecurityException")
+                    env.is_instance_of(&ex, jni_str!("java/lang/SecurityException"))
                         .unwrap()
                 );
             } else {
@@ -393,7 +394,7 @@ mod test {
         test_utils::JVM_ENV.with(|cell| {
             let env = &mut *cell.borrow_mut();
             let ex = JThrowable::from(
-                env.new_object("java/lang/IllegalArgumentException", "()V", &[])
+                env.new_object(jni_str!("java/lang/IllegalArgumentException"), jni_sig!("()V"), &[])
                     .unwrap(),
             );
             env.throw(&ex).unwrap();
@@ -425,7 +426,7 @@ mod test {
                 let ex = env.exception_occurred().unwrap();
                 env.exception_clear().unwrap();
                 assert!(
-                    env.is_instance_of(&ex, "java/lang/StringIndexOutOfBoundsException")
+                    env.is_instance_of(&ex, jni_str!("java/lang/StringIndexOutOfBoundsException"))
                         .unwrap()
                 );
             } else {
@@ -469,7 +470,7 @@ mod test {
             }
 
             let msg: JString = env
-                .call_method(&*ex, "getMessage", "()Ljava/lang/String;", &[])
+                .call_method(&*ex, jni_str!("getMessage"), jni_sig!("()Ljava/lang/String;"), &[])
                 .unwrap()
                 .l()
                 .unwrap()
@@ -496,7 +497,7 @@ mod test {
             }
 
             let msg: JString = env
-                .call_method(&*ex, "getMessage", "()Ljava/lang/String;", &[])
+                .call_method(&*ex, jni_str!("getMessage"), jni_sig!("()Ljava/lang/String;"), &[])
                 .unwrap()
                 .l()
                 .unwrap()
@@ -525,7 +526,7 @@ mod test {
             }
 
             let msg = env
-                .call_method(&*ex, "getMessage", "()Ljava/lang/String;", &[])
+                .call_method(&*ex, jni_str!("getMessage"), jni_sig!("()Ljava/lang/String;"), &[])
                 .unwrap()
                 .l()
                 .unwrap();
@@ -557,12 +558,12 @@ mod test {
             let ex = env.exception_occurred().unwrap();
             env.exception_clear().unwrap();
             assert!(
-                env.is_instance_of(&ex, "io/github/gedgygedgy/rust/panic/PanicException")
+                env.is_instance_of(&ex, jni_str!("io/github/gedgygedgy/rust/panic/PanicException"))
                     .unwrap()
             );
 
             let suppressed_list = env
-                .call_method(&ex, "getSuppressed", "()[Ljava/lang/Throwable;", &[])
+                .call_method(&ex, jni_str!("getSuppressed"), jni_sig!("()[Ljava/lang/Throwable;"), &[])
                 .unwrap()
                 .l()
                 .unwrap();
@@ -583,7 +584,7 @@ mod test {
         test_utils::JVM_ENV.with(|cell| {
             let env = &mut *cell.borrow_mut();
             let old_ex =
-                JThrowable::from(env.new_object("java/lang/Exception", "()V", &[]).unwrap());
+                JThrowable::from(env.new_object(jni_str!("java/lang/Exception"), jni_sig!("()V"), &[]).unwrap());
             env.throw(&old_ex).unwrap();
 
             super::throw_unwind(env, || panic!("This is a panic"))
@@ -593,12 +594,12 @@ mod test {
             let ex = env.exception_occurred().unwrap();
             env.exception_clear().unwrap();
             assert!(
-                env.is_instance_of(&ex, "io/github/gedgygedgy/rust/panic/PanicException")
+                env.is_instance_of(&ex, jni_str!("io/github/gedgygedgy/rust/panic/PanicException"))
                     .unwrap()
             );
 
             let suppressed_list = env
-                .call_method(&ex, "getSuppressed", "()[Ljava/lang/Throwable;", &[])
+                .call_method(&ex, jni_str!("getSuppressed"), jni_sig!("()[Ljava/lang/Throwable;"), &[])
                 .unwrap()
                 .l()
                 .unwrap();

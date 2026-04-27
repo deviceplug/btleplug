@@ -1,6 +1,6 @@
 pub mod objects;
 
-use ::jni::{Env, EnvUnowned, NativeMethod, jni_str, objects::JObject};
+use ::jni::{Env, NativeMethod, jni_str, native_method, objects::JObject};
 use jni::{objects::JString, sys::jboolean};
 use std::ffi::c_void;
 use std::sync::Once;
@@ -24,16 +24,16 @@ fn init_inner(env: &mut Env) -> crate::Result<()> {
         unsafe { env.register_native_methods(
             &adapter_class,
             &[
-                NativeMethod::from_raw_parts(
-                    jni_str!("reportScanResult"),
-                    jni_str!("(Landroid/bluetooth/le/ScanResult;)V"),
-                    adapter_report_scan_result as *mut c_void,
-                ),
-                NativeMethod::from_raw_parts(
-                    jni_str!("onConnectionStateChanged"),
-                    jni_str!("(Ljava/lang/String;Z)V"),
-                    adapter_on_connection_state_changed as *mut c_void,
-                ),
+                native_method! {
+                    name = "reportScanResult",
+                    sig = (scan_result: JObject) -> (),
+                    fn = adapter_report_scan_result,
+                },
+                native_method! {
+                    name = "onConnectionStateChanged",
+                    sig = (addr: JString, connected: jboolean) -> (),
+                    fn = adapter_on_connection_state_changed,
+                },
             ],
         )? };
         super::jni_utils::classcache::find_add_class(
@@ -140,25 +140,21 @@ impl From<::jni::errors::Error> for crate::Error {
     }
 }
 
-extern "C" fn adapter_report_scan_result<'a>(mut env: EnvUnowned<'a>, obj: JObject, scan_result: JObject<'a>) {
-    let outcome = env.with_env(|env| {
-        let _ = super::adapter::adapter_report_scan_result_internal(env, &obj, scan_result);
-        Ok::<(), jni::errors::Error>(())
-    });
-    let _ = outcome.into_outcome();
+fn adapter_report_scan_result<'local>(
+    env: &mut Env<'local>,
+    obj: JObject<'local>,
+    scan_result: JObject<'local>,
+) -> jni::errors::Result<()> {
+    super::adapter::adapter_report_scan_result_internal(env, &obj, scan_result)
+        .map_err(|e| jni::errors::Error::Other(Box::new(e)))
 }
 
-extern "C" fn adapter_on_connection_state_changed(
-    mut env: EnvUnowned,
-    obj: JObject,
-    addr: JString,
+fn adapter_on_connection_state_changed<'local>(
+    env: &mut Env<'local>,
+    obj: JObject<'local>,
+    addr: JString<'local>,
     connected: jboolean,
-) {
-    let outcome = env.with_env(|env| {
-        let _ = super::adapter::adapter_on_connection_state_changed_internal(
-            env, &obj, addr, connected,
-        );
-        Ok::<(), jni::errors::Error>(())
-    });
-    let _ = outcome.into_outcome();
+) -> jni::errors::Result<()> {
+    super::adapter::adapter_on_connection_state_changed_internal(env, &obj, addr, connected)
+        .map_err(|e| jni::errors::Error::Other(Box::new(e)))
 }

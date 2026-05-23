@@ -5,6 +5,7 @@ use ::jni::{
     jni_sig, jni_str,
     objects::{JObject, Reference},
 };
+use ::jni::errors::ThrowRuntimeExAndDefault;
 use std::sync::{Arc, Mutex};
 
 bind_java_type! {
@@ -313,7 +314,7 @@ pub(crate) extern "C" fn fn_adapter_call_internal<'local>(
 ) -> JObject<'local> {
     use std::panic::{AssertUnwindSafe, catch_unwind};
 
-    let outcome = env.with_env(|env| -> std::result::Result<JObject<'local>, jni::errors::Error> {
+    env.with_env(|env| -> std::result::Result<JObject<'local>, jni::errors::Error> {
         let arc =
             if let Ok(f) = unsafe { env.get_rust_field::<_, _, FnWrapper>(&obj1, jni_str!("data")) } {
                 AssertUnwindSafe(f.0.clone())
@@ -327,24 +328,21 @@ pub(crate) extern "C" fn fn_adapter_call_internal<'local>(
                 Ok(JObject::null())
             }
         }
-    });
-    match outcome.into_outcome() {
-        jni::Outcome::Ok(obj) => obj,
-        _ => JObject::null(),
-    }
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }
 
 pub(crate) extern "C" fn fn_adapter_close_internal(mut env: EnvUnowned, obj: JObject) {
     use std::panic::{AssertUnwindSafe, catch_unwind};
 
-    let outcome = env.with_env(|env| {
+    env.with_env(|env| {
         let result = catch_unwind(AssertUnwindSafe(|| {
             let _ = unsafe { env.take_rust_field::<_, _, FnWrapper>(&obj, jni_str!("data")) };
         }));
         if let Err(panic) = result {
-            let _ = super::exceptions::throw_panic(env, panic);
+            super::exceptions::throw_panic(env, panic)?;
         }
         Ok::<(), jni::errors::Error>(())
-    });
-    let _ = outcome.into_outcome();
+    })
+    .resolve::<ThrowRuntimeExAndDefault>();
 }

@@ -42,6 +42,7 @@ pub fn find_descriptor(
 
 use jni::objects::JClass;
 use jni::{Env, EnvUnowned, jni_str};
+use jni::errors::ThrowRuntimeExAndDefault;
 use std::sync::OnceLock;
 use tokio::runtime::Runtime;
 
@@ -95,11 +96,8 @@ pub extern "system" fn Java_com_nonpolynomial_btleplug_test_NativeTests_initBtle
             .with_max_level(log::LevelFilter::Debug)
             .with_tag("btleplug-test"),
     );
-    let outcome = env.with_env(|env| {
-        btleplug::platform::init(env).expect("failed to initialize btleplug");
-        Ok::<_, jni::errors::Error>(())
-    });
-    let _ = outcome.into_outcome();
+    env.with_env(|env| btleplug::platform::init(env))
+        .resolve::<ThrowRuntimeExAndDefault>();
 }
 
 // ── Test JNI exports ────────────────────────────────────────────────
@@ -111,11 +109,11 @@ macro_rules! jni_test {
     ($jni_name:ident, $test_fn:path) => {
         #[unsafe(no_mangle)]
         pub extern "system" fn $jni_name(mut env: EnvUnowned, _class: JClass) {
-            let outcome = env.with_env(|env| {
+            env.with_env(|env| {
                 run_test(env, stringify!($test_fn), $test_fn());
                 Ok::<_, jni::errors::Error>(())
-            });
-            let _ = outcome.into_outcome();
+            })
+            .resolve::<ThrowRuntimeExAndDefault>();
         }
     };
 }

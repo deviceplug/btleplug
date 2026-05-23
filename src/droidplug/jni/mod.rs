@@ -1,6 +1,7 @@
 pub mod objects;
 
 use ::jni::{Env, EnvUnowned, NativeMethod, jni_str, native_method, objects::{JObject, Reference}};
+use ::jni::errors::ThrowRuntimeExAndDefault;
 use jni::{objects::JString, sys::jboolean};
 use std::ffi::c_void;
 use std::sync::Once;
@@ -105,11 +106,8 @@ extern "C" fn adapter_report_scan_result<'local>(
     obj: JObject<'local>,
     scan_result: JObject<'local>,
 ) {
-    let outcome = env.with_env(|env| {
-        let _ = super::adapter::adapter_report_scan_result_internal(env, &obj, scan_result);
-        Ok::<_, jni::errors::Error>(())
-    });
-    let _ = outcome.into_outcome();
+    env.with_env(|env| super::adapter::adapter_report_scan_result_internal(env, &obj, scan_result))
+        .resolve::<ThrowRuntimeExAndDefault>();
 }
 
 fn adapter_on_connection_state_changed<'local>(
@@ -118,6 +116,12 @@ fn adapter_on_connection_state_changed<'local>(
     addr: JString<'local>,
     connected: jboolean,
 ) -> jni::errors::Result<()> {
-    let _ = super::adapter::adapter_on_connection_state_changed_internal(env, &obj, addr, connected);
+    if let Err(e) =
+        super::adapter::adapter_on_connection_state_changed_internal(env, &obj, addr, connected)
+    {
+        if !env.exception_check() {
+            let _ = env.throw(format!("Rust error: {e}"));
+        }
+    }
     Ok(())
 }

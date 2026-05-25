@@ -26,13 +26,11 @@ pub fn try_block<T>(
     block: impl FnOnce(&mut Env) -> Result<T, Error>,
 ) -> TryCatchResult<T> {
     TryCatchResult {
-        try_result: (|| {
-            if env.exception_check() {
-                Err(Error::JavaException)
-            } else {
-                Ok(block(env))
-            }
-        })(),
+        try_result: if env.exception_check() {
+            Err(Error::JavaException)
+        } else {
+            Ok(block(env))
+        },
         catch_result: None,
     }
 }
@@ -59,18 +57,18 @@ impl<T> TryCatchResult<T> {
             },
             (Ok(Err(Error::JavaException)), None) => {
                 let catch_result = (|| {
-                    if env.exception_check() {
-                        if let Some(ex) = env.exception_occurred() {
-                            env.exception_clear();
-                            if env.is_instance_of(&ex, class)? {
-                                return block(env, ex).map(|o| Some(o));
-                            }
-                            // Rethrow — throw() returns Err(JavaException) on success
-                            match env.throw(&ex) {
-                                Err(Error::JavaException) => {}
-                                Err(e) => return Err(e),
-                                Ok(()) => {}
-                            }
+                    if env.exception_check()
+                        && let Some(ex) = env.exception_occurred()
+                    {
+                        env.exception_clear();
+                        if env.is_instance_of(&ex, class)? {
+                            return block(env, ex).map(|o| Some(o));
+                        }
+                        // Rethrow — throw() returns Err(JavaException) on success
+                        match env.throw(&ex) {
+                            Err(Error::JavaException) => {}
+                            Err(e) => return Err(e),
+                            Ok(()) => {}
                         }
                     }
                     Ok(None)

@@ -206,14 +206,11 @@ async fn central_events(
         },
         BluetoothEvent::Adapter {
             id,
-            event: adapter_event,
-        } if id == adapter_id => match adapter_event {
-            AdapterEvent::Powered { powered } => {
-                let state = get_central_state(powered);
-                Some(vec![CentralEvent::StateUpdate(state)])
-            }
-            _ => None,
-        },
+            event: AdapterEvent::Powered { powered },
+        } if id == adapter_id => {
+            let state = get_central_state(powered);
+            Some(vec![CentralEvent::StateUpdate(state)])
+        }
         _ => None,
     }
 }

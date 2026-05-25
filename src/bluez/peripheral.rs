@@ -141,7 +141,7 @@ impl api::Peripheral for Peripheral {
     fn mtu(&self) -> u16 {
         let services = self.services.lock().unwrap();
         for (_, service) in services.iter() {
-            for (_, characteristic) in service.characteristics.iter() {
+            if let Some((_, characteristic)) = service.characteristics.iter().next() {
                 return characteristic.info.mtu.unwrap();
             }
         }
@@ -202,9 +202,7 @@ impl api::Peripheral for Peripheral {
                         // This "should" be unique, but of course it's not enforced
                         HashMap::<Uuid, CharacteristicInfo>::new(),
                         |mut map, characteristic| {
-                            if !map.contains_key(&characteristic.uuid) {
-                                map.insert(characteristic.uuid, characteristic);
-                            }
+                            map.entry(characteristic.uuid).or_insert(characteristic);
                             map
                         },
                     )
@@ -391,8 +389,8 @@ fn make_characteristic(
         uuid: info.uuid,
         properties: info.flags.into(),
         descriptors: descriptors
-            .iter()
-            .map(|(_, descriptor)| make_descriptor(descriptor, info.uuid, service_uuid))
+            .values()
+            .map(|descriptor| make_descriptor(descriptor, info.uuid, service_uuid))
             .collect(),
         service_uuid,
     }

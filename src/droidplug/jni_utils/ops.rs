@@ -43,6 +43,7 @@ macro_rules! define_fn_adapter {
         signature: $closure_name:ident: impl for<'c, 'd> Fn$args:tt -> $ret:ty,
         closure: $closure:expr,
     ) => {
+        #[allow(clippy::unused_unit)]
         fn $foi<'local>(
             env: &mut Env<'local>,
             $closure_name: impl for<'c, 'd> FnOnce$args -> $ret + 'static,
@@ -57,6 +58,7 @@ macro_rules! define_fn_adapter {
             )
         }
 
+        #[allow(clippy::unused_unit)]
         pub fn $fo<'local>(
             env: &mut Env<'local>,
             f: impl for<'c, 'd> FnOnce$args -> $ret + Send + 'static,
@@ -64,7 +66,7 @@ macro_rules! define_fn_adapter {
             $foi(env, f, false)
         }
 
-        #[allow(dead_code)]
+        #[allow(dead_code, clippy::unused_unit)]
         pub fn $fol<'local>(
             env: &mut Env<'local>,
             f: impl for<'c, 'd> FnOnce$args -> $ret + 'static,
@@ -72,6 +74,7 @@ macro_rules! define_fn_adapter {
             $foi(env, f, true)
         }
 
+        #[allow(clippy::unused_unit)]
         fn $fmi<'local>(
             env: &mut Env<'local>,
             mut $closure_name: impl for<'c, 'd> FnMut$args -> $ret + 'static,
@@ -86,7 +89,7 @@ macro_rules! define_fn_adapter {
             )
         }
 
-        #[allow(dead_code)]
+        #[allow(dead_code, clippy::unused_unit)]
         pub fn $fm<'local>(
             env: &mut Env<'local>,
             f: impl for<'c, 'd> FnMut$args -> $ret + Send + 'static,
@@ -94,7 +97,7 @@ macro_rules! define_fn_adapter {
             $fmi(env, f, false)
         }
 
-        #[allow(dead_code)]
+        #[allow(dead_code, clippy::unused_unit)]
         pub fn $fml<'local>(
             env: &mut Env<'local>,
             f: impl for<'c, 'd> FnMut$args -> $ret + 'static,
@@ -102,6 +105,7 @@ macro_rules! define_fn_adapter {
             $fmi(env, f, true)
         }
 
+        #[allow(clippy::unused_unit)]
         fn $fi<'local>(
             env: &mut Env<'local>,
             $closure_name: impl for<'c, 'd> Fn$args -> $ret + 'static,
@@ -116,7 +120,7 @@ macro_rules! define_fn_adapter {
             )
         }
 
-        #[allow(dead_code)]
+        #[allow(dead_code, clippy::unused_unit)]
         pub fn $f<'local>(
             env: &mut Env<'local>,
             f: impl for<'c, 'd> Fn$args -> $ret + Send + Sync + 'static,
@@ -124,7 +128,7 @@ macro_rules! define_fn_adapter {
             $fi(env, f, false)
         }
 
-        #[allow(dead_code)]
+        #[allow(dead_code, clippy::unused_unit)]
         pub fn $fl<'local>(
             env: &mut Env<'local>,
             f: impl for<'c, 'd> Fn$args -> $ret + 'static,
@@ -272,6 +276,7 @@ fn fn_mut_adapter<'local>(
     )
 }
 
+#[allow(clippy::type_complexity)]
 fn fn_adapter<'local>(
     env: &mut Env<'local>,
     f: impl for<'c, 'd> Fn(

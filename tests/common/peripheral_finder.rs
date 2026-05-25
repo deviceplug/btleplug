@@ -41,12 +41,15 @@ pub async fn get_adapter() -> &'static Adapter {
                             .expect("failed to create adapter runtime");
                         rt.block_on(async {
                             log::info!("adapter thread: creating manager");
-                            let manager = Manager::new().await.expect("failed to create BLE manager");
+                            let manager =
+                                Manager::new().await.expect("failed to create BLE manager");
                             log::info!("adapter thread: getting adapters");
-                            let adapters = manager.adapters().await.expect("failed to get adapters");
+                            let adapters =
+                                manager.adapters().await.expect("failed to get adapters");
                             log::info!("adapter thread: got {} adapters", adapters.len());
                             std::mem::forget(manager);
-                            let adapter = adapters.into_iter().next().expect("no BLE adapters found");
+                            let adapter =
+                                adapters.into_iter().next().expect("no BLE adapters found");
                             log::info!("adapter thread: sending adapter");
                             tx.send(adapter).ok();
                             log::info!("adapter thread: blocking forever");

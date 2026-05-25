@@ -1,11 +1,10 @@
+use ::jni::errors::ThrowRuntimeExAndDefault;
 use ::jni::{
-    Env, EnvUnowned,
-    bind_java_type,
+    Env, EnvUnowned, bind_java_type,
     errors::Result,
     jni_sig, jni_str,
     objects::{JObject, Reference},
 };
-use ::jni::errors::ThrowRuntimeExAndDefault;
 use std::sync::{Arc, Mutex};
 
 bind_java_type! {
@@ -296,11 +295,7 @@ fn fn_adapter<'local>(
     > = Arc::from(f);
 
     let class = <JFnAdapter as Reference>::lookup_class(env, &Default::default())?;
-    let obj = env.new_object(
-        &*class,
-        jni_sig!("(Z)V"),
-        &[local.into()],
-    )?;
+    let obj = env.new_object(&*class, jni_sig!("(Z)V"), &[local.into()])?;
     unsafe { env.set_rust_field::<_, _, FnWrapper>(&obj, jni_str!("data"), SendSyncWrapper(arc)) }?;
     Ok(obj)
 }
@@ -314,21 +309,24 @@ pub(crate) extern "C" fn fn_adapter_call_internal<'local>(
 ) -> JObject<'local> {
     use std::panic::{AssertUnwindSafe, catch_unwind};
 
-    env.with_env(|env| -> std::result::Result<JObject<'local>, jni::errors::Error> {
-        let arc =
-            if let Ok(f) = unsafe { env.get_rust_field::<_, _, FnWrapper>(&obj1, jni_str!("data")) } {
+    env.with_env(
+        |env| -> std::result::Result<JObject<'local>, jni::errors::Error> {
+            let arc = if let Ok(f) =
+                unsafe { env.get_rust_field::<_, _, FnWrapper>(&obj1, jni_str!("data")) }
+            {
                 AssertUnwindSafe(f.0.clone())
             } else {
                 return Ok(JObject::null());
             };
-        match catch_unwind(AssertUnwindSafe(|| arc(env, obj1, obj2, arg1, arg2))) {
-            Ok(result) => Ok(result),
-            Err(panic) => {
-                let _ = super::exceptions::throw_panic(env, panic);
-                Ok(JObject::null())
+            match catch_unwind(AssertUnwindSafe(|| arc(env, obj1, obj2, arg1, arg2))) {
+                Ok(result) => Ok(result),
+                Err(panic) => {
+                    let _ = super::exceptions::throw_panic(env, panic);
+                    Ok(JObject::null())
+                }
             }
-        }
-    })
+        },
+    )
     .resolve::<ThrowRuntimeExAndDefault>()
 }
 

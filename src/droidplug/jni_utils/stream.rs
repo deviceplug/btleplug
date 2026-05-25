@@ -1,7 +1,6 @@
 use super::task::JPollResult;
 use ::jni::{
-    Env, JavaVM,
-    bind_java_type,
+    Env, JavaVM, bind_java_type,
     errors::Result,
     jni_sig, jni_str,
     objects::{Global, JObject},
@@ -18,7 +17,11 @@ bind_java_type! {
 }
 
 impl<'local> JStream<'local> {
-    pub fn poll_next(&self, env: &mut Env<'local>, waker: &JObject<'local>) -> Result<JObject<'local>> {
+    pub fn poll_next(
+        &self,
+        env: &mut Env<'local>,
+        waker: &JObject<'local>,
+    ) -> Result<JObject<'local>> {
         env.call_method(
             self,
             jni_str!("pollNext"),
@@ -129,7 +132,11 @@ mod test {
             assert_eq!(data.value(), false);
 
             let stream_obj = env
-                .new_object(jni_str!("io/github/gedgygedgy/rust/stream/QueueStream"), jni_sig!("()V"), &[])
+                .new_object(
+                    jni_str!("io/github/gedgygedgy/rust/stream/QueueStream"),
+                    jni_sig!("()V"),
+                    &[],
+                )
                 .unwrap();
             let stream_local = env.new_local_ref(&stream_obj).unwrap();
             let jstream = env.cast_local::<JStream>(stream_local).unwrap();
@@ -143,7 +150,9 @@ mod test {
             assert_eq!(Arc::strong_count(&data), 3);
             assert_eq!(data.value(), false);
 
-            let obj1 = env.new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[]).unwrap();
+            let obj1 = env
+                .new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[])
+                .unwrap();
             env.call_method(
                 &stream_obj,
                 jni_str!("add"),
@@ -155,7 +164,9 @@ mod test {
             assert_eq!(data.value(), true);
             data.set_value(false);
 
-            let obj2 = env.new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[]).unwrap();
+            let obj2 = env
+                .new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[])
+                .unwrap();
             env.call_method(
                 &stream_obj,
                 jni_str!("add"),
@@ -192,7 +203,8 @@ mod test {
             assert_eq!(Arc::strong_count(&data), 3);
             assert_eq!(data.value(), false);
 
-            env.call_method(&stream_obj, jni_str!("finish"), jni_sig!("()V"), &[]).unwrap();
+            env.call_method(&stream_obj, jni_str!("finish"), jni_sig!("()V"), &[])
+                .unwrap();
             assert_eq!(Arc::strong_count(&data), 2);
             assert_eq!(data.value(), true);
             data.set_value(false);
@@ -206,27 +218,38 @@ mod test {
             assert_eq!(data.value(), false);
 
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
     fn test_jstream_await() {
         use futures::{executor::block_on, join};
 
-        let (mut stream, stream_obj_global, obj1_global, obj2_global) = test_utils::with_env(|env| {
-            let stream_obj = env
-                .new_object(jni_str!("io/github/gedgygedgy/rust/stream/QueueStream"), jni_sig!("()V"), &[])
-                .unwrap();
-            let stream_obj_global = env.new_global_ref(&stream_obj).unwrap();
-            let stream_local = env.new_local_ref(&stream_obj).unwrap();
-            let jstream = env.cast_local::<JStream>(stream_local).unwrap();
-            let stream = JSendStream::new(env, &jstream).unwrap();
-            let obj1 = env.new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[]).unwrap();
-            let obj1_global = env.new_global_ref(&obj1).unwrap();
-            let obj2 = env.new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[]).unwrap();
-            let obj2_global = env.new_global_ref(&obj2).unwrap();
-            Ok((stream, stream_obj_global, obj1_global, obj2_global))
-        }).unwrap();
+        let (mut stream, stream_obj_global, obj1_global, obj2_global) =
+            test_utils::with_env(|env| {
+                let stream_obj = env
+                    .new_object(
+                        jni_str!("io/github/gedgygedgy/rust/stream/QueueStream"),
+                        jni_sig!("()V"),
+                        &[],
+                    )
+                    .unwrap();
+                let stream_obj_global = env.new_global_ref(&stream_obj).unwrap();
+                let stream_local = env.new_local_ref(&stream_obj).unwrap();
+                let jstream = env.cast_local::<JStream>(stream_local).unwrap();
+                let stream = JSendStream::new(env, &jstream).unwrap();
+                let obj1 = env
+                    .new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[])
+                    .unwrap();
+                let obj1_global = env.new_global_ref(&obj1).unwrap();
+                let obj2 = env
+                    .new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[])
+                    .unwrap();
+                let obj2_global = env.new_global_ref(&obj2).unwrap();
+                Ok((stream, stream_obj_global, obj1_global, obj2_global))
+            })
+            .unwrap();
 
         block_on(async {
             join!(
@@ -249,9 +272,11 @@ mod test {
                             &[(&o2).into()],
                         )
                         .unwrap();
-                        env.call_method(&s, jni_str!("finish"), jni_sig!("()V"), &[]).unwrap();
+                        env.call_method(&s, jni_str!("finish"), jni_sig!("()V"), &[])
+                            .unwrap();
                         Ok(())
-                    }).unwrap();
+                    })
+                    .unwrap();
                 },
                 async {
                     use futures::StreamExt;
@@ -260,14 +285,16 @@ mod test {
                         let o1 = env.new_local_ref(obj1_global.as_obj()).unwrap();
                         assert!(env.is_same_object(g1.as_obj(), &o1).unwrap());
                         Ok(())
-                    }).unwrap();
+                    })
+                    .unwrap();
 
                     let g2 = stream.next().await.unwrap().unwrap();
                     test_utils::with_env(|env| {
                         let o2 = env.new_local_ref(obj2_global.as_obj()).unwrap();
                         assert!(env.is_same_object(g2.as_obj(), &o2).unwrap());
                         Ok(())
-                    }).unwrap();
+                    })
+                    .unwrap();
 
                     assert!(stream.next().await.is_none());
                 }
@@ -279,18 +306,28 @@ mod test {
     fn test_jsendstream_await() {
         use futures::{executor::block_on, join};
 
-        let (mut stream, stream_obj_global, obj1_global, obj2_global) = test_utils::with_env(|env| {
-            let stream_obj = env
-                .new_object(jni_str!("io/github/gedgygedgy/rust/stream/QueueStream"), jni_sig!("()V"), &[])
-                .unwrap();
-            let stream_obj_global = env.new_global_ref(&stream_obj).unwrap();
-            let stream = JSendStream::from_env(env, &stream_obj).unwrap();
-            let obj1 = env.new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[]).unwrap();
-            let obj1_global = env.new_global_ref(&obj1).unwrap();
-            let obj2 = env.new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[]).unwrap();
-            let obj2_global = env.new_global_ref(&obj2).unwrap();
-            Ok((stream, stream_obj_global, obj1_global, obj2_global))
-        }).unwrap();
+        let (mut stream, stream_obj_global, obj1_global, obj2_global) =
+            test_utils::with_env(|env| {
+                let stream_obj = env
+                    .new_object(
+                        jni_str!("io/github/gedgygedgy/rust/stream/QueueStream"),
+                        jni_sig!("()V"),
+                        &[],
+                    )
+                    .unwrap();
+                let stream_obj_global = env.new_global_ref(&stream_obj).unwrap();
+                let stream = JSendStream::from_env(env, &stream_obj).unwrap();
+                let obj1 = env
+                    .new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[])
+                    .unwrap();
+                let obj1_global = env.new_global_ref(&obj1).unwrap();
+                let obj2 = env
+                    .new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[])
+                    .unwrap();
+                let obj2_global = env.new_global_ref(&obj2).unwrap();
+                Ok((stream, stream_obj_global, obj1_global, obj2_global))
+            })
+            .unwrap();
 
         block_on(async {
             join!(
@@ -313,9 +350,11 @@ mod test {
                             &[(&o2).into()],
                         )
                         .unwrap();
-                        env.call_method(&s, jni_str!("finish"), jni_sig!("()V"), &[]).unwrap();
+                        env.call_method(&s, jni_str!("finish"), jni_sig!("()V"), &[])
+                            .unwrap();
                         Ok(())
-                    }).unwrap();
+                    })
+                    .unwrap();
                 },
                 async {
                     use futures::StreamExt;
@@ -324,14 +363,16 @@ mod test {
                         let o1 = env.new_local_ref(obj1_global.as_obj()).unwrap();
                         assert!(env.is_same_object(g1.as_obj(), &o1).unwrap());
                         Ok(())
-                    }).unwrap();
+                    })
+                    .unwrap();
 
                     let g2 = stream.next().await.unwrap().unwrap();
                     test_utils::with_env(|env| {
                         let o2 = env.new_local_ref(obj2_global.as_obj()).unwrap();
                         assert!(env.is_same_object(g2.as_obj(), &o2).unwrap());
                         Ok(())
-                    }).unwrap();
+                    })
+                    .unwrap();
 
                     assert!(stream.next().await.is_none());
                 }

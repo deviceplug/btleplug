@@ -1,7 +1,10 @@
 pub mod objects;
 
-use ::jni::{Env, EnvUnowned, NativeMethod, jni_str, native_method, objects::{JObject, Reference}};
 use ::jni::errors::ThrowRuntimeExAndDefault;
+use ::jni::{
+    Env, EnvUnowned, NativeMethod, jni_str, native_method,
+    objects::{JObject, Reference},
+};
 use jni::{objects::JString, sys::jboolean};
 use std::ffi::c_void;
 use std::sync::Once;
@@ -24,30 +27,32 @@ fn init_inner(env: &mut Env) -> crate::Result<()> {
     {
         let adapter_class =
             env.find_class(jni_str!("com/nonpolynomial/btleplug/android/impl/Adapter"))?;
-        unsafe { env.register_native_methods(
-            &adapter_class,
-            &[
-                // Can't use native_method! here — JObject maps to Ljava/lang/Object; but the
-                // Java side declares the parameter as ScanResult. JNI requires exact signature match.
-                NativeMethod::from_raw_parts(
-                    jni_str!("reportScanResult"),
-                    jni_str!("(Landroid/bluetooth/le/ScanResult;)V"),
-                    adapter_report_scan_result as *mut c_void,
-                ),
-                native_method! {
-                    name = "onConnectionStateChanged",
-                    sig = (addr: JString, connected: jboolean) -> (),
-                    fn = adapter_on_connection_state_changed,
-                },
-            ],
-        )? };
-        use objects::*;
+        unsafe {
+            env.register_native_methods(
+                &adapter_class,
+                &[
+                    // Can't use native_method! here — JObject maps to Ljava/lang/Object; but the
+                    // Java side declares the parameter as ScanResult. JNI requires exact signature match.
+                    NativeMethod::from_raw_parts(
+                        jni_str!("reportScanResult"),
+                        jni_str!("(Landroid/bluetooth/le/ScanResult;)V"),
+                        adapter_report_scan_result as *mut c_void,
+                    ),
+                    native_method! {
+                        name = "onConnectionStateChanged",
+                        sig = (addr: JString, connected: jboolean) -> (),
+                        fn = adapter_on_connection_state_changed,
+                    },
+                ],
+            )?
+        };
         use super::jni_utils::{
             future::{JFuture, JFutureException},
-            ops::{JFnAdapter, JFnRunnableImpl, JFnBiFunctionImpl, JFnFunctionImpl},
+            ops::{JFnAdapter, JFnBiFunctionImpl, JFnFunctionImpl, JFnRunnableImpl},
             stream::{JStream, JStreamPoll},
             task::{JPollResult, JWaker},
         };
+        use objects::*;
 
         let loader = jni::objects::LoaderContext::default();
         <JPeripheral as Reference>::lookup_class(env, &loader)?;
@@ -71,7 +76,8 @@ fn init_inner(env: &mut Env) -> crate::Result<()> {
 
         // FnAdapter native method registration
         let fn_adapter_class = <JFnAdapter as Reference>::lookup_class(env, &loader)?;
-        unsafe { env.register_native_methods(
+        unsafe {
+            env.register_native_methods(
             &*fn_adapter_class,
             &[
                 NativeMethod::from_raw_parts(
@@ -85,8 +91,8 @@ fn init_inner(env: &mut Env) -> crate::Result<()> {
                     super::jni_utils::ops::fn_adapter_close_internal as *mut c_void,
                 ),
             ],
-        )? };
-
+        )?
+        };
     }
     Ok(())
 }

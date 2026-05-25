@@ -1,12 +1,10 @@
-use jni::{
-    Env,
-    errors::Result,
-    objects::JByteArray,
-    sys::jbyte,
-};
+use jni::{Env, errors::Result, objects::JByteArray, sys::jbyte};
 use std::slice;
 
-pub fn slice_to_byte_array<'local>(env: &mut Env<'local>, slice: &[u8]) -> Result<JByteArray<'local>> {
+pub fn slice_to_byte_array<'local>(
+    env: &mut Env<'local>,
+    slice: &[u8],
+) -> Result<JByteArray<'local>> {
     let obj = env.new_byte_array(slice.len())?;
     let slice = unsafe { &*(slice as *const [u8] as *const [jbyte]) };
     obj.set_region(env, 0, slice)?;
@@ -38,19 +36,20 @@ mod test {
             obj.get_region(env, 0, &mut bytes).unwrap();
             assert_eq!(bytes, [1, 2, 3, 4, 5]);
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
     fn test_byte_array_to_vec() {
         test_utils::with_env(|env| {
             let obj = env.new_byte_array(5).unwrap();
-            obj.set_region(env, 0, &[1, 2, 3, 4, 5])
-                .unwrap();
+            obj.set_region(env, 0, &[1, 2, 3, 4, 5]).unwrap();
 
             let vec = super::byte_array_to_vec(env, &obj).unwrap();
             assert_eq!(vec, vec![1, 2, 3, 4, 5]);
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 }

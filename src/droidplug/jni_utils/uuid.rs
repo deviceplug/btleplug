@@ -1,9 +1,4 @@
-use jni::{
-    Env,
-    bind_java_type,
-    errors::Result,
-    sys::jlong,
-};
+use jni::{Env, bind_java_type, errors::Result, sys::jlong};
 use uuid::Uuid;
 
 bind_java_type! {
@@ -39,7 +34,7 @@ impl<'local> JUuid<'local> {
 mod test {
     use super::super::test_utils;
     use super::JUuid;
-    use jni::{jni_str, jni_sig, objects::JObject, sys::jlong};
+    use jni::{jni_sig, jni_str, objects::JObject, sys::jlong};
     use uuid::Uuid;
 
     struct UuidTest {
@@ -72,12 +67,22 @@ mod test {
                 let obj: JObject = uuid_obj.into();
 
                 let actual_most = env
-                    .call_method(&obj, jni_str!("getMostSignificantBits"), jni_sig!("()J"), &[])
+                    .call_method(
+                        &obj,
+                        jni_str!("getMostSignificantBits"),
+                        jni_sig!("()J"),
+                        &[],
+                    )
                     .unwrap()
                     .j()
                     .unwrap();
                 let actual_least = env
-                    .call_method(&obj, jni_str!("getLeastSignificantBits"), jni_sig!("()J"), &[])
+                    .call_method(
+                        &obj,
+                        jni_str!("getLeastSignificantBits"),
+                        jni_sig!("()J"),
+                        &[],
+                    )
                     .unwrap()
                     .j()
                     .unwrap();
@@ -85,7 +90,8 @@ mod test {
                 assert_eq!(actual_least, least);
             }
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -96,13 +102,18 @@ mod test {
                 let least = test.least as jlong;
 
                 let obj = env
-                    .new_object(jni_str!("java/util/UUID"), jni_sig!("(JJ)V"), &[most.into(), least.into()])
+                    .new_object(
+                        jni_str!("java/util/UUID"),
+                        jni_sig!("(JJ)V"),
+                        &[most.into(), least.into()],
+                    )
                     .unwrap();
                 let uuid_obj = env.cast_local::<JUuid>(obj).unwrap();
 
                 assert_eq!(uuid_obj.as_uuid(env).unwrap(), Uuid::from_u128(test.uuid));
             }
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 }

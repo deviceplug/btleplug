@@ -8,7 +8,10 @@ pub mod uuid;
 
 #[cfg(test)]
 pub(crate) mod test_utils {
-    use jni::{Env, JavaVM, NativeMethod, jni_str, jni_sig, objects::{Global, JObject, Reference}};
+    use jni::{
+        Env, JavaVM, NativeMethod, jni_sig, jni_str,
+        objects::{Global, JObject, Reference},
+    };
     use lazy_static::lazy_static;
     use std::{
         cell::Cell,
@@ -20,7 +23,7 @@ pub(crate) mod test_utils {
     fn test_init(env: &mut Env) -> jni::errors::Result<()> {
         use super::{
             future::{JFuture, JFutureException},
-            ops::{JFnAdapter, JFnRunnableImpl, JFnBiFunctionImpl, JFnFunctionImpl},
+            ops::{JFnAdapter, JFnBiFunctionImpl, JFnFunctionImpl, JFnRunnableImpl},
             stream::{JStream, JStreamPoll},
             task::{JPollResult, JWaker},
         };
@@ -38,7 +41,8 @@ pub(crate) mod test_utils {
         <JFnFunctionImpl as Reference>::lookup_class(env, &loader)?;
 
         let fn_adapter_class = <JFnAdapter as Reference>::lookup_class(env, &loader)?;
-        unsafe { env.register_native_methods(
+        unsafe {
+            env.register_native_methods(
             &*fn_adapter_class,
             &[
                 NativeMethod::from_raw_parts(
@@ -52,7 +56,8 @@ pub(crate) mod test_utils {
                     super::ops::fn_adapter_close_internal as *mut c_void,
                 ),
             ],
-        )? };
+        )?
+        };
         Ok(())
     }
 
@@ -134,41 +139,37 @@ pub(crate) mod test_utils {
             jni_utils_jar.push("libs");
             jni_utils_jar.push("btleplug-jni.jar");
 
-            let classpath = format!(
-                "-Djava.class.path={}",
-                jni_utils_jar.to_str().unwrap()
-            );
-            let jvm_args = InitArgsBuilder::new()
-                .option(&classpath)
-                .build()
-                .unwrap();
+            let classpath = format!("-Djava.class.path={}", jni_utils_jar.to_str().unwrap());
+            let jvm_args = InitArgsBuilder::new().option(&classpath).build().unwrap();
             let jvm = JavaVM::new(jvm_args).unwrap();
 
-            let class_loader = jvm.attach_current_thread(|env| {
-                test_init(env).unwrap();
+            let class_loader = jvm
+                .attach_current_thread(|env| {
+                    test_init(env).unwrap();
 
-                let thread = env
-                    .call_static_method(
-                        jni_str!("java/lang/Thread"),
-                        jni_str!("currentThread"),
-                        jni_sig!("()Ljava/lang/Thread;"),
-                        &[],
-                    )
-                    .unwrap()
-                    .l()
-                    .unwrap();
-                let class_loader = env
-                    .call_method(
-                        &thread,
-                        jni_str!("getContextClassLoader"),
-                        jni_sig!("()Ljava/lang/ClassLoader;"),
-                        &[],
-                    )
-                    .unwrap()
-                    .l()
-                    .unwrap();
-                Ok::<_, jni::errors::Error>(env.new_global_ref(class_loader).unwrap())
-            }).unwrap();
+                    let thread = env
+                        .call_static_method(
+                            jni_str!("java/lang/Thread"),
+                            jni_str!("currentThread"),
+                            jni_sig!("()Ljava/lang/Thread;"),
+                            &[],
+                        )
+                        .unwrap()
+                        .l()
+                        .unwrap();
+                    let class_loader = env
+                        .call_method(
+                            &thread,
+                            jni_str!("getContextClassLoader"),
+                            jni_sig!("()Ljava/lang/ClassLoader;"),
+                            &[],
+                        )
+                        .unwrap()
+                        .l()
+                        .unwrap();
+                    Ok::<_, jni::errors::Error>(env.new_global_ref(class_loader).unwrap())
+                })
+                .unwrap();
 
             GlobalJVM { jvm, class_loader }
         };

@@ -1,6 +1,5 @@
 use ::jni::{
-    Env,
-    bind_java_type,
+    Env, bind_java_type,
     errors::Result,
     jni_sig,
     objects::{JObject, Reference},
@@ -51,16 +50,19 @@ mod test {
             assert_eq!(Arc::strong_count(&data), 2);
             assert_eq!(data.value(), false);
 
-            env.call_method(&jwaker, jni_str!("wake"), jni_sig!("()V"), &[]).unwrap();
+            env.call_method(&jwaker, jni_str!("wake"), jni_sig!("()V"), &[])
+                .unwrap();
             assert_eq!(Arc::strong_count(&data), 1);
             assert_eq!(data.value(), true);
             data.set_value(false);
 
-            env.call_method(&jwaker, jni_str!("wake"), jni_sig!("()V"), &[]).unwrap();
+            env.call_method(&jwaker, jni_str!("wake"), jni_sig!("()V"), &[])
+                .unwrap();
             assert_eq!(Arc::strong_count(&data), 1);
             assert_eq!(data.value(), false);
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -78,14 +80,17 @@ mod test {
             assert_eq!(Arc::strong_count(&data), 2);
             assert_eq!(data.value(), false);
 
-            env.call_method(&jwaker, jni_str!("close"), jni_sig!("()V"), &[]).unwrap();
+            env.call_method(&jwaker, jni_str!("close"), jni_sig!("()V"), &[])
+                .unwrap();
             assert_eq!(Arc::strong_count(&data), 1);
             assert_eq!(data.value(), false);
 
-            env.call_method(&jwaker, jni_str!("wake"), jni_sig!("()V"), &[]).unwrap();
+            env.call_method(&jwaker, jni_str!("wake"), jni_sig!("()V"), &[])
+                .unwrap();
             assert_eq!(Arc::strong_count(&data), 1);
             assert_eq!(data.value(), false);
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 }

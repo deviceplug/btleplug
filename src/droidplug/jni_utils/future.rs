@@ -1,6 +1,5 @@
 use ::jni::{
-    Env, JavaVM,
-    bind_java_type,
+    Env, JavaVM, bind_java_type,
     errors::Result,
     jni_sig, jni_str,
     objects::{Global, JObject},
@@ -51,7 +50,10 @@ impl JSendFuture {
         })
     }
 
-    fn poll_internal(&self, context: &mut Context<'_>) -> Result<Poll<Result<Global<JObject<'static>>>>> {
+    fn poll_internal(
+        &self,
+        context: &mut Context<'_>,
+    ) -> Result<Poll<Result<Global<JObject<'static>>>>> {
         self.vm.attach_current_thread(|env| {
             let jwaker = super::task::waker(env, context.waker().clone())?;
             let local = env.new_local_ref(self.internal.as_obj())?;
@@ -113,7 +115,11 @@ mod test {
             assert_eq!(data.value(), false);
 
             let future_obj = env
-                .new_object(jni_str!("io/github/gedgygedgy/rust/future/SimpleFuture"), jni_sig!("()V"), &[])
+                .new_object(
+                    jni_str!("io/github/gedgygedgy/rust/future/SimpleFuture"),
+                    jni_sig!("()V"),
+                    &[],
+                )
                 .unwrap();
             let future_local = env.new_local_ref(&future_obj).unwrap();
             let jfuture = env.cast_local::<JFuture>(future_local).unwrap();
@@ -131,7 +137,9 @@ mod test {
             assert_eq!(Arc::strong_count(&data), 3);
             assert_eq!(data.value(), false);
 
-            let obj = env.new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[]).unwrap();
+            let obj = env
+                .new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[])
+                .unwrap();
             env.call_method(
                 &future_obj,
                 jni_str!("wake"),
@@ -169,7 +177,8 @@ mod test {
             assert_eq!(data.value(), true);
 
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -179,16 +188,23 @@ mod test {
 
         let (future, future_obj_global, obj_global) = test_utils::with_env(|env| {
             let future_obj = env
-                .new_object(jni_str!("io/github/gedgygedgy/rust/future/SimpleFuture"), jni_sig!("()V"), &[])
+                .new_object(
+                    jni_str!("io/github/gedgygedgy/rust/future/SimpleFuture"),
+                    jni_sig!("()V"),
+                    &[],
+                )
                 .unwrap();
             let future_obj_global = env.new_global_ref(&future_obj).unwrap();
             let future_local = env.new_local_ref(&future_obj).unwrap();
             let jfuture = env.cast_local::<JFuture>(future_local).unwrap();
             let future = JSendFuture::new(env, &jfuture).unwrap();
-            let obj = env.new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[]).unwrap();
+            let obj = env
+                .new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[])
+                .unwrap();
             let obj_global = env.new_global_ref(&obj).unwrap();
             Ok((future, future_obj_global, obj_global))
-        }).unwrap();
+        })
+        .unwrap();
 
         block_on(async {
             join!(
@@ -204,7 +220,8 @@ mod test {
                         )
                         .unwrap();
                         Ok(())
-                    }).unwrap();
+                    })
+                    .unwrap();
                 },
                 async {
                     let global = future.await.unwrap();
@@ -215,7 +232,8 @@ mod test {
                         let obj_local = env.new_local_ref(obj_global.as_obj()).unwrap();
                         assert!(env.is_same_object(&result_obj, &obj_local).unwrap());
                         Ok(())
-                    }).unwrap();
+                    })
+                    .unwrap();
                 }
             );
         });
@@ -227,16 +245,23 @@ mod test {
 
         let (future, future_obj_global, ex_global) = test_utils::with_env(|env| {
             let future_obj = env
-                .new_object(jni_str!("io/github/gedgygedgy/rust/future/SimpleFuture"), jni_sig!("()V"), &[])
+                .new_object(
+                    jni_str!("io/github/gedgygedgy/rust/future/SimpleFuture"),
+                    jni_sig!("()V"),
+                    &[],
+                )
                 .unwrap();
             let future_obj_global = env.new_global_ref(&future_obj).unwrap();
             let future_local = env.new_local_ref(&future_obj).unwrap();
             let jfuture = env.cast_local::<JFuture>(future_local).unwrap();
             let future = JSendFuture::new(env, &jfuture).unwrap();
-            let ex = env.new_object(jni_str!("java/lang/Exception"), jni_sig!("()V"), &[]).unwrap();
+            let ex = env
+                .new_object(jni_str!("java/lang/Exception"), jni_sig!("()V"), &[])
+                .unwrap();
             let ex_global = env.new_global_ref(&ex).unwrap();
             Ok((future, future_obj_global, ex_global))
-        }).unwrap();
+        })
+        .unwrap();
 
         block_on(async {
             join!(
@@ -252,7 +277,8 @@ mod test {
                         )
                         .unwrap();
                         Ok(())
-                    }).unwrap();
+                    })
+                    .unwrap();
                 },
                 async {
                     use super::super::task::JPollResult;
@@ -266,14 +292,20 @@ mod test {
                         let future_ex = env.exception_occurred().unwrap();
                         env.exception_clear();
                         let actual_ex = env
-                            .call_method(&future_ex, jni_str!("getCause"), jni_sig!("()Ljava/lang/Throwable;"), &[])
+                            .call_method(
+                                &future_ex,
+                                jni_str!("getCause"),
+                                jni_sig!("()Ljava/lang/Throwable;"),
+                                &[],
+                            )
                             .unwrap()
                             .l()
                             .unwrap();
                         let ex_local = env.new_local_ref(ex_global.as_obj()).unwrap();
                         assert!(env.is_same_object(&actual_ex, &ex_local).unwrap());
                         Ok(())
-                    }).unwrap();
+                    })
+                    .unwrap();
                 }
             );
         });
@@ -286,14 +318,21 @@ mod test {
 
         let (future, future_obj_global, obj_global) = test_utils::with_env(|env| {
             let future_obj = env
-                .new_object(jni_str!("io/github/gedgygedgy/rust/future/SimpleFuture"), jni_sig!("()V"), &[])
+                .new_object(
+                    jni_str!("io/github/gedgygedgy/rust/future/SimpleFuture"),
+                    jni_sig!("()V"),
+                    &[],
+                )
                 .unwrap();
             let future_obj_global = env.new_global_ref(&future_obj).unwrap();
             let future = JSendFuture::from_env(env, &future_obj).unwrap();
-            let obj = env.new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[]).unwrap();
+            let obj = env
+                .new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[])
+                .unwrap();
             let obj_global = env.new_global_ref(&obj).unwrap();
             Ok((future, future_obj_global, obj_global))
-        }).unwrap();
+        })
+        .unwrap();
 
         block_on(async {
             join!(
@@ -309,7 +348,8 @@ mod test {
                         )
                         .unwrap();
                         Ok(())
-                    }).unwrap();
+                    })
+                    .unwrap();
                 },
                 async {
                     let global_ref = future.await.unwrap();
@@ -320,7 +360,8 @@ mod test {
                         let obj_local = env.new_local_ref(obj_global.as_obj()).unwrap();
                         assert!(env.is_same_object(&result_obj, &obj_local).unwrap());
                         Ok(())
-                    }).unwrap();
+                    })
+                    .unwrap();
                 }
             );
         });

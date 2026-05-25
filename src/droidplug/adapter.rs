@@ -61,7 +61,6 @@ impl Adapter {
         &self,
         env: &mut Env<'a>,
         scan_result: JObject<'a>,
-
     ) -> Result<Peripheral> {
         let scan_result = env.cast_local::<JScanResult>(scan_result)?;
         let (addr, properties): (BDAddr, Option<PeripheralProperties>) =
@@ -176,7 +175,12 @@ impl Central for Adapter {
 
     async fn stop_scan(&self) -> Result<()> {
         jvm()?.attach_current_thread(|env| {
-            env.call_method(self.internal.as_obj(), jni_str!("stopScan"), jni_sig!("()V"), &[])?;
+            env.call_method(
+                self.internal.as_obj(),
+                jni_str!("stopScan"),
+                jni_sig!("()V"),
+                &[],
+            )?;
             Ok(())
         })
     }

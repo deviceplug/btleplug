@@ -1,3 +1,7 @@
+use super::jni::{
+    jvm,
+    objects::{JBluetoothGattCharacteristic, JBluetoothGattService, JPeripheral},
+};
 use super::jni_utils::{
     arrays::byte_array_to_vec,
     future::{JFuture, JSendFuture},
@@ -29,10 +33,6 @@ use std::{
     sync::atomic::{AtomicU16, Ordering},
     sync::{Arc, Mutex},
 };
-use super::jni::{
-    jvm,
-    objects::{JBluetoothGattCharacteristic, JBluetoothGattService, JPeripheral},
-};
 
 #[cfg_attr(
     feature = "serde",
@@ -60,16 +60,23 @@ fn get_poll_result<'a>(
             let ex = env.exception_occurred().unwrap();
             env.exception_clear();
 
-            use jni::objects::Reference;
             use super::jni::objects::*;
+            use jni::objects::Reference;
 
-            let future_ex_class = <super::jni_utils::future::JFutureException as Reference>::lookup_class(
-                env, &Default::default(),
-            )?;
+            let future_ex_class =
+                <super::jni_utils::future::JFutureException as Reference>::lookup_class(
+                    env,
+                    &Default::default(),
+                )?;
 
             if env.is_instance_of(&ex, &*future_ex_class)? {
                 let cause = env
-                    .call_method(&ex, jni_str!("getCause"), jni_sig!("()Ljava/lang/Throwable;"), &[])?
+                    .call_method(
+                        &ex,
+                        jni_str!("getCause"),
+                        jni_sig!("()Ljava/lang/Throwable;"),
+                        &[],
+                    )?
                     .l()?;
 
                 macro_rules! check_exception {
@@ -95,7 +102,12 @@ fn get_poll_result<'a>(
                     Err(Error::NoAdapterAvailable)
                 } else if env.is_instance_of(&cause, jni_str!("java/lang/RuntimeException"))? {
                     let msg = env
-                        .call_method(&cause, jni_str!("getMessage"), jni_sig!("()Ljava/lang/String;"), &[])?
+                        .call_method(
+                            &cause,
+                            jni_str!("getMessage"),
+                            jni_sig!("()Ljava/lang/String;"),
+                            &[],
+                        )?
                         .l()?;
                     let jstr = env.cast_local::<JString>(msg)?;
                     let msgstr = String::from(jstr.mutf8_chars(env)?);
@@ -240,7 +252,9 @@ impl api::Peripheral for Peripheral {
             let mtu_result_ref = mtu_future.await?;
             self.with_obj(|env, _obj| -> Result<()> {
                 let mtu_obj = get_poll_result(env, &mtu_result_ref)?;
-                let mtu_val = env.call_method(&mtu_obj, jni_str!("intValue"), jni_sig!("()I"), &[])?.i()?;
+                let mtu_val = env
+                    .call_method(&mtu_obj, jni_str!("intValue"), jni_sig!("()I"), &[])?
+                    .i()?;
                 self.mtu.store(mtu_val as u16, Ordering::Relaxed);
                 Ok(())
             })?;
@@ -272,13 +286,20 @@ impl api::Peripheral for Peripheral {
             use std::iter::FromIterator;
 
             let obj = get_poll_result(env, &result_ref)?;
-            let size = env.call_method(&obj, jni_str!("size"), jni_sig!("()I"), &[])?.i()?;
+            let size = env
+                .call_method(&obj, jni_str!("size"), jni_sig!("()I"), &[])?
+                .i()?;
             let mut peripheral_services = Vec::new();
             let mut peripheral_characteristics = Vec::new();
 
             for i in 0..size {
                 let svc_obj = env
-                    .call_method(&obj, jni_str!("get"), jni_sig!("(I)Ljava/lang/Object;"), &[JValue::from(i)])?
+                    .call_method(
+                        &obj,
+                        jni_str!("get"),
+                        jni_sig!("(I)Ljava/lang/Object;"),
+                        &[JValue::from(i)],
+                    )?
                     .l()?;
                 let service = env.cast_local::<JBluetoothGattService>(svc_obj)?;
                 let mut characteristics = BTreeSet::<Characteristic>::new();
@@ -349,7 +370,8 @@ impl api::Peripheral for Peripheral {
         let result_ref = future.await?;
         self.with_obj(|env, _obj| {
             let bytes_obj = get_poll_result(env, &result_ref)?;
-            let bytes_arr = unsafe { jni::objects::JByteArray::from_raw(env, bytes_obj.into_raw()) };
+            let bytes_arr =
+                unsafe { jni::objects::JByteArray::from_raw(env, bytes_obj.into_raw()) };
             Ok(byte_array_to_vec(env, &bytes_arr)?)
         })
     }
@@ -375,29 +397,31 @@ impl api::Peripheral for Peripheral {
             .map(move |item| match item {
                 Ok(item) => {
                     let vm = jvm()?;
-                    let result: crate::Result<_> = vm.attach_current_thread(|env| -> jni::errors::Result<_> {
-                        let local_obj = env.new_local_ref(item.as_obj())?;
-                        let characteristic =
-                            env.cast_local::<JBluetoothGattCharacteristic>(local_obj)?;
-                        let uuid = characteristic.get_uuid(env)?;
-                        let value = characteristic.get_value(env)?;
-                        let service_uuid = shared
-                            .lock()
-                            .ok()
-                            .and_then(|guard| {
-                                guard
-                                    .services
-                                    .iter()
-                                    .find(|s| s.characteristics.iter().any(|c| c.uuid == uuid))
-                                    .map(|s| s.uuid)
+                    let result: crate::Result<_> = vm
+                        .attach_current_thread(|env| -> jni::errors::Result<_> {
+                            let local_obj = env.new_local_ref(item.as_obj())?;
+                            let characteristic =
+                                env.cast_local::<JBluetoothGattCharacteristic>(local_obj)?;
+                            let uuid = characteristic.get_uuid(env)?;
+                            let value = characteristic.get_value(env)?;
+                            let service_uuid = shared
+                                .lock()
+                                .ok()
+                                .and_then(|guard| {
+                                    guard
+                                        .services
+                                        .iter()
+                                        .find(|s| s.characteristics.iter().any(|c| c.uuid == uuid))
+                                        .map(|s| s.uuid)
+                                })
+                                .unwrap_or_default();
+                            Ok(ValueNotification {
+                                uuid,
+                                service_uuid,
+                                value,
                             })
-                            .unwrap_or_default();
-                        Ok(ValueNotification {
-                            uuid,
-                            service_uuid,
-                            value,
                         })
-                    }).map_err(Into::into);
+                        .map_err(Into::into);
                     result
                 }
                 Err(err) => Err(err.into()),
@@ -415,7 +439,9 @@ impl api::Peripheral for Peripheral {
         let result_ref = future.await?;
         self.with_obj(|env, _obj| {
             let rssi_obj = get_poll_result(env, &result_ref)?;
-            let rssi_val = env.call_method(&rssi_obj, jni_str!("intValue"), jni_sig!("()I"), &[])?.i()?;
+            let rssi_val = env
+                .call_method(&rssi_obj, jni_str!("intValue"), jni_sig!("()I"), &[])?
+                .i()?;
             Ok(rssi_val as i16)
         })
     }
@@ -442,7 +468,8 @@ impl api::Peripheral for Peripheral {
         let result_ref = future.await?;
         self.with_obj(|env, _obj| {
             let bytes_obj = get_poll_result(env, &result_ref)?;
-            let bytes_arr = unsafe { jni::objects::JByteArray::from_raw(env, bytes_obj.into_raw()) };
+            let bytes_arr =
+                unsafe { jni::objects::JByteArray::from_raw(env, bytes_obj.into_raw()) };
             Ok(byte_array_to_vec(env, &bytes_arr)?)
         })
     }

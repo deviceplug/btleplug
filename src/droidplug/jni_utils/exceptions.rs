@@ -2,7 +2,7 @@ use jni::{
     Env,
     descriptors::Desc,
     errors::Error,
-    jni_str, jni_sig,
+    jni_sig, jni_str,
     objects::{JClass, JObject, JThrowable},
 };
 use std::{
@@ -163,10 +163,7 @@ impl<'a> ::std::ops::Deref for JPanicException<'a> {
 /// Wraps a caught panic payload in a
 /// `io.github.gedgygedgy.rust.panic.PanicException` and throws it. If a Java
 /// exception is already pending, it will be added as a suppressed exception.
-pub fn throw_panic(
-    env: &mut Env,
-    panic: Box<dyn Any + Send>,
-) -> Result<(), Error> {
+pub fn throw_panic(env: &mut Env, panic: Box<dyn Any + Send>) -> Result<(), Error> {
     let old_ex = if env.exception_check() {
         let ex = env.exception_occurred();
         env.exception_clear();
@@ -204,7 +201,13 @@ pub fn throw_unwind<R>(
 
 #[cfg(test)]
 mod test {
-    use jni::{Env, errors::Error, jni_str, jni_sig, objects::{JObject, JThrowable}, strings::JNIString};
+    use jni::{
+        Env,
+        errors::Error,
+        jni_sig, jni_str,
+        objects::{JObject, JThrowable},
+        strings::JNIString,
+    };
 
     use super::super::test_utils;
     use super::try_block;
@@ -230,7 +233,9 @@ mod test {
         }
 
         let ex = throw_class.map(|c| {
-            let obj = env.new_object(JNIString::from(c), jni_sig!("()V"), &[]).unwrap();
+            let obj = env
+                .new_object(JNIString::from(c), jni_sig!("()V"), &[])
+                .unwrap();
             env.cast_local::<JThrowable>(obj).unwrap()
         });
 
@@ -299,7 +304,8 @@ mod test {
             );
             assert!(!env.exception_check());
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -317,7 +323,8 @@ mod test {
             );
             assert!(!env.exception_check());
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -335,7 +342,8 @@ mod test {
             );
             assert!(!env.exception_check());
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -344,7 +352,8 @@ mod test {
             assert_eq!(test_catch(env, None, Ok(0), false).unwrap(), 0);
             assert!(!env.exception_check());
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -369,7 +378,8 @@ mod test {
                 panic!("No JavaException");
             }
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -383,7 +393,8 @@ mod test {
                 panic!("InvalidCtorReturn not found");
             }
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -397,13 +408,20 @@ mod test {
                 panic!("JavaException not found");
             }
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
     fn test_catch_prior_exception() {
         test_utils::with_env(|env| {
-            let obj = env.new_object(jni_str!("java/lang/IllegalArgumentException"), jni_sig!("()V"), &[]).unwrap();
+            let obj = env
+                .new_object(
+                    jni_str!("java/lang/IllegalArgumentException"),
+                    jni_sig!("()V"),
+                    &[],
+                )
+                .unwrap();
             let ex = env.cast_local::<JThrowable>(obj).unwrap();
             let _ = env.throw(&ex);
 
@@ -416,7 +434,8 @@ mod test {
                 panic!("JavaException not found");
             }
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -441,7 +460,8 @@ mod test {
                 panic!("JavaException not found");
             }
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -460,7 +480,8 @@ mod test {
                 panic!("JavaException not found");
             }
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -477,7 +498,12 @@ mod test {
             }
 
             let msg_obj = env
-                .call_method(&*ex, jni_str!("getMessage"), jni_sig!("()Ljava/lang/String;"), &[])
+                .call_method(
+                    &*ex,
+                    jni_str!("getMessage"),
+                    jni_sig!("()Ljava/lang/String;"),
+                    &[],
+                )
                 .unwrap()
                 .l()
                 .unwrap();
@@ -485,7 +511,8 @@ mod test {
             let chars = msg.mutf8_chars(env).unwrap();
             assert_eq!(String::from(chars), STATIC_MSG);
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -503,7 +530,12 @@ mod test {
             }
 
             let msg_obj = env
-                .call_method(&*ex, jni_str!("getMessage"), jni_sig!("()Ljava/lang/String;"), &[])
+                .call_method(
+                    &*ex,
+                    jni_str!("getMessage"),
+                    jni_sig!("()Ljava/lang/String;"),
+                    &[],
+                )
                 .unwrap()
                 .l()
                 .unwrap();
@@ -514,7 +546,8 @@ mod test {
             let any: Box<dyn Any + Send> = ex.take(env).unwrap();
             assert_eq!(*any.downcast::<String>().unwrap(), STRING_MSG);
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -531,7 +564,12 @@ mod test {
             }
 
             let msg = env
-                .call_method(&*ex, jni_str!("getMessage"), jni_sig!("()Ljava/lang/String;"), &[])
+                .call_method(
+                    &*ex,
+                    jni_str!("getMessage"),
+                    jni_sig!("()Ljava/lang/String;"),
+                    &[],
+                )
                 .unwrap()
                 .l()
                 .unwrap();
@@ -540,7 +578,8 @@ mod test {
             let any: Box<dyn Any + Send> = ex.take(env).unwrap();
             assert_eq!(*any.downcast::<i32>().unwrap(), 42);
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -550,7 +589,8 @@ mod test {
             assert_eq!(result, 42);
             assert!(!env.exception_check());
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -563,17 +603,26 @@ mod test {
             let ex = env.exception_occurred().unwrap();
             env.exception_clear();
             assert!(
-                env.is_instance_of(&ex, jni_str!("io/github/gedgygedgy/rust/panic/PanicException"))
-                    .unwrap()
+                env.is_instance_of(
+                    &ex,
+                    jni_str!("io/github/gedgygedgy/rust/panic/PanicException")
+                )
+                .unwrap()
             );
 
             let suppressed_list = env
-                .call_method(&ex, jni_str!("getSuppressed"), jni_sig!("()[Ljava/lang/Throwable;"), &[])
+                .call_method(
+                    &ex,
+                    jni_str!("getSuppressed"),
+                    jni_sig!("()[Ljava/lang/Throwable;"),
+                    &[],
+                )
                 .unwrap()
                 .l()
                 .unwrap();
-            let suppressed_array =
-                unsafe { jni::objects::JObjectArray::<JObject>::from_raw(env, suppressed_list.into_raw()) };
+            let suppressed_array = unsafe {
+                jni::objects::JObjectArray::<JObject>::from_raw(env, suppressed_list.into_raw())
+            };
             assert_eq!(suppressed_array.len(env).unwrap(), 0);
 
             let ex = super::JPanicException::from_env(ex);
@@ -581,13 +630,16 @@ mod test {
             let str = any.downcast::<&str>().unwrap();
             assert_eq!(*str, "This is a panic");
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
     fn test_throw_unwind_panic_suppress() {
         test_utils::with_env(|env| {
-            let obj = env.new_object(jni_str!("java/lang/Exception"), jni_sig!("()V"), &[]).unwrap();
+            let obj = env
+                .new_object(jni_str!("java/lang/Exception"), jni_sig!("()V"), &[])
+                .unwrap();
             let old_ex = env.cast_local::<JThrowable>(obj).unwrap();
             let _ = env.throw(&old_ex);
 
@@ -598,17 +650,26 @@ mod test {
             let ex = env.exception_occurred().unwrap();
             env.exception_clear();
             assert!(
-                env.is_instance_of(&ex, jni_str!("io/github/gedgygedgy/rust/panic/PanicException"))
-                    .unwrap()
+                env.is_instance_of(
+                    &ex,
+                    jni_str!("io/github/gedgygedgy/rust/panic/PanicException")
+                )
+                .unwrap()
             );
 
             let suppressed_list = env
-                .call_method(&ex, jni_str!("getSuppressed"), jni_sig!("()[Ljava/lang/Throwable;"), &[])
+                .call_method(
+                    &ex,
+                    jni_str!("getSuppressed"),
+                    jni_sig!("()[Ljava/lang/Throwable;"),
+                    &[],
+                )
                 .unwrap()
                 .l()
                 .unwrap();
-            let suppressed_array =
-                unsafe { jni::objects::JObjectArray::<JObject>::from_raw(env, suppressed_list.into_raw()) };
+            let suppressed_array = unsafe {
+                jni::objects::JObjectArray::<JObject>::from_raw(env, suppressed_list.into_raw())
+            };
             assert_eq!(suppressed_array.len(env).unwrap(), 1);
             let suppressed_ex = suppressed_array.get_element(env, 0).unwrap();
             assert!(env.is_same_object(&old_ex, &suppressed_ex).unwrap());
@@ -618,7 +679,8 @@ mod test {
             let str = any.downcast::<&str>().unwrap();
             assert_eq!(*str, "This is a panic");
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -628,6 +690,7 @@ mod test {
             let ex = super::JPanicException::new(env, Box::new("This is a panic")).unwrap();
             ex.resume_unwind(env).unwrap();
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 }

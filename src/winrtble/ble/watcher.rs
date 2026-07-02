@@ -77,6 +77,11 @@ impl BLEWatcher {
         self.watcher
             .SetScanningMode(BluetoothLEScanningMode::Active)?;
         let _ = self.watcher.SetAllowExtendedAdvertisements(true);
+        // Also receive on the Coded (long-range) PHY where the adapter and
+        // OS support it. Only takes effect alongside extended advertisements
+        // (above); the error is ignored the same way, so systems without
+        // Coded PHY support behave exactly as before.
+        let _ = self.watcher.SetUseCodedPhy(true);
 
         // Pre-convert the filter UUIDs once so the handler closure is cheap.
         let filter_guids: Vec<windows::core::GUID> = services.iter().map(utils::to_guid).collect();

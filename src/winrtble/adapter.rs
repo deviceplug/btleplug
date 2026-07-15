@@ -299,10 +299,15 @@ impl Central for Adapter {
         self.manager.peripheral(id).ok_or(Error::DeviceNotFound)
     }
 
-    async fn add_peripheral(&self, _address: &PeripheralId) -> Result<Peripheral> {
-        Err(Error::NotSupported(
-            "Can't add a Peripheral from a BDAddr".to_string(),
-        ))
+    async fn add_peripheral(&self, id: &PeripheralId) -> Result<Peripheral> {
+        if let Some(peripheral) = self.manager.peripheral(id) {
+            return Ok(peripheral);
+        }
+        // Create a peripheral straight from its address so a device the OS already knows (bonded or
+        // connected to another central) can be reached without waiting for an advertisement.
+        let peripheral = Peripheral::new(Arc::downgrade(&self.manager), id.clone().into());
+        self.manager.add_peripheral(peripheral.clone());
+        Ok(peripheral)
     }
 
     async fn clear_peripherals(&self) -> Result<()> {

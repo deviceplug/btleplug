@@ -748,3 +748,9 @@ impl From<BDAddr> for PeripheralId {
         PeripheralId(address)
     }
 }
+
+impl From<PeripheralId> for BDAddr {
+    fn from(id: PeripheralId) -> Self {
+        id.0
+    }
+}

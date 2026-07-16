@@ -720,6 +720,15 @@ pub async fn test_descriptor_discovery() {
 pub async fn test_mtu_after_service_discovery() {
     let peripheral = peripheral_finder::find_and_connect().await;
     let mtu = peripheral.mtu();
+
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    assert!(
+        mtu > 23,
+        "CoreBluetooth MTU should be negotiated above the default, got {}",
+        mtu
+    );
+
+    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
     assert!(
         mtu >= 23,
         "MTU should be at least 23 (default), got {}",

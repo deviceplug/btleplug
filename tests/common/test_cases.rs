@@ -717,7 +717,7 @@ pub async fn test_descriptor_discovery() {
 
 // ── Device Info ─────────────────────────────────────────────────────
 
-pub async fn test_mtu_after_connection() {
+pub async fn test_mtu_after_service_discovery() {
     let peripheral = peripheral_finder::find_and_connect().await;
     let mtu = peripheral.mtu();
     assert!(

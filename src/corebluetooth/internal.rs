@@ -46,6 +46,21 @@ use std::{
 use tokio::runtime;
 use uuid::Uuid;
 
+/// ATT Write Command PDUs reserve one byte for the opcode and two bytes for
+/// the attribute handle (Bluetooth Core Specification, Vol 3, Part F, 3.4.5.3).
+const ATT_WRITE_COMMAND_HEADER_LEN: usize = 3;
+
+fn maximum_write_value_length_to_att_mtu(maximum_write_value_length: usize) -> Result<u16, String> {
+    maximum_write_value_length
+        .checked_add(ATT_WRITE_COMMAND_HEADER_LEN)
+        .and_then(|mtu| u16::try_from(mtu).ok())
+        .ok_or_else(|| {
+            format!(
+                "CoreBluetooth maximum write value length {maximum_write_value_length} cannot be represented as a u16 ATT MTU"
+            )
+        })
+}
+
 struct DescriptorInternal {
     pub descriptor: Retained<CBDescriptor>,
     pub uuid: Uuid,
@@ -163,7 +178,7 @@ pub enum CoreBluetoothReply {
     ReadResult(Vec<u8>),
     ReadRssi(i16),
     Connected,
-    ServicesDiscovered(BTreeSet<Service>),
+    ServicesDiscovered(BTreeSet<Service>, u16),
     State(CBPeripheralState),
     Ok,
     Peripherals(Vec<Peripheral>),
@@ -351,12 +366,24 @@ impl PeripheralInternal {
                         .collect(),
                 })
                 .collect();
+            // CoreBluetooth exposes the maximum characteristic value length for
+            // a write, not the ATT MTU. Sample it after discovery, then account
+            // for the ATT Write Command header to infer the full ATT MTU.
+            let maximum_write_value_length = unsafe {
+                self.peripheral.maximumWriteValueLengthForType(
+                    CBCharacteristicWriteType::CBCharacteristicWriteWithoutResponse,
+                )
+            };
+            let reply = match maximum_write_value_length_to_att_mtu(maximum_write_value_length) {
+                Ok(mtu) => CoreBluetoothReply::ServicesDiscovered(services, mtu),
+                Err(error) => CoreBluetoothReply::Err(error),
+            };
             self.services_discovered_future_state
                 .take()
                 .unwrap()
                 .lock()
                 .unwrap()
-                .set_reply(CoreBluetoothReply::ServicesDiscovered(services));
+                .set_reply(reply);
         }
     }
 

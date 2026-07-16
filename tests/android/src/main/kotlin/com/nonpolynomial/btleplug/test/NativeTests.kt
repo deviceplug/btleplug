@@ -39,7 +39,7 @@ object NativeTests {
     external fun testDescriptorDiscovery()
 
     // Device Info
-    external fun testMtuAfterConnection()
+    external fun testMtuAfterServiceDiscovery()
     external fun testReadRssi()
     external fun testPropertiesContainPeripheralInfo()
     external fun testConnectionParameters()

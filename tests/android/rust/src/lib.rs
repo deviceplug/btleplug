@@ -215,8 +215,8 @@ jni_test!(
     test_cases::test_descriptor_discovery
 );
 jni_test!(
-    Java_com_nonpolynomial_btleplug_test_NativeTests_testMtuAfterConnection,
-    test_cases::test_mtu_after_connection
+    Java_com_nonpolynomial_btleplug_test_NativeTests_testMtuAfterServiceDiscovery,
+    test_cases::test_mtu_after_service_discovery
 );
 jni_test!(
     Java_com_nonpolynomial_btleplug_test_NativeTests_testReadRssi,

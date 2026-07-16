@@ -289,6 +289,9 @@ impl api::Peripheral for Peripheral {
         match fut.await {
             CoreBluetoothReply::Connected => {
                 self.shared
+                    .mtu
+                    .store(api::DEFAULT_MTU_SIZE, std::sync::atomic::Ordering::Relaxed);
+                self.shared
                     .emit_event(CentralEvent::DeviceConnected(self.shared.uuid.into()));
             }
             CoreBluetoothReply::Err(msg) => return Err(Error::RuntimeError(msg)),
@@ -330,8 +333,11 @@ impl api::Peripheral for Peripheral {
             })
             .await?;
         match fut.await {
-            CoreBluetoothReply::ServicesDiscovered(services) => {
+            CoreBluetoothReply::ServicesDiscovered(services, mtu) => {
                 *(self.shared.services.lock().map_err(Into::<Error>::into)?) = services;
+                self.shared
+                    .mtu
+                    .store(mtu, std::sync::atomic::Ordering::Relaxed);
                 return Ok(());
             }
             CoreBluetoothReply::Err(msg) => return Err(Error::RuntimeError(msg)),

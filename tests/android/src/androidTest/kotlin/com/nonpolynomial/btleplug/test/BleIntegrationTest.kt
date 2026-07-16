@@ -97,7 +97,7 @@ class BleIntegrationTest {
     @Test fun testDescriptorDiscovery() = NativeTests.testDescriptorDiscovery()
 
     // ── Device Info ─────────────────────────────────────────────────
-    @Test fun testMtuAfterConnection() = NativeTests.testMtuAfterConnection()
+    @Test fun testMtuAfterServiceDiscovery() = NativeTests.testMtuAfterServiceDiscovery()
     @Test fun testReadRssi() = NativeTests.testReadRssi()
     @Test fun testPropertiesContainPeripheralInfo() = NativeTests.testPropertiesContainPeripheralInfo()
     @Test fun testConnectionParameters() = NativeTests.testConnectionParameters()

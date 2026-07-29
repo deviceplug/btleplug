@@ -100,6 +100,7 @@ impl Peripheral {
             address_type: None,
             local_name,
             advertisement_name,
+            appearance: None,
             tx_power_level: None,
             rssi: None,
             manufacturer_data: HashMap::new(),

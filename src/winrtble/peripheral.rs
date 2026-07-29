@@ -82,6 +82,7 @@ struct Shared {
     address_type: RwLock<Option<AddressType>>,
     local_name: RwLock<Option<String>>,
     advertisement_name: RwLock<Option<String>>,
+    appearance: RwLock<Option<u16>>,
     last_tx_power_level: RwLock<Option<i16>>, // XXX: would be nice to avoid lock here!
     last_rssi: RwLock<Option<i16>>,           // XXX: would be nice to avoid lock here!
     latest_manufacturer_data: RwLock<HashMap<u16, Vec<u8>>>,
@@ -105,6 +106,7 @@ impl Peripheral {
                 address_type: RwLock::new(None),
                 local_name: RwLock::new(None),
                 advertisement_name: RwLock::new(None),
+                appearance: RwLock::new(None),
                 last_tx_power_level: RwLock::new(None),
                 last_rssi: RwLock::new(None),
                 latest_manufacturer_data: RwLock::new(HashMap::new()),
@@ -123,6 +125,7 @@ impl Peripheral {
             address_type: *self.shared.address_type.read().unwrap(),
             local_name: self.shared.local_name.read().unwrap().clone(),
             advertisement_name: self.shared.advertisement_name.read().unwrap().clone(),
+            appearance: *self.shared.appearance.read().unwrap(),
             tx_power_level: *self.shared.last_tx_power_level.read().unwrap(),
             rssi: *self.shared.last_rssi.read().unwrap(),
             manufacturer_data: self.shared.latest_manufacturer_data.read().unwrap().clone(),
@@ -183,19 +186,36 @@ impl Peripheral {
         // The Windows Runtime API (as of 19041) does not directly expose Service Data as a friendly API (like Manufacturer Data above)
         // Instead they provide data sections for access to raw advertising data. That is processed here.
         if let Ok(data_sections) = advertisement.DataSections() {
-            // See if we have any advertised service data before taking a lock to update...
             let mut found_service_data = false;
+            let mut appearance = None;
             for section in &data_sections {
-                match section.DataType().unwrap() {
+                let Ok(data_type) = section.DataType() else {
+                    continue;
+                };
+                match data_type {
                     advertisement_data_type::SERVICE_DATA_16_BIT_UUID
                     | advertisement_data_type::SERVICE_DATA_32_BIT_UUID
                     | advertisement_data_type::SERVICE_DATA_128_BIT_UUID => {
                         found_service_data = true;
-                        break;
+                    }
+                    crate::advertisement::APPEARANCE_DATA_TYPE => {
+                        if let Ok(data) = section.Data() {
+                            if let Some(parsed) =
+                                crate::advertisement::parse_appearance(&utils::to_vec(&data))
+                            {
+                                appearance = Some(parsed);
+                            }
+                        }
                     }
                     _ => {}
                 }
             }
+
+            if let Some(appearance) = appearance {
+                *self.shared.appearance.write().unwrap() = Some(appearance);
+            }
+
+            // See if we have any advertised service data before taking a lock to update...
             if found_service_data {
                 let mut service_data_guard = self.shared.latest_service_data.write().unwrap();
 

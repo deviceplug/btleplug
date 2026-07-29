@@ -786,6 +786,10 @@ impl<'a: 'b, 'b> TryFrom<JScanResult<'a, 'b>> for (BDAddr, Option<PeripheralProp
             };
 
             let rssi = Some(result.get_rssi()? as i16);
+            let appearance = record
+                .get_bytes()?
+                .as_deref()
+                .and_then(crate::advertisement::parse_appearance_from_advertisement);
 
             let manufacturer_specific_data_array = record.get_manufacturer_specific_data()?;
             let manufacturer_specific_data_obj: &JObject = &manufacturer_specific_data_array;
@@ -845,6 +849,7 @@ impl<'a: 'b, 'b> TryFrom<JScanResult<'a, 'b>> for (BDAddr, Option<PeripheralProp
                 address_type: None,
                 local_name: device_name.clone(),
                 advertisement_name: device_name,
+                appearance,
                 tx_power_level,
                 manufacturer_data,
                 service_data,
@@ -859,6 +864,7 @@ impl<'a: 'b, 'b> TryFrom<JScanResult<'a, 'b>> for (BDAddr, Option<PeripheralProp
 
 pub struct JScanRecord<'a: 'b, 'b> {
     internal: JObject<'a>,
+    get_bytes: JMethodID<'a>,
     get_device_name: JMethodID<'a>,
     get_tx_power_level: JMethodID<'a>,
     get_manufacturer_specific_data: JMethodID<'a>,
@@ -885,6 +891,7 @@ impl<'a: 'b, 'b> JScanRecord<'a, 'b> {
     pub fn from_env(env: &'b JNIEnv<'a>, obj: JObject<'a>) -> Result<Self> {
         let class = env.auto_local(env.find_class("android/bluetooth/le/ScanRecord")?);
 
+        let get_bytes = env.get_method_id(&class, "getBytes", "()[B")?;
         let get_device_name = env.get_method_id(&class, "getDeviceName", "()Ljava/lang/String;")?;
         let get_tx_power_level = env.get_method_id(&class, "getTxPowerLevel", "()I")?;
         let get_manufacturer_specific_data = env.get_method_id(
@@ -897,6 +904,7 @@ impl<'a: 'b, 'b> JScanRecord<'a, 'b> {
             env.get_method_id(&class, "getServiceUuids", "()Ljava/util/List;")?;
         Ok(Self {
             internal: obj,
+            get_bytes,
             get_device_name,
             get_tx_power_level,
             get_manufacturer_specific_data,
@@ -904,6 +912,24 @@ impl<'a: 'b, 'b> JScanRecord<'a, 'b> {
             get_service_uuids,
             env,
         })
+    }
+
+    pub fn get_bytes(&self) -> Result<Option<Vec<u8>>> {
+        let value = self
+            .env
+            .call_method_unchecked(
+                self.internal,
+                self.get_bytes,
+                JavaType::Array(JavaType::Primitive(Primitive::Byte).into()),
+                &[],
+            )?
+            .l()?;
+        if self.env.is_same_object(value.clone(), JObject::null())? {
+            Ok(None)
+        } else {
+            crate::droidplug::jni_utils::arrays::byte_array_to_vec(self.env, value.into_inner())
+                .map(Some)
+        }
     }
 
     pub fn get_device_name(&self) -> Result<JString<'a>> {

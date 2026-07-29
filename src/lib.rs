@@ -89,6 +89,8 @@ use crate::api::ParseBDAddrError;
 use std::result;
 use std::time::Duration;
 
+#[cfg(any(target_os = "android", target_os = "windows", test))]
+mod advertisement;
 pub mod api;
 #[cfg(target_os = "linux")]
 mod bluez;

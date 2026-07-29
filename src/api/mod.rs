@@ -190,6 +190,9 @@ pub struct PeripheralProperties {
     pub local_name: Option<String>,
     /// The advertisement name. May be different than local_name.
     pub advertisement_name: Option<String>,
+    /// The GAP appearance reported by this peripheral.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub appearance: Option<u16>,
     /// The transmission power level for the device
     pub tx_power_level: Option<i16>,
     /// The most recent Received Signal Strength Indicator for the device
@@ -691,4 +694,32 @@ pub trait Manager {
 
     /// Get a list of all Bluetooth adapters on the system. Each adapter implements [`Central`].
     async fn adapters(&self) -> Result<Vec<Self::Adapter>>;
+}
+
+#[cfg(all(test, feature = "serde"))]
+mod tests {
+    use super::PeripheralProperties;
+
+    #[test]
+    fn peripheral_properties_round_trip_appearance() {
+        let properties = PeripheralProperties {
+            appearance: Some(0x0340),
+            ..PeripheralProperties::default()
+        };
+
+        let value = serde_json::to_value(&properties).unwrap();
+        assert_eq!(value["appearance"], 0x0340);
+
+        let decoded: PeripheralProperties = serde_json::from_value(value).unwrap();
+        assert_eq!(decoded.appearance, Some(0x0340));
+    }
+
+    #[test]
+    fn peripheral_properties_missing_appearance_defaults_to_none() {
+        let mut value = serde_json::to_value(PeripheralProperties::default()).unwrap();
+        value.as_object_mut().unwrap().remove("appearance").unwrap();
+
+        let properties: PeripheralProperties = serde_json::from_value(value).unwrap();
+        assert_eq!(properties.appearance, None);
+    }
 }

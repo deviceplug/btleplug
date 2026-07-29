@@ -1,3 +1,16 @@
+# Unreleased
+
+## Features
+
+- Add `appearance` to `PeripheralProperties`, populated from GAP Appearance
+  advertising data on Windows, Linux, and Android. CoreBluetooth does not expose
+  this advertising field, so it remains `None` on Apple platforms.
+
+## Breaking Changes
+
+- **`PeripheralProperties` struct literals**: The new `appearance` field must be
+  initialized by callers that construct this public struct directly.
+
 # 0.12.0 (2026-03-08)
 
 ## Features

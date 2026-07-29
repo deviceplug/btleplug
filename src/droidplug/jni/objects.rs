@@ -522,6 +522,10 @@ impl<'local> JScanResult<'local> {
             };
 
             let rssi = Some(self.get_rssi(env)? as i16);
+            let appearance = record
+                .get_bytes(env)?
+                .as_deref()
+                .and_then(crate::advertisement::parse_appearance_from_advertisement);
 
             let mfr_data_obj = record.get_manufacturer_specific_data(env)?;
             let mut manufacturer_data = HashMap::new();
@@ -624,6 +628,7 @@ impl<'local> JScanResult<'local> {
                 address_type: None,
                 local_name: device_name.clone(),
                 advertisement_name: device_name,
+                appearance,
                 tx_power_level,
                 manufacturer_data,
                 service_data,
@@ -644,6 +649,18 @@ bind_java_type! {
 }
 
 impl<'local> JScanRecord<'local> {
+    pub fn get_bytes(&self, env: &mut Env<'local>) -> Result<Option<Vec<u8>>> {
+        let value = env
+            .call_method(self, jni_str!("getBytes"), jni_sig!("()[B"), &[])?
+            .l()?;
+        if value.is_null() {
+            Ok(None)
+        } else {
+            let value = unsafe { jni::objects::JByteArray::from_raw(env, value.into_raw()) };
+            crate::droidplug::jni_utils::arrays::byte_array_to_vec(env, &value).map(Some)
+        }
+    }
+
     pub fn get_device_name(&self, env: &mut Env<'local>) -> Result<JObject<'local>> {
         env.call_method(
             self,

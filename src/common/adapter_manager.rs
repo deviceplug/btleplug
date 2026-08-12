@@ -58,12 +58,27 @@ where
         Box::pin(BroadcastStream::new(receiver).filter_map(|x| async move { x.ok() }))
     }
 
+    /// Idempotent: keeps the peripheral already in the map, if any.
+    ///
+    /// Was an `assert!` + `insert`. That is a check-then-act pair on a
+    /// concurrent `DashMap`, and the callers that reach it are inherently
+    /// racy — droidplug's `Adapter::report_scan_result` looks a peripheral
+    /// up, finds nothing, and then adds, with no lock held across the two
+    /// steps. Two scan results for the same device (which is what starting a
+    /// second scan on the process-global adapter produces) could both take
+    /// the `None` branch and the second `add` would abort the process.
+    ///
+    /// A panic here is especially hard to diagnose because the callers are
+    /// spawned tasks: Tokio stores the payload in the `JoinHandle` nobody
+    /// joins, and on Android the default hook writes to stderr, which is not
+    /// in logcat — so the symptom is a task that silently stops existing.
+    ///
+    /// Keeping the existing entry (rather than replacing it) is deliberate:
+    /// it may already carry connection state and characteristics that a
+    /// freshly constructed wrapper for the same address would not.
     pub fn add_peripheral(&self, peripheral: PeripheralType) {
-        assert!(
-            !self.peripherals.contains_key(&peripheral.id()),
-            "Adding a peripheral that's already in the map."
-        );
-        self.peripherals.insert(peripheral.id(), peripheral);
+        let id = peripheral.id();
+        self.peripherals.entry(id).or_insert(peripheral);
     }
 
     pub fn clear_peripherals(&self) {

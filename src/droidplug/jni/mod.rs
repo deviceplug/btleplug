@@ -7,18 +7,21 @@ use ::jni::{
 };
 use jni::{objects::JString, sys::jboolean};
 use std::ffi::c_void;
-use std::sync::Once;
+use std::sync::OnceLock;
 
-static INIT: Once = Once::new();
+static INIT: OnceLock<()> = OnceLock::new();
 
 pub fn init(env: &mut Env) -> crate::Result<()> {
-    let mut init_result: crate::Result<()> = Ok(());
-    INIT.call_once(|| {
-        if let Err(e) = init_inner(env) {
-            init_result = Err(e);
+    match INIT.get() {
+        Some(()) => Ok(()),
+        None => {
+            let result = init_inner(env);
+            if result.is_ok() {
+                let _ = INIT.set(());
+            }
+            result
         }
-    });
-    init_result
+    }
 }
 
 fn init_inner(env: &mut Env) -> crate::Result<()> {

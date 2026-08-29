@@ -3,6 +3,7 @@ use super::{
         jvm,
         objects::{JScanFilter, JScanResult},
     },
+    jni_utils::exceptions::throwable_to_string,
     peripheral::{Peripheral, PeripheralId},
 };
 use crate::{
@@ -164,8 +165,8 @@ impl Central for Adapter {
                     let msgstr = String::from(jstr.mutf8_chars(env)?);
                     Err(Error::RuntimeError(msgstr))
                 } else {
-                    let _ = env.throw(&ex);
-                    Err(jni::errors::Error::JavaException.into())
+                    let desc = throwable_to_string(env, &ex)?;
+                    Err(Error::RuntimeError(format!("Java exception: {}", desc)))
                 }
             }
             Err(e) => Err(e.into()),

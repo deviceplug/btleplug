@@ -3,13 +3,29 @@ use jni::{
     descriptors::Desc,
     errors::Error,
     jni_sig, jni_str,
-    objects::{JClass, JObject, JThrowable},
+    objects::{JClass, JObject, JString, JThrowable},
 };
 use std::{
     any::Any,
     panic::{UnwindSafe, catch_unwind, resume_unwind},
     sync::MutexGuard,
 };
+
+pub(crate) fn throwable_to_string(
+    env: &mut Env,
+    throwable: &JThrowable,
+) -> jni::errors::Result<String> {
+    let msg = env
+        .call_method(
+            throwable,
+            jni_str!("toString"),
+            jni_sig!("()Ljava/lang/String;"),
+            &[],
+        )?
+        .l()?;
+    let jstr = env.cast_local::<JString>(msg)?;
+    Ok(String::from(jstr.mutf8_chars(env)?))
+}
 
 /// Result from [`try_block`]. This object can be chained into
 /// [`catch`](TryCatchResult::catch) calls to catch exceptions.

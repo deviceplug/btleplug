@@ -4,6 +4,7 @@ use super::jni::{
 };
 use super::jni_utils::{
     arrays::byte_array_to_vec,
+    exceptions::throwable_to_string,
     future::{JFuture, JSendFuture},
     stream::JSendStream,
     task::JPollResult,
@@ -20,7 +21,7 @@ use async_trait::async_trait;
 use futures::stream::Stream;
 use jni::{
     Env, jni_sig, jni_str,
-    objects::{Global, JObject, JString, JValue},
+    objects::{Global, JObject, JString, JThrowable, JValue},
 };
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -113,12 +114,21 @@ fn get_poll_result<'a>(
                     let msgstr = String::from(jstr.mutf8_chars(env)?);
                     Err(Error::RuntimeError(msgstr))
                 } else {
-                    let _ = env.throw(&ex);
-                    Err(jni::errors::Error::JavaException.into())
+                    let cause = if cause.is_null() {
+                        None
+                    } else {
+                        Some(env.cast_local::<JThrowable>(cause)?)
+                    };
+                    let desc = if let Some(cause) = &cause {
+                        throwable_to_string(env, cause)?
+                    } else {
+                        throwable_to_string(env, &ex)?
+                    };
+                    Err(Error::RuntimeError(format!("Java exception: {}", desc)))
                 }
             } else {
-                let _ = env.throw(&ex);
-                Err(jni::errors::Error::JavaException.into())
+                let desc = throwable_to_string(env, &ex)?;
+                Err(Error::RuntimeError(format!("Java exception: {}", desc)))
             }
         }
         Err(e) => Err(e.into()),

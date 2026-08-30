@@ -3,6 +3,8 @@
 //! Each function contains the actual test logic, callable from both
 //! desktop `#[tokio::test]` wrappers and Android JNI test harness.
 
+#![allow(dead_code)]
+
 use btleplug::api::Peripheral as _;
 
 use super::gatt_uuids;

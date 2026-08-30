@@ -140,7 +140,7 @@ impl api::Peripheral for Peripheral {
 
     fn mtu(&self) -> u16 {
         let services = self.services.lock().unwrap();
-        for (_, service) in services.iter() {
+        for service in services.values() {
             if let Some((_, characteristic)) = service.characteristics.iter().next() {
                 return characteristic.info.mtu.unwrap();
             }

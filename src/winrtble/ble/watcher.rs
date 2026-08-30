@@ -12,7 +12,10 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use crate::{Error, Result, api::ScanFilter, winrtble::utils};
+use std::{collections::HashSet, sync::Mutex};
 use windows::{Devices::Bluetooth::Advertisement::*, Foundation::TypedEventHandler, core::Ref};
+
+const MATCH_CACHE_CAPACITY: usize = 1024;
 
 pub type AdvertisementEventHandler =
     Box<dyn Fn(&BluetoothLEAdvertisementReceivedEventArgs) -> windows::core::Result<()> + Send>;
@@ -20,6 +23,7 @@ pub type AdvertisementEventHandler =
 #[derive(Debug)]
 pub struct BLEWatcher {
     watcher: BluetoothLEAdvertisementWatcher,
+    received_token: Option<i64>,
 }
 
 impl From<windows::core::Error> for Error {
@@ -28,14 +32,39 @@ impl From<windows::core::Error> for Error {
     }
 }
 
+#[derive(Default)]
+struct MatchCache {
+    addresses: HashSet<u64>,
+}
+
+impl MatchCache {
+    fn record(&mut self, address: u64) {
+        if self.addresses.len() < MATCH_CACHE_CAPACITY || self.addresses.contains(&address) {
+            self.addresses.insert(address);
+        }
+    }
+
+    fn contains(&self, address: u64) -> bool {
+        self.addresses.contains(&address)
+    }
+}
+
 impl BLEWatcher {
     pub fn new() -> Result<Self> {
         let ad = BluetoothLEAdvertisementFilter::new()?;
         let watcher = BluetoothLEAdvertisementWatcher::Create(&ad)?;
-        Ok(BLEWatcher { watcher })
+        Ok(BLEWatcher {
+            watcher,
+            received_token: None,
+        })
     }
 
-    pub fn start(&self, filter: ScanFilter, on_received: AdvertisementEventHandler) -> Result<()> {
+    pub fn start(
+        &mut self,
+        filter: ScanFilter,
+        on_received: AdvertisementEventHandler,
+    ) -> Result<()> {
+        self.remove_received_handler()?;
         let ScanFilter { services } = filter;
 
         // Clear any OS-level service UUID filter from a previous scan.
@@ -51,8 +80,7 @@ impl BLEWatcher {
 
         // Pre-convert the filter UUIDs once so the handler closure is cheap.
         let filter_guids: Vec<windows::core::GUID> = services.iter().map(utils::to_guid).collect();
-        
-        let matching_devices = std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashSet::new()));
+        let matching_devices = Mutex::new(MatchCache::default());
 
         let handler: TypedEventHandler<
             BluetoothLEAdvertisementWatcher,
@@ -64,23 +92,26 @@ impl BLEWatcher {
                     if !filter_guids.is_empty() {
                         let address = args.BluetoothAddress().unwrap_or(0);
                         let mut is_match = false;
-                        
+
                         if let Ok(ad) = args.Advertisement() {
                             if let Ok(ad_uuids) = ad.ServiceUuids() {
                                 let count = ad_uuids.Size().unwrap_or(0);
                                 if count > 0 {
                                     let advertised: Vec<windows::core::GUID> =
                                         (0..count).filter_map(|i| ad_uuids.GetAt(i).ok()).collect();
-                                    is_match = filter_guids.iter().all(|g| advertised.contains(g));
+                                    is_match = filter_guids.iter().any(|g| advertised.contains(g));
                                 }
                             }
                         }
 
                         let mut cache = matching_devices.lock().unwrap();
                         if is_match {
-                            cache.insert(address);
-                        } else if !cache.contains(&address) {
-                            // If the current packet doesn't have the UUID and we haven't seen it before, drop it.
+                            cache.record(address);
+                        } else if !matches!(
+                            args.AdvertisementType(),
+                            Ok(BluetoothLEAdvertisementType::ScanResponse)
+                        ) || !cache.contains(address)
+                        {
                             return Ok(());
                         }
                     }
@@ -90,13 +121,38 @@ impl BLEWatcher {
             },
         );
 
-        self.watcher.Received(&handler)?;
+        self.received_token = Some(self.watcher.Received(&handler)?);
         self.watcher.Start()?;
         Ok(())
     }
 
-    pub fn stop(&self) -> Result<()> {
+    pub fn stop(&mut self) -> Result<()> {
         self.watcher.Stop()?;
+        self.remove_received_handler()
+    }
+
+    fn remove_received_handler(&mut self) -> Result<()> {
+        if let Some(token) = self.received_token.take() {
+            self.watcher.RemoveReceived(token)?;
+        }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MATCH_CACHE_CAPACITY, MatchCache};
+
+    #[test]
+    fn match_cache_is_bounded() {
+        let mut cache = MatchCache::default();
+        for address in 0..MATCH_CACHE_CAPACITY as u64 {
+            cache.record(address);
+        }
+        cache.record(MATCH_CACHE_CAPACITY as u64);
+
+        assert_eq!(cache.addresses.len(), MATCH_CACHE_CAPACITY);
+        assert!(cache.contains(0));
+        assert!(!cache.contains(MATCH_CACHE_CAPACITY as u64));
     }
 }

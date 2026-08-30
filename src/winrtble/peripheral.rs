@@ -87,6 +87,7 @@ struct Shared {
     // Mutable, advertised, state...
     address_type: RwLock<Option<AddressType>>,
     local_name: RwLock<Option<String>>,
+    has_complete_local_name: AtomicBool,
     advertisement_name: RwLock<Option<String>>,
     last_tx_power_level: RwLock<Option<i16>>, // XXX: would be nice to avoid lock here!
     last_rssi: RwLock<Option<i16>>,           // XXX: would be nice to avoid lock here!
@@ -94,6 +95,23 @@ struct Shared {
     latest_service_data: RwLock<HashMap<Uuid, Vec<u8>>>,
     services: RwLock<HashSet<Uuid>>,
     class: RwLock<Option<u32>>,
+}
+
+struct AdvertisedName {
+    value: String,
+    is_complete: bool,
+}
+
+fn parse_advertised_name(data: &[u8], is_complete: bool) -> Option<AdvertisedName> {
+    let value = std::str::from_utf8(data)
+        .ok()?
+        .trim_end_matches('\0')
+        .to_string();
+    (!value.is_empty()).then_some(AdvertisedName { value, is_complete })
+}
+
+fn should_accept_name(has_complete_name: bool, new_name_is_complete: bool) -> bool {
+    !has_complete_name || new_name_is_complete
 }
 
 impl Peripheral {
@@ -110,6 +128,7 @@ impl Peripheral {
                 notifications_channel: broadcast_sender,
                 address_type: RwLock::new(None),
                 local_name: RwLock::new(None),
+                has_complete_local_name: AtomicBool::new(false),
                 advertisement_name: RwLock::new(None),
                 last_tx_power_level: RwLock::new(None),
                 last_rssi: RwLock::new(None),
@@ -149,20 +168,13 @@ impl Peripheral {
         let advertisement = args.Advertisement().unwrap();
 
         // Advertisements are cumulative: set/replace data only if it's set
-        if let Ok(name) = advertisement.LocalName() {
-            if !name.is_empty() {
-                let name_str = name.to_string();
-                let mut adv_name_guard = self.shared.advertisement_name.write().unwrap();
-                *adv_name_guard = Some(name_str.clone());
-                drop(adv_name_guard);
-                // Also use as local_name fallback if we don't have one yet
-                let local_name_guard = self.shared.local_name.read().unwrap();
-                if local_name_guard.is_none() {
-                    drop(local_name_guard);
-                    let mut local_name_guard = self.shared.local_name.write().unwrap();
-                    *local_name_guard = Some(name_str);
-                }
-            }
+        let projected_local_name = advertisement
+            .LocalName()
+            .ok()
+            .map(|name| name.to_string())
+            .filter(|name| !name.is_empty());
+        if let Some(name) = &projected_local_name {
+            *self.shared.advertisement_name.write().unwrap() = Some(name.clone());
         }
         if let Ok(manufacturer_data) = advertisement.ManufacturerData() {
             if manufacturer_data.Size().unwrap() > 0 {
@@ -191,8 +203,7 @@ impl Peripheral {
         if let Ok(data_sections) = advertisement.DataSections() {
             // See if we have any advertised service data before taking a lock to update...
             let mut found_service_data = false;
-            let mut manual_local_name: Option<String> = None;
-            let mut has_complete_name = false;
+            let mut advertised_name = None;
             for section in &data_sections {
                 match section.DataType().unwrap() {
                     advertisement_data_type::SERVICE_DATA_16_BIT_UUID
@@ -201,44 +212,38 @@ impl Peripheral {
                         found_service_data = true;
                     }
                     advertisement_data_type::COMPLETE_LOCAL_NAME => {
-                        let data = utils::to_vec(&section.Data().unwrap());
-                        if let Ok(name) = String::from_utf8(data) {
-                            let name = name.trim_end_matches('\0').trim().to_string();
-                            if !name.is_empty() {
-                                manual_local_name = Some(name);
-                                has_complete_name = true;
-                            }
+                        if let Some(name) =
+                            parse_advertised_name(&utils::to_vec(&section.Data().unwrap()), true)
+                        {
+                            advertised_name = Some(name);
                         }
                     }
-                    advertisement_data_type::SHORT_LOCAL_NAME => {
-                        // Only use SHORT_LOCAL_NAME if we haven't already found a COMPLETE_LOCAL_NAME
-                        if !has_complete_name {
-                            let data = utils::to_vec(&section.Data().unwrap());
-                            if let Ok(name) = String::from_utf8(data) {
-                                let name = name.trim_end_matches('\0').trim().to_string();
-                                if !name.is_empty() {
-                                    manual_local_name = Some(name);
-                                }
-                            }
-                        }
+                    advertisement_data_type::SHORT_LOCAL_NAME if advertised_name.is_none() => {
+                        advertised_name =
+                            parse_advertised_name(&utils::to_vec(&section.Data().unwrap()), false);
                     }
                     _ => {}
                 }
             }
 
-            if let Some(name) = manual_local_name {
-                if !name.is_empty() {
-                    let existing = self.shared.local_name.read().unwrap().clone();
-                    // Only update if: (1) no existing name, or (2) this is a COMPLETE_LOCAL_NAME,
-                    // or (3) new name is longer (prevents SHORT from overwriting COMPLETE across packets)
-                    let should_update = match &existing {
-                        None => true,
-                        Some(old) => has_complete_name || name.len() > old.len(),
-                    };
-                    if should_update {
-                        *self.shared.local_name.write().unwrap() = Some(name.clone());
-                        self.emit_event(CentralEvent::DeviceUpdated(self.shared.address.into()));
-                    }
+            let has_complete_name = self.shared.has_complete_local_name.load(Ordering::Relaxed);
+            let name = advertised_name.or_else(|| {
+                (!has_complete_name)
+                    .then(|| projected_local_name.clone())
+                    .flatten()
+                    .map(|value| AdvertisedName {
+                        value,
+                        is_complete: false,
+                    })
+            });
+            if let Some(name) = name
+                && should_accept_name(has_complete_name, name.is_complete)
+            {
+                *self.shared.local_name.write().unwrap() = Some(name.value);
+                if name.is_complete {
+                    self.shared
+                        .has_complete_local_name
+                        .store(true, Ordering::Relaxed);
                 }
             }
             if found_service_data {
@@ -356,6 +361,33 @@ impl Peripheral {
         } else {
             trace!("Could not emit an event. AdapterManager has been dropped");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_advertised_name, should_accept_name};
+
+    #[test]
+    fn advertised_name_removes_only_nul_padding() {
+        let name = parse_advertised_name(b" Device Name \0\0", true).unwrap();
+
+        assert_eq!(name.value, " Device Name ");
+        assert!(name.is_complete);
+    }
+
+    #[test]
+    fn advertised_name_rejects_empty_and_invalid_utf8() {
+        assert!(parse_advertised_name(b"\0\0", false).is_none());
+        assert!(parse_advertised_name(&[0xff], true).is_none());
+    }
+
+    #[test]
+    fn complete_name_cannot_be_replaced_by_short_name() {
+        assert!(!should_accept_name(true, false));
+        assert!(should_accept_name(true, true));
+        assert!(should_accept_name(false, false));
+        assert!(should_accept_name(false, true));
     }
 }
 

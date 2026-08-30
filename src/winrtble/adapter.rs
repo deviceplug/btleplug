@@ -150,7 +150,7 @@ impl Central for Adapter {
     }
 
     async fn start_scan(&self, filter: ScanFilter) -> Result<()> {
-        let watcher = self.watcher.lock().map_err(Into::<Error>::into)?;
+        let mut watcher = self.watcher.lock().map_err(Into::<Error>::into)?;
         let manager = self.manager.clone();
         watcher.start(
             filter,
@@ -172,7 +172,7 @@ impl Central for Adapter {
     }
 
     async fn stop_scan(&self) -> Result<()> {
-        let watcher = self.watcher.lock().map_err(Into::<Error>::into)?;
+        let mut watcher = self.watcher.lock().map_err(Into::<Error>::into)?;
         watcher.stop()?;
         Ok(())
     }

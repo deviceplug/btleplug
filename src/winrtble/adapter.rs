@@ -156,7 +156,12 @@ impl Central for Adapter {
             filter,
             Box::new(move |args| {
                 let bluetooth_address = args.BluetoothAddress()?;
-                let address = checked_address(bluetooth_address)?;
+                let address = checked_address(bluetooth_address).map_err(|error| {
+                    windows::core::Error::new(
+                        windows::core::HRESULT::from_win32(87),
+                        error.to_string(),
+                    )
+                })?;
                 if let Some(mut entry) = manager.peripheral_mut(&address.into()) {
                     entry.value_mut().update_properties(args);
                     manager.emit(CentralEvent::DeviceUpdated(address.into()));
@@ -237,7 +242,9 @@ impl Central for Adapter {
             .map_err(winrt_error)?
             .into_future()
             .await
-            .map_err(winrt_error)?;
+            .map_err(winrt_error)?
+            .into_iter()
+            .collect::<Vec<_>>();
         let mut result = Vec::new();
 
         for info in devices {

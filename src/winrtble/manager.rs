@@ -35,7 +35,9 @@ impl api::Manager for Manager {
         let selector = BluetoothAdapter::GetDeviceSelector()?;
         let devices = DeviceInformation::FindAllAsyncAqsFilter(&selector)?
             .into_future()
-            .await?;
+            .await?
+            .into_iter()
+            .collect::<Vec<_>>();
         let mut adapters = Vec::new();
         for device in devices {
             let device_id = device.Id()?;

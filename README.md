@@ -114,6 +114,12 @@ Privacy_ → _Privacy_ → _Bluetooth_, clicking the '+' button, and selecting
 Due to requiring a hybrid Rust/Java build, btleplug for Android requires a somewhat complicated
 setup.
 
+The Android library and its test application require Android API 24 (Android 7.0) or newer. This is
+because the JNI support classes use Java functional interfaces introduced in API 24. Applications
+that need to support API 23 must use a compatible btleplug release or provide a redesigned JNI
+interface; core library desugaring is not enabled by btleplug and would also need to be configured
+by the consuming application.
+
 There is now a build script at `./scripts/build-java.sh` for building the java portion of the library on linux or macOS. This can also be used as a guide for manual building if need be.
 
 If your app uses Proguard/R8 with `minifyEnabled true`, you must add keep rules for btleplug's

@@ -44,7 +44,7 @@ jobs:
         if: ${{ runner.os == 'Linux' }}
         run: |
           sudo apt-get update
-          sudo apt-get install libdbus-1-dev
+          sudo apt-get install libdbus-1-dev openjdk-17-jdk
       - uses: actions/setup-java@v2
         if: ${{ matrix.target == 'android' }}
         with:
@@ -71,9 +71,22 @@ jobs:
         run: cargo check --all --bins --examples --no-default-features
       - name: Check with all features
         run: cargo check --all --bins --examples --all-features
+      - name: Run JNI host tests
+        if: ${{ matrix.target == 'linux' || matrix.target == 'macos' }}
+        run: ./scripts/run-jni-tests.sh
       - name: Run tests
         if: ${{ matrix.target != 'android' }}
         run: cargo test --all
+      - name: Build Android library and test app
+        if: ${{ matrix.target == 'android' }}
+        run: |
+          ./scripts/build-java.sh
+          cp src/droidplug/java/gradlew tests/android/
+          cp -r src/droidplug/java/gradle tests/android/
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > tests/android/local.properties
+          cd tests/android
+          chmod +x gradlew
+          ./gradlew assembleDebug assembleAndroidTest
       - name: Run clippy
         uses: actions-rs/clippy-check@v1
         with:

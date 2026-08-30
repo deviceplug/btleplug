@@ -223,15 +223,13 @@ pub struct ScanFilter {
 /// `None` leaves a selector unspecified; an explicitly empty selector matches nothing. Values
 /// within a selector are OR'ed, while the identifier and service selectors are combined as a
 /// union. Returned peripherals retain backend order and are deduplicated by identifier.
-#[derive(Clone, Debug, Eq, PartialEq)]
-#[derive(Default)]
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct RetrievePeripheralsOptions {
     /// Known peripheral identifiers to retrieve.
     pub identifiers: Option<Vec<PeripheralId>>,
     /// Service UUIDs used to retrieve connected peripherals.
     pub services: Option<Vec<Uuid>>,
 }
-
 
 /// Returns whether a candidate identifier is included in an identifier selector.
 #[allow(dead_code)] // Used by platform-gated backend implementations.

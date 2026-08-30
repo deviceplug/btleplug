@@ -193,7 +193,7 @@ impl Peripheral {
                 }
             }
         });
-        Self { shared: shared }
+        Self { shared }
     }
 
     pub(super) fn update_name(

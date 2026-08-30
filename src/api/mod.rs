@@ -224,6 +224,7 @@ pub struct ScanFilter {
 /// within a selector are OR'ed, while the identifier and service selectors are combined as a
 /// union. Returned peripherals retain backend order and are deduplicated by identifier.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Default)]
 pub struct RetrievePeripheralsOptions {
     /// Known peripheral identifiers to retrieve.
     pub identifiers: Option<Vec<PeripheralId>>,
@@ -231,14 +232,6 @@ pub struct RetrievePeripheralsOptions {
     pub services: Option<Vec<Uuid>>,
 }
 
-impl Default for RetrievePeripheralsOptions {
-    fn default() -> Self {
-        Self {
-            identifiers: None,
-            services: None,
-        }
-    }
-}
 
 /// Returns whether a candidate identifier is included in an identifier selector.
 pub(crate) fn matches_identifier<T: Eq>(candidate: &T, requested: &[T]) -> bool {

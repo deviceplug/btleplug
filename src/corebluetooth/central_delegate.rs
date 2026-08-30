@@ -789,7 +789,7 @@ declare_class!(
                     service_uuid,
                     characteristic_uuid,
                     descriptor_uuid,
-                    data: get_descriptor_value(&descriptor),
+                    data: get_descriptor_value(descriptor),
                 });
                 // Notify BluetoothGATTCharacteristic::read_value that read was successful.
             }

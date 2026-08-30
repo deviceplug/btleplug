@@ -94,7 +94,7 @@ impl Debug for CharacteristicInternal {
 
 impl CharacteristicInternal {
     pub fn new(characteristic: Retained<CBCharacteristic>) -> Self {
-        let properties = CharacteristicInternal::form_flags(&*characteristic);
+        let properties = CharacteristicInternal::form_flags(&characteristic);
         let raw_uuid = unsafe { characteristic.UUID() };
         let uuid = cbuuid_to_uuid(&raw_uuid);
         let descriptors_arr = unsafe { characteristic.descriptors() };
@@ -256,7 +256,7 @@ impl PeripheralInternal {
                 // in-flight future state and already-discovered descriptors to
                 // avoid dropping pending operations during late re-discovery
                 // events (see issue #167).
-                existing.properties = CharacteristicInternal::form_flags(&*cb_characteristic);
+                existing.properties = CharacteristicInternal::form_flags(&cb_characteristic);
                 existing.characteristic = cb_characteristic;
             } else {
                 service.characteristics.insert(
@@ -393,10 +393,10 @@ impl PeripheralInternal {
                     } = characteristic;
 
                     let futures = read_future_state
-                        .into_iter()
-                        .chain(write_future_state.into_iter())
-                        .chain(subscribe_future_state.into_iter())
-                        .chain(unsubscribe_future_state.into_iter());
+                        .iter()
+                        .chain(write_future_state)
+                        .chain(subscribe_future_state)
+                        .chain(unsubscribe_future_state);
                     for state in futures {
                         state.lock().unwrap().set_reply(error.clone());
                     }
@@ -589,8 +589,8 @@ impl CoreBluetoothInternal {
             "Got manufacturer data advertisement! {}: {:?}",
             manufacturer_id, manufacturer_data
         );
-        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Err(e) = p
+        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid)
+            && let Err(e) = p
                 .event_sender
                 .send(PeripheralEventInternal::ManufacturerData(
                     manufacturer_id,
@@ -601,7 +601,6 @@ impl CoreBluetoothInternal {
             {
                 error!("Error sending notification event: {}", e);
             }
-        }
     }
 
     async fn on_service_data(
@@ -611,28 +610,26 @@ impl CoreBluetoothInternal {
         rssi: i16,
     ) {
         trace!("Got service data advertisement! {:?}", service_data);
-        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Err(e) = p
+        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid)
+            && let Err(e) = p
                 .event_sender
                 .send(PeripheralEventInternal::ServiceData(service_data, rssi))
                 .await
             {
                 error!("Error sending notification event: {}", e);
             }
-        }
     }
 
     async fn on_services(&mut self, peripheral_uuid: Uuid, services: Vec<Uuid>, rssi: i16) {
         trace!("Got service advertisement! {:?}", services);
-        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Err(e) = p
+        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid)
+            && let Err(e) = p
                 .event_sender
                 .send(PeripheralEventInternal::Services(services, rssi))
                 .await
             {
                 error!("Error sending notification event: {}", e);
             }
-        }
     }
 
     async fn on_services_modified(&mut self, peripheral_uuid: Uuid) {
@@ -664,7 +661,18 @@ impl CoreBluetoothInternal {
             .map(|n| n.to_string())
             .or(advertisement_name.clone());
 
-        if self.peripherals.contains_key(&uuid) {
+        if let std::collections::hash_map::Entry::Vacant(e) = self.peripherals.entry(uuid) {
+            // Create our channels
+            let (event_sender, event_receiver) = mpsc::channel(256);
+            e.insert(PeripheralInternal::new(peripheral, event_sender));
+            self.dispatch_event(CoreBluetoothEvent::DeviceDiscovered {
+                uuid,
+                local_name,
+                advertisement_name,
+                event_receiver,
+            })
+            .await;
+        } else {
             if local_name.is_some() || advertisement_name.is_some() {
                 self.dispatch_event(CoreBluetoothEvent::DeviceUpdated {
                     uuid,
@@ -673,18 +681,6 @@ impl CoreBluetoothInternal {
                 })
                 .await;
             }
-        } else {
-            // Create our channels
-            let (event_sender, event_receiver) = mpsc::channel(256);
-            self.peripherals
-                .insert(uuid, PeripheralInternal::new(peripheral, event_sender));
-            self.dispatch_event(CoreBluetoothEvent::DeviceDiscovered {
-                uuid,
-                local_name,
-                advertisement_name,
-                event_receiver,
-            })
-            .await;
         }
     }
 
@@ -908,9 +904,9 @@ impl CoreBluetoothInternal {
         characteristic_uuid: Uuid,
         data: Vec<u8>,
     ) {
-        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Some(service) = peripheral.services.get_mut(&service_uuid) {
-                if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
+        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid)
+            && let Some(service) = peripheral.services.get_mut(&service_uuid)
+                && let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
                 {
                     trace!("Got read event!");
 
@@ -940,8 +936,6 @@ impl CoreBluetoothInternal {
                         error!("Error sending notification event: {}", e);
                     }
                 }
-            }
-        }
     }
 
     fn on_characteristic_written(
@@ -1003,9 +997,9 @@ impl CoreBluetoothInternal {
         kind: WriteType,
         fut: CoreBluetoothReplyStateShared,
     ) {
-        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Some(service) = peripheral.services.get_mut(&service_uuid) {
-                if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
+        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid)
+            && let Some(service) = peripheral.services.get_mut(&service_uuid)
+                && let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
                 {
                     trace!("Writing value! With kind {:?}", kind);
                     match kind {
@@ -1043,8 +1037,6 @@ impl CoreBluetoothInternal {
                         }
                     }
                 }
-            }
-        }
     }
 
     fn drain_write_without_response_queue(&mut self, peripheral_uuid: Uuid) {
@@ -1099,9 +1091,9 @@ impl CoreBluetoothInternal {
         characteristic_uuid: Uuid,
         fut: CoreBluetoothReplyStateShared,
     ) {
-        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Some(service) = peripheral.services.get_mut(&service_uuid) {
-                if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
+        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid)
+            && let Some(service) = peripheral.services.get_mut(&service_uuid)
+                && let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
                 {
                     trace!("Reading value!");
                     unsafe {
@@ -1111,8 +1103,6 @@ impl CoreBluetoothInternal {
                     }
                     characteristic.read_future_state.push_front(fut);
                 }
-            }
-        }
     }
 
     fn subscribe(
@@ -1122,9 +1112,9 @@ impl CoreBluetoothInternal {
         characteristic_uuid: Uuid,
         fut: CoreBluetoothReplyStateShared,
     ) {
-        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Some(service) = peripheral.services.get_mut(&service_uuid) {
-                if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
+        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid)
+            && let Some(service) = peripheral.services.get_mut(&service_uuid)
+                && let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
                 {
                     trace!("Setting subscribe!");
                     unsafe {
@@ -1134,8 +1124,6 @@ impl CoreBluetoothInternal {
                     }
                     characteristic.subscribe_future_state.push_front(fut);
                 }
-            }
-        }
     }
 
     fn unsubscribe(
@@ -1145,9 +1133,9 @@ impl CoreBluetoothInternal {
         characteristic_uuid: Uuid,
         fut: CoreBluetoothReplyStateShared,
     ) {
-        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Some(service) = peripheral.services.get_mut(&service_uuid) {
-                if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
+        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid)
+            && let Some(service) = peripheral.services.get_mut(&service_uuid)
+                && let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
                 {
                     trace!("Setting subscribe!");
                     unsafe {
@@ -1158,8 +1146,6 @@ impl CoreBluetoothInternal {
                     }
                     characteristic.unsubscribe_future_state.push_front(fut);
                 }
-            }
-        }
     }
 
     fn write_descriptor_value(
@@ -1171,11 +1157,10 @@ impl CoreBluetoothInternal {
         data: Vec<u8>,
         fut: CoreBluetoothReplyStateShared,
     ) {
-        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Some(service) = peripheral.services.get_mut(&service_uuid) {
-                if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
-                {
-                    if let Some(descriptor) = characteristic.descriptors.get_mut(&descriptor_uuid) {
+        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid)
+            && let Some(service) = peripheral.services.get_mut(&service_uuid)
+                && let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
+                    && let Some(descriptor) = characteristic.descriptors.get_mut(&descriptor_uuid) {
                         trace!("Writing descriptor value!");
                         unsafe {
                             peripheral.peripheral.writeValue_forDescriptor(
@@ -1185,9 +1170,6 @@ impl CoreBluetoothInternal {
                         }
                         descriptor.write_future_state.push_front(fut);
                     }
-                }
-            }
-        }
     }
 
     fn read_descriptor_value(
@@ -1198,11 +1180,10 @@ impl CoreBluetoothInternal {
         descriptor_uuid: Uuid,
         fut: CoreBluetoothReplyStateShared,
     ) {
-        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Some(service) = peripheral.services.get_mut(&service_uuid) {
-                if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
-                {
-                    if let Some(descriptor) = characteristic.descriptors.get_mut(&descriptor_uuid) {
+        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid)
+            && let Some(service) = peripheral.services.get_mut(&service_uuid)
+                && let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
+                    && let Some(descriptor) = characteristic.descriptors.get_mut(&descriptor_uuid) {
                         trace!("Reading descriptor value!");
                         unsafe {
                             peripheral
@@ -1211,9 +1192,6 @@ impl CoreBluetoothInternal {
                         }
                         descriptor.read_future_state.push_front(fut);
                     }
-                }
-            }
-        }
     }
 
     fn read_rssi(&mut self, peripheral_uuid: Uuid, fut: CoreBluetoothReplyStateShared) {
@@ -1247,15 +1225,14 @@ impl CoreBluetoothInternal {
     }
 
     async fn on_tx_power_level(&mut self, peripheral_uuid: Uuid, tx_power_level: i16) {
-        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Err(e) = peripheral
+        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid)
+            && let Err(e) = peripheral
                 .event_sender
                 .send(PeripheralEventInternal::TxPowerLevel(tx_power_level))
                 .await
             {
                 error!("Error sending tx_power_level event: {}", e);
             }
-        }
     }
 
     async fn on_descriptor_read(
@@ -1266,11 +1243,10 @@ impl CoreBluetoothInternal {
         descriptor_uuid: Uuid,
         data: Vec<u8>,
     ) {
-        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
-            if let Some(service) = peripheral.services.get_mut(&service_uuid) {
-                if let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
-                {
-                    if let Some(descriptor) = characteristic.descriptors.get_mut(&descriptor_uuid) {
+        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid)
+            && let Some(service) = peripheral.services.get_mut(&service_uuid)
+                && let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid)
+                    && let Some(descriptor) = characteristic.descriptors.get_mut(&descriptor_uuid) {
                         trace!("Got read event!");
 
                         let mut data_clone = Vec::new();
@@ -1284,9 +1260,6 @@ impl CoreBluetoothInternal {
                                 .set_reply(CoreBluetoothReply::ReadResult(data_clone));
                         }
                     }
-                }
-            }
-        }
     }
 
     fn on_descriptor_written(

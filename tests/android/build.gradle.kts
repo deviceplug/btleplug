@@ -15,7 +15,7 @@ android {
 
     defaultConfig {
         applicationId = "com.nonpolynomial.btleplug.test"
-        minSdk = 23
+        minSdk = 24
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"

@@ -622,8 +622,8 @@ declare_class!(
                 characteristic_debug(characteristic),
                 localized_description(error)
             );
-            // Always send the event, even on error, so that the characteristic
-            // is marked as discovered and discover_services() can complete.
+            // Send the event even on error when the characteristic is associated
+            // with a service, so discover_services() can complete.
             let mut descriptors = HashMap::new();
             if error.is_some() {
                 warn!(
@@ -642,7 +642,13 @@ declare_class!(
             }
             let id = unsafe { peripheral.identifier() };
             let peripheral_uuid = nsuuid_to_uuid(&id);
-            let service = unsafe { characteristic.service() }.unwrap();
+            let Some(service) = (unsafe { characteristic.service() }) else {
+                warn!(
+                    "Descriptor discovery completed for characteristic {} without an associated service",
+                    characteristic_debug(characteristic)
+                );
+                return;
+            };
             let raw_service_uuid = unsafe { service.UUID() };
             let service_uuid = cbuuid_to_uuid(&raw_service_uuid);
             let raw_char_uuid = unsafe { characteristic.UUID() };

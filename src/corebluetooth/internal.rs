@@ -1567,6 +1567,157 @@ impl Drop for CoreBluetoothInternal {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures::StreamExt;
+    use objc2::{DeclaredClass, declare_class, mutability};
+    use objc2_core_bluetooth::{
+        CBAttributePermissions, CBMutableCharacteristic, CBMutableService, CBPeripheralDelegate,
+    };
+    use objc2_foundation::{NSError, NSObjectProtocol, NSString, ns_string};
+    use std::time::Duration;
+
+    declare_class!(
+        struct TestPeripheral;
+
+        unsafe impl ClassType for TestPeripheral {
+            type Super = CBPeripheral;
+            type Mutability = mutability::InteriorMutable;
+            const NAME: &'static str = "BtlePlugTestPeripheral";
+        }
+
+        impl DeclaredClass for TestPeripheral {
+            type Ivars = Retained<NSUUID>;
+        }
+
+        unsafe impl NSObjectProtocol for TestPeripheral {}
+
+        unsafe impl TestPeripheral {
+            #[method_id(identifier)]
+            fn identifier(&self) -> Retained<NSUUID> {
+                self.ivars().clone()
+            }
+
+            #[method_id(name)]
+            fn name(&self) -> Option<Retained<NSString>> {
+                None
+            }
+        }
+    );
+
+    impl TestPeripheral {
+        fn new(identifier: Retained<NSUUID>) -> Retained<Self> {
+            let this = Self::alloc().set_ivars(identifier);
+            unsafe { msg_send_id![super(this), init] }
+        }
+    }
+
+    #[tokio::test]
+    async fn descriptor_discovery_error_completes_service_discovery_without_descriptors() {
+        let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
+        let peripheral_uuid_string = NSString::from_str(&peripheral_uuid.to_string());
+        let peripheral_identifier =
+            NSUUID::initWithUUIDString(NSUUID::alloc(), &peripheral_uuid_string)
+                .expect("valid peripheral UUID");
+        let peripheral = TestPeripheral::new(peripheral_identifier);
+        let service_uuid = Uuid::from_u128(0x0000180f_0000_1000_8000_00805f9b34fb);
+        let characteristic_uuid = Uuid::from_u128(0x00002a19_0000_1000_8000_00805f9b34fb);
+        let service_cbuuid = uuid_to_cbuuid(service_uuid);
+        let characteristic_cbuuid = uuid_to_cbuuid(characteristic_uuid);
+        let characteristic = unsafe {
+            CBMutableCharacteristic::initWithType_properties_value_permissions(
+                CBMutableCharacteristic::alloc(),
+                &characteristic_cbuuid,
+                CBCharacteristicProperties::CBCharacteristicPropertyRead,
+                None,
+                CBAttributePermissions::Readable,
+            )
+        };
+        let service = unsafe {
+            CBMutableService::initWithType_primary(CBMutableService::alloc(), &service_cbuuid, true)
+        };
+        let characteristic: Retained<CBCharacteristic> = Retained::into_super(characteristic);
+        let characteristics = NSArray::from_vec(vec![characteristic.clone()]);
+        unsafe { service.setCharacteristics(Some(&characteristics)) };
+        let service: Retained<CBService> = Retained::into_super(service);
+
+        let (event_sender, _) = mpsc::channel(1);
+        let mut internal =
+            PeripheralInternal::new(Retained::into_super(peripheral.clone()), event_sender);
+        internal.services.insert(
+            service_uuid,
+            ServiceInternal {
+                cbservice: service,
+                characteristics: HashMap::from([(
+                    characteristic_uuid,
+                    CharacteristicInternal::new(characteristic.clone()),
+                )]),
+                discovered: false,
+            },
+        );
+        let discovery = CoreBluetoothReplyFuture::default();
+        internal.services_discovered_future_state = Some(discovery.get_state_clone());
+
+        let (delegate_sender, mut delegate_receiver) = mpsc::channel(1);
+        let delegate = CentralDelegate::new(delegate_sender);
+        let error = NSError::new(1, ns_string!("BtlePlugCoreBluetoothTests"));
+        unsafe {
+            delegate.peripheral_didDiscoverDescriptorsForCharacteristic_error(
+                &peripheral,
+                &characteristic,
+                Some(&error),
+            );
+        }
+
+        let event = tokio::time::timeout(Duration::from_secs(1), delegate_receiver.next())
+            .await
+            .expect("descriptor error callback did not emit an event")
+            .expect("delegate event channel closed");
+        let CentralDelegateEvent::DiscoveredCharacteristicDescriptors {
+            peripheral_uuid: event_peripheral_uuid,
+            service_uuid: event_service_uuid,
+            characteristic_uuid: event_characteristic_uuid,
+            descriptors,
+        } = event
+        else {
+            panic!("unexpected delegate event: {event:?}");
+        };
+        assert_eq!(event_peripheral_uuid, peripheral_uuid);
+        assert_eq!(event_service_uuid, service_uuid);
+        assert_eq!(event_characteristic_uuid, characteristic_uuid);
+        assert!(descriptors.is_empty());
+
+        internal.set_characteristic_descriptors(
+            event_service_uuid,
+            event_characteristic_uuid,
+            descriptors,
+        );
+        let reply = tokio::time::timeout(Duration::from_secs(1), discovery)
+            .await
+            .expect("service discovery remained pending after descriptor error");
+        let CoreBluetoothReply::ServicesDiscovered(services) = reply else {
+            panic!("unexpected discovery reply: {reply:?}");
+        };
+        let characteristic = services
+            .iter()
+            .find(|service| service.uuid == service_uuid)
+            .and_then(|service| {
+                service
+                    .characteristics
+                    .iter()
+                    .find(|characteristic| characteristic.uuid == characteristic_uuid)
+            })
+            .expect("discovered characteristic");
+        assert!(characteristic.descriptors.is_empty());
+
+        // CBPeripheral has no public initializer suitable for tests, so this
+        // subclass must not run CoreBluetooth's private destruction path.
+        std::mem::forget(internal);
+        std::mem::forget(peripheral);
+    }
+}
+
 pub fn run_corebluetooth_thread(
     event_sender: Sender<CoreBluetoothEvent>,
 ) -> Result<Sender<CoreBluetoothMessage>, Error> {

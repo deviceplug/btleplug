@@ -40,7 +40,7 @@ async fn main() -> anyhow::Result<()> {
         .await
         .expect("Unable to fetch adapter list.")
         .into_iter()
-        .nth(0)
+        .next()
         .expect("Unable to find adapters.");
 
     // start scanning for devices
@@ -78,7 +78,7 @@ async fn main() -> anyhow::Result<()> {
             0xAA,
         ];
         light
-            .write(&cmd_char, &color_cmd, WriteType::WithoutResponse)
+            .write(cmd_char, &color_cmd, WriteType::WithoutResponse)
             .await?;
         time::sleep(Duration::from_millis(200)).await;
     }

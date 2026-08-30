@@ -9,7 +9,7 @@ use futures::stream::StreamExt;
 
 async fn get_central(manager: &Manager) -> Adapter {
     let adapters = manager.adapters().await.unwrap();
-    adapters.into_iter().nth(0).unwrap()
+    adapters.into_iter().next().unwrap()
 }
 
 #[tokio::main]

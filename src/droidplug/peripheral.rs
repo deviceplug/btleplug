@@ -140,7 +140,6 @@ struct PeripheralShared {
     services: BTreeSet<Service>,
     characteristics: BTreeSet<Characteristic>,
     properties: Option<PeripheralProperties>,
-    mtu: AtomicU16,
 }
 
 #[derive(Clone)]
@@ -162,7 +161,6 @@ impl Peripheral {
                 services: BTreeSet::new(),
                 characteristics: BTreeSet::new(),
                 properties: None,
-                mtu: AtomicU16::new(crate::api::DEFAULT_MTU_SIZE),
             })),
             mtu: Arc::new(AtomicU16::new(crate::api::DEFAULT_MTU_SIZE)),
         })
@@ -221,12 +219,12 @@ impl api::Peripheral for Peripheral {
 
     async fn properties(&self) -> Result<Option<PeripheralProperties>> {
         let guard = self.shared.lock().map_err(Into::<Error>::into)?;
-        Ok((&guard.properties).clone())
+        Ok(guard.properties.clone())
     }
 
     fn characteristics(&self) -> BTreeSet<Characteristic> {
         let guard = self.shared.lock().unwrap();
-        (&guard.characteristics).clone()
+        guard.characteristics.clone()
     }
 
     async fn is_connected(&self) -> Result<bool> {
@@ -283,7 +281,7 @@ impl api::Peripheral for Peripheral {
 
     fn services(&self) -> BTreeSet<Service> {
         let guard = self.shared.lock().unwrap();
-        (&guard.services).clone()
+        guard.services.clone()
     }
 
     async fn discover_services(&self) -> Result<()> {
@@ -486,9 +484,8 @@ impl api::Peripheral for Peripheral {
 
     async fn connection_parameters(&self) -> Result<Option<ConnectionParameters>> {
         self.with_obj(|env, obj| {
-            Ok(obj
-                .get_connection_parameters(env)
-                .map_err(|e| Error::Other(format!("{:?}", e).into()))?)
+            obj.get_connection_parameters(env)
+                .map_err(|e| Error::Other(format!("{:?}", e).into()))
         })
     }
 

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::task::JPollResult;
 use ::jni::{
     Env, JavaVM, bind_java_type,

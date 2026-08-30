@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use jni::{
     Env,
     descriptors::Desc,

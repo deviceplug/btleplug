@@ -127,10 +127,9 @@ fn adapter_on_connection_state_changed<'local>(
 ) -> jni::errors::Result<()> {
     if let Err(e) =
         super::adapter::adapter_on_connection_state_changed_internal(env, &obj, addr, connected)
+        && !env.exception_check()
     {
-        if !env.exception_check() {
-            let _ = env.throw(format!("Rust error: {e}"));
-        }
+        let _ = env.throw(format!("Rust error: {e}"));
     }
     Ok(())
 }

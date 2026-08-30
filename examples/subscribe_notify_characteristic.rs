@@ -11,7 +11,7 @@ use uuid::Uuid;
 /// Only devices whose name contains this string will be tried.
 const PERIPHERAL_NAME_MATCH_FILTER: &str = "Neuro";
 /// UUID of the characteristic for which we should subscribe to notifications.
-const NOTIFY_CHARACTERISTIC_UUID: Uuid = Uuid::from_u128(0x6e400002_b534_f393_67a9_e50e24dccA9e);
+const NOTIFY_CHARACTERISTIC_UUID: Uuid = Uuid::from_u128(0x6e400002_b534_f393_67a9_e50e24dcca9e);
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -45,11 +45,11 @@ async fn main() -> anyhow::Result<()> {
                     .unwrap_or(String::from("(peripheral name unknown)"));
                 println!(
                     "Peripheral {:?} is connected: {:?}",
-                    &local_name, is_connected
+                    local_name, is_connected
                 );
                 // Check if it's the peripheral we want.
                 if local_name.contains(PERIPHERAL_NAME_MATCH_FILTER) {
-                    println!("Found matching peripheral {:?}...", &local_name);
+                    println!("Found matching peripheral {:?}...", local_name);
                     if !is_connected {
                         // Connect if we aren't already connected.
                         if let Err(err) = peripheral.connect().await {
@@ -60,7 +60,7 @@ async fn main() -> anyhow::Result<()> {
                     let is_connected = peripheral.is_connected().await?;
                     println!(
                         "Now connected ({:?}) to peripheral {:?}.",
-                        is_connected, &local_name
+                        is_connected, local_name
                     );
                     if is_connected {
                         println!("Discover peripheral {:?} services...", local_name);

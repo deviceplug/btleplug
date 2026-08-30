@@ -11,6 +11,7 @@ use std::pin::Pin;
 use tokio::sync::broadcast::Receiver;
 use tokio_stream::wrappers::BroadcastStream;
 
+#[allow(dead_code)]
 pub fn notifications_stream_from_broadcast_receiver(
     receiver: Receiver<ValueNotification>,
 ) -> Pin<Box<dyn Stream<Item = ValueNotification> + Send>> {

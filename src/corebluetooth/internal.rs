@@ -51,6 +51,10 @@ use uuid::Uuid;
 const ATT_WRITE_COMMAND_HEADER_LEN: usize = 3;
 
 fn maximum_write_value_length_to_att_mtu(maximum_write_value_length: usize) -> Result<u16, String> {
+    if maximum_write_value_length == 0 {
+        return Ok(crate::api::DEFAULT_MTU_SIZE);
+    }
+
     maximum_write_value_length
         .checked_add(ATT_WRITE_COMMAND_HEADER_LEN)
         .and_then(|mtu| u16::try_from(mtu).ok())
@@ -1644,6 +1648,14 @@ mod tests {
             fn name(&self) -> Option<Retained<NSString>> {
                 None
             }
+
+            #[method(maximumWriteValueLengthForType:)]
+            fn maximum_write_value_length_for_type(
+                &self,
+                _write_type: CBCharacteristicWriteType,
+            ) -> usize {
+                0
+            }
         }
     );
 
@@ -1652,6 +1664,30 @@ mod tests {
             let this = Self::alloc().set_ivars(identifier);
             unsafe { msg_send_id![super(this), init] }
         }
+    }
+
+    #[test]
+    fn maximum_write_value_length_is_converted_to_att_mtu() {
+        assert_eq!(maximum_write_value_length_to_att_mtu(20), Ok(23));
+        assert_eq!(maximum_write_value_length_to_att_mtu(512), Ok(515));
+        assert_eq!(
+            maximum_write_value_length_to_att_mtu(u16::MAX as usize - 3),
+            Ok(u16::MAX)
+        );
+    }
+
+    #[test]
+    fn zero_maximum_write_value_length_uses_default_mtu() {
+        assert_eq!(
+            maximum_write_value_length_to_att_mtu(0),
+            Ok(crate::api::DEFAULT_MTU_SIZE)
+        );
+    }
+
+    #[test]
+    fn unrepresentable_maximum_write_value_length_is_rejected() {
+        assert!(maximum_write_value_length_to_att_mtu(u16::MAX as usize).is_err());
+        assert!(maximum_write_value_length_to_att_mtu(usize::MAX).is_err());
     }
 
     #[tokio::test]
@@ -1737,9 +1773,10 @@ mod tests {
         let reply = tokio::time::timeout(Duration::from_secs(1), discovery)
             .await
             .expect("service discovery remained pending after descriptor error");
-        let CoreBluetoothReply::ServicesDiscovered(services) = reply else {
+        let CoreBluetoothReply::ServicesDiscovered(services, mtu) = reply else {
             panic!("unexpected discovery reply: {reply:?}");
         };
+        assert_eq!(mtu, crate::api::DEFAULT_MTU_SIZE);
         let characteristic = services
             .iter()
             .find(|service| service.uuid == service_uuid)

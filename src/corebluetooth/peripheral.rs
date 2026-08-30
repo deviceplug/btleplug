@@ -202,19 +202,34 @@ impl Peripheral {
         advertisement_name: Option<String>,
     ) {
         if let Ok(mut props) = self.shared.properties.lock() {
-            // Only update local_name if new value is present and is at least as informative
-            // (i.e. don't let a shorter GAP name overwrite a longer advertisement name)
-            if let Some(ref new_name) = local_name {
-                let should_update = match &props.local_name {
-                    None => true,
-                    Some(old) => new_name.len() >= old.len(),
-                };
-                if should_update {
-                    props.local_name = local_name;
-                }
-            }
-            props.advertisement_name = advertisement_name;
+            let PeripheralProperties {
+                local_name: current_local_name,
+                advertisement_name: current_advertisement_name,
+                ..
+            } = &mut *props;
+            merge_names(
+                current_local_name,
+                current_advertisement_name,
+                local_name,
+                advertisement_name,
+            );
         }
+    }
+}
+
+fn merge_names(
+    local_name: &mut Option<String>,
+    advertisement_name: &mut Option<String>,
+    new_local_name: Option<String>,
+    new_advertisement_name: Option<String>,
+) {
+    if let Some(name) = new_advertisement_name {
+        *local_name = Some(name.clone());
+        *advertisement_name = Some(name);
+    } else if advertisement_name.is_none()
+        && let Some(name) = new_local_name
+    {
+        *local_name = Some(name);
     }
 }
 
@@ -225,6 +240,59 @@ impl Display for Peripheral {
         // write!(f, "{} {}{}", self.address, properties.local_name.clone()
         //     .unwrap_or_else(|| "(unknown)".to_string()), connected)
         write!(f, "Peripheral")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::merge_names;
+
+    #[test]
+    fn advertisement_name_takes_precedence_over_gap_name() {
+        let mut local_name = Some("Longer GAP name".to_string());
+        let mut advertisement_name = None;
+
+        merge_names(
+            &mut local_name,
+            &mut advertisement_name,
+            Some("Short GAP".to_string()),
+            Some("Complete".to_string()),
+        );
+
+        assert_eq!(local_name.as_deref(), Some("Complete"));
+        assert_eq!(advertisement_name.as_deref(), Some("Complete"));
+    }
+
+    #[test]
+    fn absent_advertisement_does_not_erase_or_override_it() {
+        let mut local_name = Some("Complete".to_string());
+        let mut advertisement_name = Some("Complete".to_string());
+
+        merge_names(
+            &mut local_name,
+            &mut advertisement_name,
+            Some("Different GAP name".to_string()),
+            None,
+        );
+
+        assert_eq!(local_name.as_deref(), Some("Complete"));
+        assert_eq!(advertisement_name.as_deref(), Some("Complete"));
+    }
+
+    #[test]
+    fn gap_name_is_used_until_an_advertisement_name_arrives() {
+        let mut local_name = None;
+        let mut advertisement_name = None;
+
+        merge_names(
+            &mut local_name,
+            &mut advertisement_name,
+            Some("GAP name".to_string()),
+            None,
+        );
+
+        assert_eq!(local_name.as_deref(), Some("GAP name"));
+        assert_eq!(advertisement_name, None);
     }
 }
 

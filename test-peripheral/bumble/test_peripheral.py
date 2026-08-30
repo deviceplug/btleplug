@@ -66,6 +66,7 @@ CMD_RESET_STATE              = 0x05
 CMD_SET_NOTIFICATION_PAYLOAD = 0x06
 
 DEVICE_NAME = "btleplug-test"
+TEST_APPEARANCE = 0x0340
 MANUFACTURER_COMPANY_ID = 0xFFFF
 STATIC_READ_VALUE = bytes([0x01, 0x02, 0x03, 0x04])
 NOTIFICATION_INTERVAL = 1.0  # seconds
@@ -409,6 +410,7 @@ async def main():
                         struct.pack("<H", MANUFACTURER_COMPANY_ID)
                         + bytes([0xBB, 0xCC, 0x01]),
                     ),
+                    (AdvertisingData.APPEARANCE, struct.pack("<H", TEST_APPEARANCE)),
                     (AdvertisingData.TX_POWER_LEVEL, bytes([0])),  # 0 dBm
                 ]
             )

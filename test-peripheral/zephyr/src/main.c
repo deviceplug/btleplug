@@ -12,27 +12,30 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 /* Advertisement data:
  * - Flags: General Discoverable + BR/EDR Not Supported
  * - Complete device name: "btleplug-test"
- * - Manufacturer data: Company ID 0xFFFF + [0xBB, 0xTT, 0x01]
+ * - GAP Appearance: Generic Heart Rate Sensor (0x0340)
+ * - TX Power Level: 0 dBm
  */
 static const struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
 	BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME,
 		sizeof(CONFIG_BT_DEVICE_NAME) - 1),
-	BT_DATA_BYTES(BT_DATA_MANUFACTURER_DATA,
-		0xFF, 0xFF,       /* Company ID 0xFFFF (little-endian) */
-		0xBB, 0xCC, 0x01  /* "bt" + version */
-	),
-	BT_DATA_BYTES(BT_DATA_TX_POWER, 0x00),  /* TX Power Level: 0 dBm */
+	BT_DATA_BYTES(BT_DATA_GAP_APPEARANCE, 0x40, 0x03),
+	BT_DATA_BYTES(BT_DATA_TX_POWER, 0x00),
 };
 
 /* Scan response data:
  * - 128-bit service UUID list (triggers ServicesAdvertisement in btleplug)
+ * - Manufacturer data: Company ID 0xFFFF + [0xBB, 0xCC, 0x01]
  */
 static const struct bt_data sd[] = {
 	BT_DATA_BYTES(BT_DATA_UUID128_ALL,
 		/* Control Service UUID (little-endian) */
 		0x9e, 0xca, 0xdc, 0x24, 0x0e, 0xe5, 0xa9, 0xe0,
 		0x93, 0xf3, 0xa3, 0xb5, 0x01, 0x00, 0x00, 0x00
+	),
+	BT_DATA_BYTES(BT_DATA_MANUFACTURER_DATA,
+		0xFF, 0xFF,       /* Company ID 0xFFFF (little-endian) */
+		0xBB, 0xCC, 0x01  /* "bt" + version */
 	),
 };
 

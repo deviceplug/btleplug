@@ -697,7 +697,7 @@ pub trait Manager {
 }
 
 #[cfg(all(test, feature = "serde"))]
-mod tests {
+mod serde_tests {
     use super::PeripheralProperties;
 
     #[test]

@@ -30,10 +30,10 @@ pub(crate) fn parse_appearance_from_advertisement(data: &[u8]) -> Option<u16> {
         let section = data.get(offset..end)?;
         let (&data_type, payload) = section.split_first()?;
 
-        if data_type == APPEARANCE_DATA_TYPE {
-            if let Some(appearance) = parse_appearance(payload) {
-                return Some(appearance);
-            }
+        if data_type == APPEARANCE_DATA_TYPE
+            && let Some(appearance) = parse_appearance(payload)
+        {
+            return Some(appearance);
         }
 
         offset = end;

@@ -779,6 +779,17 @@ pub async fn test_properties_contain_peripheral_info() {
         props.tx_power_level.is_some(),
         "TX Power Level should be present in advertisement properties"
     );
+    #[cfg(target_vendor = "apple")]
+    assert_eq!(
+        props.appearance, None,
+        "CoreBluetooth does not expose GAP Appearance advertising data"
+    );
+    #[cfg(not(target_vendor = "apple"))]
+    assert_eq!(
+        props.appearance,
+        Some(gatt_uuids::TEST_APPEARANCE),
+        "Properties should contain the advertised GAP Appearance"
+    );
     peripheral.disconnect().await.unwrap();
 }
 

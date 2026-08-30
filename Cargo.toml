@@ -26,29 +26,29 @@ serde = ["uuid/serde", "serde_cr", "serde_bytes"]
 jni-host-tests = ["jni/invocation", "once_cell"]
 
 [dependencies]
-async-trait = "0.1.89"
-log = "0.4.29"
-bitflags = "2.11.0"
-thiserror = "2.0.18"
-uuid = "1.22.0"
-serde_cr = { package = "serde", version = "1.0.228", features = ["derive"], default-features = false, optional = true }
+async-trait = "0.1.92"
+log = "0.4.34"
+bitflags = "2.13.1"
+thiserror = "2.0.20"
+uuid = "1.26.0"
+serde_cr = { package = "serde", version = "1.0.229", features = ["derive"], default-features = false, optional = true }
 serde_bytes = { version = "0.11.19", optional = true }
-dashmap = "6.1.0"
-futures = "0.3.32"
+dashmap = "6.2.1"
+futures = "0.3.34"
 static_assertions = "1.1.0"
 # rt feature needed for block_on in macOS internal thread
-tokio = { version = "1.50.0", features = ["sync", "rt", "time"] }
-tokio-stream = { version = "0.1.18", features = ["sync"] }
+tokio = { version = "1.53.1", features = ["sync", "rt", "time"] }
+tokio-stream = { version = "0.1.19", features = ["sync"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-dbus = "0.9.10"
+dbus = "0.9.12"
 bluez-async = "0.8.2"
 jni = { version = "0.22", optional = true }
-once_cell = { version = "1.21.3", optional = true }
+once_cell = { version = "1.21.4", optional = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.22"
-once_cell = "1.21.3"
+once_cell = "1.21.4"
 
 [target.'cfg(target_vendor = "apple")'.dependencies]
 objc2 = "0.5.2"
@@ -87,8 +87,8 @@ windows-future = "0.3.2"
 [dev-dependencies]
 rand = "0.10"
 pretty_env_logger = "0.5.0"
-tokio = { version = "1.50.0", features = ["macros", "rt", "rt-multi-thread"] }
-serde_json = "1.0.149"
-toml = "1.0.6"
+tokio = { version = "1.53.1", features = ["macros", "rt", "rt-multi-thread"] }
+serde_json = "1.0.151"
+toml = "1.1.4"
 anyhow = "1"
 lazy_static = "1.5.0"

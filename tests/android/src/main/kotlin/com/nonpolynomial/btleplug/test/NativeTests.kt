@@ -15,6 +15,9 @@ object NativeTests {
     external fun testAdvertisementManufacturerData()
     external fun testAdvertisementServices()
 
+    // Retrieval
+    external fun testRetrievePeripheralsNotSupported()
+
     // Connection
     external fun testConnectAndDisconnect()
     external fun testReconnectAfterDisconnect()

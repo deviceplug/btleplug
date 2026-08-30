@@ -1,5 +1,7 @@
 use super::peripheral::{Peripheral, PeripheralId};
-use crate::api::{BDAddr, Central, CentralEvent, CentralState, ScanFilter};
+use crate::api::{
+    self, BDAddr, Central, CentralEvent, CentralState, RetrievePeripheralsOptions, ScanFilter,
+};
 use crate::{Error, Result};
 use async_trait::async_trait;
 use bluez_async::{
@@ -27,6 +29,22 @@ fn get_central_state(powered: bool) -> CentralState {
         true => CentralState::PoweredOn,
         false => CentralState::PoweredOff,
     }
+}
+
+fn matches_retrieval_options(
+    candidate_id: &bluez_async::DeviceId,
+    candidate_services: &[uuid::Uuid],
+    connected: bool,
+    options: &RetrievePeripheralsOptions,
+) -> bool {
+    let candidate_id = PeripheralId(candidate_id.clone());
+    let service_match = connected && options.services.is_some();
+    let services = if service_match {
+        candidate_services
+    } else {
+        &[]
+    };
+    api::matches_retrieval_selectors(&candidate_id, services, options)
 }
 
 #[async_trait]
@@ -93,6 +111,22 @@ impl Central for Adapter {
 
     async fn peripherals(&self) -> Result<Vec<Peripheral>> {
         let devices = self.session.get_devices_on_adapter(&self.adapter).await?;
+        Ok(devices
+            .into_iter()
+            .map(|device| Peripheral::new(self.session.clone(), device))
+            .collect())
+    }
+
+    async fn retrieve_peripherals(
+        &self,
+        options: RetrievePeripheralsOptions,
+    ) -> Result<Vec<Peripheral>> {
+        let devices = self.session.get_devices_on_adapter(&self.adapter).await?;
+        let devices = devices.into_iter().filter(|device| {
+            matches_retrieval_options(&device.id, &device.services, device.connected, &options)
+        });
+        let devices = api::merge_retrieved_peripherals(devices, |device| device.id.clone());
+
         Ok(devices
             .into_iter()
             .map(|device| Peripheral::new(self.session.clone(), device))

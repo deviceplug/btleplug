@@ -73,6 +73,9 @@ class BleIntegrationTest {
     @Test fun testAdvertisementManufacturerData() = NativeTests.testAdvertisementManufacturerData()
     @Test fun testAdvertisementServices() = NativeTests.testAdvertisementServices()
 
+    // ── Retrieval ────────────────────────────────────────────────────
+    @Test fun testRetrievePeripheralsNotSupported() = NativeTests.testRetrievePeripheralsNotSupported()
+
     // ── Connection ──────────────────────────────────────────────────
     @Test fun testConnectAndDisconnect() = NativeTests.testConnectAndDisconnect()
     @Test fun testReconnectAfterDisconnect() = NativeTests.testReconnectAfterDisconnect()

@@ -12,13 +12,17 @@ use super::{
     central_delegate::{CentralDelegate, CentralDelegateEvent},
     ffi,
     future::{BtlePlugFuture, BtlePlugFutureStateShared},
+    peripheral::Peripheral,
     utils::{
         core_bluetooth::{cbuuid_to_uuid, uuid_to_cbuuid},
         nsuuid_to_uuid,
     },
 };
 use crate::Error;
-use crate::api::{CharPropFlags, Characteristic, Descriptor, ScanFilter, Service, WriteType};
+use crate::api::{
+    CharPropFlags, Characteristic, Descriptor, RetrievePeripheralsOptions, ScanFilter, Service,
+    WriteType,
+};
 use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::select;
 use futures::sink::SinkExt;
@@ -31,7 +35,7 @@ use objc2_core_bluetooth::{
     CBCharacteristicProperties, CBCharacteristicWriteType, CBDescriptor, CBManager,
     CBManagerAuthorization, CBManagerState, CBPeripheral, CBPeripheralState, CBService, CBUUID,
 };
-use objc2_foundation::{NSArray, NSData, NSMutableDictionary, NSNumber};
+use objc2_foundation::{NSArray, NSData, NSMutableDictionary, NSNumber, NSUUID};
 use std::{
     collections::{BTreeSet, HashMap, VecDeque},
     ffi::CString,
@@ -162,6 +166,7 @@ pub enum CoreBluetoothReply {
     ServicesDiscovered(BTreeSet<Service>),
     State(CBPeripheralState),
     Ok,
+    Peripherals(Vec<Peripheral>),
     Err(String),
 }
 
@@ -499,6 +504,18 @@ pub enum CoreBluetoothMessage {
         peripheral_uuid: Uuid,
         future: CoreBluetoothReplyStateShared,
     },
+    RetrievePeripherals {
+        options: RetrievePeripheralsOptions,
+        future: CoreBluetoothReplyStateShared,
+    },
+}
+
+#[derive(Debug)]
+pub struct RetrievedPeripheral {
+    pub uuid: Uuid,
+    pub local_name: Option<String>,
+    pub advertisement_name: Option<String>,
+    pub event_receiver: Option<Receiver<PeripheralEventInternal>>,
 }
 
 #[derive(Debug)]
@@ -511,6 +528,10 @@ pub enum CoreBluetoothEvent {
         local_name: Option<String>,
         advertisement_name: Option<String>,
         event_receiver: Receiver<PeripheralEventInternal>,
+    },
+    RetrievedPeripherals {
+        peripherals: Vec<RetrievedPeripheral>,
+        future: CoreBluetoothReplyStateShared,
     },
     DeviceUpdated {
         uuid: Uuid,
@@ -1297,6 +1318,79 @@ impl CoreBluetoothInternal {
         }
     }
 
+    async fn retrieve_peripherals(
+        &mut self,
+        options: RetrievePeripheralsOptions,
+        future: CoreBluetoothReplyStateShared,
+    ) {
+        if options.identifiers.is_none() && options.services.is_none() {
+            future.lock().unwrap().set_reply(CoreBluetoothReply::Err(
+                "retrieve_peripherals requires an identifier or service selector".to_string(),
+            ));
+            return;
+        }
+        let mut retrieved = Vec::new();
+        if let Some(services) = options.services.filter(|services| !services.is_empty()) {
+            let services = NSArray::from_vec(services.into_iter().map(uuid_to_cbuuid).collect());
+            retrieved.extend(unsafe {
+                self.manager
+                    .retrieveConnectedPeripheralsWithServices(&services)
+            });
+        }
+        if let Some(identifiers) = options
+            .identifiers
+            .filter(|identifiers| !identifiers.is_empty())
+        {
+            let identifiers = NSArray::from_vec(
+                identifiers
+                    .into_iter()
+                    .map(|id| {
+                        NSUUID::from_string(&objc2_foundation::NSString::from_str(&id.to_string()))
+                            .unwrap()
+                    })
+                    .collect(),
+            );
+            retrieved.extend(unsafe {
+                self.manager
+                    .retrievePeripheralsWithIdentifiers(&identifiers)
+            });
+        }
+        let mut peripherals = Vec::new();
+        for peripheral in retrieved {
+            let identifier = unsafe { peripheral.identifier() };
+            let uuid = nsuuid_to_uuid(&identifier);
+            if peripherals
+                .iter()
+                .any(|retrieved: &RetrievedPeripheral| retrieved.uuid == uuid)
+            {
+                continue;
+            }
+
+            let peripheral_name = unsafe { peripheral.name() };
+            let local_name = peripheral_name.map(|name| name.to_string());
+            let event_receiver = if let Some(existing) = self.peripherals.get_mut(&uuid) {
+                existing.peripheral = peripheral;
+                None
+            } else {
+                let (event_sender, event_receiver) = mpsc::channel(256);
+                self.peripherals
+                    .insert(uuid, PeripheralInternal::new(peripheral, event_sender));
+                Some(event_receiver)
+            };
+            peripherals.push(RetrievedPeripheral {
+                uuid,
+                local_name,
+                advertisement_name: None,
+                event_receiver,
+            });
+        }
+        self.dispatch_event(CoreBluetoothEvent::RetrievedPeripherals {
+            peripherals,
+            future,
+        })
+        .await;
+    }
+
     async fn wait_for_message(&mut self) {
         select! {
             delegate_msg = self.delegate_receiver.select_next_some() => {
@@ -1437,6 +1531,9 @@ impl CoreBluetoothInternal {
                     }
                     CoreBluetoothMessage::ReadRssi{peripheral_uuid, future} => {
                         self.read_rssi(peripheral_uuid, future)
+                    }
+                    CoreBluetoothMessage::RetrievePeripherals { options, future } => {
+                        self.retrieve_peripherals(options, future).await
                     }
                 };
             }

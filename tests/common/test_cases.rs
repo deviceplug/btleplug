@@ -192,6 +192,44 @@ pub async fn test_advertisement_services() {
     );
 }
 
+// ── Retrieval ──────────────────────────────────────────────────────
+
+pub async fn test_retrieve_peripherals_not_supported() {
+    use btleplug::api::{Central, RetrievePeripheralsOptions};
+
+    let adapter = peripheral_finder::get_adapter().await;
+    let error = adapter
+        .retrieve_peripherals(RetrievePeripheralsOptions::default())
+        .await
+        .expect_err("retrieval without selectors should not be supported on Android");
+    assert!(matches!(
+        error,
+        btleplug::Error::NotSupported(operation) if operation == "retrieve_peripherals"
+    ));
+}
+
+pub async fn test_retrieve_connected_peripheral_by_service() {
+    use btleplug::api::{Central, RetrievePeripheralsOptions};
+
+    let adapter = peripheral_finder::get_adapter().await;
+    let expected = peripheral_finder::find_and_connect().await;
+    let expected_id = expected.id();
+    let retrieved = adapter
+        .retrieve_peripherals(RetrievePeripheralsOptions {
+            identifiers: None,
+            services: Some(vec![gatt_uuids::CONTROL_SERVICE]),
+        })
+        .await
+        .expect("retrieval by service should be supported on desktop backends");
+    assert!(
+        retrieved
+            .iter()
+            .any(|peripheral| peripheral.id() == expected_id),
+        "connected test peripheral was not returned by service retrieval"
+    );
+    expected.disconnect().await.unwrap();
+}
+
 // ── Connection ──────────────────────────────────────────────────────
 
 pub async fn test_connect_and_disconnect() {

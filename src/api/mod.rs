@@ -33,8 +33,9 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde_cr as serde;
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap, HashSet},
     fmt::{self, Debug, Display, Formatter},
+    hash::Hash,
     pin::Pin,
     time::Duration,
 };
@@ -215,6 +216,86 @@ pub struct ScanFilter {
     /// If the filter contains at least one service UUID, only devices supporting at least one of
     /// the given services will be available.
     pub services: Vec<Uuid>,
+}
+
+/// Selects peripherals for [`Central::retrieve_peripherals`].
+///
+/// `None` leaves a selector unspecified; an explicitly empty selector matches nothing. Values
+/// within a selector are OR'ed, while the identifier and service selectors are combined as a
+/// union. Returned peripherals retain backend order and are deduplicated by identifier.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RetrievePeripheralsOptions {
+    /// Known peripheral identifiers to retrieve.
+    pub identifiers: Option<Vec<PeripheralId>>,
+    /// Service UUIDs used to retrieve connected peripherals.
+    pub services: Option<Vec<Uuid>>,
+}
+
+impl Default for RetrievePeripheralsOptions {
+    fn default() -> Self {
+        Self {
+            identifiers: None,
+            services: None,
+        }
+    }
+}
+
+/// Returns whether a candidate identifier is included in an identifier selector.
+pub(crate) fn matches_identifier<T: Eq>(candidate: &T, requested: &[T]) -> bool {
+    requested.iter().any(|requested| requested == candidate)
+}
+
+/// Returns whether a candidate service set contains one of the requested services.
+pub(crate) fn matches_service(candidate_services: &[Uuid], requested: &[Uuid]) -> bool {
+    requested
+        .iter()
+        .any(|requested| candidate_services.contains(requested))
+}
+
+/// Returns whether a candidate matches either supplied selector.
+///
+/// A selector is considered supplied even when empty; in that case it matches nothing.
+pub(crate) fn matches_retrieval_selectors(
+    candidate_id: &PeripheralId,
+    candidate_services: &[Uuid],
+    options: &RetrievePeripheralsOptions,
+) -> bool {
+    let id_match = options
+        .identifiers
+        .as_deref()
+        .is_some_and(|requested| matches_identifier(candidate_id, requested));
+    let service_match = options
+        .services
+        .as_deref()
+        .is_some_and(|requested| matches_service(candidate_services, requested));
+
+    if options.identifiers.is_none() && options.services.is_none() {
+        true
+    } else {
+        id_match || service_match
+    }
+}
+
+/// Merges retrieved peripherals while preserving the first occurrence of each identifier.
+pub(crate) fn merge_retrieved_peripherals<P, K, F>(
+    peripherals: impl IntoIterator<Item = P>,
+    id: F,
+) -> Vec<P>
+where
+    K: Eq + Hash,
+    F: Fn(&P) -> K,
+{
+    let mut seen = HashSet::new();
+    peripherals
+        .into_iter()
+        .filter(|peripheral| seen.insert(id(peripheral)))
+        .collect()
+}
+
+fn unsupported_retrieve_peripherals<P>() -> Result<Vec<P>> {
+    Err(crate::Error::NotSupported(
+        "retrieve_peripherals".to_string(),
+    ))
 }
 
 /// Current BLE connection parameters as reported by the OS.
@@ -457,6 +538,22 @@ pub trait Central: Send + Sync + Clone {
     /// may contain peripherals that are no longer available.
     async fn peripherals(&self) -> Result<Vec<Self::Peripheral>>;
 
+    /// Retrieves peripherals from the backend's connected-device or known-device source.
+    ///
+    /// Selectors are combined as a union: a peripheral is returned when its identifier matches
+    /// any requested identifier or its backend-reported services contain any requested service.
+    /// Results are in backend order and deduplicated by [`Peripheral::id`]. An explicitly empty
+    /// selector matches nothing. Backends without a retrieval source return
+    /// [`Error::NotSupported`](crate::Error::NotSupported) with `"retrieve_peripherals"`.
+    async fn retrieve_peripherals(
+        &self,
+        _options: RetrievePeripheralsOptions,
+    ) -> Result<Vec<Self::Peripheral>> {
+        Err(crate::Error::NotSupported(
+            "retrieve_peripherals".to_string(),
+        ))
+    }
+
     /// Returns a particular [`Peripheral`] by its address if it has been discovered.
     async fn peripheral(&self, id: &PeripheralId) -> Result<Self::Peripheral>;
 
@@ -500,7 +597,80 @@ pub trait Central: Send + Sync + Clone {
     async fn adapter_state(&self) -> Result<CentralState>;
 }
 
-/// The Manager is the entry point to the library, providing access to all the Bluetooth adapters on
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retrieve_options_are_publicly_constructible() {
+        let options = RetrievePeripheralsOptions {
+            identifiers: Some(Vec::new()),
+            services: Some(vec![Uuid::nil()]),
+        };
+        assert_eq!(options.services, Some(vec![Uuid::nil()]));
+        assert_eq!(options.identifiers, Some(Vec::new()));
+    }
+
+    #[test]
+    fn retrieve_options_default_is_explicit() {
+        assert_eq!(RetrievePeripheralsOptions::default().identifiers, None);
+        assert_eq!(RetrievePeripheralsOptions::default().services, None);
+    }
+
+    #[test]
+    fn retrieve_empty_identifier_selector_matches_nothing() {
+        assert!(!matches_identifier(&1_u8, &[]));
+    }
+
+    #[test]
+    fn retrieve_empty_service_selector_matches_nothing() {
+        assert!(!matches_service(&[Uuid::nil()], &[]));
+    }
+
+    #[test]
+    fn retrieve_selector_matching_uses_any_value() {
+        assert!(matches_identifier(&2_u8, &[1, 2, 3]));
+        assert!(matches_service(
+            &[Uuid::nil()],
+            &[Uuid::from_u128(1), Uuid::nil()],
+        ));
+    }
+
+    #[test]
+    fn retrieve_unknown_identifiers_are_omitted() {
+        let requested = [1_u8, 2_u8];
+        assert!(!matches_identifier(&3, &requested));
+    }
+
+    #[test]
+    fn retrieve_order_is_preserved() {
+        let merged = merge_retrieved_peripherals([3_u8, 1, 2], |value| *value);
+        assert_eq!(merged, vec![3, 1, 2]);
+    }
+
+    #[test]
+    fn retrieve_combined_selectors_use_union() {
+        assert!(matches_service(&[Uuid::nil()], &[Uuid::nil()]));
+        assert!(!matches_service(&[], &[Uuid::nil()]));
+    }
+
+    #[test]
+    fn retrieve_results_are_deduplicated() {
+        let merged = merge_retrieved_peripherals([1_u8, 2, 1, 3, 2], |value| *value);
+        assert_eq!(merged, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn retrieve_peripherals_default_is_not_supported() {
+        let error = unsupported_retrieve_peripherals::<u8>().unwrap_err();
+        assert!(matches!(
+            error,
+            crate::Error::NotSupported(operation) if operation == "retrieve_peripherals"
+        ));
+    }
+}
+
+/// The Manager is the entry point for the library, providing access to all Bluetooth adapters on
 /// the system. You can obtain an instance from [`platform::Manager::new()`](crate::platform::Manager::new).
 ///
 /// ## Usage

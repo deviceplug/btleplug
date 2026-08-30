@@ -57,6 +57,12 @@ use windows::core::GUID;
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PeripheralId(BDAddr);
 
+impl PeripheralId {
+    pub(crate) fn address(&self) -> BDAddr {
+        self.0
+    }
+}
+
 impl Display for PeripheralId {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         Display::fmt(&self.0, f)

@@ -148,6 +148,10 @@ jni_test!(
     test_cases::test_advertisement_services
 );
 jni_test!(
+    Java_com_nonpolynomial_btleplug_test_NativeTests_testRetrievePeripheralsNotSupported,
+    test_cases::test_retrieve_peripherals_not_supported
+);
+jni_test!(
     Java_com_nonpolynomial_btleplug_test_NativeTests_testConnectAndDisconnect,
     test_cases::test_connect_and_disconnect
 );

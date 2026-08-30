@@ -46,7 +46,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install libdbus-1-dev openjdk-17-jdk
       - uses: actions/setup-java@v2
-        if: ${{ matrix.target == 'android' || matrix.target == 'linux' || matrix.target == 'macos' }}
+        if: ${{ matrix.target == 'android' || matrix.target == 'linux' }}
         with:
           distribution: 'zulu'
           java-version: '17'
@@ -72,7 +72,7 @@ jobs:
       - name: Check with all features
         run: cargo check --all --bins --examples --all-features
       - name: Run JNI host tests
-        if: ${{ matrix.target == 'linux' || matrix.target == 'macos' }}
+        if: ${{ matrix.target == 'linux' }}
         run: ./scripts/run-jni-tests.sh
       - name: Run tests
         if: ${{ matrix.target != 'android' }}

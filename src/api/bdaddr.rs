@@ -477,6 +477,11 @@ mod tests {
     }
 
     #[test]
+    fn zero_u64_to_addr_is_zero_sentinel() {
+        assert_eq!(BDAddr::try_from(0), Ok(BDAddr::default()));
+    }
+
+    #[test]
     fn addr_to_u64() {
         let addr_as_hex: u64 = ADDR.into();
         assert_eq!(HEX, addr_as_hex);

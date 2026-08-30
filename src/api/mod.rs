@@ -474,6 +474,28 @@ pub trait Central: Send + Sync + Clone {
     /// be useful for debug logs.
     async fn adapter_info(&self) -> Result<String>;
 
+    /// Retrieve the Bluetooth address exposed by the local adapter, when available.
+    ///
+    /// `Ok(Some(address))` means the platform exposed a usable adapter Bluetooth address.
+    /// `Ok(None)` means the platform or its public API does not expose one. `Err` means
+    /// retrieving the adapter metadata failed operationally. This value is optional and is
+    /// not the portable adapter identity: callers should continue using the platform adapter
+    /// handle and [`PeripheralId`] for identity and lookup.
+    ///
+    /// ```no_run
+    /// # use btleplug::api::Central as _;
+    /// # async fn example(adapter: impl btleplug::api::Central) {
+    /// match adapter.adapter_address().await {
+    ///     Ok(Some(address)) => println!("adapter address: {address}"),
+    ///     Ok(None) => println!("adapter address is unavailable on this platform"),
+    ///     Err(error) => eprintln!("could not query adapter address: {error}"),
+    /// }
+    /// # }
+    /// ```
+    async fn adapter_address(&self) -> Result<Option<BDAddr>> {
+        Ok(None)
+    }
+
     /// Get information about the Bluetooth adapter state.
     async fn adapter_state(&self) -> Result<CentralState>;
 }

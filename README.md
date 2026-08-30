@@ -52,6 +52,7 @@ support.
 | └ Discover Manufacturer Data          | X       | X           | X     | X       |
 | └ Discover Service Data               | X       | X           | X     | X       |
 | └ Discover MAC address                | X       |             | X     | X       |
+| Retrieve local adapter address         | X       |             | X     |         |
 | GATT Server Connect                   | X       | X           | X     | X       |
 | GATT Server Connect Event             | X       | X           | X     | X       |
 | GATT Server Disconnect                | X       | X           | X     | X       |
@@ -73,6 +74,8 @@ support.
 ### Platform Caveats
 
 #### Scan Filtering on Linux (BlueZ)
+
+The `Central::adapter_address()` API retrieves a local Bluetooth adapter address only where the platform exposes one (currently Linux and Windows). CoreBluetooth and ordinary Android applications return `Ok(None)` because their public APIs provide opaque or privacy-restricted adapter identities. This address is distinct from a discovered peripheral address; `PeripheralId` remains the portable identity for adapters' peripherals.
 
 The `ScanFilter` passed to `start_scan()` behaves differently on Linux than
 other platforms. btleplug forwards service UUID filters to BlueZ, but BlueZ

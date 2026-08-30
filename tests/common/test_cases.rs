@@ -8,6 +8,39 @@ use btleplug::api::Peripheral as _;
 use super::gatt_uuids;
 use super::peripheral_finder;
 
+// ── Adapter capabilities ─────────────────────────────────────────────
+
+pub async fn test_adapter_address() {
+    use btleplug::api::{BDAddr, Central};
+
+    let adapter = peripheral_finder::get_adapter().await;
+    let result = adapter
+        .adapter_address()
+        .await
+        .expect("Failed to get adapter address");
+    match &result {
+        Some(address) => assert_ne!(
+            *address,
+            BDAddr::default(),
+            "adapter address must be nonzero"
+        ),
+        None => {
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
+            panic!("adapter address is unavailable on a supported desktop platform");
+            #[cfg(any(target_vendor = "apple", target_os = "android"))]
+            return;
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    if let Ok(expected) = std::env::var("BTLEPLUG_TEST_ADAPTER_ADDRESS") {
+        let expected = expected
+            .parse()
+            .expect("invalid BTLEPLUG_TEST_ADAPTER_ADDRESS");
+        assert_eq!(Some(expected), result);
+    }
+}
+
 // ── Discovery ───────────────────────────────────────────────────────
 
 pub async fn test_discover_peripheral_by_name() {

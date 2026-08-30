@@ -4,6 +4,9 @@ package com.nonpolynomial.btleplug.test
 object NativeTests {
     external fun initBtleplug()
 
+    // Adapter capabilities
+    external fun testAdapterAddress()
+
     // Discovery
     external fun testDiscoverPeripheralByName()
     external fun testDiscoverServices()

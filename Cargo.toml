@@ -83,7 +83,7 @@ objc2-core-bluetooth = { version = "0.2.2", default-features = false, features =
 ] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.62", features = ["Devices_Bluetooth", "Devices_Bluetooth_GenericAttributeProfile", "Devices_Bluetooth_Advertisement", "Devices_Radios", "Foundation_Collections", "Foundation", "Storage_Streams"] }
+windows = { version = "0.62", features = ["Devices_Bluetooth", "Devices_Enumeration", "Devices_Bluetooth_GenericAttributeProfile", "Devices_Bluetooth_Advertisement", "Devices_Radios", "Foundation_Collections", "Foundation", "Storage_Streams"] }
 windows-future = "0.3.2"
 
 [dev-dependencies]

@@ -24,7 +24,10 @@ use std::fmt::{self, Debug, Formatter};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use windows::{
-    Devices::Radios::{Radio, RadioState},
+    Devices::{
+        Bluetooth::BluetoothAdapter,
+        Radios::{Radio, RadioState},
+    },
     Foundation::TypedEventHandler,
 };
 
@@ -34,6 +37,7 @@ pub struct Adapter {
     watcher: Arc<Mutex<BLEWatcher>>,
     manager: Arc<AdapterManager<Peripheral>>,
     radio: Radio,
+    bluetooth_adapter: BluetoothAdapter,
 }
 
 // https://github.com/microsoft/windows-rs/blob/master/crates/libs/windows/src/Windows/Devices/Radios/mod.rs
@@ -47,7 +51,7 @@ fn get_central_state(radio: &Radio) -> CentralState {
 }
 
 impl Adapter {
-    pub(crate) fn new(radio: Radio) -> Result<Self> {
+    pub(crate) fn new(bluetooth_adapter: BluetoothAdapter, radio: Radio) -> Result<Self> {
         let watcher = Arc::new(Mutex::new(BLEWatcher::new()?));
         let manager = Arc::new(AdapterManager::default());
 
@@ -66,6 +70,7 @@ impl Adapter {
             watcher,
             manager,
             radio,
+            bluetooth_adapter,
         })
     }
 }
@@ -136,6 +141,17 @@ impl Central for Adapter {
     async fn adapter_info(&self) -> Result<String> {
         // TODO: Get information about the adapter.
         Ok("WinRT".to_string())
+    }
+
+    async fn adapter_address(&self) -> Result<Option<BDAddr>> {
+        let bluetooth_address = self.bluetooth_adapter.BluetoothAddress().map_err(|error| {
+            Error::Other(format!("Could not get Bluetooth adapter address: {error:?}").into())
+        })?;
+        if bluetooth_address == 0 {
+            return Ok(None);
+        }
+        let address: BDAddr = bluetooth_address.try_into()?;
+        Ok(Some(address))
     }
 
     async fn adapter_state(&self) -> Result<CentralState> {

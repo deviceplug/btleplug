@@ -101,6 +101,11 @@ pub extern "system" fn Java_com_nonpolynomial_btleplug_test_NativeTests_initBtle
 }
 
 // ── Test JNI exports ────────────────────────────────────────────────
+
+jni_test!(
+    Java_com_nonpolynomial_btleplug_test_NativeTests_testAdapterAddress,
+    test_cases::test_adapter_address
+);
 //
 // Each function follows the JNI naming convention:
 //   Java_com_nonpolynomial_btleplug_test_NativeTests_<methodName>

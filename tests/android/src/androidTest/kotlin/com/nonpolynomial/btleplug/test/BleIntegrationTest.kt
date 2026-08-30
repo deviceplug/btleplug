@@ -62,6 +62,9 @@ class BleIntegrationTest {
         }
     }
 
+    // ── Adapter capabilities ────────────────────────────────────────
+    @Test fun testAdapterAddress() = NativeTests.testAdapterAddress()
+
     // ── Discovery ───────────────────────────────────────────────────
     @Test fun testDiscoverPeripheralByName() = NativeTests.testDiscoverPeripheralByName()
     @Test fun testDiscoverServices() = NativeTests.testDiscoverServices()

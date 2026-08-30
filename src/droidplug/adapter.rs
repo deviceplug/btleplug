@@ -205,6 +205,11 @@ impl Central for Adapter {
         Ok(())
     }
 
+    async fn adapter_address(&self) -> Result<Option<BDAddr>> {
+        // Ordinary Android applications cannot access the local factory address.
+        Ok(None)
+    }
+
     async fn adapter_state(&self) -> Result<CentralState> {
         Ok(CentralState::Unknown)
     }

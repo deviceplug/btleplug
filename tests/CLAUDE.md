@@ -33,7 +33,8 @@ Each test is its own file (and therefore its own binary), ensuring process isola
 
 ## Contracts
 
-- Every test file uses `find_and_connect()` from `peripheral_finder.rs` to get a connected peripheral with services discovered.
+- Every peripheral-backed test file uses `find_and_connect()` from `peripheral_finder.rs` to get a connected peripheral with services discovered.
+- Adapter-only scenarios may use `get_adapter()` without `find_and_connect()`; they still require local adapter hardware but do not require the btleplug test peripheral.
 - Tests that mutate peripheral state must call `reset_peripheral()` in setup to ensure clean state.
 - Control commands are sent via the Control Point characteristic (UUID `00000101-...`) using `send_control_command()`.
 - The env var `BTLEPLUG_TEST_PERIPHERAL` overrides the default peripheral name (`btleplug-test`).
@@ -51,3 +52,4 @@ Each test is its own file (and therefore its own binary), ensuring process isola
 - Tests must not depend on execution order; each test connects independently.
 - The scan timeout is 10 seconds (hardcoded in `peripheral_finder.rs`).
 - When adding a new test, also add the corresponding JNI export in `android/rust/src/lib.rs`, native declaration in `NativeTests.kt`, and `@Test` in `BleIntegrationTest.kt`.
+- Adapter-only tests require local adapter hardware but do not require the btleplug test peripheral; their desktop assertions are target-specific because CoreBluetooth and ordinary Android intentionally return `Ok(None)`.

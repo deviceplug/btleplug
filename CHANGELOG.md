@@ -10,6 +10,7 @@
 - Add `clear_peripherals()` to `Central` trait
   - Thanks danielstuart14!
 - Add `adapter_state()` to `Central` trait for querying Bluetooth on/off state
+- Add optional `adapter_address()` to `Central` for platforms exposing a local adapter Bluetooth address; unsupported platforms return `Ok(None)` without breaking custom implementations
 - Add `add_peripheral()` to `Central` trait for adding a device by address without scanning (Android)
 - Add `advertisement_name` field to `PeripheralProperties`
   - Thanks szymonlesisz!

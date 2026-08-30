@@ -234,11 +234,13 @@ pub struct RetrievePeripheralsOptions {
 
 
 /// Returns whether a candidate identifier is included in an identifier selector.
+#[allow(dead_code)] // Used by platform-gated backend implementations.
 pub(crate) fn matches_identifier<T: Eq>(candidate: &T, requested: &[T]) -> bool {
     requested.iter().any(|requested| requested == candidate)
 }
 
 /// Returns whether a candidate service set contains one of the requested services.
+#[allow(dead_code)] // Used by platform-gated backend implementations.
 pub(crate) fn matches_service(candidate_services: &[Uuid], requested: &[Uuid]) -> bool {
     requested
         .iter()
@@ -248,6 +250,7 @@ pub(crate) fn matches_service(candidate_services: &[Uuid], requested: &[Uuid]) -
 /// Returns whether a candidate matches either supplied selector.
 ///
 /// A selector is considered supplied even when empty; in that case it matches nothing.
+#[allow(dead_code)] // Used by platform-gated backend implementations.
 pub(crate) fn matches_retrieval_selectors(
     candidate_id: &PeripheralId,
     candidate_services: &[Uuid],
@@ -270,6 +273,7 @@ pub(crate) fn matches_retrieval_selectors(
 }
 
 /// Merges retrieved peripherals while preserving the first occurrence of each identifier.
+#[allow(dead_code)] // Used by platform-gated backend implementations.
 pub(crate) fn merge_retrieved_peripherals<P, K, F>(
     peripherals: impl IntoIterator<Item = P>,
     id: F,
@@ -285,6 +289,7 @@ where
         .collect()
 }
 
+#[cfg(test)]
 fn unsupported_retrieve_peripherals<P>() -> Result<Vec<P>> {
     Err(crate::Error::NotSupported(
         "retrieve_peripherals".to_string(),

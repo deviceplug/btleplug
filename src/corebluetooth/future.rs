@@ -36,7 +36,7 @@ impl<T> BtlePlugFutureState<T> {
     /// # Parameters
     ///
     /// - `msg`: Message to set as reply, which will be returned by the
-    /// corresponding future.
+    ///   corresponding future.
     pub fn set_reply(&mut self, reply: T) {
         if self.reply_msg.is_some() {
             // TODO Can we stop multiple calls to set_reply_msg at compile time?

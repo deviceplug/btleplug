@@ -508,7 +508,9 @@ pub enum CoreBluetoothMessage {
         options: RetrievePeripheralsOptions,
         future: CoreBluetoothReplyStateShared,
     },
-    ClearPeripherals,
+    ClearPeripherals {
+        future: CoreBluetoothReplyStateShared,
+    },
 }
 
 #[derive(Debug)]
@@ -541,6 +543,9 @@ pub enum CoreBluetoothEvent {
     },
     DeviceDisconnected {
         uuid: Uuid,
+    },
+    PeripheralsCleared {
+        future: CoreBluetoothReplyStateShared,
     },
 }
 
@@ -1509,8 +1514,10 @@ impl CoreBluetoothInternal {
                     CoreBluetoothMessage::RetrievePeripherals { options, future } => {
                         self.retrieve_peripherals(options, future).await
                     }
-                    CoreBluetoothMessage::ClearPeripherals => {
+                    CoreBluetoothMessage::ClearPeripherals { future } => {
                         self.peripherals.clear();
+                        self.dispatch_event(CoreBluetoothEvent::PeripheralsCleared { future })
+                            .await;
                     }
                 };
             }

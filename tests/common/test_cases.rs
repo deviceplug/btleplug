@@ -66,6 +66,71 @@ pub async fn test_discover_peripheral_by_name() {
     peripheral.disconnect().await.unwrap();
 }
 
+#[cfg(target_os = "macos")]
+pub async fn test_clear_peripherals_rediscovers_device() {
+    use btleplug::api::{Central, CentralEvent, ScanFilter};
+    use futures::StreamExt;
+    use std::time::Duration;
+    use tokio::time;
+
+    let adapter = peripheral_finder::get_adapter().await;
+    let peripheral_name = std::env::var("BTLEPLUG_TEST_PERIPHERAL")
+        .unwrap_or_else(|_| gatt_uuids::TEST_PERIPHERAL_NAME.to_string());
+    let mut events = adapter.events().await.unwrap();
+
+    adapter.start_scan(ScanFilter::default()).await.unwrap();
+    let peripheral = time::timeout(Duration::from_secs(15), async {
+        loop {
+            for peripheral in adapter.peripherals().await.unwrap() {
+                if peripheral
+                    .properties()
+                    .await
+                    .unwrap()
+                    .is_some_and(|properties| {
+                        properties.local_name.as_deref() == Some(&peripheral_name)
+                    })
+                {
+                    return peripheral;
+                }
+            }
+            let _ = events.next().await;
+        }
+    })
+    .await
+    .expect("timed out waiting for initial peripheral discovery");
+    let peripheral_id = peripheral.id();
+
+    adapter.stop_scan().await.unwrap();
+    adapter.clear_peripherals().await.unwrap();
+    assert!(
+        adapter.peripherals().await.unwrap().is_empty(),
+        "clear_peripherals returned before the public map was cleared"
+    );
+
+    adapter.start_scan(ScanFilter::default()).await.unwrap();
+    time::timeout(Duration::from_secs(15), async {
+        loop {
+            if matches!(events.next().await, Some(CentralEvent::DeviceDiscovered(id)) if id == peripheral_id)
+            {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("timed out waiting for rediscovery after clear_peripherals");
+    adapter.stop_scan().await.unwrap();
+
+    assert!(
+        adapter
+            .peripherals()
+            .await
+            .unwrap()
+            .iter()
+            .any(|peripheral| peripheral.id() == peripheral_id),
+        "rediscovered peripheral was not restored to the public map"
+    );
+}
+
 pub async fn test_discover_services() {
     let peripheral = peripheral_finder::find_and_connect().await;
     let services = peripheral.services();

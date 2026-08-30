@@ -134,6 +134,11 @@ impl Adapter {
                         handles.remove(&uuid.into());
                         manager_clone.emit(CentralEvent::DeviceDisconnected(uuid.into()));
                     }
+                    CoreBluetoothEvent::PeripheralsCleared { future } => {
+                        manager_clone.clear_peripherals();
+                        handles.clear();
+                        future.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
+                    }
                     CoreBluetoothEvent::DidUpdateState { state } => {
                         let central_state = get_central_state(state);
                         manager_clone.emit(CentralEvent::StateUpdate(central_state));
@@ -218,13 +223,20 @@ impl Central for Adapter {
     }
 
     async fn clear_peripherals(&self) -> Result<()> {
-        self.manager.clear_peripherals();
+        let fut = CoreBluetoothReplyFuture::default();
         self.sender
             .to_owned()
-            .send(CoreBluetoothMessage::ClearPeripherals)
+            .send(CoreBluetoothMessage::ClearPeripherals {
+                future: fut.get_state_clone(),
+            })
             .await
             .map_err(|e| Error::Other(Box::new(e)))?;
-        Ok(())
+        match fut.await {
+            CoreBluetoothReply::Ok => Ok(()),
+            _ => Err(Error::RuntimeError(
+                "Unexpected CoreBluetooth clear reply".to_string(),
+            )),
+        }
     }
 
     async fn adapter_info(&self) -> Result<String> {

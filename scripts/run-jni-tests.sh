@@ -97,16 +97,16 @@ compile_java() {
     rm -rf "$classes_dir"
     mkdir -p "$classes_dir"
 
-    # Only compile the gedgygedgy sources — the nonpolynomial sources
-    # depend on Android APIs and cannot be compiled with plain javac.
-    local gedgy_dir="$JAVA_SRC_DIR/io/github/gedgygedgy"
+    # Only compile the plain-Java rust support classes — the nonpolynomial
+    # sources depend on Android APIs and cannot be compiled with plain javac.
+    local rust_dir="$JAVA_SRC_DIR/io/github/gedgygedgy/rust"
     local sources=()
     while IFS= read -r -d '' f; do
         sources+=("$f")
-    done < <(find "$gedgy_dir" -name '*.java' -print0)
+    done < <(find "$rust_dir" -name '*.java' -print0)
 
     if [ ${#sources[@]} -eq 0 ]; then
-        die "No .java files found under $gedgy_dir"
+        die "No .java files found under $rust_dir"
     fi
 
     info "Found ${#sources[@]} Java source files"

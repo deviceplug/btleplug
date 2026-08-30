@@ -1,15 +1,47 @@
-# Unreleased
+# 0.13.0 (2026-08-29)
 
 ## Features
 
+- Add `Central::retrieve_peripherals()` and `RetrievePeripheralsOptions` for
+  retrieving peripherals by identifier or advertised service without scanning.
+  This is supported on Linux, macOS/iOS, and Windows; Android returns
+  `Error::NotSupported`.
+- Add `Central::adapter_address()` for retrieving the local adapter address on
+  Linux and Windows. Apple platforms and ordinary Android applications return
+  `Ok(None)` because their public APIs do not expose this address.
+- Implement `Central::add_peripheral()` on Windows, allowing bonded or already
+  connected devices to be reached by address without waiting for an
+  advertisement.
 - Add `appearance` to `PeripheralProperties`, populated from GAP Appearance
   advertising data on Windows, Linux, and Android. CoreBluetooth does not expose
   this advertising field, so it remains `None` on Apple platforms.
+- Add support for receiving advertisements on the Bluetooth LE Coded PHY on
+  Windows where supported.
+
+## Bugfixes
+
+- Fix CoreBluetooth service discovery hanging when descriptor discovery fails.
+- Fix CoreBluetooth `clear_peripherals()` so cleared devices can be rediscovered
+  and emit fresh discovery events.
+- Report the negotiated CoreBluetooth MTU after service discovery instead of
+  always returning the default MTU.
+- Preserve complete local names over shortened names across split or repeated
+  advertisements on Android, macOS/iOS, and Windows.
+- Fix filtered Windows scans dropping scan-response packets that omit service
+  UUIDs, and prevent stale scan-response matches from leaking between scans.
+- Propagate Android JNI callback and initialization failures consistently while
+  preserving Java exception details.
 
 ## Breaking Changes
 
+- **Android minimum SDK**: Android API 24 (Android 7.0) or newer is now required.
 - **`PeripheralProperties` struct literals**: The new `appearance` field must be
   initialized by callers that construct this public struct directly.
+
+## Dependencies
+
+- Update `jni` from 0.19 to 0.22 and migrate the Android backend to its current
+  API.
 
 # 0.12.0 (2026-03-08)
 
@@ -23,7 +55,6 @@
 - Add `clear_peripherals()` to `Central` trait
   - Thanks danielstuart14!
 - Add `adapter_state()` to `Central` trait for querying Bluetooth on/off state
-- Add optional `adapter_address()` to `Central` for platforms exposing a local adapter Bluetooth address; unsupported platforms return `Ok(None)` without breaking custom implementations
 - Add `add_peripheral()` to `Central` trait for adding a device by address without scanning (Android)
 - Add `advertisement_name` field to `PeripheralProperties`
   - Thanks szymonlesisz!

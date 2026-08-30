@@ -13,7 +13,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 JAVA_SRC_DIR="$PROJECT_ROOT/src/droidplug/java/src/main/java"
-BUILD_DIR="$PROJECT_ROOT/target/debug/java"
+CARGO_TARGET_ROOT="${CARGO_TARGET_DIR:-$PROJECT_ROOT/target}"
+HOST_TARGET="$(rustc -vV | sed -n 's/^host: //p')"
+BUILD_DIR="$CARGO_TARGET_ROOT/$HOST_TARGET/debug/java"
 JAR_DIR="$BUILD_DIR/libs"
 JAR_PATH="$JAR_DIR/btleplug-jni.jar"
 
@@ -132,7 +134,7 @@ run_tests() {
     info "Running jni_utils tests..."
 
     cd "$PROJECT_ROOT"
-    cargo test --features jni-host-tests -- --test-threads=1
+    cargo test --target "$HOST_TARGET" --features jni-host-tests -- --test-threads=1
 
     info "All tests passed!"
 }

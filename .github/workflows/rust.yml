@@ -46,7 +46,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install libdbus-1-dev openjdk-17-jdk
       - uses: actions/setup-java@v2
-        if: ${{ matrix.target == 'android' }}
+        if: ${{ matrix.target == 'android' || matrix.target == 'linux' || matrix.target == 'macos' }}
         with:
           distribution: 'zulu'
           java-version: '17'

@@ -31,6 +31,22 @@
   UUIDs, and prevent stale scan-response matches from leaking between scans.
 - Propagate Android JNI callback and initialization failures consistently while
   preserving Java exception details.
+- Harden Windows characteristic subscription state so repeated subscriptions do
+  not install duplicate handlers and failed CCCD operations remain retryable.
+  (#326)
+- Clarify that `Peripheral::properties()` is a backend-dependent snapshot and
+  may be unavailable, incomplete, or stale. (#339)
+- Prevent CoreBluetooth descriptor discovery and GATT operation failures from
+  hanging pending futures or panicking on missing relationships. (#397, #422)
+- Run compatible CoreBluetooth operations through FIFO queues, preserve
+  write-without-response ordering under backpressure, and complete pending
+  operations safely on disconnect or late callbacks. (#464)
+- Remove stale CoreBluetooth peripheral event senders after dispatch failures so
+  peripherals can be rediscovered cleanly. (#469)
+- Expand Android JNI host-test coverage for futures, streams, and environment
+  setup across worker threads. (#427)
+- Update the event-driven discovery example to describe its async-task usage.
+  (#460)
 
 ## Breaking Changes
 

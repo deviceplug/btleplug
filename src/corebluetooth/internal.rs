@@ -295,15 +295,13 @@ impl PeripheralInternal {
         service_uuid: Uuid,
         characteristic_uuid: Uuid,
         descriptors: HashMap<Uuid, Retained<CBDescriptor>>,
-    ) {
-        let service = self
-            .services
-            .get_mut(&service_uuid)
-            .expect("Got descriptors for a service we don't know about");
-        let characteristic = service
-            .characteristics
-            .get_mut(&characteristic_uuid)
-            .expect("Got descriptors for a characteristic we don't know about");
+    ) -> bool {
+        let Some(service) = self.services.get_mut(&service_uuid) else {
+            return false;
+        };
+        let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid) else {
+            return false;
+        };
         for (descriptor_uuid, cb_descriptor) in descriptors {
             if let Some(existing) = characteristic.descriptors.get_mut(&descriptor_uuid) {
                 // Update the CB object reference but preserve in-flight future
@@ -326,6 +324,7 @@ impl PeripheralInternal {
             service.discovered = true;
             self.check_discovered()
         }
+        true
     }
 
     fn check_discovered(&mut self) {
@@ -392,47 +391,54 @@ impl PeripheralInternal {
     }
 
     pub fn confirm_disconnect(&mut self) {
-        // Fulfill the disconnected future, if there is one.
-        // There might not be a future if the device disconnects unexpectedly.
-        if let Some(future) = self.disconnected_future_state.take() {
-            future.lock().unwrap().set_reply(CoreBluetoothReply::Ok)
-        }
+        self.drain_pending_operations("Device disconnected");
+    }
 
-        // Fulfill pending RSSI futures
-        let error = CoreBluetoothReply::Err(String::from("Device disconnected"));
+    /// Complete every operation that cannot receive a callback after the
+    /// peripheral disappears.  Keep this centralized: adding a future-bearing
+    /// operation must also add its queue here.
+    fn drain_pending_operations(&mut self, message: &str) {
+        let error = CoreBluetoothReply::Err(message.to_string());
+        for future in [
+            self.disconnected_future_state.take(),
+            self.connected_future_state.take(),
+            self.services_discovered_future_state.take(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            future.lock().unwrap().set_reply(error.clone());
+        }
         for state in self.read_rssi_future_state.drain(..) {
             state.lock().unwrap().set_reply(error.clone());
         }
-
-        // Fulfill pending write-without-response futures
         for pending in self.write_without_response_queue.drain(..) {
             pending.fut.lock().unwrap().set_reply(error.clone());
         }
-
-        // Fulfill all pending futures
-        self.services.iter().for_each(|(_, service)| {
-            service
-                .characteristics
-                .iter()
-                .for_each(|(_, characteristic)| {
-                    let CharacteristicInternal {
-                        read_future_state,
-                        write_future_state,
-                        subscribe_future_state,
-                        unsubscribe_future_state,
-                        ..
-                    } = characteristic;
-
-                    let futures = read_future_state
-                        .iter()
-                        .chain(write_future_state)
-                        .chain(subscribe_future_state)
-                        .chain(unsubscribe_future_state);
-                    for state in futures {
+        for service in self.services.values_mut() {
+            for characteristic in service.characteristics.values_mut() {
+                for queue in [
+                    &mut characteristic.read_future_state,
+                    &mut characteristic.write_future_state,
+                    &mut characteristic.subscribe_future_state,
+                    &mut characteristic.unsubscribe_future_state,
+                ] {
+                    for state in queue.drain(..) {
                         state.lock().unwrap().set_reply(error.clone());
                     }
-                });
-        });
+                }
+                for descriptor in characteristic.descriptors.values_mut() {
+                    for queue in [
+                        &mut descriptor.read_future_state,
+                        &mut descriptor.write_future_state,
+                    ] {
+                        for state in queue.drain(..) {
+                            state.lock().unwrap().set_reply(error.clone());
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

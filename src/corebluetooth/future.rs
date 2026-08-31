@@ -38,15 +38,18 @@ impl<T> BtlePlugFutureState<T> {
     /// - `msg`: Message to set as reply, which will be returned by the
     ///   corresponding future.
     pub fn set_reply(&mut self, reply: T) {
+        // CoreBluetooth can deliver a late callback after a disconnect has
+        // already completed and drained the operation.  Completion is
+        // terminal, so duplicate callbacks must be harmless (including after
+        // the reply has been polled by the caller).
         if self.reply_msg.is_some() {
-            // TODO Can we stop multiple calls to set_reply_msg at compile time?
-            panic!("set_reply_msg called multiple times on the same future.");
+            return;
         }
 
         self.reply_msg = Some(reply);
 
-        if self.waker.is_some() {
-            self.waker.take().unwrap().wake();
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
         }
     }
 }

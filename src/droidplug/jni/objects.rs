@@ -516,7 +516,10 @@ impl<'local> JScanResult<'local> {
             let tx_power_level = self.get_tx_power(env)?;
             const TX_POWER_NOT_PRESENT: jint = 127;
             let tx_power_level = if tx_power_level == TX_POWER_NOT_PRESENT {
-                None
+                match record.get_tx_power_level(env)? {
+                    TX_POWER_NOT_PRESENT => None,
+                    tx_power_level => Some(tx_power_level as i16),
+                }
             } else {
                 Some(tx_power_level as i16)
             };

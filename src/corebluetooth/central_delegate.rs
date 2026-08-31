@@ -720,7 +720,15 @@ declare_class!(
                 characteristic_debug(characteristic),
                 localized_description(error)
             );
-            if error.is_none() {
+            if error.is_some() {
+                let Some(service) = (unsafe { characteristic.service() }) else { return };
+                self.send_event(CentralDelegateEvent::CharacteristicWritten {
+                    peripheral_uuid: nsuuid_to_uuid(&*unsafe { peripheral.identifier() }),
+                    service_uuid: cbuuid_to_uuid(&*unsafe { service.UUID() }),
+                    characteristic_uuid: cbuuid_to_uuid(&*unsafe { characteristic.UUID() }),
+                    error: error.map(|e| e.localizedDescription().to_string()),
+                });
+            } else {
                 let service = unsafe { characteristic.service() }.unwrap();
                 let id = unsafe { peripheral.identifier() };
                 let peripheral_uuid = nsuuid_to_uuid(&id);
@@ -806,7 +814,17 @@ declare_class!(
                 descriptor_debug(descriptor),
                 localized_description(error)
             );
-            if error.is_none() {
+            if let Some(error) = error {
+                let Some(characteristic) = (unsafe { descriptor.characteristic() }) else { return };
+                let Some(service) = (unsafe { characteristic.service() }) else { return };
+                self.send_event(CentralDelegateEvent::DescriptorNotified {
+                    peripheral_uuid: nsuuid_to_uuid(&*unsafe { peripheral.identifier() }),
+                    service_uuid: cbuuid_to_uuid(&*unsafe { service.UUID() }),
+                    characteristic_uuid: cbuuid_to_uuid(&*unsafe { characteristic.UUID() }),
+                    descriptor_uuid: cbuuid_to_uuid(&*unsafe { descriptor.UUID() }),
+                    data: Vec::new(), error: Some(error.localizedDescription().to_string()),
+                });
+            } else {
                 let characteristic = unsafe { descriptor.characteristic() }.unwrap();
                 let service = unsafe { characteristic.service() }.unwrap();
                 let id = unsafe { peripheral.identifier() };
@@ -842,7 +860,17 @@ declare_class!(
                 descriptor_debug(descriptor),
                 localized_description(error)
             );
-            if error.is_none() {
+            if let Some(error) = error {
+                let Some(characteristic) = (unsafe { descriptor.characteristic() }) else { return };
+                let Some(service) = (unsafe { characteristic.service() }) else { return };
+                self.send_event(CentralDelegateEvent::DescriptorWritten {
+                    peripheral_uuid: nsuuid_to_uuid(&*unsafe { peripheral.identifier() }),
+                    service_uuid: cbuuid_to_uuid(&*unsafe { service.UUID() }),
+                    characteristic_uuid: cbuuid_to_uuid(&*unsafe { characteristic.UUID() }),
+                    descriptor_uuid: cbuuid_to_uuid(&*unsafe { descriptor.UUID() }),
+                    error: Some(error.localizedDescription().to_string()),
+                });
+            } else {
                 let characteristic = unsafe { descriptor.characteristic() }.unwrap();
                 let service = unsafe { characteristic.service() }.unwrap();
                 let id = unsafe { peripheral.identifier() };

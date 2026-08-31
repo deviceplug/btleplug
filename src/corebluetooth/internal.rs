@@ -632,17 +632,21 @@ impl CoreBluetoothInternal {
             "Got manufacturer data advertisement! {}: {:?}",
             manufacturer_id, manufacturer_data
         );
-        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid)
-            && let Err(e) = p
-                .event_sender
+        let dead = if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
+            p.event_sender
                 .send(PeripheralEventInternal::ManufacturerData(
                     manufacturer_id,
                     manufacturer_data,
                     rssi,
                 ))
                 .await
-        {
-            error!("Error sending notification event: {}", e);
+                .is_err()
+        } else {
+            false
+        };
+        if dead {
+            error!("Removing CoreBluetooth peripheral {peripheral_uuid}: event receiver is gone");
+            self.peripherals.remove(&peripheral_uuid);
         }
     }
 
@@ -653,25 +657,33 @@ impl CoreBluetoothInternal {
         rssi: i16,
     ) {
         trace!("Got service data advertisement! {:?}", service_data);
-        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid)
-            && let Err(e) = p
-                .event_sender
+        let dead = if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
+            p.event_sender
                 .send(PeripheralEventInternal::ServiceData(service_data, rssi))
                 .await
-        {
-            error!("Error sending notification event: {}", e);
+                .is_err()
+        } else {
+            false
+        };
+        if dead {
+            error!("Removing CoreBluetooth peripheral {peripheral_uuid}: event receiver is gone");
+            self.peripherals.remove(&peripheral_uuid);
         }
     }
 
     async fn on_services(&mut self, peripheral_uuid: Uuid, services: Vec<Uuid>, rssi: i16) {
         trace!("Got service advertisement! {:?}", services);
-        if let Some(p) = self.peripherals.get_mut(&peripheral_uuid)
-            && let Err(e) = p
-                .event_sender
+        let dead = if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
+            p.event_sender
                 .send(PeripheralEventInternal::Services(services, rssi))
                 .await
-        {
-            error!("Error sending notification event: {}", e);
+                .is_err()
+        } else {
+            false
+        };
+        if dead {
+            error!("Removing CoreBluetooth peripheral {peripheral_uuid}: event receiver is gone");
+            self.peripherals.remove(&peripheral_uuid);
         }
     }
 
@@ -789,7 +801,13 @@ impl CoreBluetoothInternal {
             trace!("{}", id);
         }
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
-            p.set_characteristic_descriptors(service_uuid, characteristic_uuid, descriptors);
+            if !p.set_characteristic_descriptors(service_uuid, characteristic_uuid, descriptors) {
+                if let Some(future) = p.services_discovered_future_state.take() {
+                    future.lock().unwrap().set_reply(CoreBluetoothReply::Err(
+                        format!("Unknown descriptor relationship for service {service_uuid}, characteristic {characteristic_uuid}"),
+                    ));
+                }
+            }
         }
     }
 
@@ -880,6 +898,14 @@ impl CoreBluetoothInternal {
             })
             .await;
         }
+    }
+
+    fn complete_missing(fut: CoreBluetoothReplyStateShared, object: &str) {
+        fut.lock()
+            .unwrap()
+            .set_reply(CoreBluetoothReply::Err(format!(
+                "{object} no longer available"
+            )));
     }
 
     /// Get the CBCharacteristic for the given characteristic of the given peripheral, if it exists.
@@ -1005,6 +1031,10 @@ impl CoreBluetoothInternal {
             trace!("Connecting peripheral!");
             p.connected_future_state = Some(fut);
             unsafe { self.manager.connectPeripheral_options(&p.peripheral, None) };
+        } else {
+            fut.lock().unwrap().set_reply(CoreBluetoothReply::Err(
+                "Peripheral no longer available".into(),
+            ));
         }
     }
 
@@ -1014,6 +1044,8 @@ impl CoreBluetoothInternal {
             trace!("Disconnecting peripheral!");
             p.disconnected_future_state = Some(fut);
             unsafe { self.manager.cancelPeripheralConnection(&p.peripheral) };
+        } else {
+            fut.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
         }
     }
 

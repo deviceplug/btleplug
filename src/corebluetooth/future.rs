@@ -13,6 +13,7 @@ use std::task::{Context, Poll, Waker};
 pub struct BtlePlugFutureState<T> {
     reply_msg: Option<T>,
     waker: Option<Waker>,
+    completed: bool,
 }
 
 // For some reason, deriving default above doesn't work, but doing an explicit
@@ -22,6 +23,7 @@ impl<T> Default for BtlePlugFutureState<T> {
         BtlePlugFutureState::<T> {
             reply_msg: None,
             waker: None,
+            completed: false,
         }
     }
 }
@@ -42,10 +44,11 @@ impl<T> BtlePlugFutureState<T> {
         // already completed and drained the operation.  Completion is
         // terminal, so duplicate callbacks must be harmless (including after
         // the reply has been polled by the caller).
-        if self.reply_msg.is_some() {
+        if self.completed {
             return;
         }
 
+        self.completed = true;
         self.reply_msg = Some(reply);
 
         if let Some(waker) = self.waker.take() {
@@ -113,5 +116,30 @@ impl<T> Future for BtlePlugFuture<T> {
             waker_state.waker = Some(cx.waker().clone());
             Poll::Pending
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::task::{Context, Poll, Waker};
+
+    #[test]
+    fn late_duplicate_completion_after_poll_is_ignored() {
+        let mut future = BtlePlugFuture::<u8>::default();
+        let state = future.get_state_clone();
+        let waker = Waker::noop();
+        let mut context = Context::from_waker(waker);
+
+        state.lock().unwrap().set_reply(1);
+        assert_eq!(Pin::new(&mut future).poll(&mut context), Poll::Ready(1));
+
+        // A callback arriving after the reply was consumed must not resurrect
+        // the operation or replace its terminal result.
+        state.lock().unwrap().set_reply(2);
+        assert!(matches!(
+            Pin::new(&mut future).poll(&mut context),
+            Poll::Pending
+        ));
     }
 }

@@ -53,8 +53,8 @@ jni = "0.22"
 once_cell = "1.21.4"
 
 [target.'cfg(target_vendor = "apple")'.dependencies]
-objc2 = "0.5.2"
-objc2-foundation = { version = "0.2.2", default-features = false, features = [
+objc2 = "0.6.4"
+objc2-foundation = { version = "0.3.2", default-features = false, features = [
     "std",
     "block2",
     "NSArray",
@@ -67,7 +67,7 @@ objc2-foundation = { version = "0.2.2", default-features = false, features = [
     "NSUUID",
     "NSValue",
 ] }
-objc2-core-bluetooth = { version = "0.2.2", default-features = false, features = [
+objc2-core-bluetooth = { version = "0.3.2", default-features = false, features = [
     "std",
     "CBAdvertisementData",
     "CBAttribute",

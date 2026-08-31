@@ -28,14 +28,14 @@ use futures::select;
 use futures::sink::SinkExt;
 use futures::stream::{Fuse, StreamExt};
 use log::{debug, error, trace, warn};
-use objc2::{ClassType, msg_send_id};
+use objc2::{AnyThread, msg_send};
 use objc2::{rc::Retained, runtime::AnyObject};
 use objc2_core_bluetooth::{
     CBCentralManager, CBCentralManagerScanOptionAllowDuplicatesKey, CBCharacteristic,
     CBCharacteristicProperties, CBCharacteristicWriteType, CBDescriptor, CBManager,
     CBManagerAuthorization, CBManagerState, CBPeripheral, CBPeripheralState, CBService, CBUUID,
 };
-use objc2_foundation::{NSArray, NSData, NSMutableDictionary, NSNumber, NSUUID};
+use objc2_foundation::{NSArray, NSData, NSMutableDictionary, NSNumber, NSString, NSUUID};
 use std::{
     collections::{BTreeSet, HashMap, VecDeque},
     ffi::CString,
@@ -140,28 +140,25 @@ impl CharacteristicInternal {
     fn form_flags(characteristic: &CBCharacteristic) -> CharPropFlags {
         let flags = unsafe { characteristic.properties() };
         let mut v = CharPropFlags::default();
-        if flags.contains(CBCharacteristicProperties::CBCharacteristicPropertyBroadcast) {
+        if flags.contains(CBCharacteristicProperties::Broadcast) {
             v |= CharPropFlags::BROADCAST;
         }
-        if flags.contains(CBCharacteristicProperties::CBCharacteristicPropertyRead) {
+        if flags.contains(CBCharacteristicProperties::Read) {
             v |= CharPropFlags::READ;
         }
-        if flags.contains(CBCharacteristicProperties::CBCharacteristicPropertyWriteWithoutResponse)
-        {
+        if flags.contains(CBCharacteristicProperties::WriteWithoutResponse) {
             v |= CharPropFlags::WRITE_WITHOUT_RESPONSE;
         }
-        if flags.contains(CBCharacteristicProperties::CBCharacteristicPropertyWrite) {
+        if flags.contains(CBCharacteristicProperties::Write) {
             v |= CharPropFlags::WRITE;
         }
-        if flags.contains(CBCharacteristicProperties::CBCharacteristicPropertyNotify) {
+        if flags.contains(CBCharacteristicProperties::Notify) {
             v |= CharPropFlags::NOTIFY;
         }
-        if flags.contains(CBCharacteristicProperties::CBCharacteristicPropertyIndicate) {
+        if flags.contains(CBCharacteristicProperties::Indicate) {
             v |= CharPropFlags::INDICATE;
         }
-        if flags
-            .contains(CBCharacteristicProperties::CBCharacteristicPropertyAuthenticatedSignedWrites)
-        {
+        if flags.contains(CBCharacteristicProperties::AuthenticatedSignedWrites) {
             v |= CharPropFlags::AUTHENTICATED_SIGNED_WRITES;
         }
         trace!("Flags: {:?}", v);
@@ -373,9 +370,8 @@ impl PeripheralInternal {
             // a write, not the ATT MTU. Sample it after discovery, then account
             // for the ATT Write Command header to infer the full ATT MTU.
             let maximum_write_value_length = unsafe {
-                self.peripheral.maximumWriteValueLengthForType(
-                    CBCharacteristicWriteType::CBCharacteristicWriteWithoutResponse,
-                )
+                self.peripheral
+                    .maximumWriteValueLengthForType(CBCharacteristicWriteType::WithoutResponse)
             };
             let reply = match maximum_write_value_length_to_att_mtu(maximum_write_value_length) {
                 Ok(mtu) => CoreBluetoothReply::ServicesDiscovered(services, mtu),
@@ -601,7 +597,7 @@ impl CoreBluetoothInternal {
         let queue: *mut AnyObject = queue.cast();
 
         let manager = unsafe {
-            msg_send_id![CBCentralManager::alloc(), initWithDelegate: &*delegate, queue: queue]
+            msg_send![CBCentralManager::alloc(), initWithDelegate: &*delegate, queue: queue]
         };
 
         Self {
@@ -1124,7 +1120,7 @@ impl CoreBluetoothInternal {
                             peripheral.peripheral.writeValue_forCharacteristic_type(
                                 &NSData::from_vec(data),
                                 &characteristic.characteristic,
-                                CBCharacteristicWriteType::CBCharacteristicWriteWithoutResponse,
+                                CBCharacteristicWriteType::WithoutResponse,
                             );
                         }
                         fut.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
@@ -1145,7 +1141,7 @@ impl CoreBluetoothInternal {
                         peripheral.peripheral.writeValue_forCharacteristic_type(
                             &NSData::from_vec(data),
                             &characteristic.characteristic,
-                            CBCharacteristicWriteType::CBCharacteristicWriteWithResponse,
+                            CBCharacteristicWriteType::WithResponse,
                         );
                     }
                     characteristic.write_future_state.push_back(fut);
@@ -1169,7 +1165,7 @@ impl CoreBluetoothInternal {
                             peripheral.peripheral.writeValue_forCharacteristic_type(
                                 &NSData::from_vec(pending.data),
                                 &characteristic.characteristic,
-                                CBCharacteristicWriteType::CBCharacteristicWriteWithoutResponse,
+                                CBCharacteristicWriteType::WithoutResponse,
                             );
                         }
                         pending
@@ -1489,7 +1485,9 @@ impl CoreBluetoothInternal {
         }
         let mut retrieved = Vec::new();
         if let Some(services) = options.services.filter(|services| !services.is_empty()) {
-            let services = NSArray::from_vec(services.into_iter().map(uuid_to_cbuuid).collect());
+            let services = NSArray::from_retained_slice(
+                &services.into_iter().map(uuid_to_cbuuid).collect::<Vec<_>>(),
+            );
             retrieved.extend(unsafe {
                 self.manager
                     .retrieveConnectedPeripheralsWithServices(&services)
@@ -1499,14 +1497,14 @@ impl CoreBluetoothInternal {
             .identifiers
             .filter(|identifiers| !identifiers.is_empty())
         {
-            let identifiers = NSArray::from_vec(
-                identifiers
+            let identifiers = NSArray::from_retained_slice(
+                &identifiers
                     .into_iter()
                     .map(|id| {
                         NSUUID::from_string(&objc2_foundation::NSString::from_str(&id.to_string()))
                             .unwrap()
                     })
-                    .collect(),
+                    .collect::<Vec<_>>(),
             );
             retrieved.extend(unsafe {
                 self.manager
@@ -1719,18 +1717,19 @@ impl CoreBluetoothInternal {
     fn start_discovery(&mut self, filter: ScanFilter) {
         trace!("BluetoothAdapter::start_discovery");
         let service_uuids = scan_filter_to_service_uuids(filter);
-        let mut options = NSMutableDictionary::new();
+        let mut options: Retained<NSMutableDictionary<NSString, AnyObject>> =
+            NSMutableDictionary::new();
         // NOTE: If duplicates are not allowed then a peripheral will not show
         // up again once connected and then disconnected.
-        options.insert_id(
+        options.insert(
             unsafe { CBCentralManagerScanOptionAllowDuplicatesKey },
-            Retained::into_super(Retained::into_super(Retained::into_super(
-                NSNumber::new_bool(true),
-            ))),
+            &*Retained::into_super(Retained::into_super(NSNumber::new_bool(true))),
         );
         unsafe {
-            self.manager
-                .scanForPeripheralsWithServices_options(service_uuids.as_deref(), Some(&options))
+            self.manager.scanForPeripheralsWithServices_options(
+                service_uuids.as_deref(),
+                Some(&*Retained::into_super(options)),
+            )
         };
     }
 
@@ -1751,7 +1750,7 @@ fn scan_filter_to_service_uuids(filter: ScanFilter) -> Option<Retained<NSArray<C
             .into_iter()
             .map(uuid_to_cbuuid)
             .collect::<Vec<_>>();
-        Some(NSArray::from_vec(service_uuids))
+        Some(NSArray::from_retained_slice(&service_uuids))
     }
 }
 
@@ -1767,40 +1766,33 @@ impl Drop for CoreBluetoothInternal {
 mod tests {
     use super::*;
     use futures::StreamExt;
-    use objc2::{DeclaredClass, declare_class, mutability};
+    use objc2::{DefinedClass, define_class};
     use objc2_core_bluetooth::{
         CBAttributePermissions, CBMutableCharacteristic, CBMutableService, CBPeripheralDelegate,
     };
     use objc2_foundation::{NSError, NSObjectProtocol, NSString, ns_string};
     use std::time::Duration;
 
-    declare_class!(
+    define_class!(
+        #[unsafe(super(CBPeripheral))]
+        #[thread_kind = AnyThread]
+        #[ivars = Retained<NSUUID>]
         struct TestPeripheral;
-
-        unsafe impl ClassType for TestPeripheral {
-            type Super = CBPeripheral;
-            type Mutability = mutability::InteriorMutable;
-            const NAME: &'static str = "BtlePlugTestPeripheral";
-        }
-
-        impl DeclaredClass for TestPeripheral {
-            type Ivars = Retained<NSUUID>;
-        }
 
         unsafe impl NSObjectProtocol for TestPeripheral {}
 
-        unsafe impl TestPeripheral {
-            #[method_id(identifier)]
+        impl TestPeripheral {
+            #[unsafe(method_id(identifier))]
             fn identifier(&self) -> Retained<NSUUID> {
                 self.ivars().clone()
             }
 
-            #[method_id(name)]
+            #[unsafe(method_id(name))]
             fn name(&self) -> Option<Retained<NSString>> {
                 None
             }
 
-            #[method(maximumWriteValueLengthForType:)]
+            #[unsafe(method(maximumWriteValueLengthForType:))]
             fn maximum_write_value_length_for_type(
                 &self,
                 _write_type: CBCharacteristicWriteType,
@@ -1813,7 +1805,7 @@ mod tests {
     impl TestPeripheral {
         fn new(identifier: Retained<NSUUID>) -> Retained<Self> {
             let this = Self::alloc().set_ivars(identifier);
-            unsafe { msg_send_id![super(this), init] }
+            unsafe { msg_send![super(this), init] }
         }
     }
 
@@ -1857,7 +1849,7 @@ mod tests {
             CBMutableCharacteristic::initWithType_properties_value_permissions(
                 CBMutableCharacteristic::alloc(),
                 &characteristic_cbuuid,
-                CBCharacteristicProperties::CBCharacteristicPropertyRead,
+                CBCharacteristicProperties::Read,
                 None,
                 CBAttributePermissions::Readable,
             )
@@ -1866,7 +1858,7 @@ mod tests {
             CBMutableService::initWithType_primary(CBMutableService::alloc(), &service_cbuuid, true)
         };
         let characteristic: Retained<CBCharacteristic> = Retained::into_super(characteristic);
-        let characteristics = NSArray::from_vec(vec![characteristic.clone()]);
+        let characteristics = NSArray::from_retained_slice(&[characteristic.clone()]);
         unsafe { service.setCharacteristics(Some(&characteristics)) };
         let service: Retained<CBService> = Retained::into_super(service);
 

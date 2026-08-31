@@ -1717,7 +1717,7 @@ impl CoreBluetoothInternal {
     fn start_discovery(&mut self, filter: ScanFilter) {
         trace!("BluetoothAdapter::start_discovery");
         let service_uuids = scan_filter_to_service_uuids(filter);
-        let mut options: Retained<NSMutableDictionary<NSString, AnyObject>> =
+        let options: Retained<NSMutableDictionary<NSString, AnyObject>> =
             NSMutableDictionary::new();
         // NOTE: If duplicates are not allowed then a peripheral will not show
         // up again once connected and then disconnected.

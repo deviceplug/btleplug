@@ -305,6 +305,61 @@ mod test {
     }
 
     #[test]
+    fn test_jsendstream_cross_thread_await() {
+        use futures::{StreamExt, executor::block_on};
+        use std::sync::{Arc, Barrier, mpsc};
+
+        let (mut stream, stream_obj_global, obj_global) = test_utils::with_env(|env| {
+            let stream_obj = env
+                .new_object(
+                    jni_str!("io/github/gedgygedgy/rust/stream/QueueStream"),
+                    jni_sig!("()V"),
+                    &[],
+                )
+                .unwrap();
+            let stream_obj_global = env.new_global_ref(&stream_obj).unwrap();
+            let stream = JSendStream::from_env(env, &stream_obj).unwrap();
+            let obj = env
+                .new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[])
+                .unwrap();
+            let obj_global = env.new_global_ref(&obj).unwrap();
+            Ok((stream, stream_obj_global, obj_global))
+        })
+        .unwrap();
+
+        let barrier = Arc::new(Barrier::new(2));
+        let worker_barrier = barrier.clone();
+        let (tx, rx) = mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            worker_barrier.wait();
+            let actual = block_on(stream.next()).unwrap().unwrap();
+            tx.send(actual).unwrap();
+        });
+
+        barrier.wait();
+        test_utils::with_env(|env| {
+            let stream_local = env.new_local_ref(stream_obj_global.as_obj()).unwrap();
+            let obj_local = env.new_local_ref(obj_global.as_obj()).unwrap();
+            env.call_method(
+                &stream_local,
+                jni_str!("add"),
+                jni_sig!("(Ljava/lang/Object;)V"),
+                &[(&obj_local).into()],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+        worker.join().unwrap();
+        let actual = rx.recv().unwrap();
+        test_utils::with_env(|env| {
+            let expected = env.new_local_ref(obj_global.as_obj()).unwrap();
+            assert!(env.is_same_object(actual.as_obj(), &expected).unwrap());
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
     fn test_jsendstream_await() {
         use futures::{executor::block_on, join};
 

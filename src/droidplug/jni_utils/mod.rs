@@ -174,4 +174,42 @@ pub(crate) mod test_utils {
             GlobalJVM { jvm, class_loader }
         };
     }
+
+    #[test]
+    fn with_env_is_safe_across_threads() {
+        use std::sync::{Arc, Barrier, mpsc};
+
+        let barrier = Arc::new(Barrier::new(2));
+        let worker_barrier = barrier.clone();
+        let (tx, rx) = mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            worker_barrier.wait();
+            with_env(|env| {
+                let thread = env
+                    .call_static_method(
+                        jni_str!("java/lang/Thread"),
+                        jni_str!("currentThread"),
+                        jni_sig!("()Ljava/lang/Thread;"),
+                        &[],
+                    )?
+                    .l()?;
+                let name = env
+                    .call_method(
+                        &thread,
+                        jni_str!("getName"),
+                        jni_sig!("()Ljava/lang/String;"),
+                        &[],
+                    )?
+                    .l()?;
+                let name = env.cast_local::<jni::objects::JString>(name)?.to_string();
+                tx.send(name).unwrap();
+                Ok(())
+            })
+            .unwrap();
+        });
+
+        barrier.wait();
+        worker.join().unwrap();
+        assert!(!rx.recv().unwrap().is_empty());
+    }
 }

@@ -314,6 +314,65 @@ mod test {
     }
 
     #[test]
+    fn test_jsendfuture_cross_thread_await() {
+        use super::super::task::JPollResult;
+        use futures::executor::block_on;
+        use std::sync::{Arc, Barrier, mpsc};
+
+        let (future, future_obj_global, obj_global) = test_utils::with_env(|env| {
+            let future_obj = env
+                .new_object(
+                    jni_str!("io/github/gedgygedgy/rust/future/SimpleFuture"),
+                    jni_sig!("()V"),
+                    &[],
+                )
+                .unwrap();
+            let future_obj_global = env.new_global_ref(&future_obj).unwrap();
+            let future = JSendFuture::from_env(env, &future_obj).unwrap();
+            let obj = env
+                .new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[])
+                .unwrap();
+            let obj_global = env.new_global_ref(&obj).unwrap();
+            Ok((future, future_obj_global, obj_global))
+        })
+        .unwrap();
+
+        let barrier = Arc::new(Barrier::new(2));
+        let (tx, rx) = mpsc::channel();
+        let worker_barrier = barrier.clone();
+        let worker = std::thread::spawn(move || {
+            worker_barrier.wait();
+            let global = block_on(future).unwrap();
+            tx.send(global).unwrap();
+        });
+
+        barrier.wait();
+        test_utils::with_env(|env| {
+            let future_local = env.new_local_ref(future_obj_global.as_obj()).unwrap();
+            let obj_local = env.new_local_ref(obj_global.as_obj()).unwrap();
+            env.call_method(
+                &future_local,
+                jni_str!("wake"),
+                jni_sig!("(Ljava/lang/Object;)V"),
+                &[(&obj_local).into()],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+        worker.join().unwrap();
+        let global = rx.recv().unwrap();
+        test_utils::with_env(|env| {
+            let actual = env.new_local_ref(global.as_obj()).unwrap();
+            let poll = env.cast_local::<JPollResult>(actual).unwrap();
+            let result = poll.get(env).unwrap();
+            let expected = env.new_local_ref(obj_global.as_obj()).unwrap();
+            assert!(env.is_same_object(&result, &expected).unwrap());
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
     fn test_jsendfuture_await() {
         use super::super::task::JPollResult;
         use futures::{executor::block_on, join};

@@ -43,6 +43,8 @@ tokio-stream = { version = "0.1.19", features = ["sync"] }
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = "0.9.12"
 bluez-async = "0.8.2"
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
 jni = { version = "0.22", optional = true }
 once_cell = { version = "1.21.4", optional = true }
 

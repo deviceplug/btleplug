@@ -99,14 +99,15 @@ impl BLEWatcher {
                         let mut is_match = false;
 
                         if let Ok(ad) = args.Advertisement()
-                            && let Ok(ad_uuids) = ad.ServiceUuids() {
-                                let count = ad_uuids.Size().unwrap_or(0);
-                                if count > 0 {
-                                    let advertised: Vec<windows::core::GUID> =
-                                        (0..count).filter_map(|i| ad_uuids.GetAt(i).ok()).collect();
-                                    is_match = filter_guids.iter().any(|g| advertised.contains(g));
-                                }
+                            && let Ok(ad_uuids) = ad.ServiceUuids()
+                        {
+                            let count = ad_uuids.Size().unwrap_or(0);
+                            if count > 0 {
+                                let advertised: Vec<windows::core::GUID> =
+                                    (0..count).filter_map(|i| ad_uuids.GetAt(i).ok()).collect();
+                                is_match = filter_guids.iter().any(|g| advertised.contains(g));
                             }
+                        }
 
                         let mut cache = matching_devices.lock().unwrap();
                         if is_match {

@@ -60,9 +60,8 @@ impl BLEDevice {
         let connection_status_handler =
             TypedEventHandler::<BluetoothLEDevice, _>::new(move |sender, _| {
                 if let Some(sender) = sender.as_ref() {
-                    let is_connected = sender
-                        .ConnectionStatus()
-                        .ok() == Some(BluetoothConnectionStatus::Connected);
+                    let is_connected = sender.ConnectionStatus().ok()
+                        == Some(BluetoothConnectionStatus::Connected);
                     connection_status_changed(is_connected);
                     trace!("state {:?}", sender.ConnectionStatus());
                 }

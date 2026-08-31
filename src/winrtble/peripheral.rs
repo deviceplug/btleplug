@@ -180,25 +180,25 @@ impl Peripheral {
             *self.shared.advertisement_name.write().unwrap() = Some(name.clone());
         }
         if let Ok(manufacturer_data) = advertisement.ManufacturerData()
-            && manufacturer_data.Size().unwrap() > 0 {
-                let mut manufacturer_data_guard =
-                    self.shared.latest_manufacturer_data.write().unwrap();
-                *manufacturer_data_guard = manufacturer_data
-                    .into_iter()
-                    .map(|d| {
-                        let manufacturer_id = d.CompanyId().unwrap();
-                        let data = utils::to_vec(&d.Data().unwrap());
+            && manufacturer_data.Size().unwrap() > 0
+        {
+            let mut manufacturer_data_guard = self.shared.latest_manufacturer_data.write().unwrap();
+            *manufacturer_data_guard = manufacturer_data
+                .into_iter()
+                .map(|d| {
+                    let manufacturer_id = d.CompanyId().unwrap();
+                    let data = utils::to_vec(&d.Data().unwrap());
 
-                        (manufacturer_id, data)
-                    })
-                    .collect();
+                    (manufacturer_id, data)
+                })
+                .collect();
 
-                // Emit event of newly received advertisement
-                self.emit_event(CentralEvent::ManufacturerDataAdvertisement {
-                    id: self.shared.address.into(),
-                    manufacturer_data: manufacturer_data_guard.clone(),
-                });
-            }
+            // Emit event of newly received advertisement
+            self.emit_event(CentralEvent::ManufacturerDataAdvertisement {
+                id: self.shared.address.into(),
+                manufacturer_data: manufacturer_data_guard.clone(),
+            });
+        }
 
         // The Windows Runtime API (as of 19041) does not directly expose Service Data as a friendly API (like Manufacturer Data above)
         // Instead they provide data sections for access to raw advertising data. That is processed here.
@@ -496,10 +496,9 @@ impl ApiPeripheral for Peripheral {
                     shared.connected.store(is_connected, Ordering::Relaxed);
                 }
 
-                if !is_connected
-                    && let Some(adapter) = adapter_clone.upgrade() {
-                        adapter.emit(CentralEvent::DeviceDisconnected(address.into()));
-                    }
+                if !is_connected && let Some(adapter) = adapter_clone.upgrade() {
+                    adapter.emit(CentralEvent::DeviceDisconnected(address.into()));
+                }
             }
         });
 
@@ -568,7 +567,9 @@ impl ApiPeripheral for Peripheral {
                                         map.entry(uuid).or_insert(gatt_characteristic);
                                         map
                                     },
-                                ).into_values().map(|characteristic| async {
+                                )
+                                .into_values()
+                                .map(|characteristic| async {
                                     let c = characteristic.clone();
                                     (
                                         characteristic,

@@ -1159,7 +1159,7 @@ impl CoreBluetoothInternal {
         if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
             while let Some(pending) = peripheral.write_without_response_queue.pop_front() {
                 if !unsafe { peripheral.peripheral.canSendWriteWithoutResponse() } {
-                    peripheral.write_without_response_queue.push_back(pending);
+                    peripheral.write_without_response_queue.push_front(pending);
                     break;
                 }
                 if let Some(service) = peripheral.services.get(&pending.service_uuid) {

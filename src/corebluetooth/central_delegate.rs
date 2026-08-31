@@ -99,22 +99,26 @@ pub enum CentralDelegateEvent {
         peripheral_uuid: Uuid,
         service_uuid: Uuid,
         characteristic_uuid: Uuid,
+        error: Option<String>,
     },
     CharacteristicUnsubscribed {
         peripheral_uuid: Uuid,
         service_uuid: Uuid,
         characteristic_uuid: Uuid,
+        error: Option<String>,
     },
     CharacteristicNotified {
         peripheral_uuid: Uuid,
         service_uuid: Uuid,
         characteristic_uuid: Uuid,
         data: Vec<u8>,
+        error: Option<String>,
     },
     CharacteristicWritten {
         peripheral_uuid: Uuid,
         service_uuid: Uuid,
         characteristic_uuid: Uuid,
+        error: Option<String>,
     },
     DescriptorNotified {
         peripheral_uuid: Uuid,
@@ -122,12 +126,14 @@ pub enum CentralDelegateEvent {
         characteristic_uuid: Uuid,
         descriptor_uuid: Uuid,
         data: Vec<u8>,
+        error: Option<String>,
     },
     DescriptorWritten {
         peripheral_uuid: Uuid,
         service_uuid: Uuid,
         characteristic_uuid: Uuid,
         descriptor_uuid: Uuid,
+        error: Option<String>,
     },
     TxPowerLevel {
         peripheral_uuid: Uuid,
@@ -136,6 +142,7 @@ pub enum CentralDelegateEvent {
     DidReadRssi {
         peripheral_uuid: Uuid,
         rssi: i16,
+        error: Option<String>,
     },
     ReadyToSendWriteWithoutResponse {
         peripheral_uuid: Uuid,
@@ -210,6 +217,7 @@ impl Debug for CentralDelegateEvent {
                 peripheral_uuid,
                 service_uuid,
                 characteristic_uuid,
+                ..
             } => f
                 .debug_struct("CharacteristicSubscribed")
                 .field("peripheral_uuid", peripheral_uuid)
@@ -220,6 +228,7 @@ impl Debug for CentralDelegateEvent {
                 peripheral_uuid,
                 service_uuid,
                 characteristic_uuid,
+                ..
             } => f
                 .debug_struct("CharacteristicUnsubscribed")
                 .field("peripheral_uuid", peripheral_uuid)
@@ -231,6 +240,7 @@ impl Debug for CentralDelegateEvent {
                 service_uuid,
                 characteristic_uuid,
                 data,
+                ..
             } => f
                 .debug_struct("CharacteristicNotified")
                 .field("peripheral_uuid", peripheral_uuid)
@@ -242,6 +252,7 @@ impl Debug for CentralDelegateEvent {
                 peripheral_uuid,
                 service_uuid,
                 characteristic_uuid,
+                ..
             } => f
                 .debug_struct("CharacteristicWritten")
                 .field("service_uuid", service_uuid)
@@ -290,6 +301,7 @@ impl Debug for CentralDelegateEvent {
                 characteristic_uuid,
                 descriptor_uuid,
                 data,
+                ..
             } => f
                 .debug_struct("DescriptorNotified")
                 .field("peripheral_uuid", peripheral_uuid)
@@ -303,6 +315,7 @@ impl Debug for CentralDelegateEvent {
                 service_uuid,
                 characteristic_uuid,
                 descriptor_uuid,
+                ..
             } => f
                 .debug_struct("DescriptorWritten")
                 .field("service_uuid", service_uuid)
@@ -321,6 +334,7 @@ impl Debug for CentralDelegateEvent {
             CentralDelegateEvent::DidReadRssi {
                 peripheral_uuid,
                 rssi,
+                ..
             } => f
                 .debug_struct("DidReadRssi")
                 .field("peripheral_uuid", peripheral_uuid)
@@ -687,6 +701,7 @@ declare_class!(
                     service_uuid,
                     characteristic_uuid,
                     data: get_characteristic_value(characteristic),
+                    error: error.map(|e| e.localizedDescription().to_string()),
                 });
                 // Notify BluetoothGATTCharacteristic::read_value that read was successful.
             }
@@ -717,6 +732,7 @@ declare_class!(
                     peripheral_uuid,
                     service_uuid,
                     characteristic_uuid,
+                    error: error.map(|e| e.localizedDescription().to_string()),
                 });
             }
         }
@@ -726,7 +742,7 @@ declare_class!(
             &self,
             peripheral: &CBPeripheral,
             characteristic: &CBCharacteristic,
-            _error: Option<&NSError>,
+            error: Option<&NSError>,
         ) {
             trace!("delegate_peripheral_didupdatenotificationstateforcharacteristic_error");
             // TODO check for error here
@@ -742,12 +758,14 @@ declare_class!(
                     peripheral_uuid,
                     service_uuid,
                     characteristic_uuid,
+                    error: error.map(|e| e.localizedDescription().to_string()),
                 });
             } else {
                 self.send_event(CentralDelegateEvent::CharacteristicUnsubscribed {
                     peripheral_uuid,
                     service_uuid,
                     characteristic_uuid,
+                    error: error.map(|e| e.localizedDescription().to_string()),
                 });
             }
         }
@@ -770,6 +788,7 @@ declare_class!(
                 self.send_event(CentralDelegateEvent::DidReadRssi {
                     peripheral_uuid,
                     rssi: rssi_value,
+                    error: error.map(|e| e.localizedDescription().to_string()),
                 });
             }
         }
@@ -804,6 +823,7 @@ declare_class!(
                     characteristic_uuid,
                     descriptor_uuid,
                     data: get_descriptor_value(descriptor),
+                    error: error.map(|e| e.localizedDescription().to_string()),
                 });
                 // Notify BluetoothGATTCharacteristic::read_value that read was successful.
             }
@@ -838,6 +858,7 @@ declare_class!(
                     service_uuid,
                     characteristic_uuid,
                     descriptor_uuid,
+                    error: error.map(|e| e.localizedDescription().to_string()),
                 });
             }
         }

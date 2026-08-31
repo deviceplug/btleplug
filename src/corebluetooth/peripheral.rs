@@ -543,7 +543,13 @@ impl api::Peripheral for Peripheral {
             .await?;
         match fut.await {
             CoreBluetoothReply::Ok => {}
-            reply => panic!("Unexpected reply: {:?}", reply),
+            CoreBluetoothReply::Err(msg) => return Err(Error::RuntimeError(msg)),
+            reply => {
+                return Err(Error::RuntimeError(format!(
+                    "Unexpected reply: {:?}",
+                    reply
+                )));
+            }
         }
         Ok(())
     }
@@ -580,9 +586,10 @@ impl api::Peripheral for Peripheral {
             .await?;
         match fut.await {
             CoreBluetoothReply::ReadResult(chars) => Ok(chars),
-            _ => {
-                panic!("Shouldn't get anything but read result!");
-            }
+            CoreBluetoothReply::Err(msg) => Err(Error::RuntimeError(msg)),
+            _ => Err(Error::RuntimeError(
+                "Unexpected reply for descriptor read".into(),
+            )),
         }
     }
 }

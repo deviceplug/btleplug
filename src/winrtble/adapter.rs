@@ -74,7 +74,7 @@ impl Adapter {
         let manager_clone = manager.clone();
         let handler = TypedEventHandler::new(move |_sender, _args| {
             let state = get_central_state(&radio_clone);
-            manager_clone.emit(CentralEvent::StateUpdate(state.into()));
+            manager_clone.emit(CentralEvent::StateUpdate(state));
             Ok(())
         });
         if let Err(err) = radio.StateChanged(&handler) {

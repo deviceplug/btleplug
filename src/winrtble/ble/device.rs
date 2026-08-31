@@ -62,8 +62,7 @@ impl BLEDevice {
                 if let Some(sender) = sender.as_ref() {
                     let is_connected = sender
                         .ConnectionStatus()
-                        .ok()
-                        .map_or(false, |v| v == BluetoothConnectionStatus::Connected);
+                        .ok() == Some(BluetoothConnectionStatus::Connected);
                     connection_status_changed(is_connected);
                     trace!("state {:?}", sender.ConnectionStatus());
                 }
@@ -211,7 +210,7 @@ impl BLEDevice {
         let params = self.device.GetConnectionParameters().map_err(winrt_error)?;
         // ConnectionInterval is in units of 1.25ms, convert to microseconds
         let interval_us = (params.ConnectionInterval().map_err(winrt_error)? as u32) * 1250;
-        let latency = params.ConnectionLatency().map_err(winrt_error)? as u16;
+        let latency = params.ConnectionLatency().map_err(winrt_error)?;
         // LinkTimeout is in units of 10ms, convert to microseconds
         let supervision_timeout_us = (params.LinkTimeout().map_err(winrt_error)? as u32) * 10_000;
         Ok(crate::api::ConnectionParameters {

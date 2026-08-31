@@ -179,8 +179,8 @@ impl Peripheral {
         if let Some(name) = &projected_local_name {
             *self.shared.advertisement_name.write().unwrap() = Some(name.clone());
         }
-        if let Ok(manufacturer_data) = advertisement.ManufacturerData() {
-            if manufacturer_data.Size().unwrap() > 0 {
+        if let Ok(manufacturer_data) = advertisement.ManufacturerData()
+            && manufacturer_data.Size().unwrap() > 0 {
                 let mut manufacturer_data_guard =
                     self.shared.latest_manufacturer_data.write().unwrap();
                 *manufacturer_data_guard = manufacturer_data
@@ -199,7 +199,6 @@ impl Peripheral {
                     manufacturer_data: manufacturer_data_guard.clone(),
                 });
             }
-        }
 
         // The Windows Runtime API (as of 19041) does not directly expose Service Data as a friendly API (like Manufacturer Data above)
         // Instead they provide data sections for access to raw advertising data. That is processed here.
@@ -497,11 +496,10 @@ impl ApiPeripheral for Peripheral {
                     shared.connected.store(is_connected, Ordering::Relaxed);
                 }
 
-                if !is_connected {
-                    if let Some(adapter) = adapter_clone.upgrade() {
+                if !is_connected
+                    && let Some(adapter) = adapter_clone.upgrade() {
                         adapter.emit(CentralEvent::DeviceDisconnected(address.into()));
                     }
-                }
             }
         });
 
@@ -567,14 +565,10 @@ impl ApiPeripheral for Peripheral {
                                     HashMap::<GUID, GattCharacteristic>::new(),
                                     |mut map, gatt_characteristic| {
                                         let uuid = gatt_characteristic.Uuid().unwrap_or_default();
-                                        if !map.contains_key(&uuid) {
-                                            map.insert(uuid, gatt_characteristic);
-                                        }
+                                        map.entry(uuid).or_insert(gatt_characteristic);
                                         map
                                     },
-                                )
-                                .into_iter()
-                                .map(|(_, characteristic)| async {
+                                ).into_values().map(|characteristic| async {
                                     let c = characteristic.clone();
                                     (
                                         characteristic,

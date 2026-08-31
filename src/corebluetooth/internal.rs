@@ -802,11 +802,12 @@ impl CoreBluetoothInternal {
         }
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid)
             && !p.set_characteristic_descriptors(service_uuid, characteristic_uuid, descriptors)
-                && let Some(future) = p.services_discovered_future_state.take() {
-                    future.lock().unwrap().set_reply(CoreBluetoothReply::Err(
+            && let Some(future) = p.services_discovered_future_state.take()
+        {
+            future.lock().unwrap().set_reply(CoreBluetoothReply::Err(
                         format!("Unknown descriptor relationship for service {service_uuid}, characteristic {characteristic_uuid}"),
                     ));
-                }
+        }
     }
 
     fn on_peripheral_connect(&mut self, peripheral_uuid: Uuid) {

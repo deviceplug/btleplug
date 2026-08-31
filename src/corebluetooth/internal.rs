@@ -946,7 +946,7 @@ impl CoreBluetoothInternal {
             self.get_characteristic(peripheral_uuid, service_uuid, characteristic_uuid)
         {
             trace!("Got subscribed event!");
-            if let Some(state) = characteristic.subscribe_future_state.pop_back() {
+            if let Some(state) = characteristic.subscribe_future_state.pop_front() {
                 state.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
             }
         }
@@ -962,7 +962,7 @@ impl CoreBluetoothInternal {
             self.get_characteristic(peripheral_uuid, service_uuid, characteristic_uuid)
         {
             trace!("Got unsubscribed event!");
-            if let Some(state) = characteristic.unsubscribe_future_state.pop_back() {
+            if let Some(state) = characteristic.unsubscribe_future_state.pop_front() {
                 state.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
             }
         }
@@ -990,7 +990,7 @@ impl CoreBluetoothInternal {
             // fulfill. Otherwise, just treat the returned value as a
             // notification and use the event system.
             if !characteristic.read_future_state.is_empty() {
-                let state = characteristic.read_future_state.pop_back().unwrap();
+                let state = characteristic.read_future_state.pop_front().unwrap();
                 state
                     .lock()
                     .unwrap()
@@ -1019,7 +1019,7 @@ impl CoreBluetoothInternal {
             self.get_characteristic(peripheral_uuid, service_uuid, characteristic_uuid)
         {
             trace!("Got written event!");
-            if let Some(state) = characteristic.write_future_state.pop_back() {
+            if let Some(state) = characteristic.write_future_state.pop_front() {
                 state.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
             }
         }
@@ -1110,7 +1110,7 @@ impl CoreBluetoothInternal {
                             CBCharacteristicWriteType::CBCharacteristicWriteWithResponse,
                         );
                     }
-                    characteristic.write_future_state.push_front(fut);
+                    characteristic.write_future_state.push_back(fut);
                 }
             }
         }
@@ -1120,7 +1120,7 @@ impl CoreBluetoothInternal {
         if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
             while let Some(pending) = peripheral.write_without_response_queue.pop_front() {
                 if !unsafe { peripheral.peripheral.canSendWriteWithoutResponse() } {
-                    peripheral.write_without_response_queue.push_front(pending);
+                    peripheral.write_without_response_queue.push_back(pending);
                     break;
                 }
                 if let Some(service) = peripheral.services.get(&pending.service_uuid) {
@@ -1178,7 +1178,7 @@ impl CoreBluetoothInternal {
                     .peripheral
                     .readValueForCharacteristic(&characteristic.characteristic);
             }
-            characteristic.read_future_state.push_front(fut);
+            characteristic.read_future_state.push_back(fut);
         }
     }
 
@@ -1199,7 +1199,7 @@ impl CoreBluetoothInternal {
                     .peripheral
                     .setNotifyValue_forCharacteristic(true, &characteristic.characteristic);
             }
-            characteristic.subscribe_future_state.push_front(fut);
+            characteristic.subscribe_future_state.push_back(fut);
         }
     }
 
@@ -1220,7 +1220,7 @@ impl CoreBluetoothInternal {
                     .peripheral
                     .setNotifyValue_forCharacteristic(false, &characteristic.characteristic);
             }
-            characteristic.unsubscribe_future_state.push_front(fut);
+            characteristic.unsubscribe_future_state.push_back(fut);
         }
     }
 
@@ -1244,7 +1244,7 @@ impl CoreBluetoothInternal {
                     .peripheral
                     .writeValue_forDescriptor(&NSData::from_vec(data), &descriptor.descriptor);
             }
-            descriptor.write_future_state.push_front(fut);
+            descriptor.write_future_state.push_back(fut);
         }
     }
 
@@ -1267,7 +1267,7 @@ impl CoreBluetoothInternal {
                     .peripheral
                     .readValueForDescriptor(&descriptor.descriptor);
             }
-            descriptor.read_future_state.push_front(fut);
+            descriptor.read_future_state.push_back(fut);
         }
     }
 
@@ -1277,14 +1277,14 @@ impl CoreBluetoothInternal {
             unsafe {
                 peripheral.peripheral.readRSSI();
             }
-            peripheral.read_rssi_future_state.push_front(fut);
+            peripheral.read_rssi_future_state.push_back(fut);
         }
     }
 
     async fn on_read_rssi(&mut self, peripheral_uuid: Uuid, rssi: i16) {
         if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
             trace!("Got RSSI read event: {}", rssi);
-            if let Some(state) = peripheral.read_rssi_future_state.pop_back() {
+            if let Some(state) = peripheral.read_rssi_future_state.pop_front() {
                 state
                     .lock()
                     .unwrap()
@@ -1331,7 +1331,7 @@ impl CoreBluetoothInternal {
             for byte in data.iter() {
                 data_clone.push(*byte);
             }
-            if let Some(state) = descriptor.read_future_state.pop_back() {
+            if let Some(state) = descriptor.read_future_state.pop_front() {
                 state
                     .lock()
                     .unwrap()
@@ -1354,7 +1354,7 @@ impl CoreBluetoothInternal {
             descriptor_uuid,
         ) {
             trace!("Got written event!");
-            if let Some(state) = descriptor.write_future_state.pop_back() {
+            if let Some(state) = descriptor.write_future_state.pop_front() {
                 state.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
             }
         }

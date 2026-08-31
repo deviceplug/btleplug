@@ -343,8 +343,13 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     /// Returns the currently negotiated mtu size
     fn mtu(&self) -> u16;
 
-    /// Returns the set of properties associated with the peripheral. These may be updated over time
-    /// as additional advertising reports are received.
+    /// Returns the properties currently known for the peripheral.
+    ///
+    /// `Ok(Some(_))` contains a snapshot of the properties available to the backend. The snapshot
+    /// may be updated as additional advertising reports are received, and individual fields may be
+    /// unavailable (`None`) when the peripheral has not advertised them or the platform does not
+    /// expose them. `Ok(None)` means that the backend has no properties snapshot available yet;
+    /// callers should handle this case rather than assuming that properties are always available.
     async fn properties(&self) -> Result<Option<PeripheralProperties>>;
 
     /// The set of services we've discovered for this device. This will be empty until

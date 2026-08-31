@@ -27,7 +27,7 @@ use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::select;
 use futures::sink::SinkExt;
 use futures::stream::{Fuse, StreamExt};
-use log::{error, trace, warn};
+use log::{debug, error, trace, warn};
 use objc2::{ClassType, msg_send_id};
 use objc2::{rc::Retained, runtime::AnyObject};
 use objc2_core_bluetooth::{
@@ -817,13 +817,17 @@ impl CoreBluetoothInternal {
                 .peripherals
                 .get_mut(&peripheral_uuid)
                 .expect("If we're here we should have an ID");
-            peripheral
-                .connected_future_state
-                .take()
-                .unwrap()
-                .lock()
-                .unwrap()
-                .set_reply(CoreBluetoothReply::Connected);
+            if let Some(future) = peripheral.connected_future_state.take() {
+                future
+                    .lock()
+                    .unwrap()
+                    .set_reply(CoreBluetoothReply::Connected);
+            } else {
+                debug!(
+                    "Ignoring duplicate connection callback for peripheral {}",
+                    peripheral_uuid
+                );
+            }
         }
     }
 
@@ -839,13 +843,17 @@ impl CoreBluetoothInternal {
                 .peripherals
                 .get_mut(&peripheral_uuid)
                 .expect("If we're here we should have an ID");
-            peripheral
-                .connected_future_state
-                .take()
-                .unwrap()
-                .lock()
-                .unwrap()
-                .set_reply(CoreBluetoothReply::Err(error));
+            if let Some(future) = peripheral.connected_future_state.take() {
+                future
+                    .lock()
+                    .unwrap()
+                    .set_reply(CoreBluetoothReply::Err(error));
+            } else {
+                debug!(
+                    "Ignoring duplicate connection failure callback for peripheral {}",
+                    peripheral_uuid
+                );
+            }
         }
     }
 

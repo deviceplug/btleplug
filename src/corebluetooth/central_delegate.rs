@@ -688,23 +688,26 @@ declare_class!(
                 characteristic_debug(characteristic),
                 localized_description(error)
             );
-            if error.is_none() {
-                let service = unsafe { characteristic.service() }.unwrap();
-                let id = unsafe { peripheral.identifier() };
-                let peripheral_uuid = nsuuid_to_uuid(&id);
-                let raw_service_uuid = unsafe { service.UUID() };
-                let service_uuid = cbuuid_to_uuid(&raw_service_uuid);
-                let raw_char_uuid = unsafe { characteristic.UUID() };
-                let characteristic_uuid = cbuuid_to_uuid(&raw_char_uuid);
-                self.send_event(CentralDelegateEvent::CharacteristicNotified {
-                    peripheral_uuid,
-                    service_uuid,
-                    characteristic_uuid,
-                    data: get_characteristic_value(characteristic),
-                    error: error.map(|e| e.localizedDescription().to_string()),
-                });
-                // Notify BluetoothGATTCharacteristic::read_value that read was successful.
-            }
+            let Some(service) = (unsafe { characteristic.service() }) else {
+                warn!(
+                    "Characteristic value update for {} has no associated service",
+                    characteristic_debug(characteristic)
+                );
+                return;
+            };
+            let id = unsafe { peripheral.identifier() };
+            let peripheral_uuid = nsuuid_to_uuid(&id);
+            let raw_service_uuid = unsafe { service.UUID() };
+            let service_uuid = cbuuid_to_uuid(&raw_service_uuid);
+            let raw_char_uuid = unsafe { characteristic.UUID() };
+            let characteristic_uuid = cbuuid_to_uuid(&raw_char_uuid);
+            self.send_event(CentralDelegateEvent::CharacteristicNotified {
+                peripheral_uuid,
+                service_uuid,
+                characteristic_uuid,
+                data: get_characteristic_value(characteristic),
+                error: error.map(|e| e.localizedDescription().to_string()),
+            });
         }
 
         #[method(peripheral:didWriteValueForCharacteristic:error:)]
@@ -789,16 +792,14 @@ declare_class!(
                 "delegate_peripheral_didreadrssi_error {}",
                 peripheral_debug(peripheral)
             );
-            if error.is_none() {
-                let id = unsafe { peripheral.identifier() };
-                let peripheral_uuid = nsuuid_to_uuid(&id);
-                let rssi_value = rssi.as_i16();
-                self.send_event(CentralDelegateEvent::DidReadRssi {
-                    peripheral_uuid,
-                    rssi: rssi_value,
-                    error: error.map(|e| e.localizedDescription().to_string()),
-                });
-            }
+            let id = unsafe { peripheral.identifier() };
+            let peripheral_uuid = nsuuid_to_uuid(&id);
+            let rssi_value = rssi.as_i16();
+            self.send_event(CentralDelegateEvent::DidReadRssi {
+                peripheral_uuid,
+                rssi: rssi_value,
+                error: error.map(|e| e.localizedDescription().to_string()),
+            });
         }
 
         #[method(peripheral:didUpdateValueForDescriptor:error:)]

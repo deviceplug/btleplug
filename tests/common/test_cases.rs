@@ -602,9 +602,40 @@ pub async fn test_unsubscribe_stops_notifications() {
     }
     assert!(got_one, "Should have received at least one notification");
 
+    // Discard notifications that were already queued before unsubscribe. Stop
+    // draining once the stream is briefly quiet; do not wait indefinitely for
+    // a new item.
+    loop {
+        if time::timeout(Duration::from_millis(100), stream.next())
+            .await
+            .is_err()
+        {
+            break;
+        }
+    }
     peripheral.unsubscribe(&char).await.unwrap();
-    time::sleep(Duration::from_secs(2)).await;
 
+    let mut received_after_unsubscribe = false;
+    let timeout = time::sleep(Duration::from_secs(2));
+    tokio::pin!(timeout);
+    loop {
+        tokio::select! {
+            Some(n) = stream.next() => {
+                if n.uuid == gatt_uuids::NOTIFY_CHAR {
+                    received_after_unsubscribe = true;
+                    break;
+                }
+            }
+            _ = &mut timeout => break,
+        }
+    }
+    assert!(
+        !received_after_unsubscribe,
+        "Should not receive notifications after unsubscribe"
+    );
+
+    // A second unsubscribe must be harmless and leave notifications disabled.
+    peripheral.unsubscribe(&char).await.unwrap();
     peripheral_finder::send_control_command(&peripheral, gatt_uuids::CMD_STOP_NOTIFICATIONS).await;
     peripheral.disconnect().await.unwrap();
 }

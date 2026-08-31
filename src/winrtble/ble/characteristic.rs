@@ -100,8 +100,28 @@ impl BLECharacteristic {
         }
     }
 
+    fn remove_notify_handler(&mut self) -> Result<()> {
+        if let Some(token) = self.notify_token {
+            // Only relinquish ownership after WinRT confirms removal. This keeps
+            // the token available for a later retry when removal fails.
+            self.characteristic.RemoveValueChanged(token)?;
+            self.notify_token = None;
+        }
+        Ok(())
+    }
+
     pub async fn subscribe(&mut self, on_value_changed: NotifiyEventHandler) -> Result<()> {
-        {
+        // Validate before changing the existing subscription state.
+        let config = to_descriptor_value(self.characteristic.CharacteristicProperties()?);
+        if config == GattClientCharacteristicConfigurationDescriptorValue::None {
+            return Err(Error::NotSupported("Can not subscribe to attribute".into()));
+        }
+
+        // A replacement is allowed, but never leave two handlers installed. If
+        // removal fails, retain the old token and reject the replacement.
+        self.remove_notify_handler()?;
+
+        let token = {
             let value_handler = TypedEventHandler::new(
                 move |_: Ref<GattCharacteristic>, args: Ref<GattValueChangedEventArgs>| {
                     if let Ok(args) = args.ok() {
@@ -116,23 +136,32 @@ impl BLECharacteristic {
                     Ok(())
                 },
             );
-            let token = self.characteristic.ValueChanged(&value_handler)?;
-            self.notify_token = Some(token);
-        }
-        let config = to_descriptor_value(self.characteristic.CharacteristicProperties()?);
-        if config == GattClientCharacteristicConfigurationDescriptorValue::None {
-            return Err(Error::NotSupported("Can not subscribe to attribute".into()));
-        }
+            self.characteristic.ValueChanged(&value_handler)?
+        };
+        self.notify_token = Some(token);
 
-        let status = self
+        let status = match self
             .characteristic
-            .WriteClientCharacteristicConfigurationDescriptorAsync(config)?
-            .into_future()
-            .await?;
+            .WriteClientCharacteristicConfigurationDescriptorAsync(config)
+        {
+            Ok(operation) => operation.into_future().await,
+            Err(err) => {
+                let _ = self.remove_notify_handler();
+                return Err(err.into());
+            }
+        };
+        let status = match status {
+            Ok(status) => status,
+            Err(err) => {
+                let _ = self.remove_notify_handler();
+                return Err(err.into());
+            }
+        };
         trace!("subscribe {:?}", status);
         if status == GattCommunicationStatus::Success {
             Ok(())
         } else {
+            let _ = self.remove_notify_handler();
             Err(Error::Other(
                 format!("Windows UWP threw error on subscribe: {:?}", status).into(),
             ))
@@ -140,10 +169,8 @@ impl BLECharacteristic {
     }
 
     pub async fn unsubscribe(&mut self) -> Result<()> {
-        if let Some(token) = &self.notify_token {
-            self.characteristic.RemoveValueChanged(*token)?;
-        }
-        self.notify_token = None;
+        // Disable the CCCD first. If that fails, retain the token and handler so
+        // ownership is still available for a later cleanup retry.
         let config = GattClientCharacteristicConfigurationDescriptorValue::None;
         let status = self
             .characteristic
@@ -151,13 +178,14 @@ impl BLECharacteristic {
             .into_future()
             .await?;
         trace!("unsubscribe {:?}", status);
-        if status == GattCommunicationStatus::Success {
-            Ok(())
-        } else {
-            Err(Error::Other(
+        if status != GattCommunicationStatus::Success {
+            return Err(Error::Other(
                 format!("Windows UWP threw error on unsubscribe: {:?}", status).into(),
-            ))
+            ));
         }
+
+        // Keep the token if removal fails; the next unsubscribe (or Drop) can retry.
+        self.remove_notify_handler()
     }
 
     pub fn uuid(&self) -> Uuid {

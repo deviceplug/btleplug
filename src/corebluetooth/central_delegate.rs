@@ -95,13 +95,7 @@ pub enum CentralDelegateEvent {
     DisconnectedDevice {
         peripheral_uuid: Uuid,
     },
-    CharacteristicSubscribed {
-        peripheral_uuid: Uuid,
-        service_uuid: Uuid,
-        characteristic_uuid: Uuid,
-        error: Option<String>,
-    },
-    CharacteristicUnsubscribed {
+    CharacteristicNotificationStateUpdated {
         peripheral_uuid: Uuid,
         service_uuid: Uuid,
         characteristic_uuid: Uuid,
@@ -213,24 +207,13 @@ impl Debug for CentralDelegateEvent {
                 .debug_struct("DisconnectedDevice")
                 .field("peripheral_uuid", peripheral_uuid)
                 .finish(),
-            CentralDelegateEvent::CharacteristicSubscribed {
+            CentralDelegateEvent::CharacteristicNotificationStateUpdated {
                 peripheral_uuid,
                 service_uuid,
                 characteristic_uuid,
                 ..
             } => f
-                .debug_struct("CharacteristicSubscribed")
-                .field("peripheral_uuid", peripheral_uuid)
-                .field("service_uuid", service_uuid)
-                .field("characteristic_uuid", characteristic_uuid)
-                .finish(),
-            CentralDelegateEvent::CharacteristicUnsubscribed {
-                peripheral_uuid,
-                service_uuid,
-                characteristic_uuid,
-                ..
-            } => f
-                .debug_struct("CharacteristicUnsubscribed")
+                .debug_struct("CharacteristicNotificationStateUpdated")
                 .field("peripheral_uuid", peripheral_uuid)
                 .field("service_uuid", service_uuid)
                 .field("characteristic_uuid", characteristic_uuid)
@@ -741,29 +724,29 @@ define_class!(
             error: Option<&NSError>,
         ) {
             trace!("delegate_peripheral_didupdatenotificationstateforcharacteristic_error");
-            // TODO check for error here
             let id = unsafe { peripheral.identifier() };
             let peripheral_uuid = nsuuid_to_uuid(&id);
-            let service = unsafe { characteristic.service() }.unwrap();
+            let Some(service) = (unsafe { characteristic.service() }) else {
+                warn!(
+                    "Notification state update for {} has no associated service",
+                    characteristic_debug(characteristic)
+                );
+                return;
+            };
             let raw_service_uuid = unsafe { service.UUID() };
             let service_uuid = cbuuid_to_uuid(&raw_service_uuid);
             let raw_char_uuid = unsafe { characteristic.UUID() };
             let characteristic_uuid = cbuuid_to_uuid(&raw_char_uuid);
-            if unsafe { characteristic.isNotifying() } {
-                self.send_event(CentralDelegateEvent::CharacteristicSubscribed {
-                    peripheral_uuid,
-                    service_uuid,
-                    characteristic_uuid,
-                    error: error.map(|e| e.localizedDescription().to_string()),
-                });
-            } else {
-                self.send_event(CentralDelegateEvent::CharacteristicUnsubscribed {
-                    peripheral_uuid,
-                    service_uuid,
-                    characteristic_uuid,
-                    error: error.map(|e| e.localizedDescription().to_string()),
-                });
-            }
+            // The callback only reports the outcome of a setNotifyValue
+            // request; isNotifying describes the current state and does not
+            // identify the requested direction, so the event carries no
+            // direction information.
+            self.send_event(CentralDelegateEvent::CharacteristicNotificationStateUpdated {
+                peripheral_uuid,
+                service_uuid,
+                characteristic_uuid,
+                error: error.map(|e| e.localizedDescription().to_string()),
+            });
         }
 
         #[unsafe(method(peripheral:didReadRSSI:error:))]

@@ -246,7 +246,7 @@ impl Display for Peripheral {
 
 #[cfg(test)]
 mod tests {
-    use super::merge_names;
+    use super::*;
 
     #[test]
     fn advertisement_name_takes_precedence_over_gap_name() {
@@ -278,6 +278,81 @@ mod tests {
 
         assert_eq!(local_name.as_deref(), Some("Complete"));
         assert_eq!(advertisement_name.as_deref(), Some("Complete"));
+    }
+
+    /// Drive the public Peripheral subscribe/unsubscribe path with a fake
+    /// message receiver that refuses the request, so the real reply future
+    /// resolves through the production error mapping.
+    async fn refused_notification_request_maps_to_runtime_error(enabled: bool) {
+        use futures::channel::mpsc;
+        use std::time::Duration;
+
+        const TIMEOUT: Duration = Duration::from_secs(2);
+
+        let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
+        let service_uuid = Uuid::from_u128(0x0000180f_0000_1000_8000_00805f9b34fb);
+        let characteristic_uuid = Uuid::from_u128(0x00002a19_0000_1000_8000_00805f9b34fb);
+        let (message_sender, mut message_receiver) = mpsc::channel(1);
+        let (_event_sender, event_receiver) = mpsc::channel(1);
+        let peripheral = Peripheral::new(
+            peripheral_uuid,
+            None,
+            None,
+            Weak::<AdapterManager<Peripheral>>::new(),
+            event_receiver,
+            message_sender,
+        );
+        let characteristic = Characteristic {
+            uuid: characteristic_uuid,
+            service_uuid,
+            properties: CharPropFlags::NOTIFY,
+            descriptors: Default::default(),
+        };
+
+        let task_peripheral = peripheral.clone();
+        let task_characteristic = characteristic.clone();
+        let request = tokio::spawn(async move {
+            if enabled {
+                api::Peripheral::subscribe(&task_peripheral, &task_characteristic).await
+            } else {
+                api::Peripheral::unsubscribe(&task_peripheral, &task_characteristic).await
+            }
+        });
+
+        let message = tokio::time::timeout(TIMEOUT, message_receiver.next())
+            .await
+            .expect("notification request did not send a message")
+            .expect("message channel closed");
+        let future = match message {
+            CoreBluetoothMessage::Subscribe { future, .. }
+            | CoreBluetoothMessage::Unsubscribe { future, .. } => future,
+            message => panic!("unexpected message: {message:?}"),
+        };
+
+        let error_text = "The operation couldn’t be completed. (ATT error 15.)".to_string();
+        future
+            .lock()
+            .unwrap()
+            .set_reply(CoreBluetoothReply::Err(error_text.clone()));
+
+        let result = tokio::time::timeout(TIMEOUT, request)
+            .await
+            .expect("notification request did not complete")
+            .expect("notification request task panicked");
+        match result {
+            Err(Error::RuntimeError(actual)) => assert_eq!(actual, error_text),
+            result => panic!("unexpected notification request result: {result:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn refused_subscribe_maps_to_public_runtime_error() {
+        refused_notification_request_maps_to_runtime_error(true).await;
+    }
+
+    #[tokio::test]
+    async fn refused_unsubscribe_maps_to_public_runtime_error() {
+        refused_notification_request_maps_to_runtime_error(false).await;
     }
 
     #[test]

@@ -67,7 +67,10 @@ fn get_central_state(radio: &Radio) -> CentralState {
 
 impl Adapter {
     pub(crate) fn new(bluetooth_adapter: BluetoothAdapter, radio: Radio) -> Result<Self> {
-        let watcher = Arc::new(Mutex::new(BLEWatcher::new()?));
+        let coded_phy_supported = bluetooth_adapter
+            .IsLowEnergyCodedPhySupported()
+            .unwrap_or(false);
+        let watcher = Arc::new(Mutex::new(BLEWatcher::new(coded_phy_supported)?));
         let manager = Arc::new(AdapterManager::default());
 
         let radio_clone = radio.clone();

@@ -12,6 +12,7 @@
 // Copyright (c) 2014 The Rust Project Developers
 
 use crate::{Error, Result, api::ScanFilter, winrtble::utils};
+use log::debug;
 use std::{collections::HashSet, sync::Mutex};
 use windows::{Devices::Bluetooth::Advertisement::*, Foundation::TypedEventHandler, core::Ref};
 
@@ -24,6 +25,10 @@ pub type AdvertisementEventHandler =
 pub struct BLEWatcher {
     watcher: BluetoothLEAdvertisementWatcher,
     received_token: Option<i64>,
+    /// Whether the adapter reports Coded (long-range) PHY support. Only
+    /// then is `UseCodedPhy` requested: the setter succeeds on any adapter,
+    /// and on one without Coded PHY the scan starts but never reports.
+    coded_phy_supported: bool,
 }
 
 impl From<windows::core::Error> for Error {
@@ -50,12 +55,13 @@ impl MatchCache {
 }
 
 impl BLEWatcher {
-    pub fn new() -> Result<Self> {
+    pub fn new(coded_phy_supported: bool) -> Result<Self> {
         let ad = BluetoothLEAdvertisementFilter::new()?;
         let watcher = BluetoothLEAdvertisementWatcher::Create(&ad)?;
         Ok(BLEWatcher {
             watcher,
             received_token: None,
+            coded_phy_supported,
         })
     }
 
@@ -77,11 +83,22 @@ impl BLEWatcher {
         self.watcher
             .SetScanningMode(BluetoothLEScanningMode::Active)?;
         let _ = self.watcher.SetAllowExtendedAdvertisements(true);
-        // Also receive on the Coded (long-range) PHY where the adapter and
-        // OS support it. Only takes effect alongside extended advertisements
-        // (above); the error is ignored the same way, so systems without
-        // Coded PHY support behave exactly as before.
-        let _ = self.watcher.SetUseCodedPhy(true);
+        // Also receive on the Coded (long-range) PHY, but only when the
+        // adapter supports it. `SetUseCodedPhy(true)` is accepted (and
+        // `Start` succeeds) on adapters without Coded PHY as well, and the
+        // scan then delivers no advertisements at all, so the capability
+        // check is the guard rather than the setter's result.
+        if self.coded_phy_supported {
+            let _ = self.watcher.SetUseCodedPhy(true);
+        }
+        debug!(
+            "extended scanning enabled; coded PHY {}",
+            if self.coded_phy_supported {
+                "enabled"
+            } else {
+                "not supported by adapter, disabled"
+            }
+        );
 
         // Pre-convert the filter UUIDs once so the handler closure is cheap.
         let filter_guids: Vec<windows::core::GUID> = services.iter().map(utils::to_guid).collect();

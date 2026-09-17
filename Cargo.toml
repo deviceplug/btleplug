@@ -28,9 +28,9 @@ jni-host-tests = ["jni/invocation", "once_cell"]
 [dependencies]
 async-trait = "0.1.92"
 log = "0.4.34"
-bitflags = "2.13.1"
+bitflags = "2.13.2"
 thiserror = "2.0.20"
-uuid = "1.26.0"
+uuid = "1.26.1"
 serde_cr = { package = "serde", version = "1.0.229", features = ["derive"], default-features = false, optional = true }
 serde_bytes = { version = "0.11.19", optional = true }
 dashmap = "6.2.1"
@@ -91,6 +91,6 @@ rand = "0.10"
 pretty_env_logger = "0.5.0"
 tokio = { version = "1.53.1", features = ["macros", "rt", "rt-multi-thread"] }
 serde_json = "1.0.151"
-toml = "1.1.4"
+toml = "1.1.6"
 anyhow = "1"
 lazy_static = "1.5.0"

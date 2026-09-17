@@ -87,25 +87,13 @@ impl Adapter {
     }
 
     fn add(&self, address: BDAddr) -> Result<Peripheral> {
-        // Fast path: another scan result for this address may have added it
-        // between our caller's lookup and here. Returning the instance the
-        // map already holds — rather than a second wrapper for the same
-        // address — keeps `report_properties` writing to the peripheral
-        // everyone else will later read.
         if let Some(existing) = self.manager.peripheral(&PeripheralId(address)) {
             return Ok(existing);
         }
         jvm()?.attach_current_thread(|env| {
             let local_adapter = env.new_local_ref(self.internal.as_obj())?;
             let peripheral = Peripheral::new(env, local_adapter, address)?;
-            self.manager.add_peripheral(peripheral.clone());
-            // `add_peripheral` is idempotent, so if we lost the race the map
-            // kept the winner; hand that back rather than our now-orphaned
-            // wrapper.
-            Ok(self
-                .manager
-                .peripheral(&PeripheralId(address))
-                .unwrap_or(peripheral))
+            Ok(self.manager.add_peripheral(peripheral))
         })
     }
 

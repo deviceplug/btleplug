@@ -170,8 +170,8 @@ impl Central for Adapter {
                     manager.emit(CentralEvent::DeviceUpdated(address.into()));
                 } else {
                     let peripheral = Peripheral::new(Arc::downgrade(&manager), address);
+                    let peripheral = manager.add_peripheral(peripheral);
                     peripheral.update_properties(args);
-                    manager.add_peripheral(peripheral);
                     manager.emit(CentralEvent::DeviceDiscovered(address.into()));
                 }
                 Ok(())
@@ -226,8 +226,7 @@ impl Central for Adapter {
                     .peripheral(&PeripheralId::from(address))
                     .unwrap_or_else(|| {
                         let peripheral = Peripheral::new(Arc::downgrade(&self.manager), address);
-                        self.manager.add_peripheral(peripheral.clone());
-                        peripheral
+                        self.manager.add_peripheral(peripheral)
                     });
                 result.push(peripheral);
             }
@@ -288,8 +287,7 @@ impl Central for Adapter {
             }
             let peripheral = self.manager.peripheral(&candidate_id).unwrap_or_else(|| {
                 let peripheral = Peripheral::new(Arc::downgrade(&self.manager), address);
-                self.manager.add_peripheral(peripheral.clone());
-                peripheral
+                self.manager.add_peripheral(peripheral)
             });
             result.push(peripheral);
         }
@@ -309,8 +307,7 @@ impl Central for Adapter {
         // Create a peripheral straight from its address so a device the OS already knows (bonded or
         // connected to another central) can be reached without waiting for an advertisement.
         let peripheral = Peripheral::new(Arc::downgrade(&self.manager), id.clone().into());
-        self.manager.add_peripheral(peripheral.clone());
-        Ok(peripheral)
+        Ok(self.manager.add_peripheral(peripheral))
     }
 
     async fn clear_peripherals(&self) -> Result<()> {

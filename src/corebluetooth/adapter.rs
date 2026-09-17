@@ -75,8 +75,8 @@ impl Adapter {
                                 event_receiver,
                                 adapter_sender_clone.clone(),
                             );
-                            handles.insert(peripheral.id(), peripheral.clone());
-                            manager_clone.add_peripheral(peripheral);
+                            let peripheral = manager_clone.add_peripheral(peripheral);
+                            handles.insert(peripheral.id(), peripheral);
                             manager_clone.emit(CentralEvent::DeviceDiscovered(uuid.into()));
                         }
                     }
@@ -108,10 +108,13 @@ impl Adapter {
                                 continue;
                             };
 
-                            if manager_clone.peripheral(&id).is_none() {
-                                manager_clone.add_peripheral(peripheral.clone());
+                            let peripheral = if manager_clone.peripheral(&id).is_none() {
+                                let peripheral = manager_clone.add_peripheral(peripheral);
                                 manager_clone.emit(CentralEvent::DeviceDiscovered(id));
-                            }
+                                peripheral
+                            } else {
+                                peripheral
+                            };
                             result.push(peripheral);
                         }
                         future

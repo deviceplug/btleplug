@@ -1,3 +1,23 @@
+# 0.13.1 (2026-09-17)
+
+## Bugfixes
+
+- Only request Coded PHY scanning on Windows when the adapter supports it.
+  Adapters without Coded PHY support (e.g. Bluetooth 4.x dongles) accepted the
+  request and started scans, but those scans never delivered a single
+  advertisement. (#473)
+- Fix CoreBluetooth `subscribe()` never resolving when the remote device refuses
+  the notification request. Refused requests are now resolved with an error, and
+  overlapping subscribe and unsubscribe requests on one characteristic can no
+  longer be misrouted to each other. (#471)
+- Make `AdapterManager::add_peripheral()` idempotent, fixing a process abort when
+  two scan results for the same device raced on insertion. This was most likely
+  on Android, where rescans re-report devices already held by the shared adapter
+  manager. Duplicate insertions now keep the existing peripheral.
+- `AdapterManager::add_peripheral()` now returns the canonical stored instance,
+  so a caller that loses a race against an existing peripheral receives the live
+  one instead of a fresh wrapper without its connection state.
+
 # 0.13.0 (2026-08-29)
 
 ## Features

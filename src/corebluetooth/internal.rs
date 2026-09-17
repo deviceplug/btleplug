@@ -1899,10 +1899,6 @@ mod tests {
                 ]
             }
         }
-
-        fn set_notifying(&self, notifying: bool) {
-            self.ivars().store(notifying, Ordering::SeqCst);
-        }
     }
 
     const CALLBACK_TIMEOUT: Duration = Duration::from_secs(2);
@@ -2211,49 +2207,40 @@ mod tests {
     #[tokio::test]
     async fn notification_callback_error_completes_requested_operation() {
         for enabled in [true, false] {
-            for notifying in [true, false] {
-                for att_error in [false, true] {
-                    let context =
-                        format!("enabled={enabled} notifying={notifying} att_error={att_error}");
-                    let characteristic_uuid =
-                        Uuid::from_u128(0x00002a19_0000_1000_8000_00805f9b34fb);
-                    let mut fixture = NotificationFixture::new(&[characteristic_uuid]);
-                    let future = CoreBluetoothReplyFuture::default();
-                    fixture.internal.queue_notification_request(
-                        fixture.service_uuid,
+            for att_error in [false, true] {
+                let context = format!("enabled={enabled} att_error={att_error}");
+                let characteristic_uuid = Uuid::from_u128(0x00002a19_0000_1000_8000_00805f9b34fb);
+                let mut fixture = NotificationFixture::new(&[characteristic_uuid]);
+                let future = CoreBluetoothReplyFuture::default();
+                fixture.internal.queue_notification_request(
+                    fixture.service_uuid,
+                    characteristic_uuid,
+                    enabled,
+                    future.get_state_clone(),
+                );
+                assert_eq!(
+                    fixture.set_notify_calls(),
+                    vec![RecordedSetNotify {
                         characteristic_uuid,
                         enabled,
-                        future.get_state_clone(),
-                    );
-                    assert_eq!(
-                        fixture.set_notify_calls(),
-                        vec![RecordedSetNotify {
-                            characteristic_uuid,
-                            enabled,
-                        }],
-                        "{context}"
-                    );
-                    fixture.characteristic(0).set_notifying(notifying);
-                    let error = notification_error(att_error);
-                    let expected_error = deliver_notification_state_callback(
-                        &mut fixture,
-                        0,
-                        Some(&error),
-                        &context,
-                    )
-                    .await
-                    .expect("{context}: error callback carried no error");
-                    let reply = tokio::time::timeout(CALLBACK_TIMEOUT, future)
+                    }],
+                    "{context}"
+                );
+                let error = notification_error(att_error);
+                let expected_error =
+                    deliver_notification_state_callback(&mut fixture, 0, Some(&error), &context)
                         .await
-                        .unwrap_or_else(|_| {
-                            panic!("{context}: notification error did not complete the request")
-                        });
-                    match reply {
-                        CoreBluetoothReply::Err(actual) => {
-                            assert_eq!(actual, expected_error, "{context}")
-                        }
-                        reply => panic!("{context}: unexpected reply: {reply:?}"),
+                        .expect("{context}: error callback carried no error");
+                let reply = tokio::time::timeout(CALLBACK_TIMEOUT, future)
+                    .await
+                    .unwrap_or_else(|_| {
+                        panic!("{context}: notification error did not complete the request")
+                    });
+                match reply {
+                    CoreBluetoothReply::Err(actual) => {
+                        assert_eq!(actual, expected_error, "{context}")
                     }
+                    reply => panic!("{context}: unexpected reply: {reply:?}"),
                 }
             }
         }

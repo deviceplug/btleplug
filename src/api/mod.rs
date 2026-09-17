@@ -290,13 +290,6 @@ where
         .collect()
 }
 
-#[cfg(test)]
-fn unsupported_retrieve_peripherals<P>() -> Result<Vec<P>> {
-    Err(crate::Error::NotSupported(
-        "retrieve_peripherals".to_string(),
-    ))
-}
-
 /// Current BLE connection parameters as reported by the OS.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ConnectionParameters {
@@ -606,16 +599,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn retrieve_options_are_publicly_constructible() {
-        let options = RetrievePeripheralsOptions {
-            identifiers: Some(Vec::new()),
-            services: Some(vec![Uuid::nil()]),
-        };
-        assert_eq!(options.services, Some(vec![Uuid::nil()]));
-        assert_eq!(options.identifiers, Some(Vec::new()));
-    }
-
-    #[test]
     fn retrieve_options_default_is_explicit() {
         assert_eq!(RetrievePeripheralsOptions::default().identifiers, None);
         assert_eq!(RetrievePeripheralsOptions::default().services, None);
@@ -629,6 +612,7 @@ mod tests {
     #[test]
     fn retrieve_empty_service_selector_matches_nothing() {
         assert!(!matches_service(&[Uuid::nil()], &[]));
+        assert!(!matches_service(&[], &[Uuid::nil()]));
     }
 
     #[test]
@@ -653,24 +637,9 @@ mod tests {
     }
 
     #[test]
-    fn retrieve_combined_selectors_use_union() {
-        assert!(matches_service(&[Uuid::nil()], &[Uuid::nil()]));
-        assert!(!matches_service(&[], &[Uuid::nil()]));
-    }
-
-    #[test]
     fn retrieve_results_are_deduplicated() {
         let merged = merge_retrieved_peripherals([1_u8, 2, 1, 3, 2], |value| *value);
         assert_eq!(merged, vec![1, 2, 3]);
-    }
-
-    #[test]
-    fn retrieve_peripherals_default_is_not_supported() {
-        let error = unsupported_retrieve_peripherals::<u8>().unwrap_err();
-        assert!(matches!(
-            error,
-            crate::Error::NotSupported(operation) if operation == "retrieve_peripherals"
-        ));
     }
 }
 

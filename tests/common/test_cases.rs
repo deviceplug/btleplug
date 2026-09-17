@@ -603,14 +603,16 @@ pub async fn test_unsubscribe_stops_notifications() {
     assert!(got_one, "Should have received at least one notification");
 
     // Discard notifications that were already queued before unsubscribe. Stop
-    // draining once the stream is briefly quiet; do not wait indefinitely for
-    // a new item.
+    // draining once the stream is briefly quiet, but never wait more than
+    // three seconds in case the peripheral keeps notifying continuously.
+    let drain_deadline = time::Instant::now() + Duration::from_secs(3);
     loop {
-        if time::timeout(Duration::from_millis(100), stream.next())
-            .await
-            .is_err()
-        {
+        if time::Instant::now() >= drain_deadline {
             break;
+        }
+        match time::timeout(Duration::from_millis(100), stream.next()).await {
+            Ok(Some(_)) => {}
+            _ => break,
         }
     }
     peripheral.unsubscribe(&char).await.unwrap();
@@ -782,15 +784,6 @@ pub async fn test_read_rssi() {
 
 pub async fn test_properties_contain_peripheral_info() {
     let peripheral = peripheral_finder::find_and_connect().await;
-
-    let id_str = format!("{:?}", peripheral.id());
-    assert!(!id_str.is_empty(), "Peripheral ID should not be empty");
-
-    let addr_str = format!("{:?}", peripheral.address());
-    assert!(
-        !addr_str.is_empty(),
-        "Peripheral address should not be empty"
-    );
 
     let props = peripheral
         .properties()

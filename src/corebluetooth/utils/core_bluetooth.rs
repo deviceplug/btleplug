@@ -73,13 +73,18 @@ mod tests {
     }
 
     #[test]
-    fn cbuuid_roundtrip() {
+    fn uuid_to_cbuuid_uses_canonical_uuid_string() {
         for uuid in [
             Uuid::from_u128(0x00001234_0000_1000_8000_00805f9b34fb),
             Uuid::from_u128(0xabcd1234_0000_1000_8000_00805f9b34fb),
             Uuid::from_u128(0x12345678_0000_1111_2222_333344445555),
         ] {
-            assert_eq!(cbuuid_to_uuid(&*uuid_to_cbuuid(uuid)), uuid);
+            let uuid_string = unsafe { uuid_to_cbuuid(uuid).UUIDString() }.to_string();
+            assert_eq!(
+                uuid_string.to_lowercase(),
+                uuid.to_string(),
+                "uuid_to_cbuuid produced {uuid_string} for {uuid}"
+            );
         }
     }
 }

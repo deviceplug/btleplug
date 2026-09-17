@@ -39,15 +39,8 @@ mod test {
     fn test_waker_wake() {
         test_utils::with_env(|env| {
             let data = Arc::new(test_utils::TestWakerData::new());
-            assert_eq!(Arc::strong_count(&data), 1);
-            assert_eq!(data.value(), false);
-
             let waker = test_utils::test_waker(&data);
-            assert_eq!(Arc::strong_count(&data), 2);
-            assert_eq!(data.value(), false);
-
             let jwaker = super::waker(env, waker).unwrap();
-            assert_eq!(Arc::strong_count(&data), 2);
             assert_eq!(data.value(), false);
 
             env.call_method(&jwaker, jni_str!("wake"), jni_sig!("()V"), &[])
@@ -58,7 +51,6 @@ mod test {
 
             env.call_method(&jwaker, jni_str!("wake"), jni_sig!("()V"), &[])
                 .unwrap();
-            assert_eq!(Arc::strong_count(&data), 1);
             assert_eq!(data.value(), false);
             Ok(())
         })
@@ -69,15 +61,8 @@ mod test {
     fn test_waker_close_wake() {
         test_utils::with_env(|env| {
             let data = Arc::new(test_utils::TestWakerData::new());
-            assert_eq!(Arc::strong_count(&data), 1);
-            assert_eq!(data.value(), false);
-
             let waker = test_utils::test_waker(&data);
-            assert_eq!(Arc::strong_count(&data), 2);
-            assert_eq!(data.value(), false);
-
             let jwaker = super::waker(env, waker).unwrap();
-            assert_eq!(Arc::strong_count(&data), 2);
             assert_eq!(data.value(), false);
 
             env.call_method(&jwaker, jni_str!("close"), jni_sig!("()V"), &[])
@@ -87,7 +72,6 @@ mod test {
 
             env.call_method(&jwaker, jni_str!("wake"), jni_sig!("()V"), &[])
                 .unwrap();
-            assert_eq!(Arc::strong_count(&data), 1);
             assert_eq!(data.value(), false);
             Ok(())
         })

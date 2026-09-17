@@ -83,15 +83,15 @@ mod tests {
     }
 
     #[test]
-    fn uuid_to_from_u16_success() {
+    fn uuid_to_u16_success() {
         let uuid = Uuid::parse_str("00001234-0000-1000-8000-00805f9b34fb").unwrap();
-        assert_eq!(uuid_from_u16(uuid.to_ble_u16().unwrap()), uuid);
+        assert_eq!(uuid.to_ble_u16(), Some(0x1234));
     }
 
     #[test]
-    fn uuid_to_from_u32_success() {
+    fn uuid_to_u32_success() {
         let uuid = Uuid::parse_str("12345678-0000-1000-8000-00805f9b34fb").unwrap();
-        assert_eq!(uuid_from_u32(uuid.to_ble_u32().unwrap()), uuid);
+        assert_eq!(uuid.to_ble_u32(), Some(0x12345678));
     }
 
     #[test]

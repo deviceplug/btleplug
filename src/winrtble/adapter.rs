@@ -45,9 +45,22 @@ pub struct Adapter {
     manager: Arc<AdapterManager<Peripheral>>,
     radio: Radio,
     bluetooth_adapter: BluetoothAdapter,
+    _state_handler: Option<Arc<RadioStateHandler>>,
 }
 
-// https://github.com/microsoft/windows-rs/blob/master/crates/libs/windows/src/Windows/Devices/Radios/mod.rs
+struct RadioStateHandler {
+    radio: Radio,
+    token: i64,
+}
+
+impl Drop for RadioStateHandler {
+    fn drop(&mut self) {
+        if let Err(err) = self.radio.RemoveStateChanged(self.token) {
+            log::warn!("Failed to remove Bluetooth radio state handler: {err}");
+        }
+    }
+}
+
 fn winrt_error<E: std::fmt::Debug>(error: E) -> Error {
     Error::Other(format!("{error:?}").into())
 }
@@ -73,22 +86,31 @@ impl Adapter {
         let watcher = Arc::new(Mutex::new(BLEWatcher::new(coded_phy_supported)?));
         let manager = Arc::new(AdapterManager::default());
 
-        let radio_clone = radio.clone();
-        let manager_clone = manager.clone();
-        let handler = TypedEventHandler::new(move |_sender, _args| {
-            let state = get_central_state(&radio_clone);
-            manager_clone.emit(CentralEvent::StateUpdate(state));
-            Ok(())
-        });
-        if let Err(err) = radio.StateChanged(&handler) {
-            eprintln!("radio.StateChanged error: {}", err);
-        }
+        let manager_weak = Arc::downgrade(&manager);
+        let handler =
+            TypedEventHandler::<Radio, windows::core::IInspectable>::new(move |sender, _args| {
+                if let Some(manager) = manager_weak.upgrade() {
+                    manager.emit(CentralEvent::StateUpdate(get_central_state(sender.ok()?)));
+                }
+                Ok(())
+            });
+        let state_handler = match radio.StateChanged(&handler) {
+            Ok(token) => Some(Arc::new(RadioStateHandler {
+                radio: radio.clone(),
+                token,
+            })),
+            Err(err) => {
+                log::warn!("Failed to register Bluetooth radio state handler: {err}");
+                None
+            }
+        };
 
         Ok(Adapter {
             watcher,
             manager,
             radio,
             bluetooth_adapter,
+            _state_handler: state_handler,
         })
     }
 }
@@ -333,5 +355,85 @@ impl Central for Adapter {
 
     async fn adapter_state(&self) -> Result<CentralState> {
         Ok(get_central_state(&self.radio))
+    }
+}
+
+#[cfg(test)]
+mod cleanup_tests {
+    use super::*;
+    use crate::api::Manager as _;
+
+    #[tokio::test]
+    #[ignore = "requires a Windows Bluetooth radio"]
+    async fn dropping_last_radio_handler_unregisters_callback() {
+        let manager = crate::platform::Manager::new().await.unwrap();
+        let adapter = manager
+            .adapters()
+            .await
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
+        let owner = Arc::new(());
+        let captured = owner.clone();
+        let handler = TypedEventHandler::new(move |_sender, _args| {
+            let _ = &captured;
+            Ok(())
+        });
+        let token = adapter.radio.StateChanged(&handler).unwrap();
+        let registration = Arc::new(RadioStateHandler {
+            radio: adapter.radio.clone(),
+            token,
+        });
+        drop(handler);
+        let clone = registration.clone();
+        drop(registration);
+        assert_eq!(Arc::strong_count(&owner), 2);
+        drop(clone);
+        assert_eq!(Arc::strong_count(&owner), 1);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires a Windows Bluetooth radio"]
+    async fn dropping_last_adapter_releases_manager() {
+        let manager = crate::platform::Manager::new().await.unwrap();
+        let adapter = manager
+            .adapters()
+            .await
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
+        let weak = Arc::downgrade(&adapter.manager);
+        let clone = adapter.clone();
+        let events = adapter.events().await.unwrap();
+        drop(adapter);
+        assert!(weak.upgrade().is_some());
+        drop(clone);
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        assert!(weak.upgrade().is_none());
+        drop(events);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires a Windows Bluetooth radio"]
+    async fn stopped_scan_releases_manager_after_adapter_drop() {
+        let manager = crate::platform::Manager::new().await.unwrap();
+        for _ in 0..8 {
+            let adapter = manager
+                .adapters()
+                .await
+                .unwrap()
+                .into_iter()
+                .next()
+                .unwrap();
+            let weak = Arc::downgrade(&adapter.manager);
+            adapter.start_scan(ScanFilter::default()).await.unwrap();
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            adapter.stop_scan().await.unwrap();
+            drop(adapter);
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            assert!(weak.upgrade().is_none());
+        }
     }
 }

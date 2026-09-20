@@ -1,3 +1,9 @@
+# 0.13.2 (2026-09-20)
+
+## Bugfixes
+
+- Fix callback memory leak on windows when adapters are constantly allocated and freed. (#476)
+
 # 0.13.1 (2026-09-17)
 
 ## Bugfixes

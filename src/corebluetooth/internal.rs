@@ -342,9 +342,14 @@ impl PeripheralInternal {
         // back a ServicesDiscovered reply to the waiting future with all of
         // the characteristic info in it.
         if !self.services.values().any(|service| !service.discovered) {
-            if self.services_discovered_future_state.is_none() {
-                panic!("We should still have a future at this point!");
-            }
+            // CoreBluetooth rediscovers services on its own, for instance when the peripheral
+            // indicates Service Changed, as a BlueZ peripheral registering its GATT application
+            // does. The reply to the original request has already gone out by then, and the
+            // service map above is up to date, so there is nothing left to answer.
+            let Some(future_state) = self.services_discovered_future_state.take() else {
+                trace!("Services rediscovered with no pending discovery request");
+                return;
+            };
             let services = self
                 .services
                 .iter()
@@ -385,12 +390,7 @@ impl PeripheralInternal {
                 Ok(mtu) => CoreBluetoothReply::ServicesDiscovered(services, mtu),
                 Err(error) => CoreBluetoothReply::Err(error),
             };
-            self.services_discovered_future_state
-                .take()
-                .unwrap()
-                .lock()
-                .unwrap()
-                .set_reply(reply);
+            future_state.lock().unwrap().set_reply(reply);
         }
     }
 
@@ -2197,6 +2197,83 @@ mod tests {
             })
             .expect("discovered characteristic");
         assert!(characteristic.descriptors.is_empty());
+
+        // CBPeripheral has no public initializer suitable for tests, so this
+        // subclass must not run CoreBluetooth's private destruction path.
+        std::mem::forget(internal);
+        std::mem::forget(peripheral);
+    }
+
+    #[tokio::test]
+    async fn rediscovery_without_a_pending_request_is_ignored() {
+        // CoreBluetooth rediscovers services by itself when a peripheral indicates Service
+        // Changed, as a BlueZ peripheral registering its GATT application does. The descriptor
+        // callbacks then complete a discovery nobody requested. This used to panic with "We
+        // should still have a future at this point!" on the CoreBluetooth thread, taking every
+        // later central operation down with it.
+        let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345679);
+        let peripheral_uuid_string = NSString::from_str(&peripheral_uuid.to_string());
+        let peripheral_identifier =
+            NSUUID::initWithUUIDString(NSUUID::alloc(), &peripheral_uuid_string)
+                .expect("valid peripheral UUID");
+        let peripheral = TestPeripheral::new(peripheral_identifier);
+        let service_uuid = Uuid::from_u128(0x03b80e5a_ede8_4b33_a751_6ce34ec4c700);
+        let characteristic_uuid = Uuid::from_u128(0x7772e5db_3868_4112_a1a9_f2669d106bf3);
+        let service_cbuuid = uuid_to_cbuuid(service_uuid);
+        let characteristic_cbuuid = uuid_to_cbuuid(characteristic_uuid);
+        let characteristic = unsafe {
+            CBMutableCharacteristic::initWithType_properties_value_permissions(
+                CBMutableCharacteristic::alloc(),
+                &characteristic_cbuuid,
+                CBCharacteristicProperties::Read,
+                None,
+                CBAttributePermissions::Readable,
+            )
+        };
+        let service = unsafe {
+            CBMutableService::initWithType_primary(CBMutableService::alloc(), &service_cbuuid, true)
+        };
+        let characteristic: Retained<CBCharacteristic> = Retained::into_super(characteristic);
+        let characteristics = NSArray::from_retained_slice(std::slice::from_ref(&characteristic));
+        unsafe { service.setCharacteristics(Some(&characteristics)) };
+        let service: Retained<CBService> = Retained::into_super(service);
+
+        let (event_sender, _) = mpsc::channel(1);
+        let mut internal =
+            PeripheralInternal::new(Retained::into_super(peripheral.clone()), event_sender);
+        internal.services.insert(
+            service_uuid,
+            ServiceInternal {
+                cbservice: service,
+                characteristics: HashMap::from([(
+                    characteristic_uuid,
+                    CharacteristicInternal::new(characteristic.clone()),
+                )]),
+                discovered: false,
+            },
+        );
+
+        // No discovery request is pending: the one that started the first discovery has
+        // already been answered.
+        assert!(internal.services_discovered_future_state.is_none());
+        internal.set_characteristic_descriptors(service_uuid, characteristic_uuid, HashMap::new());
+        assert!(
+            internal.services.values().all(|service| service.discovered),
+            "the rediscovered service should still be recorded"
+        );
+
+        // A request made afterwards is still answered.
+        internal
+            .services
+            .values_mut()
+            .for_each(|service| service.discovered = false);
+        let discovery = CoreBluetoothReplyFuture::default();
+        internal.services_discovered_future_state = Some(discovery.get_state_clone());
+        internal.set_characteristic_descriptors(service_uuid, characteristic_uuid, HashMap::new());
+        let reply = tokio::time::timeout(Duration::from_secs(1), discovery)
+            .await
+            .expect("a later discovery request should still be answered");
+        assert!(matches!(reply, CoreBluetoothReply::ServicesDiscovered(..)));
 
         // CBPeripheral has no public initializer suitable for tests, so this
         // subclass must not run CoreBluetooth's private destruction path.

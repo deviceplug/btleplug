@@ -1,10 +1,10 @@
-# btleplug Integration Test Peripherals
+# btleplug Integration Test Peripheral
 
-This directory contains BLE test peripheral implementations for btleplug's integration test suite. Both implementations expose an identical GATT profile that the Rust tests in `tests/` exercise.
+This directory contains the Zephyr firmware for a BLE test peripheral used by btleplug's integration test suite. It exposes a GATT profile that the Rust tests in `tests/` exercise.
 
 ## Quick Start
 
-### Option A: Hardware (Zephyr)
+### Zephyr hardware setup
 
 The Zephyr firmware supports multiple boards, built from a pinned Zephyr `v4.4.2` tree so builds are reproducible. Pick whichever board you have.
 
@@ -70,36 +70,9 @@ The board boots and immediately starts advertising as `"btleplug-test"`.
 cargo test --test '*' -- --ignored
 ```
 
-### Option B: Virtual Peripheral (Bumble)
-
-**Prerequisites:**
-- Python 3.10+
-- A USB BLE dongle (separate from the host's built-in BLE adapter)
-- `libusb` (`brew install libusb` on macOS, `apt install libusb-1.0-0` on Linux)
-
-**Setup:**
-
-```bash
-cd bumble
-pip install -r requirements.txt
-```
-
-**Run:**
-
-```bash
-./run.sh usb:0          # USB dongle (most common)
-./run.sh hci-socket:0   # Linux HCI socket (requires sudo)
-```
-
-**Run integration tests** (in another terminal):
-
-```bash
-cargo test --test '*' -- --ignored
-```
-
 ## GATT Test Profile
 
-Both peripherals implement an identical GATT profile. The canonical UUID definitions are in `tests/common/gatt_uuids.rs` (Rust) and mirrored in `zephyr/src/gatt_profile.h` (C) and `bumble/test_peripheral.py` (Python).
+The Zephyr firmware implements the test GATT profile. The canonical UUID definitions are in `tests/common/gatt_uuids.rs` (Rust) and mirrored in `zephyr/src/gatt_profile.h` (C).
 
 ### Services
 
@@ -119,7 +92,7 @@ Write these opcodes to the Control Point characteristic (`00000101-...`):
 | `0x01` | Start Notifications | Begin periodic notifications (1 Hz) |
 | `0x02` | Stop Notifications | Stop all periodic notifications |
 | `0x03` | Trigger Disconnect | Peripheral disconnects after 500ms |
-| `0x04` | Change Advertisements | Rotate advertisement data |
+| `0x04` | Change Advertisements | Reserved; currently a no-op (logged only) |
 | `0x05` | Reset State | Stop notifications, clear all buffers |
 | `0x06` | Set Notification Payload | Remaining bytes become the notification payload |
 
@@ -136,7 +109,7 @@ Write these opcodes to the Control Point characteristic (`00000101-...`):
 1. **Verify the peripheral is advertising:** Use a BLE scanner app (nRF Connect, LightBlue) to confirm `"btleplug-test"` appears.
 2. **Check Bluetooth adapter:** Ensure your host has a working BLE adapter. On Linux, run `hciconfig` or `bluetoothctl show`.
 3. **Check permissions:** On Linux, you may need to run tests with `sudo` or add your user to the `bluetooth` group.
-4. **Increase scan timeout:** If the peripheral takes a while to appear, the default 10-second scan timeout in `peripheral_finder.rs` may need extending.
+4. **Increase scan timeout:** If the peripheral takes a while to appear, `DEFAULT_SCAN_TIMEOUT` (15 s) in `tests/common/peripheral_finder.rs` may need extending.
 
 ### Zephyr build fails
 
@@ -154,17 +127,3 @@ Write these opcodes to the Control Point characteristic (`00000101-...`):
 
 If your shell (or another Zephyr workspace) exports `ZEPHYR_BASE`, `west` can resolve against that tree instead of the pinned `deps/zephyr` here. `west config zephyr.base-prefer configfile` (run once as part of setup above) makes `west` always prefer the workspace's own manifest over an exported `ZEPHYR_BASE`.
 
-### Bumble can't find USB dongle
-
-1. **Check connection:** `lsusb` (Linux) or `system_profiler SPUSBDataType` (macOS).
-2. **Check libusb:** `python -c "import usb.core; print(list(usb.core.find(find_all=True)))"`
-3. **Permissions:** On Linux, you may need udev rules for your dongle. On macOS, the dongle should work out of the box.
-
-### Tests pass with hardware but fail with Bumble
-
-Some tests are sensitive to hardware timing:
-- **RSSI tests:** Bumble may not provide realistic RSSI values.
-- **MTU tests:** MTU negotiation behavior may differ.
-- **Connection parameter tests:** May not be supported over virtual transport.
-
-These tests should pass with the nRF52840 DK.

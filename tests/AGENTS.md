@@ -1,10 +1,10 @@
 # tests/ -- Integration Test Suite
 
-Freshness: 2026-03-01
+Freshness: 2026-09-26
 
 ## Purpose
 
-Integration tests that exercise btleplug against a real or virtual BLE peripheral running the btleplug test GATT profile. All tests are marked `#[ignore]` so they only run when explicitly requested (`cargo test --test '*' -- --ignored`).
+Integration tests that exercise btleplug against the Zephyr test peripheral running the btleplug test GATT profile. All tests are marked `#[ignore]` so they only run when explicitly requested (`cargo test --test '*' -- --ignored`).
 
 ## Structure
 
@@ -41,8 +41,8 @@ Each test is its own file (and therefore its own binary), ensuring process isola
 
 ## Dependencies
 
-- Requires a running test peripheral (Bumble virtual or Zephyr hardware) -- see `test-peripheral/`.
-- UUID constants in `gatt_uuids.rs` must stay in sync with the peripheral implementations in `test-peripheral/zephyr/src/gatt_profile.h` and `test-peripheral/bumble/test_peripheral.py`.
+- Requires the Zephyr test peripheral running on hardware -- see `test-peripheral/`.
+- UUID constants in `gatt_uuids.rs` must stay in sync with the Zephyr firmware in `test-peripheral/zephyr/src/gatt_profile.h`.
 
 ## Invariants
 
@@ -50,6 +50,6 @@ Each test is its own file (and therefore its own binary), ensuring process isola
 - Each `test_*.rs` is a thin wrapper delegating to `common::test_cases::*` — add new test logic to `test_cases.rs`.
 - One test per file ensures process isolation — never put multiple tests in the same file.
 - Tests must not depend on execution order; each test connects independently.
-- The scan timeout is 10 seconds (hardcoded in `peripheral_finder.rs`).
-- When adding a new test, also add the corresponding JNI export in `android/rust/src/lib.rs`, native declaration in `NativeTests.kt`, and `@Test` in `BleIntegrationTest.kt`.
+- The scan timeout is 15 seconds (hardcoded in `peripheral_finder.rs`).
+- When adding a new test, also add the corresponding JNI export in `android/rust/src/lib.rs`, native declaration in `NativeTests.kt`, and `@Test` in `BleIntegrationTest.kt`. Tests backed by APIs Android does not support (e.g. `test_retrieve_connected_peripheral_by_service`) and macOS-only tests intentionally have no JNI export.
 - Adapter-only tests require local adapter hardware but do not require the btleplug test peripheral; their desktop assertions are target-specific because CoreBluetooth and ordinary Android intentionally return `Ok(None)`.

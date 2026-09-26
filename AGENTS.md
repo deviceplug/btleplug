@@ -1,13 +1,13 @@
 # btleplug
 
-Last verified: 2026-03-08
+Last verified: 2026-09-26
 
 ## Tech Stack
 
 - Language: Rust (edition 2024)
 - Platforms: Windows (WinRT), macOS/iOS (CoreBluetooth), Linux (BlueZ), Android (JNI)
 - Async runtime: Tokio
-- Testing: `cargo test`, integration tests require BLE hardware/virtual peripheral
+- Testing: `cargo test`, integration tests require BLE hardware running the Zephyr test peripheral
 
 ## Commands
 
@@ -28,8 +28,8 @@ Last verified: 2026-03-08
 - `src/winrtble/` -- Windows WinRT backend
 - `src/common/` -- Shared utilities (non-Linux platforms)
 - `src/platform/` -- Platform-specific type exports
-- `tests/` -- Integration test suite (see `tests/CLAUDE.md`)
-- `test-peripheral/` -- BLE test peripheral implementations (see `test-peripheral/CLAUDE.md`)
+- `tests/` -- Integration test suite (see `tests/AGENTS.md`)
+- `test-peripheral/` -- BLE test peripheral firmware (Zephyr) (see `test-peripheral/AGENTS.md`)
 - `scripts/` -- Build and test automation scripts
 
 ## Feature Flags

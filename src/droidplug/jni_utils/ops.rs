@@ -207,23 +207,19 @@ define_fn_adapter! {
     },
 }
 
-struct SendSyncWrapper<T>(T);
-
-unsafe impl<T> Send for SendSyncWrapper<T> {}
-unsafe impl<T> Sync for SendSyncWrapper<T> {}
-
-type FnWrapper = SendSyncWrapper<
-    Arc<
-        dyn for<'a, 'b> Fn(
-                &'b mut Env<'a>,
-                JObject<'a>,
-                JObject<'a>,
-                JObject<'a>,
-                JObject<'a>,
-            ) -> JObject<'a>
-            + 'static,
-    >,
->;
+/// Storage protocol for [`JFnAdapter`] objects: the Java `data` field holds a
+/// pointer produced by [`Arc::into_raw`] to the adapter closure. Every call
+/// clones a counted reference under the object monitor and invokes the closure
+/// outside it; close zeroes the field under the monitor and drops the last
+/// reference.
+type FnClosure = dyn for<'a, 'b> Fn(
+        &'b mut Env<'a>,
+        JObject<'a>,
+        JObject<'a>,
+        JObject<'a>,
+        JObject<'a>,
+    ) -> JObject<'a>
+    + 'static;
 
 fn fn_once_adapter<'local>(
     env: &mut Env<'local>,
@@ -291,19 +287,18 @@ fn fn_adapter<'local>(
     + 'static,
     local: bool,
 ) -> Result<JObject<'local>> {
-    let arc: Arc<
-        dyn for<'c, 'd> Fn(
-            &'d mut Env<'c>,
-            JObject<'c>,
-            JObject<'c>,
-            JObject<'c>,
-            JObject<'c>,
-        ) -> JObject<'c>,
-    > = Arc::from(f);
+    let boxed: Box<FnClosure> = Box::new(f);
+    let arc: Arc<Box<FnClosure>> = Arc::new(boxed);
 
     let class = <JFnAdapter as Reference>::lookup_class(env, &Default::default())?;
     let obj = env.new_object(&*class, jni_sig!("(Z)V"), &[local.into()])?;
-    unsafe { env.set_rust_field::<_, _, FnWrapper>(&obj, jni_str!("data"), SendSyncWrapper(arc)) }?;
+    let ptr = Arc::into_raw(arc);
+    env.set_field(
+        &obj,
+        jni_str!("data"),
+        jni_sig!("J"),
+        (ptr as jni::sys::jlong).into(),
+    )?;
     Ok(obj)
 }
 
@@ -318,13 +313,19 @@ pub(crate) extern "C" fn fn_adapter_call_internal<'local>(
 
     env.with_env(
         |env| -> std::result::Result<JObject<'local>, jni::errors::Error> {
-            let arc = if let Ok(f) =
-                unsafe { env.get_rust_field::<_, _, FnWrapper>(&obj1, jni_str!("data")) }
-            {
-                AssertUnwindSafe(f.0.clone())
-            } else {
+            let _monitor = env.lock_obj(&obj1)?;
+            let ptr = env.get_field(&obj1, jni_str!("data"), jni_sig!("J"))?.j()?
+                as *const Box<FnClosure>;
+            if ptr.is_null() {
                 return Ok(JObject::null());
+            }
+            let arc: Arc<Box<FnClosure>> = unsafe {
+                // Safety: the `data` field only ever holds a pointer from `Arc::into_raw`, and the
+                // monitor serializes against `fn_adapter_close_internal` dropping the last reference.
+                Arc::increment_strong_count(ptr);
+                Arc::from_raw(ptr)
             };
+            drop(_monitor);
             match catch_unwind(AssertUnwindSafe(|| arc(env, obj1, obj2, arg1, arg2))) {
                 Ok(result) => Ok(result),
                 Err(panic) => {
@@ -338,15 +339,26 @@ pub(crate) extern "C" fn fn_adapter_call_internal<'local>(
 }
 
 pub(crate) extern "C" fn fn_adapter_close_internal(mut env: EnvUnowned, obj: JObject) {
-    use std::panic::{AssertUnwindSafe, catch_unwind};
-
     env.with_env(|env| {
-        let result = catch_unwind(AssertUnwindSafe(|| {
-            let _ = unsafe { env.take_rust_field::<_, _, FnWrapper>(&obj, jni_str!("data")) };
-        }));
-        if let Err(panic) = result {
-            super::exceptions::throw_panic(env, panic)?;
+        let _monitor = env.lock_obj(&obj)?;
+        let ptr =
+            env.get_field(&obj, jni_str!("data"), jni_sig!("J"))?.j()? as *const Box<FnClosure>;
+        if ptr.is_null() {
+            return Ok::<(), jni::errors::Error>(());
         }
+        env.set_field(
+            &obj,
+            jni_str!("data"),
+            jni_sig!("J"),
+            (0 as jni::sys::jlong).into(),
+        )?;
+        let arc: Arc<Box<FnClosure>> = unsafe {
+            // Safety: the `data` field only ever holds a pointer from `Arc::into_raw`, and the
+            // monitor serializes against `fn_adapter_call_internal` cloning a counted reference.
+            Arc::from_raw(ptr)
+        };
+        drop(_monitor);
+        drop(arc);
         Ok::<(), jni::errors::Error>(())
     })
     .resolve::<ThrowRuntimeExAndDefault>();

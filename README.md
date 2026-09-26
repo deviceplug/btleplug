@@ -199,18 +199,6 @@ west build -b nrf52840dk/nrf52840 --pristine && west flash --runner nrfjprog
 cargo test --test '*' -- --ignored
 ```
 
-**Quick start with a virtual peripheral (requires USB BLE dongle):**
-
-```bash
-# Start the Bumble virtual peripheral
-cd test-peripheral/bumble
-pip install -r requirements.txt
-./run.sh usb:0  # transport argument may vary; see Bumble docs
-
-# In another terminal, run integration tests
-cargo test --test '*' -- --ignored
-```
-
 See `test-peripheral/README.md` for full setup instructions.
 
 ## License

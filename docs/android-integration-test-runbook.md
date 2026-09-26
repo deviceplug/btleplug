@@ -14,22 +14,9 @@ The SIGABRT in logcat is a Rust panic from `peripheral_finder::find_and_connect(
 
 ## What's Needed to Run Tests
 
-### 1. Start a BLE test peripheral
+### 1. Start the Zephyr test peripheral
 
-Two options exist in `test-peripheral/`:
-
-**Option A: Bumble virtual peripheral (easiest)**
-```bash
-cd test-peripheral/bumble
-pip install -r requirements.txt
-python test_peripheral.py
-```
-- Requires a Bluetooth USB adapter or HCI transport
-- The Bumble peripheral advertises as "btleplug-test" with the test GATT profile
-
-**Option B: Zephyr hardware peripheral**
-- Requires a Zephyr-supported BLE board (e.g., nRF52840)
-- See `test-peripheral/zephyr/` and `docs/zephyr-test-peripheral-debugging.md`
+See `test-peripheral/README.md` for setup and build instructions. The firmware runs on a Zephyr-supported BLE board (e.g., nRF52840) and advertises as "btleplug-test" with the test GATT profile.
 
 ### 2. Run the Android tests
 
@@ -159,7 +146,7 @@ d21c37a fix: resolve build issues for Android integration tests
 
 ## Next Steps
 
-1. **Start a test peripheral** (Bumble or Zephyr) so the scan finds "btleplug-test"
+1. **Start the Zephyr test peripheral** so the scan finds "btleplug-test"
 2. **Implement `catch_unwind`** in the JNI test wrapper so panics become JUnit failures instead of process crashes
 3. **Run tests** and iterate on any BLE-specific Android failures
 4. **Squash/clean commits** if desired before merging to master

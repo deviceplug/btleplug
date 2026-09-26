@@ -6,7 +6,7 @@ Date: 2026-03-01
 
 1. **`BT_LE_ADV_CONN` removed in Zephyr v4.3** — replaced with `BT_LE_ADV_CONN_FAST_1` (30-60ms intervals). Fix in `src/main.c`.
 
-2. **Missing `intelhex` Python package** — needed by `nrfjprog` flash runner. Fix: `uv pip install intelhex`.
+2. **Missing `intelhex` Python package** — needed by `nrfjprog` flash runner. Fix: `uv pip install intelhex` (now installed via requirements-base.txt).
 
 3. **Scan response too large** — adding `BT_DATA_UUID128_ALL` (18 bytes) + `BT_DATA_SVC_DATA128` (19 bytes) exceeds the 31-byte BLE legacy advertising limit. Fix: removed `svc_data`, kept only UUID list.
 
@@ -14,8 +14,10 @@ Date: 2026-03-01
 
 - Board: nRF52840 DK (S/N 683223459)
 - J-Link mass storage disabled via `JLinkExe` → `MSDDisable` (persistent, fixes macOS "Disk Not Ejected Properly" spam)
-- Flash command: `uv run west flash --runner nrfjprog` (from `test-peripheral/zephyr/`)
-- Build command: `uv run west build -b nrf52840dk/nrf52840` (from `test-peripheral/zephyr/`)
+- Flash command: `west flash --runner nrfjprog` (from `test-peripheral/zephyr/`, with `test-peripheral/.venv` activated)
+- Build command: `west build -b nrf52840dk/nrf52840 --pristine` (from `test-peripheral/zephyr/`)
+
+**Pinned workspace note:** the firmware now builds against a Zephyr `v4.4.2` tree pinned by `test-peripheral/zephyr/west.yml`, fetched into `test-peripheral/deps/` via `west init -l zephyr && west update` (from `test-peripheral/`), with a `uv`-managed `.venv` providing `west` and Zephyr's Python build requirements. See `test-peripheral/README.md` for the full one-time setup (including the Zephyr SDK 1.0.1 install). The commands above assume that workspace already exists and `.venv` is activated.
 
 ## UART Serial Issues (UNRESOLVED)
 

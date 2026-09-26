@@ -65,11 +65,11 @@ Every step runs this loop. Do not start the next step until the current step is 
 
 **Goal:** Reproducible firmware builds.
 
-- Add `test-peripheral/zephyr/west.yml` (T2 star topology) pinning `zephyr` to `v4.4.0`, importing only the modules the two boards need (`hal_nordic`, `cmsis`/`cmsis_6`, `hal_espressif`, plus whatever the ESP32-S3 build requires). Before writing, have a research subagent confirm v4.4.0 is still the latest stable release and verify the allowlist names against the v4.4.0 `west.yml`.
+- Add `test-peripheral/zephyr/west.yml` (T2 star topology) pinning `zephyr` to `v4.4.2` (Zephyr SDK 1.0.1), importing only the modules the two boards need (`hal_nordic`, `cmsis`/`cmsis_6`, `hal_espressif`, plus whatever the ESP32-S3 build requires). Before writing, have a research subagent confirm v4.4.2 is still the latest stable release and verify the allowlist names against the v4.4.2 `west.yml`.
 - Update `test-peripheral/README.md` and `docs/zephyr-test-peripheral-debugging.md` with the `west init -l` / `west update` workflow.
 - Verify the nRF52840 build succeeds against the pinned tree.
 
-**Commit:** `build(zephyr): Pin test peripheral firmware to Zephyr v4.4.0`
+**Commit:** `build(zephyr): Pin test peripheral firmware to Zephyr v4.4.2`
 
 ### Step 2: Retire Bumble and fix stale test docs
 
@@ -136,7 +136,7 @@ Every step runs this loop. Do not start the next step until the current step is 
 
 Firmware:
 - `ERROR_CHAR` `0x00000207` appended to the Read/Write service, `READ | WRITE`, both handlers return `BT_GATT_ERR(0x80)` (application error; avoid authentication/encryption errors, which trigger pairing on macOS and Windows).
-- `REFUSED_NOTIFY_CHAR` `0x00000304` appended to the Notification service, `NOTIFY`, with a managed CCC whose write callback rejects every enable with an ATT error. Verify the exact v4.4.0 API (`BT_GATT_CCC_MANAGED` / `struct bt_gatt_ccc_managed_user_data` `cfg_write`, or a newer write-callback CCC macro) against the pinned tree before writing; earlier research on this signature was unreliable.
+- `REFUSED_NOTIFY_CHAR` `0x00000304` appended to the Notification service, `NOTIFY`, with a managed CCC whose write callback rejects every enable with an ATT error. Verify the exact v4.4.2 API (`BT_GATT_CCC_MANAGED` / `struct bt_gatt_ccc_managed_user_data` `cfg_write`, or a newer write-callback CCC macro) against the pinned tree before writing; earlier research on this signature was unreliable.
 
 Tests:
 - `test_gatt_error_status_is_reported`: `read(ERROR_CHAR)` and `write(ERROR_CHAR, WithResponse)` both return `Err` within a timeout; a follow-up `read(STATIC_READ)` succeeds.
@@ -163,7 +163,7 @@ Tests:
 
 Firmware:
 - Secondary service `0x00000005` (`BT_GATT_SECONDARY_SERVICE`) with `INCLUDED_CHAR` `0x00000501` (`READ`, fixed value `[0x05]`).
-- Include it from the Descriptor service. Include declarations must immediately follow the service declaration, so this inserts at `descriptor_svc.attrs[1]`; nothing references `descriptor_svc` indices. Verify the v4.4.0 `BT_GATT_INCLUDE_SERVICE` argument type (it takes the included service's declaration attribute, not the service struct) against the pinned tree.
+- Include it from the Descriptor service. Include declarations must immediately follow the service declaration, so this inserts at `descriptor_svc.attrs[1]`; nothing references `descriptor_svc` indices. Verify the v4.4.2 `BT_GATT_INCLUDE_SERVICE` argument type (it takes the included service's declaration attribute, not the service struct) against the pinned tree.
 
 Tests:
 - `test_discovery_with_included_service`: `find_and_connect()` succeeds (discovery completes), all four primary services are present, and `read(STATIC_READ)` succeeds afterwards. Do not assert whether the secondary service appears in `services()`; that is backend-dependent.

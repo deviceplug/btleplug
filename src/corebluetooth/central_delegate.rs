@@ -52,6 +52,7 @@ pub enum CentralDelegateEvent {
     DiscoveredServices {
         peripheral_uuid: Uuid,
         services: HashMap<Uuid, Retained<CBService>>,
+        error: Option<String>,
     },
     ManufacturerData {
         peripheral_uuid: Uuid,
@@ -161,10 +162,12 @@ impl Debug for CentralDelegateEvent {
             CentralDelegateEvent::DiscoveredServices {
                 peripheral_uuid,
                 services,
+                error,
             } => f
                 .debug_struct("DiscoveredServices")
                 .field("peripheral_uuid", peripheral_uuid)
                 .field("services", &services.keys().collect::<Vec<_>>())
+                .field("error", error)
                 .finish(),
             CentralDelegateEvent::DiscoveredCharacteristics {
                 peripheral_uuid,
@@ -511,9 +514,9 @@ define_class!(
                 peripheral_debug(peripheral),
                 localized_description(error)
             );
+            let mut service_map = HashMap::new();
             if error.is_none() {
                 let services = unsafe { peripheral.services() }.unwrap_or_default();
-                let mut service_map = HashMap::new();
                 for s in services {
                     // go ahead and ask for characteristics and other services
                     unsafe {
@@ -526,13 +529,14 @@ define_class!(
                     let uuid = cbuuid_to_uuid(&raw_uuid);
                     service_map.insert(uuid, s);
                 }
-                let id = unsafe { peripheral.identifier() };
-                let peripheral_uuid = nsuuid_to_uuid(&id);
-                self.send_event(CentralDelegateEvent::DiscoveredServices {
-                    peripheral_uuid,
-                    services: service_map,
-                });
             }
+            let id = unsafe { peripheral.identifier() };
+            let peripheral_uuid = nsuuid_to_uuid(&id);
+            self.send_event(CentralDelegateEvent::DiscoveredServices {
+                peripheral_uuid,
+                services: service_map,
+                error: error.map(|e| e.localizedDescription().to_string()),
+            });
         }
 
         #[unsafe(method(peripheral:didDiscoverIncludedServicesForService:error:))]
@@ -569,8 +573,15 @@ define_class!(
                 service_debug(service),
                 localized_description(error)
             );
-            if error.is_none() {
-                let mut characteristics = HashMap::new();
+            // Report even on error so the service completes discovery.
+            let mut characteristics = HashMap::new();
+            if error.is_some() {
+                warn!(
+                    "Error discovering characteristics for service {}, continuing with no characteristics: {}",
+                    service_debug(service),
+                    localized_description(error)
+                );
+            } else {
                 let chars = unsafe { service.characteristics() }.unwrap_or_default();
                 for c in chars {
                     unsafe { peripheral.discoverDescriptorsForCharacteristic(&c) };
@@ -579,16 +590,16 @@ define_class!(
                     let uuid = cbuuid_to_uuid(&raw_uuid);
                     characteristics.insert(uuid, c);
                 }
-                let id = unsafe { peripheral.identifier() };
-                let peripheral_uuid = nsuuid_to_uuid(&id);
-                let raw_service_uuid = unsafe { service.UUID() };
-                let service_uuid = cbuuid_to_uuid(&raw_service_uuid);
-                self.send_event(CentralDelegateEvent::DiscoveredCharacteristics {
-                    peripheral_uuid,
-                    service_uuid,
-                    characteristics,
-                });
             }
+            let id = unsafe { peripheral.identifier() };
+            let peripheral_uuid = nsuuid_to_uuid(&id);
+            let raw_service_uuid = unsafe { service.UUID() };
+            let service_uuid = cbuuid_to_uuid(&raw_service_uuid);
+            self.send_event(CentralDelegateEvent::DiscoveredCharacteristics {
+                peripheral_uuid,
+                service_uuid,
+                characteristics,
+            });
         }
 
         #[unsafe(method(peripheral:didDiscoverDescriptorsForCharacteristic:error:))]

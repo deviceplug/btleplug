@@ -290,6 +290,10 @@ fn fn_adapter<'local>(
     local: bool,
 ) -> Result<JObject<'local>> {
     let boxed: Box<FnClosure> = Box::new(f);
+    // Send/Sync are erased by FnClosure but still upheld: non-local constructors require
+    // Send (+ Sync, or a Mutex wrapper), and local adapters are pinned to one thread by
+    // the Java-side LocalThreadChecker on both call and close.
+    #[allow(clippy::arc_with_non_send_sync)]
     let arc: Arc<Box<FnClosure>> = Arc::new(boxed);
 
     let class = <JFnAdapter as Reference>::lookup_class(env, &Default::default())?;
@@ -556,7 +560,11 @@ mod test {
         let close_result = close_result_rx
             .recv_timeout(Duration::from_secs(10))
             .expect("close did not return within 10s while the call was in flight");
-        assert_eq!(close_result, Ok(()), "close failed while a call was in flight");
+        assert_eq!(
+            close_result,
+            Ok(()),
+            "close failed while a call was in flight"
+        );
 
         assert_eq!(
             dropped.load(Ordering::Relaxed),

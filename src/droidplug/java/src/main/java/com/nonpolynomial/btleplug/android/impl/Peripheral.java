@@ -109,7 +109,7 @@ class Peripheral {
                             public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
                                 Peripheral.this.asyncWithFuture(future, () -> {
                                     if (status != BluetoothGatt.GATT_SUCCESS) {
-                                        throw new RuntimeException("Unable to disconnect");
+                                        throw new RuntimeException("Unable to disconnect, status: " + status);
                                     }
 
                                     if (newState == BluetoothGatt.STATE_DISCONNECTED) {
@@ -174,7 +174,7 @@ class Peripheral {
                         public void onMtuChanged(BluetoothGatt gatt, int mtu, int status) {
                             Peripheral.this.asyncWithFuture(future, () -> {
                                 if (status != BluetoothGatt.GATT_SUCCESS) {
-                                    throw new RuntimeException("MTU negotiation failed");
+                                    throw new RuntimeException("MTU negotiation failed, status: " + status);
                                 }
                                 Peripheral.this.wakeCommand(future, mtu);
                             });
@@ -204,6 +204,10 @@ class Peripheral {
                         @Override
                         public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
                             Peripheral.this.asyncWithFuture(future, () -> {
+                                if (status != BluetoothGatt.GATT_SUCCESS) {
+                                    throw new RuntimeException("Unable to read characteristic, status: " + status);
+                                }
+
                                 if (!characteristic.getUuid().equals(uuid)) {
                                     throw new UnexpectedCharacteristicException();
                                 }
@@ -238,6 +242,10 @@ class Peripheral {
                         @Override
                         public void onCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
                             Peripheral.this.asyncWithFuture(future, () -> {
+                                if (status != BluetoothGatt.GATT_SUCCESS) {
+                                    throw new RuntimeException("Unable to write characteristic, status: " + status);
+                                }
+
                                 if (!characteristic.getUuid().equals(uuid)) {
                                     throw new UnexpectedCharacteristicException();
                                 }
@@ -320,7 +328,7 @@ class Peripheral {
                         public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
                             Peripheral.this.asyncWithFuture(future, () -> {
                                 if (status != BluetoothGatt.GATT_SUCCESS) {
-                                    throw new RuntimeException("Unable to write descriptor");
+                                    throw new RuntimeException("Unable to write client characteristic configuration descriptor, status: " + status);
                                 }
 
                                 if (!descriptor.getUuid().equals(CLIENT_CHARACTERISTIC_CONFIGURATION_DESCRIPTOR) || !descriptor.getCharacteristic().getUuid().equals(uuid)) {
@@ -360,6 +368,10 @@ class Peripheral {
                         @Override
                         public void onDescriptorRead(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
                             Peripheral.this.asyncWithFuture(future, () -> {
+                                if (status != BluetoothGatt.GATT_SUCCESS) {
+                                    throw new RuntimeException("Unable to read descriptor, status: " + status);
+                                }
+
                                 if (!descriptor.getUuid().equals(uuid)) {
                                     throw new UnexpectedCharacteristicException();
                                 }
@@ -393,6 +405,10 @@ class Peripheral {
                         @Override
                         public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
                             Peripheral.this.asyncWithFuture(future, () -> {
+                                if (status != BluetoothGatt.GATT_SUCCESS) {
+                                    throw new RuntimeException("Unable to write descriptor, status: " + status);
+                                }
+
                                 if (!descriptor.getUuid().equals(uuid)) {
                                     throw new UnexpectedCharacteristicException();
                                 }
@@ -424,7 +440,7 @@ class Peripheral {
                         public void onReadRemoteRssi(BluetoothGatt gatt, int rssi, int status) {
                             Peripheral.this.asyncWithFuture(future, () -> {
                                 if (status != BluetoothGatt.GATT_SUCCESS) {
-                                    throw new RuntimeException("RSSI read failed");
+                                    throw new RuntimeException("RSSI read failed, status: " + status);
                                 }
                                 Peripheral.this.wakeCommand(future, rssi);
                             });

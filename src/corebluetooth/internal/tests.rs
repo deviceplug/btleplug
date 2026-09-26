@@ -207,10 +207,6 @@ impl NotificationFixture {
         }
     }
 
-    fn characteristic(&self, index: usize) -> &TestCharacteristic {
-        &self.characteristics[index].characteristic
-    }
-
     fn set_notify_calls(&self) -> Vec<RecordedSetNotify> {
         self.peripheral.set_notify_calls()
     }

@@ -294,11 +294,13 @@ class Peripheral {
                     this.setCommandCallback(new CommandCallback() {
                         @Override
                         public void onServicesDiscovered(BluetoothGatt gatt, int status) {
-                            if (status != BluetoothGatt.GATT_SUCCESS) {
-                                throw new RuntimeException("Unable to discover services");
-                            }
+                            Peripheral.this.asyncWithFuture(future, () -> {
+                                if (status != BluetoothGatt.GATT_SUCCESS) {
+                                    throw new RuntimeException("Unable to discover services, status: " + status);
+                                }
 
-                            Peripheral.this.wakeCommand(future, gatt.getServices());
+                                Peripheral.this.wakeCommand(future, gatt.getServices());
+                            });
                         }
                         @Override
                         public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {

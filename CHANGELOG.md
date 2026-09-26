@@ -10,6 +10,47 @@
   adapter object's handle field, and wake/close access to that field is
   serialized on the object monitor, so an in-flight call always holds its own
   reference.
+- Fix CoreBluetooth `discover_services()` never resolving when service or
+  characteristic discovery reported an error, when the peripheral had no
+  services, or when the peripheral was no longer known to the adapter. Service
+  discovery errors are now returned, and a characteristic discovery error
+  completes that service without characteristics. (#486)
+- Fix CoreBluetooth panics on late or unexpected discovery callbacks, such as
+  characteristics for included services or descriptors arriving after discovery
+  finished. The panic killed the CoreBluetooth event thread, so every later
+  operation on the adapter hung. (#487)
+- Fix concurrent CoreBluetooth `connect()`, `disconnect()`, or
+  `discover_services()` calls on one peripheral leaving all but the last caller
+  waiting forever. Every concurrent caller now receives the result. (#488)
+- Fix CoreBluetooth reads, writes, subscriptions, and descriptor operations
+  never resolving when services were rediscovered, invalidated by the device, or
+  when peripherals were cleared. Rediscovery keeps in-flight operations on
+  attributes that still exist, operations on attributes that disappear fail with
+  an error, and a services-modified event only drops the invalidated services.
+  On CoreBluetooth, `Central::clear_peripherals()` now disconnects any
+  peripheral that is still connected. (#489)
+- Fix a Windows deadlock when GATT operations ran concurrently on
+  characteristics of the same service, for example two `subscribe()` calls
+  joined on one task. (#481)
+- Fix a Windows scanner crash when a nearby device advertised a truncated
+  service data section. (#482)
+- Fix 128-bit service data UUIDs being reported byte-reversed on Windows. (#483)
+- Fix every GATT operation failing on Windows after reconnecting a device whose
+  connection dropped, until `disconnect()` was called explicitly. `connect()` on
+  an already connected peripheral now returns immediately. (#484)
+- Fix BlueZ `mtu()` panicking on BlueZ versions that do not report the MTU
+  (older than 5.62). The panic also poisoned the peripheral's service cache,
+  breaking every later operation on it. (#485)
+- Fix a failed Android service discovery never resolving `discover_services()`
+  and permanently blocking the peripheral's command queue. (#491)
+- Fix an Android disconnect during a descriptor read or write, MTU request, or
+  RSSI read permanently blocking the peripheral's command queue and suppressing
+  `DeviceDisconnected`. Any operation interrupted by a disconnect now fails with
+  `Error::NotConnected`; previously writes could report success and reads or
+  discovery failed with an unrelated JNI error. (#490)
+- Fix failed Android GATT reads and writes being reported as success. Failures,
+  such as insufficient authentication, are now returned as errors that include
+  the GATT status code. (#492)
 
 # 0.13.2 (2026-09-20)
 

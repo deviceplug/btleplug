@@ -849,6 +849,218 @@ pub async fn test_connection_parameters() {
     peripheral.disconnect().await.unwrap();
 }
 
+// ── Concurrency ─────────────────────────────────────────────────────
+
+pub async fn test_concurrent_connect_and_discover() {
+    use futures::join;
+    use std::time::Duration;
+    use tokio::time::timeout;
+
+    let peripheral = peripheral_finder::find_and_connect().await;
+    assert!(peripheral.is_connected().await.unwrap());
+
+    #[cfg(target_vendor = "apple")]
+    let mut events = {
+        use btleplug::api::Central;
+        peripheral_finder::get_adapter()
+            .await
+            .events()
+            .await
+            .unwrap()
+    };
+
+    peripheral.disconnect().await.unwrap();
+    assert!(!peripheral.is_connected().await.unwrap());
+
+    // CoreBluetooth drops the peripheral from its internal map on disconnect
+    // and only re-inserts it once the background scan rediscovers it; wait
+    // for that rediscovery before attempting to reconnect (see
+    // src/corebluetooth/internal.rs on_peripheral_disconnect/on_discovered_peripheral).
+    // Other backends keep the peripheral connectable across disconnects, so
+    // they go straight to the concurrent connect below.
+    #[cfg(target_vendor = "apple")]
+    {
+        use btleplug::api::CentralEvent;
+        use futures::StreamExt;
+
+        // CoreBluetooth only emits DeviceDiscovered for an id that is
+        // currently absent from AdapterManager, and AdapterManager removes
+        // the peripheral on DeviceDisconnected (src/common/adapter_manager.rs
+        // emit()), so a DeviceDiscovered(target_id) is always fresh. A
+        // DeviceUpdated(target_id) is only trustworthy once we've also seen
+        // the id actually leave and re-enter the map (DeviceDisconnected or
+        // DeviceDiscovered), since one queued before our disconnect would
+        // otherwise be indistinguishable from a post-rediscovery update.
+        let target_id = peripheral.id();
+        let mut seen_removed_or_discovered = false;
+        timeout(Duration::from_secs(15), async {
+            loop {
+                match events.next().await {
+                    Some(CentralEvent::DeviceDiscovered(id)) if id == target_id => break,
+                    Some(CentralEvent::DeviceDisconnected(id)) if id == target_id => {
+                        seen_removed_or_discovered = true;
+                    }
+                    Some(CentralEvent::DeviceUpdated(id))
+                        if id == target_id && seen_removed_or_discovered =>
+                    {
+                        break;
+                    }
+                    Some(_) => continue,
+                    None => panic!("adapter event stream ended while waiting for rediscovery"),
+                }
+            }
+        })
+        .await
+        .expect("timed out waiting for peripheral rediscovery after disconnect");
+    }
+
+    // Concurrent connect (#488).
+    let results = timeout(Duration::from_secs(15), async {
+        join!(peripheral.connect(), peripheral.connect())
+    })
+    .await
+    .expect("concurrent connect() calls did not complete within timeout");
+    #[cfg(target_os = "linux")]
+    {
+        // bluez-async's connect_with_timeout issues Device1.Connect() directly
+        // with no dedup, so a second concurrent connect() may be rejected
+        // with org.bluez.Error.InProgress; require at least one to succeed.
+        let (first, second) = results;
+        assert!(
+            first.is_ok() || second.is_ok(),
+            "both concurrent connect() calls failed"
+        );
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let (first, second) = results;
+        first.expect("first concurrent connect() failed");
+        second.expect("second concurrent connect() failed");
+    }
+    assert!(
+        peripheral.is_connected().await.unwrap(),
+        "peripheral should be connected after concurrent connect() calls"
+    );
+
+    // Concurrent service discovery (#489 rediscovery).
+    let results = timeout(Duration::from_secs(15), async {
+        join!(
+            peripheral.discover_services(),
+            peripheral.discover_services()
+        )
+    })
+    .await
+    .expect("concurrent discover_services() calls did not complete within timeout");
+    let (first, second) = results;
+    first.expect("first concurrent discover_services() failed");
+    second.expect("second concurrent discover_services() failed");
+    assert!(
+        !peripheral.services().is_empty(),
+        "services should be populated after concurrent discover_services() calls"
+    );
+
+    // Concurrent disconnect.
+    let results = timeout(Duration::from_secs(15), async {
+        join!(peripheral.disconnect(), peripheral.disconnect())
+    })
+    .await
+    .expect("concurrent disconnect() calls did not complete within timeout");
+    let (first, second) = results;
+    first.expect("first concurrent disconnect() failed");
+    second.expect("second concurrent disconnect() failed");
+    assert!(
+        !peripheral.is_connected().await.unwrap(),
+        "peripheral should be disconnected after concurrent disconnect() calls"
+    );
+}
+
+pub async fn test_concurrent_operations_same_service() {
+    use futures::join;
+    use std::time::Duration;
+    use tokio::time::timeout;
+
+    let peripheral = peripheral_finder::find_and_connect().await;
+    // Subscribing mutates CCC state.
+    peripheral_finder::reset_peripheral(&peripheral).await;
+
+    let notify_char = peripheral_finder::find_characteristic(&peripheral, gatt_uuids::NOTIFY_CHAR);
+    let indicate_char =
+        peripheral_finder::find_characteristic(&peripheral, gatt_uuids::INDICATE_CHAR);
+
+    // Concurrent subscribe to two characteristics in the same service (#481
+    // WinRT deadlock).
+    let (subscribe_notify, subscribe_indicate) = timeout(Duration::from_secs(15), async {
+        join!(
+            peripheral.subscribe(&notify_char),
+            peripheral.subscribe(&indicate_char)
+        )
+    })
+    .await
+    .expect("concurrent subscribe() calls did not complete within timeout");
+    subscribe_notify.expect("subscribe(NOTIFY_CHAR) should succeed");
+    subscribe_indicate.expect("subscribe(INDICATE_CHAR) should succeed");
+
+    let static_char = peripheral_finder::find_characteristic(&peripheral, gatt_uuids::STATIC_READ);
+    let counter_char =
+        peripheral_finder::find_characteristic(&peripheral, gatt_uuids::COUNTER_READ);
+
+    // Concurrent read of two characteristics in the same service.
+    let (read_static, read_counter) = timeout(Duration::from_secs(15), async {
+        join!(
+            peripheral.read(&static_char),
+            peripheral.read(&counter_char)
+        )
+    })
+    .await
+    .expect("concurrent read() calls did not complete within timeout");
+    let static_value = read_static.expect("read(STATIC_READ) should succeed");
+    read_counter.expect("read(COUNTER_READ) should succeed");
+    assert_eq!(
+        static_value,
+        gatt_uuids::STATIC_READ_VALUE,
+        "Static read should return [0x01, 0x02, 0x03, 0x04]"
+    );
+
+    peripheral.unsubscribe(&notify_char).await.unwrap();
+    peripheral.unsubscribe(&indicate_char).await.unwrap();
+    peripheral.disconnect().await.unwrap();
+}
+
+pub async fn test_discover_services_during_read() {
+    use futures::join;
+    use std::time::Duration;
+    use tokio::time::timeout;
+
+    let peripheral = peripheral_finder::find_and_connect().await;
+    peripheral_finder::reset_peripheral(&peripheral).await;
+    let counter_char =
+        peripheral_finder::find_characteristic(&peripheral, gatt_uuids::COUNTER_READ);
+
+    let (read_result, discover_result) = timeout(Duration::from_secs(15), async {
+        join!(
+            peripheral.read(&counter_char),
+            peripheral.discover_services()
+        )
+    })
+    .await
+    .expect("concurrent read()/discover_services() calls did not complete within timeout");
+    read_result.expect("read(COUNTER_READ) should succeed during concurrent discovery");
+    discover_result.expect("discover_services() should succeed during concurrent read");
+
+    let static_char = peripheral_finder::find_characteristic(&peripheral, gatt_uuids::STATIC_READ);
+    let static_value = peripheral
+        .read(&static_char)
+        .await
+        .expect("follow-up read(STATIC_READ) should succeed");
+    assert_eq!(
+        static_value,
+        gatt_uuids::STATIC_READ_VALUE,
+        "Static read should return [0x01, 0x02, 0x03, 0x04]"
+    );
+
+    peripheral.disconnect().await.unwrap();
+}
+
 pub async fn test_request_connection_parameters() {
     use btleplug::api::ConnectionParameterPreset;
 

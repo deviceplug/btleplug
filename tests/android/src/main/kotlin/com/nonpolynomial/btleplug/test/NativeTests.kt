@@ -50,4 +50,9 @@ object NativeTests {
     external fun testPropertiesContainPeripheralInfo()
     external fun testConnectionParameters()
     external fun testRequestConnectionParameters()
+
+    // Concurrency
+    external fun testConcurrentConnectAndDiscover()
+    external fun testConcurrentOperationsSameService()
+    external fun testDiscoverServicesDuringRead()
 }

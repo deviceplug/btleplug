@@ -1,3 +1,16 @@
+# 0.13.3 (2026-09-26)
+
+## Bugfixes
+
+- Fix a race between waking and closing Android (`droidplug`) JNI adapter
+  closures that could free a closure while another thread was still calling
+  it. Concurrent wake and close were enough to trigger SIGSEGV/SIGBUS crashes
+  through `fn_adapter_call_internal`, which dominated the native crash rate of
+  Android apps using btleplug. Closures are now reference counted in the
+  adapter object's handle field, and wake/close access to that field is
+  serialized on the object monitor, so an in-flight call always holds its own
+  reference.
+
 # 0.13.2 (2026-09-20)
 
 ## Bugfixes

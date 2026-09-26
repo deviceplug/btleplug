@@ -219,9 +219,9 @@ struct PeripheralInternal {
     pub peripheral: Retained<CBPeripheral>,
     services: HashMap<Uuid, ServiceInternal>,
     pub event_sender: Sender<PeripheralEventInternal>,
-    pub disconnected_future_state: Option<CoreBluetoothReplyStateShared>,
-    pub connected_future_state: Option<CoreBluetoothReplyStateShared>,
-    pub services_discovered_future_state: Option<CoreBluetoothReplyStateShared>,
+    pub disconnected_future_state: VecDeque<CoreBluetoothReplyStateShared>,
+    pub connected_future_state: VecDeque<CoreBluetoothReplyStateShared>,
+    pub services_discovered_future_state: VecDeque<CoreBluetoothReplyStateShared>,
     pub read_rssi_future_state: VecDeque<CoreBluetoothReplyStateShared>,
     pub write_without_response_queue: VecDeque<PendingWriteWithoutResponse>,
 }
@@ -257,9 +257,9 @@ impl PeripheralInternal {
             peripheral,
             services: HashMap::new(),
             event_sender,
-            connected_future_state: None,
-            disconnected_future_state: None,
-            services_discovered_future_state: None,
+            connected_future_state: VecDeque::with_capacity(2),
+            disconnected_future_state: VecDeque::with_capacity(2),
+            services_discovered_future_state: VecDeque::with_capacity(2),
             read_rssi_future_state: VecDeque::with_capacity(4),
             write_without_response_queue: VecDeque::new(),
         }
@@ -271,11 +271,9 @@ impl PeripheralInternal {
         error: Option<String>,
     ) {
         if let Some(error) = error {
-            if let Some(future_state) = self.services_discovered_future_state.take() {
-                future_state
-                    .lock()
-                    .unwrap()
-                    .set_reply(CoreBluetoothReply::Err(error));
+            let reply = CoreBluetoothReply::Err(error);
+            for future_state in self.services_discovered_future_state.drain(..) {
+                future_state.lock().unwrap().set_reply(reply.clone());
             }
             return;
         }
@@ -374,10 +372,10 @@ impl PeripheralInternal {
         // back a ServicesDiscovered reply to the waiting future with all of
         // the characteristic info in it.
         if !self.services.values().any(|service| !service.discovered) {
-            let Some(future_state) = self.services_discovered_future_state.take() else {
+            if self.services_discovered_future_state.is_empty() {
                 trace!("Services discovered with no pending future; ignoring");
                 return;
-            };
+            }
             let services = self
                 .services
                 .iter()
@@ -418,12 +416,23 @@ impl PeripheralInternal {
                 Ok(mtu) => CoreBluetoothReply::ServicesDiscovered(services, mtu),
                 Err(error) => CoreBluetoothReply::Err(error),
             };
-            future_state.lock().unwrap().set_reply(reply);
+            for future_state in self.services_discovered_future_state.drain(..) {
+                future_state.lock().unwrap().set_reply(reply.clone());
+            }
         }
     }
 
     pub fn confirm_disconnect(&mut self) {
         self.drain_pending_operations("Device disconnected");
+    }
+
+    /// Resolve every queued connect waiter with the same outcome, since a
+    /// connect/connect-failure callback carries no per-request identity to
+    /// attach it to a single caller.
+    pub fn complete_connect(&mut self, reply: CoreBluetoothReply) {
+        for future in self.connected_future_state.drain(..) {
+            future.lock().unwrap().set_reply(reply.clone());
+        }
     }
 
     /// Queue a subscribe or unsubscribe request for one characteristic.
@@ -508,15 +517,14 @@ impl PeripheralInternal {
     /// operation must also add its queue here.
     fn drain_pending_operations(&mut self, message: &str) {
         let error = CoreBluetoothReply::Err(message.to_string());
-        for future in [
-            self.disconnected_future_state.take(),
-            self.connected_future_state.take(),
-            self.services_discovered_future_state.take(),
-        ]
-        .into_iter()
-        .flatten()
-        {
-            future.lock().unwrap().set_reply(error.clone());
+        for queue in [
+            &mut self.disconnected_future_state,
+            &mut self.connected_future_state,
+            &mut self.services_discovered_future_state,
+        ] {
+            for future in queue.drain(..) {
+                future.lock().unwrap().set_reply(error.clone());
+            }
         }
         for state in self.read_rssi_future_state.drain(..) {
             state.lock().unwrap().set_reply(error.clone());
@@ -910,30 +918,25 @@ impl CoreBluetoothInternal {
         }
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid)
             && !p.set_characteristic_descriptors(service_uuid, characteristic_uuid, descriptors)
-            && let Some(future) = p.services_discovered_future_state.take()
         {
-            future.lock().unwrap().set_reply(CoreBluetoothReply::Err(
-                        format!("Unknown descriptor relationship for service {service_uuid}, characteristic {characteristic_uuid}"),
-                    ));
+            let reply = CoreBluetoothReply::Err(format!(
+                "Unknown descriptor relationship for service {service_uuid}, characteristic {characteristic_uuid}"
+            ));
+            for future in p.services_discovered_future_state.drain(..) {
+                future.lock().unwrap().set_reply(reply.clone());
+            }
         }
     }
 
     fn on_peripheral_connect(&mut self, peripheral_uuid: Uuid) {
-        if self.peripherals.contains_key(&peripheral_uuid) {
-            let peripheral = self
-                .peripherals
-                .get_mut(&peripheral_uuid)
-                .expect("If we're here we should have an ID");
-            if let Some(future) = peripheral.connected_future_state.take() {
-                future
-                    .lock()
-                    .unwrap()
-                    .set_reply(CoreBluetoothReply::Connected);
-            } else {
+        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
+            if peripheral.connected_future_state.is_empty() {
                 debug!(
                     "Ignoring duplicate connection callback for peripheral {}",
                     peripheral_uuid
                 );
+            } else {
+                peripheral.complete_connect(CoreBluetoothReply::Connected);
             }
         }
     }
@@ -945,21 +948,14 @@ impl CoreBluetoothInternal {
     ) {
         trace!("Got connection fail event!");
         let error = error_description.unwrap_or(String::from("Connection failed"));
-        if self.peripherals.contains_key(&peripheral_uuid) {
-            let peripheral = self
-                .peripherals
-                .get_mut(&peripheral_uuid)
-                .expect("If we're here we should have an ID");
-            if let Some(future) = peripheral.connected_future_state.take() {
-                future
-                    .lock()
-                    .unwrap()
-                    .set_reply(CoreBluetoothReply::Err(error));
-            } else {
+        if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
+            if peripheral.connected_future_state.is_empty() {
                 debug!(
                     "Ignoring duplicate connection failure callback for peripheral {}",
                     peripheral_uuid
                 );
+            } else {
+                peripheral.complete_connect(CoreBluetoothReply::Err(error));
             }
         }
     }
@@ -1130,7 +1126,7 @@ impl CoreBluetoothInternal {
         trace!("Trying to connect peripheral!");
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             trace!("Connecting peripheral!");
-            p.connected_future_state = Some(fut);
+            p.connected_future_state.push_back(fut);
             unsafe { self.manager.connectPeripheral_options(&p.peripheral, None) };
         } else {
             fut.lock().unwrap().set_reply(CoreBluetoothReply::Err(
@@ -1143,7 +1139,7 @@ impl CoreBluetoothInternal {
         trace!("Trying to disconnect peripheral!");
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             trace!("Disconnecting peripheral!");
-            p.disconnected_future_state = Some(fut);
+            p.disconnected_future_state.push_back(fut);
             unsafe { self.manager.cancelPeripheralConnection(&p.peripheral) };
         } else {
             fut.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
@@ -1510,7 +1506,7 @@ impl CoreBluetoothInternal {
     fn discover_services(&mut self, peripheral_uuid: Uuid, fut: CoreBluetoothReplyStateShared) {
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
             trace!("Discovering services!");
-            p.services_discovered_future_state = Some(fut);
+            p.services_discovered_future_state.push_back(fut);
             // This will trigger the delegate_peripheral_diddiscoverservices in central_delegate.rs
             unsafe { p.peripheral.discoverServices(None) };
         } else {
@@ -2163,7 +2159,9 @@ mod tests {
             },
         );
         let discovery = CoreBluetoothReplyFuture::default();
-        internal.services_discovered_future_state = Some(discovery.get_state_clone());
+        internal
+            .services_discovered_future_state
+            .push_back(discovery.get_state_clone());
 
         let (delegate_sender, mut delegate_receiver) = mpsc::channel(1);
         let delegate = CentralDelegate::new(delegate_sender);
@@ -2243,7 +2241,9 @@ mod tests {
             },
         );
         let discovery = CoreBluetoothReplyFuture::default();
-        internal.services_discovered_future_state = Some(discovery.get_state_clone());
+        internal
+            .services_discovered_future_state
+            .push_back(discovery.get_state_clone());
 
         let (delegate_sender, mut delegate_receiver) = mpsc::channel(1);
         let delegate = CentralDelegate::new(delegate_sender);
@@ -2366,7 +2366,7 @@ mod tests {
                 discovered: true,
             },
         );
-        assert!(internal.services_discovered_future_state.is_none());
+        assert!(internal.services_discovered_future_state.is_empty());
 
         internal.check_discovered();
 
@@ -2410,7 +2410,9 @@ mod tests {
             },
         );
         let mut discovery = CoreBluetoothReplyFuture::default();
-        internal.services_discovered_future_state = Some(discovery.get_state_clone());
+        internal
+            .services_discovered_future_state
+            .push_back(discovery.get_state_clone());
 
         // A descriptor callback for a service this peripheral has never seen
         // (e.g. an included service dropped by set_characteristics) must not
@@ -2940,7 +2942,9 @@ mod tests {
         let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
         let (peripheral, mut internal) = new_test_internal(peripheral_uuid);
         let discovery = CoreBluetoothReplyFuture::default();
-        internal.services_discovered_future_state = Some(discovery.get_state_clone());
+        internal
+            .services_discovered_future_state
+            .push_back(discovery.get_state_clone());
 
         internal.set_discovered_services(HashMap::new(), Some("boom".to_string()));
 
@@ -2961,7 +2965,7 @@ mod tests {
     fn discover_services_error_with_no_waiting_future_does_not_panic() {
         let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
         let (peripheral, mut internal) = new_test_internal(peripheral_uuid);
-        assert!(internal.services_discovered_future_state.is_none());
+        assert!(internal.services_discovered_future_state.is_empty());
 
         internal.set_discovered_services(HashMap::new(), Some("boom".to_string()));
 
@@ -2974,7 +2978,9 @@ mod tests {
         let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
         let (peripheral, mut internal) = new_test_internal(peripheral_uuid);
         let discovery = CoreBluetoothReplyFuture::default();
-        internal.services_discovered_future_state = Some(discovery.get_state_clone());
+        internal
+            .services_discovered_future_state
+            .push_back(discovery.get_state_clone());
 
         internal.set_discovered_services(HashMap::new(), None);
 
@@ -3004,7 +3010,9 @@ mod tests {
         service_map.insert(service_uuid, service);
 
         let mut discovery = CoreBluetoothReplyFuture::default();
-        internal.services_discovered_future_state = Some(discovery.get_state_clone());
+        internal
+            .services_discovered_future_state
+            .push_back(discovery.get_state_clone());
 
         internal.set_discovered_services(service_map, None);
 
@@ -3028,16 +3036,20 @@ mod tests {
         service_map.insert(service_uuid, service);
 
         let first = CoreBluetoothReplyFuture::default();
-        internal.services_discovered_future_state = Some(first.get_state_clone());
+        internal
+            .services_discovered_future_state
+            .push_back(first.get_state_clone());
         internal.set_discovered_services(service_map.clone(), None);
         internal.set_characteristics(service_uuid, HashMap::new());
         tokio::time::timeout(Duration::from_secs(1), first)
             .await
             .expect("first discovery did not complete");
-        assert!(internal.services_discovered_future_state.is_none());
+        assert!(internal.services_discovered_future_state.is_empty());
 
         let second = CoreBluetoothReplyFuture::default();
-        internal.services_discovered_future_state = Some(second.get_state_clone());
+        internal
+            .services_discovered_future_state
+            .push_back(second.get_state_clone());
         internal.set_discovered_services(service_map, None);
         internal.set_characteristics(service_uuid, HashMap::new());
         let reply = tokio::time::timeout(Duration::from_secs(1), second)
@@ -3047,6 +3059,122 @@ mod tests {
             reply,
             CoreBluetoothReply::ServicesDiscovered(_, _)
         ));
+
+        std::mem::forget(internal);
+        std::mem::forget(peripheral);
+    }
+
+    #[tokio::test]
+    async fn concurrent_discovery_waiters_both_complete() {
+        let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
+        let (peripheral, mut internal) = new_test_internal(peripheral_uuid);
+        let service_uuid = Uuid::from_u128(0x0000180f_0000_1000_8000_00805f9b34fb);
+        let service_cbuuid = uuid_to_cbuuid(service_uuid);
+        let service = unsafe {
+            CBMutableService::initWithType_primary(CBMutableService::alloc(), &service_cbuuid, true)
+        };
+        let service: Retained<CBService> = Retained::into_super(service);
+        let mut service_map = HashMap::new();
+        service_map.insert(service_uuid, service);
+
+        let first = CoreBluetoothReplyFuture::default();
+        let second = CoreBluetoothReplyFuture::default();
+        internal
+            .services_discovered_future_state
+            .push_back(first.get_state_clone());
+        internal
+            .services_discovered_future_state
+            .push_back(second.get_state_clone());
+
+        internal.set_discovered_services(service_map, None);
+        internal.set_characteristics(service_uuid, HashMap::new());
+
+        for (name, future) in [("first", first), ("second", second)] {
+            let reply = tokio::time::timeout(Duration::from_secs(1), future)
+                .await
+                .unwrap_or_else(|_| panic!("{name} waiter never completed"));
+            assert!(
+                matches!(reply, CoreBluetoothReply::ServicesDiscovered(_, _)),
+                "{name}: unexpected reply: {reply:?}"
+            );
+        }
+        assert!(internal.services_discovered_future_state.is_empty());
+
+        std::mem::forget(internal);
+        std::mem::forget(peripheral);
+    }
+
+    #[tokio::test]
+    async fn concurrent_connect_waiters_both_complete() {
+        let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
+        let (peripheral, mut internal) = new_test_internal(peripheral_uuid);
+
+        let first = CoreBluetoothReplyFuture::default();
+        let second = CoreBluetoothReplyFuture::default();
+        internal
+            .connected_future_state
+            .push_back(first.get_state_clone());
+        internal
+            .connected_future_state
+            .push_back(second.get_state_clone());
+
+        internal.complete_connect(CoreBluetoothReply::Connected);
+
+        for (name, future) in [("first", first), ("second", second)] {
+            let reply = tokio::time::timeout(Duration::from_secs(1), future)
+                .await
+                .unwrap_or_else(|_| panic!("{name} waiter never completed"));
+            assert!(
+                matches!(reply, CoreBluetoothReply::Connected),
+                "{name}: unexpected reply: {reply:?}"
+            );
+        }
+        assert!(internal.connected_future_state.is_empty());
+
+        std::mem::forget(internal);
+        std::mem::forget(peripheral);
+    }
+
+    #[tokio::test]
+    async fn drain_pending_operations_errors_all_queued_waiters() {
+        let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
+        let (peripheral, mut internal) = new_test_internal(peripheral_uuid);
+
+        let connect_a = CoreBluetoothReplyFuture::default();
+        let connect_b = CoreBluetoothReplyFuture::default();
+        let discover_a = CoreBluetoothReplyFuture::default();
+        let discover_b = CoreBluetoothReplyFuture::default();
+        internal
+            .connected_future_state
+            .push_back(connect_a.get_state_clone());
+        internal
+            .connected_future_state
+            .push_back(connect_b.get_state_clone());
+        internal
+            .services_discovered_future_state
+            .push_back(discover_a.get_state_clone());
+        internal
+            .services_discovered_future_state
+            .push_back(discover_b.get_state_clone());
+
+        internal.drain_pending_operations("Device disconnected");
+
+        for (name, future) in [
+            ("connect_a", connect_a),
+            ("connect_b", connect_b),
+            ("discover_a", discover_a),
+            ("discover_b", discover_b),
+        ] {
+            let reply = tokio::time::timeout(Duration::from_secs(1), future)
+                .await
+                .unwrap_or_else(|_| panic!("{name} did not drain"));
+            assert!(
+                matches!(reply, CoreBluetoothReply::Err(ref message) if message == "Device disconnected"),
+                "{name}: unexpected drain reply: {reply:?}"
+            );
+        }
+        assert!(internal.connected_future_state.is_empty());
+        assert!(internal.services_discovered_future_state.is_empty());
 
         std::mem::forget(internal);
         std::mem::forget(peripheral);

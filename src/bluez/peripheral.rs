@@ -140,13 +140,11 @@ impl api::Peripheral for Peripheral {
 
     fn mtu(&self) -> u16 {
         let services = self.services.lock().unwrap();
-        for service in services.values() {
-            if let Some((_, characteristic)) = service.characteristics.iter().next() {
-                return characteristic.info.mtu.unwrap();
-            }
-        }
-
-        api::DEFAULT_MTU_SIZE
+        services
+            .values()
+            .flat_map(|s| s.characteristics.values())
+            .find_map(|c| c.info.mtu)
+            .unwrap_or(api::DEFAULT_MTU_SIZE)
     }
 
     async fn properties(&self) -> Result<Option<PeripheralProperties>> {

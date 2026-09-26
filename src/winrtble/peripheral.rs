@@ -373,6 +373,25 @@ impl Peripheral {
         }
     }
 
+    /// Looks up a characteristic by service and characteristic UUID.
+    fn get_ble_characteristic(
+        &self,
+        service_uuid: Uuid,
+        characteristic_uuid: Uuid,
+        context: &str,
+    ) -> Result<Arc<BLECharacteristic>> {
+        let ble_service = self
+            .shared
+            .ble_services
+            .get(&service_uuid)
+            .ok_or_else(|| Error::NotSupported(format!("Service not found for {context}")))?;
+        ble_service
+            .characteristics
+            .get(&characteristic_uuid)
+            .cloned()
+            .ok_or_else(|| Error::NotSupported(format!("Characteristic not found for {context}")))
+    }
+
     fn emit_event(&self, event: CentralEvent) {
         if let Some(manager) = self.shared.adapter.upgrade() {
             manager.emit(event);
@@ -591,7 +610,7 @@ impl ApiPeripheral for Peripheral {
                                 .map(|(characteristic, descriptors)| {
                                     let characteristic =
                                         BLECharacteristic::new(characteristic, descriptors);
-                                    (characteristic.uuid(), characteristic)
+                                    (characteristic.uuid(), Arc::new(characteristic))
                                 })
                                 .collect();
 
@@ -622,30 +641,19 @@ impl ApiPeripheral for Peripheral {
         data: &[u8],
         write_type: WriteType,
     ) -> Result<()> {
-        let ble_service = &*self
-            .shared
-            .ble_services
-            .get(&characteristic.service_uuid)
-            .ok_or_else(|| Error::NotSupported("Service not found for write".into()))?;
-        let ble_characteristic = ble_service
-            .characteristics
-            .get(&characteristic.uuid)
-            .ok_or_else(|| Error::NotSupported("Characteristic not found for write".into()))?;
+        let ble_characteristic =
+            self.get_ble_characteristic(characteristic.service_uuid, characteristic.uuid, "write")?;
         ble_characteristic.write_value(data, write_type).await
     }
 
     /// Enables either notify or indicate (depending on support) for the specified characteristic.
     /// This is a synchronous call.
     async fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
-        let ble_service = &mut *self
-            .shared
-            .ble_services
-            .get_mut(&characteristic.service_uuid)
-            .ok_or_else(|| Error::NotSupported("Service not found for subscribe".into()))?;
-        let ble_characteristic = ble_service
-            .characteristics
-            .get_mut(&characteristic.uuid)
-            .ok_or_else(|| Error::NotSupported("Characteristic not found for subscribe".into()))?;
+        let ble_characteristic = self.get_ble_characteristic(
+            characteristic.service_uuid,
+            characteristic.uuid,
+            "subscribe",
+        )?;
         let notifications_sender = self.shared.notifications_channel.clone();
         let uuid = characteristic.uuid;
         let service_uuid = characteristic.service_uuid;
@@ -666,30 +674,17 @@ impl ApiPeripheral for Peripheral {
     /// Disables either notify or indicate (depending on support) for the specified characteristic.
     /// This is a synchronous call.
     async fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
-        let ble_service = &mut *self
-            .shared
-            .ble_services
-            .get_mut(&characteristic.service_uuid)
-            .ok_or_else(|| Error::NotSupported("Service not found for unsubscribe".into()))?;
-        let ble_characteristic = ble_service
-            .characteristics
-            .get_mut(&characteristic.uuid)
-            .ok_or_else(|| {
-                Error::NotSupported("Characteristic not found for unsubscribe".into())
-            })?;
+        let ble_characteristic = self.get_ble_characteristic(
+            characteristic.service_uuid,
+            characteristic.uuid,
+            "unsubscribe",
+        )?;
         ble_characteristic.unsubscribe().await
     }
 
     async fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
-        let ble_service = &*self
-            .shared
-            .ble_services
-            .get(&characteristic.service_uuid)
-            .ok_or_else(|| Error::NotSupported("Service not found for read".into()))?;
-        let ble_characteristic = ble_service
-            .characteristics
-            .get(&characteristic.uuid)
-            .ok_or_else(|| Error::NotSupported("Characteristic not found for read".into()))?;
+        let ble_characteristic =
+            self.get_ble_characteristic(characteristic.service_uuid, characteristic.uuid, "read")?;
         ble_characteristic.read_value().await
     }
 
@@ -699,15 +694,11 @@ impl ApiPeripheral for Peripheral {
     }
 
     async fn write_descriptor(&self, descriptor: &Descriptor, data: &[u8]) -> Result<()> {
-        let ble_service = &*self
-            .shared
-            .ble_services
-            .get(&descriptor.service_uuid)
-            .ok_or_else(|| Error::NotSupported("Service not found for write".into()))?;
-        let ble_characteristic = ble_service
-            .characteristics
-            .get(&descriptor.characteristic_uuid)
-            .ok_or_else(|| Error::NotSupported("Characteristic not found for write".into()))?;
+        let ble_characteristic = self.get_ble_characteristic(
+            descriptor.service_uuid,
+            descriptor.characteristic_uuid,
+            "write",
+        )?;
         let ble_descriptor = ble_characteristic
             .descriptors
             .get(&descriptor.uuid)
@@ -716,15 +707,11 @@ impl ApiPeripheral for Peripheral {
     }
 
     async fn read_descriptor(&self, descriptor: &Descriptor) -> Result<Vec<u8>> {
-        let ble_service = &*self
-            .shared
-            .ble_services
-            .get(&descriptor.service_uuid)
-            .ok_or_else(|| Error::NotSupported("Service not found for read".into()))?;
-        let ble_characteristic = ble_service
-            .characteristics
-            .get(&descriptor.characteristic_uuid)
-            .ok_or_else(|| Error::NotSupported("Characteristic not found for read".into()))?;
+        let ble_characteristic = self.get_ble_characteristic(
+            descriptor.service_uuid,
+            descriptor.characteristic_uuid,
+            "read",
+        )?;
         let ble_descriptor = ble_characteristic
             .descriptors
             .get(&descriptor.uuid)

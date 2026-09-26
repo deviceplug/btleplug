@@ -1,12 +1,12 @@
 use super::characteristic::BLECharacteristic;
 use crate::api::Service;
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
 #[derive(Debug)]
 pub struct BLEService {
     pub uuid: Uuid,
-    pub characteristics: HashMap<Uuid, BLECharacteristic>,
+    pub characteristics: HashMap<Uuid, Arc<BLECharacteristic>>,
 }
 
 impl BLEService {

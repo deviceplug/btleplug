@@ -72,6 +72,7 @@ pub enum CentralDelegateEvent {
     },
     ServicesModified {
         peripheral_uuid: Uuid,
+        invalidated_services: Vec<Uuid>,
     },
     // DiscoveredIncludedServices(Uuid, HashMap<Uuid, Retained<CBService>>),
     DiscoveredCharacteristics {
@@ -79,12 +80,18 @@ pub enum CentralDelegateEvent {
         service_uuid: Uuid,
         /// Characteristic UUID to CBCharacteristic
         characteristics: HashMap<Uuid, Retained<CBCharacteristic>>,
+        /// True if CB reported an error; `characteristics` is then an empty
+        /// placeholder, not the service's real (possibly now-empty) set.
+        error: bool,
     },
     DiscoveredCharacteristicDescriptors {
         peripheral_uuid: Uuid,
         service_uuid: Uuid,
         characteristic_uuid: Uuid,
         descriptors: HashMap<Uuid, Retained<CBDescriptor>>,
+        /// True if CB reported an error; `descriptors` is then an empty
+        /// placeholder, not the characteristic's real (possibly now-empty) set.
+        error: bool,
     },
     ConnectedDevice {
         peripheral_uuid: Uuid,
@@ -173,6 +180,7 @@ impl Debug for CentralDelegateEvent {
                 peripheral_uuid,
                 service_uuid,
                 characteristics,
+                error,
             } => f
                 .debug_struct("DiscoveredCharacteristics")
                 .field("peripheral_uuid", peripheral_uuid)
@@ -181,18 +189,21 @@ impl Debug for CentralDelegateEvent {
                     "characteristics",
                     &characteristics.keys().collect::<Vec<_>>(),
                 )
+                .field("error", error)
                 .finish(),
             CentralDelegateEvent::DiscoveredCharacteristicDescriptors {
                 peripheral_uuid,
                 service_uuid,
                 characteristic_uuid,
                 descriptors,
+                error,
             } => f
                 .debug_struct("DiscoveredCharacteristicDescriptors")
                 .field("peripheral_uuid", peripheral_uuid)
                 .field("service_uuid", service_uuid)
                 .field("characteristic_uuid", characteristic_uuid)
                 .field("descriptors", &descriptors.keys().collect::<Vec<_>>())
+                .field("error", error)
                 .finish(),
             CentralDelegateEvent::ConnectedDevice { peripheral_uuid } => f
                 .debug_struct("ConnectedDevice")
@@ -277,9 +288,13 @@ impl Debug for CentralDelegateEvent {
                 .field("service_uuids", service_uuids)
                 .field("rssi", rssi)
                 .finish(),
-            CentralDelegateEvent::ServicesModified { peripheral_uuid } => f
+            CentralDelegateEvent::ServicesModified {
+                peripheral_uuid,
+                invalidated_services,
+            } => f
                 .debug_struct("ServicesModified")
                 .field("peripheral_uuid", peripheral_uuid)
+                .field("invalidated_services", invalidated_services)
                 .finish(),
             CentralDelegateEvent::DescriptorNotified {
                 peripheral_uuid,
@@ -599,6 +614,7 @@ define_class!(
                 peripheral_uuid,
                 service_uuid,
                 characteristics,
+                error: error.is_some(),
             });
         }
 
@@ -651,6 +667,7 @@ define_class!(
                 service_uuid,
                 characteristic_uuid,
                 descriptors,
+                error: error.is_some(),
             });
         }
 
@@ -875,7 +892,7 @@ define_class!(
         fn delegate_peripheral_didmodifyservices(
             &self,
             peripheral: &CBPeripheral,
-            _invalidated_services: &NSArray<CBService>,
+            invalidated_services: &NSArray<CBService>,
         ) {
             trace!(
                 "delegate_peripheral_didmodifyservices {}",
@@ -885,11 +902,18 @@ define_class!(
             // https://developer.apple.com/documentation/corebluetooth/cbperipheraldelegate/peripheral(_:didmodifyservices:)?language=objc
             // Trigger the removal of internal corebluetooth peripheral discovered services. It is also expected that
             // discover_services() will be performed again on the peripheral at the API level as soon as is practical.
-            // NOTE: the list of modified services does not appear to be particularly useful; a full service rediscovery is needed.
+            let invalidated_service_uuids: Vec<Uuid> = invalidated_services
+                .iter()
+                .map(|s| {
+                    let raw_uuid = unsafe { s.UUID() };
+                    cbuuid_to_uuid(&raw_uuid)
+                })
+                .collect();
             let id = unsafe { peripheral.identifier() };
             let peripheral_uuid = nsuuid_to_uuid(&id);
             self.send_event(CentralDelegateEvent::ServicesModified {
                 peripheral_uuid,
+                invalidated_services: invalidated_service_uuids,
             });
         }
 

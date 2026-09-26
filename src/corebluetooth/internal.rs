@@ -83,6 +83,14 @@ impl DescriptorInternal {
             write_future_state: VecDeque::with_capacity(10),
         }
     }
+
+    fn drain_pending_operations(&mut self, error: &CoreBluetoothReply) {
+        for queue in [&mut self.read_future_state, &mut self.write_future_state] {
+            for state in queue.drain(..) {
+                state.lock().unwrap().set_reply(error.clone());
+            }
+        }
+    }
 }
 
 struct CharacteristicInternal {
@@ -136,6 +144,22 @@ impl CharacteristicInternal {
             write_future_state: VecDeque::with_capacity(10),
             notification_requests: VecDeque::with_capacity(4),
             discovered: false,
+        }
+    }
+
+    fn drain_pending_operations(&mut self, error: &CoreBluetoothReply) {
+        for queue in [&mut self.read_future_state, &mut self.write_future_state] {
+            for state in queue.drain(..) {
+                state.lock().unwrap().set_reply(error.clone());
+            }
+        }
+        // Drains the submitted head along with the unsent tail; no further
+        // request is submitted afterwards.
+        for request in self.notification_requests.drain(..) {
+            request.future.lock().unwrap().set_reply(error.clone());
+        }
+        for descriptor in self.descriptors.values_mut() {
+            descriptor.drain_pending_operations(error);
         }
     }
 
@@ -215,6 +239,32 @@ struct ServiceInternal {
     pub discovered: bool,
 }
 
+impl ServiceInternal {
+    fn drain_pending_operations(&mut self, error: &CoreBluetoothReply) {
+        for characteristic in self.characteristics.values_mut() {
+            characteristic.drain_pending_operations(error);
+        }
+    }
+}
+
+/// Error and remove queued write-without-response requests matching `matches`,
+/// keeping the rest in queue order.
+fn drain_write_without_response_matching(
+    queue: &mut VecDeque<PendingWriteWithoutResponse>,
+    error: &CoreBluetoothReply,
+    mut matches: impl FnMut(&PendingWriteWithoutResponse) -> bool,
+) {
+    let mut remaining = VecDeque::with_capacity(queue.len());
+    for pending in queue.drain(..) {
+        if matches(&pending) {
+            pending.fut.lock().unwrap().set_reply(error.clone());
+        } else {
+            remaining.push_back(pending);
+        }
+    }
+    *queue = remaining;
+}
+
 struct PeripheralInternal {
     pub peripheral: Retained<CBPeripheral>,
     services: HashMap<Uuid, ServiceInternal>,
@@ -277,40 +327,112 @@ impl PeripheralInternal {
             }
             return;
         }
-        self.services = service_map
-            .into_iter()
-            .map(|(service_uuid, cbservice)| {
-                (
-                    service_uuid,
-                    ServiceInternal {
-                        cbservice,
-                        characteristics: HashMap::new(),
-                        discovered: false,
-                    },
-                )
-            })
+        let removed_uuids: Vec<Uuid> = self
+            .services
+            .keys()
+            .filter(|uuid| !service_map.contains_key(uuid))
+            .copied()
             .collect();
+        self.remove_services(
+            &removed_uuids,
+            "Service no longer present after rediscovery",
+        );
+
+        for (service_uuid, cbservice) in service_map {
+            match self.services.get_mut(&service_uuid) {
+                Some(existing) => {
+                    // Keep characteristics/descriptors (and their in-flight
+                    // queues); only the discovery gate resets, since CB
+                    // always redrives characteristic/descriptor discovery
+                    // after didDiscoverServices.
+                    existing.cbservice = cbservice;
+                    existing.discovered = false;
+                }
+                None => {
+                    self.services.insert(
+                        service_uuid,
+                        ServiceInternal {
+                            cbservice,
+                            characteristics: HashMap::new(),
+                            discovered: false,
+                        },
+                    );
+                }
+            }
+        }
         // Completes immediately when there are no services.
         self.check_discovered();
+    }
+
+    /// Remove the given services, erroring all their pending futures.
+    /// Returns whether any removed service was still mid-round
+    /// (`discovered == false`), i.e. its callers may be gating on it.
+    fn remove_services(&mut self, removed_uuids: &[Uuid], message: &str) -> bool {
+        if removed_uuids.is_empty() {
+            return false;
+        }
+        let error = CoreBluetoothReply::Err(message.to_string());
+        let mut any_undiscovered = false;
+        for uuid in removed_uuids {
+            if let Some(mut service) = self.services.remove(uuid) {
+                any_undiscovered |= !service.discovered;
+                service.drain_pending_operations(&error);
+            }
+        }
+        drain_write_without_response_matching(
+            &mut self.write_without_response_queue,
+            &error,
+            |pending| removed_uuids.contains(&pending.service_uuid),
+        );
+        any_undiscovered
     }
 
     pub fn set_characteristics(
         &mut self,
         service_uuid: Uuid,
         characteristics: HashMap<Uuid, Retained<CBCharacteristic>>,
+        error: bool,
     ) {
         let Some(service) = self.services.get_mut(&service_uuid) else {
             debug!("Ignoring characteristics for unknown service {service_uuid}");
             return;
         };
+        if error {
+            // `characteristics` is an empty placeholder here, not the
+            // service's real set (see #167 duplicate/late callbacks): leave
+            // existing state untouched and just complete the service.
+            service.discovered = true;
+            self.check_discovered();
+            return;
+        }
+
+        let removed_uuids: Vec<Uuid> = service
+            .characteristics
+            .keys()
+            .filter(|uuid| !characteristics.contains_key(uuid))
+            .copied()
+            .collect();
+        let removed_error = (!removed_uuids.is_empty()).then(|| {
+            CoreBluetoothReply::Err(
+                "Characteristic no longer present after rediscovery".to_string(),
+            )
+        });
+        if let Some(removed_error) = &removed_error {
+            for uuid in &removed_uuids {
+                if let Some(mut characteristic) = service.characteristics.remove(uuid) {
+                    characteristic.drain_pending_operations(removed_error);
+                }
+            }
+        }
         for (characteristic_uuid, cb_characteristic) in characteristics {
             if let Some(existing) = service.characteristics.get_mut(&characteristic_uuid) {
-                // Update the CB object reference and properties, but preserve
-                // in-flight future state and already-discovered descriptors to
-                // avoid dropping pending operations during late re-discovery
-                // events (see issue #167).
+                // Preserve in-flight future state and already-discovered
+                // descriptors to avoid dropping pending operations during
+                // late re-discovery events (see issue #167).
                 existing.properties = CharacteristicInternal::form_flags(&cb_characteristic);
                 existing.characteristic = cb_characteristic;
+                // CB redrives descriptor discovery for each characteristic.
+                existing.discovered = false;
             } else {
                 service.characteristics.insert(
                     characteristic_uuid,
@@ -318,8 +440,22 @@ impl PeripheralInternal {
                 );
             }
         }
-        if service.characteristics.is_empty() {
+        let now_empty = service.characteristics.is_empty();
+        if now_empty {
             service.discovered = true;
+        }
+
+        if let Some(removed_error) = &removed_error {
+            drain_write_without_response_matching(
+                &mut self.write_without_response_queue,
+                removed_error,
+                |pending| {
+                    pending.service_uuid == service_uuid
+                        && removed_uuids.contains(&pending.characteristic_uuid)
+                },
+            );
+        }
+        if now_empty {
             self.check_discovered();
         }
     }
@@ -329,6 +465,7 @@ impl PeripheralInternal {
         service_uuid: Uuid,
         characteristic_uuid: Uuid,
         descriptors: HashMap<Uuid, Retained<CBDescriptor>>,
+        error: bool,
     ) -> bool {
         let Some(service) = self.services.get_mut(&service_uuid) else {
             debug!("Ignoring descriptors for unknown service {service_uuid}");
@@ -337,19 +474,41 @@ impl PeripheralInternal {
         let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid) else {
             return false;
         };
-        for (descriptor_uuid, cb_descriptor) in descriptors {
-            if let Some(existing) = characteristic.descriptors.get_mut(&descriptor_uuid) {
-                // Update the CB object reference but preserve in-flight future
-                // state to avoid dropping pending operations during late
-                // re-discovery events (see issue #167).
-                existing.descriptor = cb_descriptor;
-            } else {
-                characteristic
-                    .descriptors
-                    .insert(descriptor_uuid, DescriptorInternal::new(cb_descriptor));
+        if error {
+            // `descriptors` is an empty placeholder here, not the
+            // characteristic's real set: leave existing state untouched.
+            characteristic.discovered = true;
+        } else {
+            let removed_uuids: Vec<Uuid> = characteristic
+                .descriptors
+                .keys()
+                .filter(|uuid| !descriptors.contains_key(uuid))
+                .copied()
+                .collect();
+            if !removed_uuids.is_empty() {
+                let removed_error = CoreBluetoothReply::Err(
+                    "Descriptor no longer present after rediscovery".to_string(),
+                );
+                for uuid in &removed_uuids {
+                    if let Some(mut descriptor) = characteristic.descriptors.remove(uuid) {
+                        descriptor.drain_pending_operations(&removed_error);
+                    }
+                }
             }
+            for (descriptor_uuid, cb_descriptor) in descriptors {
+                if let Some(existing) = characteristic.descriptors.get_mut(&descriptor_uuid) {
+                    // Update the CB object reference but preserve in-flight
+                    // future state to avoid dropping pending operations
+                    // during late re-discovery events (see issue #167).
+                    existing.descriptor = cb_descriptor;
+                } else {
+                    characteristic
+                        .descriptors
+                        .insert(descriptor_uuid, DescriptorInternal::new(cb_descriptor));
+                }
+            }
+            characteristic.discovered = true;
         }
-        characteristic.discovered = true;
 
         if !service
             .characteristics
@@ -533,31 +692,7 @@ impl PeripheralInternal {
             pending.fut.lock().unwrap().set_reply(error.clone());
         }
         for service in self.services.values_mut() {
-            for characteristic in service.characteristics.values_mut() {
-                for queue in [
-                    &mut characteristic.read_future_state,
-                    &mut characteristic.write_future_state,
-                ] {
-                    for state in queue.drain(..) {
-                        state.lock().unwrap().set_reply(error.clone());
-                    }
-                }
-                // Drain the submitted head along with the unsent tail. No
-                // further request is submitted afterwards.
-                for request in characteristic.notification_requests.drain(..) {
-                    request.future.lock().unwrap().set_reply(error.clone());
-                }
-                for descriptor in characteristic.descriptors.values_mut() {
-                    for queue in [
-                        &mut descriptor.read_future_state,
-                        &mut descriptor.write_future_state,
-                    ] {
-                        for state in queue.drain(..) {
-                            state.lock().unwrap().set_reply(error.clone());
-                        }
-                    }
-                }
-            }
+            service.drain_pending_operations(&error);
         }
     }
 }
@@ -774,7 +909,9 @@ impl CoreBluetoothInternal {
         };
         if dead {
             error!("Removing CoreBluetooth peripheral {peripheral_uuid}: event receiver is gone");
-            self.peripherals.remove(&peripheral_uuid);
+            if let Some(mut p) = self.peripherals.remove(&peripheral_uuid) {
+                p.drain_pending_operations("Peripheral event receiver is gone");
+            }
         }
     }
 
@@ -795,7 +932,9 @@ impl CoreBluetoothInternal {
         };
         if dead {
             error!("Removing CoreBluetooth peripheral {peripheral_uuid}: event receiver is gone");
-            self.peripherals.remove(&peripheral_uuid);
+            if let Some(mut p) = self.peripherals.remove(&peripheral_uuid) {
+                p.drain_pending_operations("Peripheral event receiver is gone");
+            }
         }
     }
 
@@ -811,17 +950,30 @@ impl CoreBluetoothInternal {
         };
         if dead {
             error!("Removing CoreBluetooth peripheral {peripheral_uuid}: event receiver is gone");
-            self.peripherals.remove(&peripheral_uuid);
+            if let Some(mut p) = self.peripherals.remove(&peripheral_uuid) {
+                p.drain_pending_operations("Peripheral event receiver is gone");
+            }
         }
     }
 
-    async fn on_services_modified(&mut self, peripheral_uuid: Uuid) {
+    async fn on_services_modified(
+        &mut self,
+        peripheral_uuid: Uuid,
+        invalidated_services: Vec<Uuid>,
+    ) {
         trace!(
             "Peripheral modified services and must be rediscovered! {:?}",
             peripheral_uuid
         );
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
-            p.services.clear();
+            let was_mid_round = p.remove_services(
+                &invalidated_services,
+                "Service invalidated; rediscovery required",
+            );
+            // Only complete a round already in progress; stale leftovers stay pending.
+            if was_mid_round {
+                p.check_discovered();
+            }
             if let Err(e) = p
                 .event_sender
                 .send(PeripheralEventInternal::ServicesModified)
@@ -889,6 +1041,7 @@ impl CoreBluetoothInternal {
         peripheral_uuid: Uuid,
         service_uuid: Uuid,
         characteristics: HashMap<Uuid, Retained<CBCharacteristic>>,
+        error: bool,
     ) {
         trace!(
             "Found characteristics for peripheral {} service {}:",
@@ -898,7 +1051,7 @@ impl CoreBluetoothInternal {
             trace!("{}", id);
         }
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid) {
-            p.set_characteristics(service_uuid, characteristics);
+            p.set_characteristics(service_uuid, characteristics, error);
         }
     }
 
@@ -908,6 +1061,7 @@ impl CoreBluetoothInternal {
         service_uuid: Uuid,
         characteristic_uuid: Uuid,
         descriptors: HashMap<Uuid, Retained<CBDescriptor>>,
+        error: bool,
     ) {
         trace!(
             "Found descriptors for peripheral {} service {} characteristic {}:",
@@ -917,7 +1071,12 @@ impl CoreBluetoothInternal {
             trace!("{}", id);
         }
         if let Some(p) = self.peripherals.get_mut(&peripheral_uuid)
-            && !p.set_characteristic_descriptors(service_uuid, characteristic_uuid, descriptors)
+            && !p.set_characteristic_descriptors(
+                service_uuid,
+                characteristic_uuid,
+                descriptors,
+                error,
+            )
         {
             let reply = CoreBluetoothReply::Err(format!(
                 "Unknown descriptor relationship for service {service_uuid}, characteristic {characteristic_uuid}"
@@ -1610,11 +1769,11 @@ impl CoreBluetoothInternal {
                     CentralDelegateEvent::DiscoveredServices{peripheral_uuid, services, error} => {
                         self.on_discovered_services(peripheral_uuid, services, error)
                     }
-                    CentralDelegateEvent::DiscoveredCharacteristics{peripheral_uuid, service_uuid, characteristics} => {
-                        self.on_discovered_characteristics(peripheral_uuid, service_uuid, characteristics)
+                    CentralDelegateEvent::DiscoveredCharacteristics{peripheral_uuid, service_uuid, characteristics, error} => {
+                        self.on_discovered_characteristics(peripheral_uuid, service_uuid, characteristics, error)
                     }
-                    CentralDelegateEvent::DiscoveredCharacteristicDescriptors{peripheral_uuid, service_uuid, characteristic_uuid, descriptors} => {
-                        self.on_discovered_characteristic_descriptors(peripheral_uuid, service_uuid, characteristic_uuid, descriptors)
+                    CentralDelegateEvent::DiscoveredCharacteristicDescriptors{peripheral_uuid, service_uuid, characteristic_uuid, descriptors, error} => {
+                        self.on_discovered_characteristic_descriptors(peripheral_uuid, service_uuid, characteristic_uuid, descriptors, error)
                     }
                     CentralDelegateEvent::ConnectedDevice{peripheral_uuid} => {
                         self.on_peripheral_connect(peripheral_uuid)
@@ -1653,8 +1812,8 @@ impl CoreBluetoothInternal {
                     CentralDelegateEvent::Services{peripheral_uuid, service_uuids, rssi} => {
                         self.on_services(peripheral_uuid, service_uuids, rssi).await
                     },
-                    CentralDelegateEvent::ServicesModified{peripheral_uuid} => {
-                        self.on_services_modified(peripheral_uuid).await
+                    CentralDelegateEvent::ServicesModified{peripheral_uuid, invalidated_services} => {
+                        self.on_services_modified(peripheral_uuid, invalidated_services).await
                     },
                     CentralDelegateEvent::DescriptorNotified{
                         peripheral_uuid,
@@ -1736,6 +1895,13 @@ impl CoreBluetoothInternal {
                         self.retrieve_peripherals(options, future).await
                     }
                     CoreBluetoothMessage::ClearPeripherals { future } => {
+                        for p in self.peripherals.values_mut() {
+                            // Best-effort: the resulting disconnect callback,
+                            // if any, will find no tracked peripheral and be
+                            // ignored (see on_peripheral_disconnect).
+                            unsafe { self.manager.cancelPeripheralConnection(&p.peripheral) };
+                            p.drain_pending_operations("Peripheral cleared");
+                        }
                         self.peripherals.clear();
                         self.dispatch_event(CoreBluetoothEvent::PeripheralsCleared { future })
                             .await;
@@ -1806,7 +1972,8 @@ mod tests {
     use futures::StreamExt;
     use objc2::{DefinedClass, define_class};
     use objc2_core_bluetooth::{
-        CBAttributePermissions, CBMutableCharacteristic, CBMutableService, CBPeripheralDelegate,
+        CBAttributePermissions, CBMutableCharacteristic, CBMutableDescriptor, CBMutableService,
+        CBPeripheralDelegate,
     };
     use objc2_foundation::{NSError, NSObjectProtocol, NSString, ns_string};
     use std::sync::{
@@ -2116,6 +2283,140 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn characteristic_discovery_error_preserves_pending_characteristic_read() {
+        let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
+        let (peripheral, mut internal) = new_test_internal(peripheral_uuid);
+        let service_uuid = Uuid::from_u128(0x0000180f_0000_1000_8000_00805f9b34fb);
+        let characteristic_uuid = Uuid::from_u128(0x00002a19_0000_1000_8000_00805f9b34fb);
+        let characteristic_cbuuid = uuid_to_cbuuid(characteristic_uuid);
+        let characteristic = unsafe {
+            CBMutableCharacteristic::initWithType_properties_value_permissions(
+                CBMutableCharacteristic::alloc(),
+                &characteristic_cbuuid,
+                CBCharacteristicProperties::Read,
+                None,
+                CBAttributePermissions::Readable,
+            )
+        };
+        let characteristic: Retained<CBCharacteristic> = Retained::into_super(characteristic);
+        let mut characteristic_internal = CharacteristicInternal::new(characteristic);
+        characteristic_internal.discovered = true;
+        let mut pending_read = CoreBluetoothReplyFuture::default();
+        characteristic_internal
+            .read_future_state
+            .push_back(pending_read.get_state_clone());
+        let service = unsafe {
+            CBMutableService::initWithType_primary(
+                CBMutableService::alloc(),
+                &uuid_to_cbuuid(service_uuid),
+                true,
+            )
+        };
+        internal.services.insert(
+            service_uuid,
+            ServiceInternal {
+                cbservice: Retained::into_super(service),
+                characteristics: HashMap::from([(characteristic_uuid, characteristic_internal)]),
+                discovered: true,
+            },
+        );
+
+        // A late/duplicate error callback (#167) must not prune the
+        // characteristic or its in-flight read.
+        internal.set_characteristics(service_uuid, HashMap::new(), true);
+
+        assert_pending(&mut pending_read, "pending read after characteristic error").await;
+        let service = internal
+            .services
+            .get(&service_uuid)
+            .expect("service preserved");
+        assert!(
+            service.characteristics.contains_key(&characteristic_uuid),
+            "characteristic must survive an error callback"
+        );
+
+        std::mem::forget(internal);
+        std::mem::forget(peripheral);
+    }
+
+    #[tokio::test]
+    async fn descriptor_discovery_error_preserves_pending_descriptor_read() {
+        let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
+        let (peripheral, mut internal) = new_test_internal(peripheral_uuid);
+        let service_uuid = Uuid::from_u128(0x0000180f_0000_1000_8000_00805f9b34fb);
+        let characteristic_uuid = Uuid::from_u128(0x00002a19_0000_1000_8000_00805f9b34fb);
+        let characteristic_cbuuid = uuid_to_cbuuid(characteristic_uuid);
+        let characteristic = unsafe {
+            CBMutableCharacteristic::initWithType_properties_value_permissions(
+                CBMutableCharacteristic::alloc(),
+                &characteristic_cbuuid,
+                CBCharacteristicProperties::Read,
+                None,
+                CBAttributePermissions::Readable,
+            )
+        };
+        let characteristic: Retained<CBCharacteristic> = Retained::into_super(characteristic);
+        let mut characteristic_internal = CharacteristicInternal::new(characteristic);
+        characteristic_internal.discovered = true;
+        let descriptor_uuid = Uuid::from_u128(0x00002902_0000_1000_8000_00805f9b34fb);
+        let descriptor_cbuuid = uuid_to_cbuuid(descriptor_uuid);
+        let descriptor_value = NSData::from_vec(vec![0u8]);
+        let descriptor = unsafe {
+            CBMutableDescriptor::initWithType_value(
+                CBMutableDescriptor::alloc(),
+                &descriptor_cbuuid,
+                Some(&descriptor_value),
+            )
+        };
+        let mut descriptor_internal = DescriptorInternal::new(Retained::into_super(descriptor));
+        let mut pending_read = CoreBluetoothReplyFuture::default();
+        descriptor_internal
+            .read_future_state
+            .push_back(pending_read.get_state_clone());
+        characteristic_internal
+            .descriptors
+            .insert(descriptor_uuid, descriptor_internal);
+        let service = unsafe {
+            CBMutableService::initWithType_primary(
+                CBMutableService::alloc(),
+                &uuid_to_cbuuid(service_uuid),
+                true,
+            )
+        };
+        internal.services.insert(
+            service_uuid,
+            ServiceInternal {
+                cbservice: Retained::into_super(service),
+                characteristics: HashMap::from([(characteristic_uuid, characteristic_internal)]),
+                discovered: true,
+            },
+        );
+
+        // A late/duplicate error callback (#167) must not prune the
+        // descriptor or its in-flight read.
+        internal.set_characteristic_descriptors(
+            service_uuid,
+            characteristic_uuid,
+            HashMap::new(),
+            true,
+        );
+
+        assert_pending(&mut pending_read, "pending read after descriptor error").await;
+        let service = internal.services.get(&service_uuid).expect("service");
+        let characteristic = service
+            .characteristics
+            .get(&characteristic_uuid)
+            .expect("characteristic");
+        assert!(
+            characteristic.descriptors.contains_key(&descriptor_uuid),
+            "descriptor must survive an error callback"
+        );
+
+        std::mem::forget(internal);
+        std::mem::forget(peripheral);
+    }
+
+    #[tokio::test]
     async fn descriptor_discovery_error_completes_service_discovery_without_descriptors() {
         let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
         let peripheral_uuid_string = NSString::from_str(&peripheral_uuid.to_string());
@@ -2183,6 +2484,7 @@ mod tests {
             service_uuid: event_service_uuid,
             characteristic_uuid: event_characteristic_uuid,
             descriptors,
+            error: event_error,
         } = event
         else {
             panic!("unexpected delegate event: {event:?}");
@@ -2191,11 +2493,13 @@ mod tests {
         assert_eq!(event_service_uuid, service_uuid);
         assert_eq!(event_characteristic_uuid, characteristic_uuid);
         assert!(descriptors.is_empty());
+        assert!(event_error);
 
         internal.set_characteristic_descriptors(
             event_service_uuid,
             event_characteristic_uuid,
             descriptors,
+            event_error,
         );
         let reply = tokio::time::timeout(Duration::from_secs(1), discovery)
             .await
@@ -2264,6 +2568,7 @@ mod tests {
             peripheral_uuid: event_peripheral_uuid,
             service_uuid: event_service_uuid,
             characteristics,
+            error: event_error,
         } = event
         else {
             panic!("unexpected delegate event: {event:?}");
@@ -2271,8 +2576,9 @@ mod tests {
         assert_eq!(event_peripheral_uuid, peripheral_uuid);
         assert_eq!(event_service_uuid, service_uuid);
         assert!(characteristics.is_empty());
+        assert!(event_error);
 
-        internal.set_characteristics(event_service_uuid, characteristics);
+        internal.set_characteristics(event_service_uuid, characteristics, event_error);
         let reply = tokio::time::timeout(Duration::from_secs(1), discovery)
             .await
             .expect("service discovery remained pending after characteristic discovery error");
@@ -2342,6 +2648,7 @@ mod tests {
         internal.set_characteristics(
             Uuid::from_u128(0x0000180f_0000_1000_8000_00805f9b34fb),
             HashMap::new(),
+            false,
         );
         assert!(internal.services.is_empty());
 
@@ -2421,6 +2728,7 @@ mod tests {
             Uuid::from_u128(0x0000ffff_0000_1000_8000_00805f9b34fb),
             characteristic_uuid,
             HashMap::new(),
+            false,
         );
         assert!(handled);
 
@@ -3040,7 +3348,7 @@ mod tests {
             .services_discovered_future_state
             .push_back(first.get_state_clone());
         internal.set_discovered_services(service_map.clone(), None);
-        internal.set_characteristics(service_uuid, HashMap::new());
+        internal.set_characteristics(service_uuid, HashMap::new(), false);
         tokio::time::timeout(Duration::from_secs(1), first)
             .await
             .expect("first discovery did not complete");
@@ -3051,7 +3359,7 @@ mod tests {
             .services_discovered_future_state
             .push_back(second.get_state_clone());
         internal.set_discovered_services(service_map, None);
-        internal.set_characteristics(service_uuid, HashMap::new());
+        internal.set_characteristics(service_uuid, HashMap::new(), false);
         let reply = tokio::time::timeout(Duration::from_secs(1), second)
             .await
             .expect("second discovery hung");
@@ -3087,7 +3395,7 @@ mod tests {
             .push_back(second.get_state_clone());
 
         internal.set_discovered_services(service_map, None);
-        internal.set_characteristics(service_uuid, HashMap::new());
+        internal.set_characteristics(service_uuid, HashMap::new(), false);
 
         for (name, future) in [("first", first), ("second", second)] {
             let reply = tokio::time::timeout(Duration::from_secs(1), future)
@@ -3175,6 +3483,506 @@ mod tests {
         }
         assert!(internal.connected_future_state.is_empty());
         assert!(internal.services_discovered_future_state.is_empty());
+
+        std::mem::forget(internal);
+        std::mem::forget(peripheral);
+    }
+
+    #[tokio::test]
+    async fn rediscovery_preserves_pending_characteristic_read() {
+        let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
+        let (peripheral, mut internal) = new_test_internal(peripheral_uuid);
+        let service_uuid = Uuid::from_u128(0x0000180f_0000_1000_8000_00805f9b34fb);
+        let characteristic_uuid = Uuid::from_u128(0x00002a19_0000_1000_8000_00805f9b34fb);
+        let service_cbuuid = uuid_to_cbuuid(service_uuid);
+        let characteristic_cbuuid = uuid_to_cbuuid(characteristic_uuid);
+        let characteristic = unsafe {
+            CBMutableCharacteristic::initWithType_properties_value_permissions(
+                CBMutableCharacteristic::alloc(),
+                &characteristic_cbuuid,
+                CBCharacteristicProperties::Read,
+                None,
+                CBAttributePermissions::Readable,
+            )
+        };
+        let characteristic: Retained<CBCharacteristic> = Retained::into_super(characteristic);
+        let service = unsafe {
+            CBMutableService::initWithType_primary(CBMutableService::alloc(), &service_cbuuid, true)
+        };
+        let service: Retained<CBService> = Retained::into_super(service);
+        internal.services.insert(
+            service_uuid,
+            ServiceInternal {
+                cbservice: service,
+                characteristics: HashMap::from([(
+                    characteristic_uuid,
+                    CharacteristicInternal::new(characteristic),
+                )]),
+                discovered: true,
+            },
+        );
+
+        let mut read_future = CoreBluetoothReplyFuture::default();
+        internal
+            .services
+            .get_mut(&service_uuid)
+            .unwrap()
+            .characteristics
+            .get_mut(&characteristic_uuid)
+            .unwrap()
+            .read_future_state
+            .push_back(read_future.get_state_clone());
+
+        // Re-discovery hands back a new CBService object for the same UUID.
+        let rediscovered_service = unsafe {
+            CBMutableService::initWithType_primary(CBMutableService::alloc(), &service_cbuuid, true)
+        };
+        let rediscovered_service: Retained<CBService> = Retained::into_super(rediscovered_service);
+        internal
+            .set_discovered_services(HashMap::from([(service_uuid, rediscovered_service)]), None);
+
+        assert_pending(&mut read_future, "read future after rediscovery").await;
+        let preserved_service = internal
+            .services
+            .get(&service_uuid)
+            .expect("service preserved");
+        assert!(
+            !preserved_service.discovered,
+            "service must await re-discovery before completing again"
+        );
+        let preserved_characteristic = preserved_service
+            .characteristics
+            .get(&characteristic_uuid)
+            .expect("characteristic preserved across rediscovery");
+        assert_eq!(preserved_characteristic.read_future_state.len(), 1);
+
+        // Simulate the read value arriving after rediscovery.
+        let state = internal
+            .services
+            .get_mut(&service_uuid)
+            .unwrap()
+            .characteristics
+            .get_mut(&characteristic_uuid)
+            .unwrap()
+            .read_future_state
+            .pop_front()
+            .expect("preserved read future");
+        state
+            .lock()
+            .unwrap()
+            .set_reply(CoreBluetoothReply::ReadResult(vec![1, 2, 3]));
+        let reply = tokio::time::timeout(Duration::from_secs(1), read_future)
+            .await
+            .expect("preserved read future never completed");
+        assert!(
+            matches!(reply, CoreBluetoothReply::ReadResult(ref data) if *data == vec![1, 2, 3]),
+            "unexpected reply: {reply:?}"
+        );
+
+        std::mem::forget(internal);
+        std::mem::forget(peripheral);
+    }
+
+    #[tokio::test]
+    async fn rediscovery_errors_pending_read_of_removed_service() {
+        let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
+        let (peripheral, mut internal) = new_test_internal(peripheral_uuid);
+        let removed_service_uuid = Uuid::from_u128(0x0000180f_0000_1000_8000_00805f9b34fb);
+        let remaining_service_uuid = Uuid::from_u128(0x00001801_0000_1000_8000_00805f9b34fb);
+        let characteristic_uuid = Uuid::from_u128(0x00002a19_0000_1000_8000_00805f9b34fb);
+        let characteristic_cbuuid = uuid_to_cbuuid(characteristic_uuid);
+        let characteristic = unsafe {
+            CBMutableCharacteristic::initWithType_properties_value_permissions(
+                CBMutableCharacteristic::alloc(),
+                &characteristic_cbuuid,
+                CBCharacteristicProperties::Read,
+                None,
+                CBAttributePermissions::Readable,
+            )
+        };
+        let characteristic: Retained<CBCharacteristic> = Retained::into_super(characteristic);
+        let removed_service = unsafe {
+            CBMutableService::initWithType_primary(
+                CBMutableService::alloc(),
+                &uuid_to_cbuuid(removed_service_uuid),
+                true,
+            )
+        };
+        let removed_service: Retained<CBService> = Retained::into_super(removed_service);
+        internal.services.insert(
+            removed_service_uuid,
+            ServiceInternal {
+                cbservice: removed_service,
+                characteristics: HashMap::from([(
+                    characteristic_uuid,
+                    CharacteristicInternal::new(characteristic),
+                )]),
+                discovered: true,
+            },
+        );
+
+        let read_future = CoreBluetoothReplyFuture::default();
+        internal
+            .services
+            .get_mut(&removed_service_uuid)
+            .unwrap()
+            .characteristics
+            .get_mut(&characteristic_uuid)
+            .unwrap()
+            .read_future_state
+            .push_back(read_future.get_state_clone());
+
+        let remaining_service = unsafe {
+            CBMutableService::initWithType_primary(
+                CBMutableService::alloc(),
+                &uuid_to_cbuuid(remaining_service_uuid),
+                true,
+            )
+        };
+        let remaining_service: Retained<CBService> = Retained::into_super(remaining_service);
+        internal.set_discovered_services(
+            HashMap::from([(remaining_service_uuid, remaining_service)]),
+            None,
+        );
+
+        assert!(!internal.services.contains_key(&removed_service_uuid));
+        let reply = tokio::time::timeout(Duration::from_secs(1), read_future)
+            .await
+            .expect("removed service's pending read never completed");
+        assert!(
+            matches!(reply, CoreBluetoothReply::Err(_)),
+            "unexpected reply: {reply:?}"
+        );
+
+        std::mem::forget(internal);
+        std::mem::forget(peripheral);
+    }
+
+    #[tokio::test]
+    async fn drain_pending_operations_errors_service_and_characteristic_queues() {
+        let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
+        let (peripheral, mut internal) = new_test_internal(peripheral_uuid);
+        let service_uuid = Uuid::from_u128(0x0000180f_0000_1000_8000_00805f9b34fb);
+        let characteristic_uuid = Uuid::from_u128(0x00002a19_0000_1000_8000_00805f9b34fb);
+        let characteristic_cbuuid = uuid_to_cbuuid(characteristic_uuid);
+        let characteristic = unsafe {
+            CBMutableCharacteristic::initWithType_properties_value_permissions(
+                CBMutableCharacteristic::alloc(),
+                &characteristic_cbuuid,
+                CBCharacteristicProperties::Read,
+                None,
+                CBAttributePermissions::Readable,
+            )
+        };
+        let characteristic: Retained<CBCharacteristic> = Retained::into_super(characteristic);
+        let mut characteristic_internal = CharacteristicInternal::new(characteristic);
+
+        let service = unsafe {
+            CBMutableService::initWithType_primary(
+                CBMutableService::alloc(),
+                &uuid_to_cbuuid(service_uuid),
+                true,
+            )
+        };
+        let service: Retained<CBService> = Retained::into_super(service);
+
+        let char_read = CoreBluetoothReplyFuture::default();
+        let char_write = CoreBluetoothReplyFuture::default();
+        characteristic_internal
+            .read_future_state
+            .push_back(char_read.get_state_clone());
+        characteristic_internal
+            .write_future_state
+            .push_back(char_write.get_state_clone());
+
+        internal.services.insert(
+            service_uuid,
+            ServiceInternal {
+                cbservice: service,
+                characteristics: HashMap::from([(characteristic_uuid, characteristic_internal)]),
+                discovered: true,
+            },
+        );
+
+        internal.drain_pending_operations("Peripheral cleared");
+
+        for (name, future) in [("char_read", char_read), ("char_write", char_write)] {
+            let reply = tokio::time::timeout(Duration::from_secs(1), future)
+                .await
+                .unwrap_or_else(|_| panic!("{name} did not drain"));
+            assert!(
+                matches!(reply, CoreBluetoothReply::Err(ref message) if message == "Peripheral cleared"),
+                "{name}: unexpected drain reply: {reply:?}"
+            );
+        }
+
+        std::mem::forget(internal);
+        std::mem::forget(peripheral);
+    }
+
+    #[tokio::test]
+    async fn set_characteristics_removes_one_while_preserving_another() {
+        let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
+        let (peripheral, mut internal) = new_test_internal(peripheral_uuid);
+        let service_uuid = Uuid::from_u128(0x0000180f_0000_1000_8000_00805f9b34fb);
+        let removed_uuid = Uuid::from_u128(0x00002a19_0000_1000_8000_00805f9b34fb);
+        let kept_uuid = Uuid::from_u128(0x00002a00_0000_1000_8000_00805f9b34fb);
+        let make_characteristic = |uuid: Uuid| -> Retained<CBCharacteristic> {
+            let cbuuid = uuid_to_cbuuid(uuid);
+            let characteristic = unsafe {
+                CBMutableCharacteristic::initWithType_properties_value_permissions(
+                    CBMutableCharacteristic::alloc(),
+                    &cbuuid,
+                    CBCharacteristicProperties::Read,
+                    None,
+                    CBAttributePermissions::Readable,
+                )
+            };
+            Retained::into_super(characteristic)
+        };
+        let service = unsafe {
+            CBMutableService::initWithType_primary(
+                CBMutableService::alloc(),
+                &uuid_to_cbuuid(service_uuid),
+                true,
+            )
+        };
+        let service: Retained<CBService> = Retained::into_super(service);
+
+        let removed_write = CoreBluetoothReplyFuture::default();
+        let mut removed_characteristic =
+            CharacteristicInternal::new(make_characteristic(removed_uuid));
+        removed_characteristic
+            .write_future_state
+            .push_back(removed_write.get_state_clone());
+        let kept_read = CoreBluetoothReplyFuture::default();
+        let mut kept_characteristic = CharacteristicInternal::new(make_characteristic(kept_uuid));
+        kept_characteristic.discovered = true;
+        kept_characteristic
+            .read_future_state
+            .push_back(kept_read.get_state_clone());
+
+        internal.services.insert(
+            service_uuid,
+            ServiceInternal {
+                cbservice: service,
+                characteristics: HashMap::from([
+                    (removed_uuid, removed_characteristic),
+                    (kept_uuid, kept_characteristic),
+                ]),
+                discovered: true,
+            },
+        );
+
+        // Re-discovery only reports the characteristic being kept.
+        internal.set_characteristics(
+            service_uuid,
+            HashMap::from([(kept_uuid, make_characteristic(kept_uuid))]),
+            false,
+        );
+
+        let reply = tokio::time::timeout(Duration::from_secs(1), removed_write)
+            .await
+            .expect("removed characteristic's pending write never completed");
+        assert!(matches!(reply, CoreBluetoothReply::Err(_)));
+
+        let service = internal.services.get(&service_uuid).expect("service");
+        assert!(!service.characteristics.contains_key(&removed_uuid));
+        let kept = service
+            .characteristics
+            .get(&kept_uuid)
+            .expect("kept characteristic preserved");
+        assert!(
+            !kept.discovered,
+            "CB redrives descriptor discovery, so the gate must reset"
+        );
+        assert_eq!(
+            kept.read_future_state.len(),
+            1,
+            "kept read future preserved"
+        );
+
+        std::mem::forget(internal);
+        std::mem::forget(peripheral);
+    }
+
+    #[tokio::test]
+    async fn remove_services_errors_only_the_invalidated_services() {
+        let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
+        let (peripheral, mut internal) = new_test_internal(peripheral_uuid);
+        let removed_uuid = Uuid::from_u128(0x0000180f_0000_1000_8000_00805f9b34fb);
+        let kept_uuid = Uuid::from_u128(0x00001801_0000_1000_8000_00805f9b34fb);
+
+        let make_service = |uuid: Uuid| -> Retained<CBService> {
+            let service = unsafe {
+                CBMutableService::initWithType_primary(
+                    CBMutableService::alloc(),
+                    &uuid_to_cbuuid(uuid),
+                    true,
+                )
+            };
+            Retained::into_super(service)
+        };
+
+        let removed_read = CoreBluetoothReplyFuture::default();
+        let characteristic_uuid = Uuid::from_u128(0x00002a19_0000_1000_8000_00805f9b34fb);
+        let characteristic_cbuuid = uuid_to_cbuuid(characteristic_uuid);
+        let mut removed_characteristic = CharacteristicInternal::new(unsafe {
+            Retained::into_super(
+                CBMutableCharacteristic::initWithType_properties_value_permissions(
+                    CBMutableCharacteristic::alloc(),
+                    &characteristic_cbuuid,
+                    CBCharacteristicProperties::Read,
+                    None,
+                    CBAttributePermissions::Readable,
+                ),
+            )
+        });
+        removed_characteristic
+            .read_future_state
+            .push_back(removed_read.get_state_clone());
+        internal.services.insert(
+            removed_uuid,
+            ServiceInternal {
+                cbservice: make_service(removed_uuid),
+                characteristics: HashMap::from([(characteristic_uuid, removed_characteristic)]),
+                discovered: true,
+            },
+        );
+        internal.services.insert(
+            kept_uuid,
+            ServiceInternal {
+                cbservice: make_service(kept_uuid),
+                characteristics: HashMap::new(),
+                discovered: true,
+            },
+        );
+
+        internal.remove_services(&[removed_uuid], "Service invalidated; rediscovery required");
+
+        assert!(!internal.services.contains_key(&removed_uuid));
+        assert!(internal.services.contains_key(&kept_uuid));
+        let reply = tokio::time::timeout(Duration::from_secs(1), removed_read)
+            .await
+            .expect("removed service's pending read never completed");
+        assert!(matches!(reply, CoreBluetoothReply::Err(_)));
+
+        std::mem::forget(internal);
+        std::mem::forget(peripheral);
+    }
+
+    #[tokio::test]
+    async fn remove_services_reports_no_round_in_progress_for_stale_services() {
+        let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
+        let (peripheral, mut internal) = new_test_internal(peripheral_uuid);
+        let kept_uuid = Uuid::from_u128(0x0000180f_0000_1000_8000_00805f9b34fb);
+        let removed_uuid = Uuid::from_u128(0x00001801_0000_1000_8000_00805f9b34fb);
+
+        let make_service = |uuid: Uuid| -> Retained<CBService> {
+            let service = unsafe {
+                CBMutableService::initWithType_primary(
+                    CBMutableService::alloc(),
+                    &uuid_to_cbuuid(uuid),
+                    true,
+                )
+            };
+            Retained::into_super(service)
+        };
+
+        // Both services are fully discovered, left over from a previous round.
+        internal.services.insert(
+            kept_uuid,
+            ServiceInternal {
+                cbservice: make_service(kept_uuid),
+                characteristics: HashMap::new(),
+                discovered: true,
+            },
+        );
+        internal.services.insert(
+            removed_uuid,
+            ServiceInternal {
+                cbservice: make_service(removed_uuid),
+                characteristics: HashMap::new(),
+                discovered: true,
+            },
+        );
+
+        // discover_services() queues a future without resetting any
+        // discovered flags; didDiscoverServices hasn't arrived yet.
+        let mut discovery = CoreBluetoothReplyFuture::default();
+        internal
+            .services_discovered_future_state
+            .push_back(discovery.get_state_clone());
+
+        // didModifyServices arrives first and invalidates one service. This
+        // mirrors on_services_modified: check_discovered() only runs when
+        // remove_services reports a round was actually in progress.
+        let was_mid_round =
+            internal.remove_services(&[removed_uuid], "Service invalidated; rediscovery required");
+        if was_mid_round {
+            internal.check_discovered();
+        }
+
+        assert!(
+            !was_mid_round,
+            "the removed service was a stale leftover, not part of an in-progress round"
+        );
+        assert_pending(
+            &mut discovery,
+            "discovery must not complete with a stale leftover set",
+        )
+        .await;
+
+        std::mem::forget(internal);
+        std::mem::forget(peripheral);
+    }
+
+    #[tokio::test]
+    async fn remove_services_drains_matching_write_without_response_queue() {
+        let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
+        let (peripheral, mut internal) = new_test_internal(peripheral_uuid);
+        let removed_service_uuid = Uuid::from_u128(0x0000180f_0000_1000_8000_00805f9b34fb);
+        let kept_service_uuid = Uuid::from_u128(0x00001801_0000_1000_8000_00805f9b34fb);
+        let characteristic_uuid = Uuid::from_u128(0x00002a19_0000_1000_8000_00805f9b34fb);
+
+        let removed_pending = CoreBluetoothReplyFuture::default();
+        let mut kept_pending = CoreBluetoothReplyFuture::default();
+        internal
+            .write_without_response_queue
+            .push_back(PendingWriteWithoutResponse {
+                service_uuid: removed_service_uuid,
+                characteristic_uuid,
+                data: vec![1],
+                fut: removed_pending.get_state_clone(),
+            });
+        internal
+            .write_without_response_queue
+            .push_back(PendingWriteWithoutResponse {
+                service_uuid: kept_service_uuid,
+                characteristic_uuid,
+                data: vec![2],
+                fut: kept_pending.get_state_clone(),
+            });
+
+        internal.remove_services(
+            &[removed_service_uuid],
+            "Service invalidated; rediscovery required",
+        );
+
+        let reply = tokio::time::timeout(Duration::from_secs(1), removed_pending)
+            .await
+            .expect("removed service's queued write-without-response never completed");
+        assert!(matches!(reply, CoreBluetoothReply::Err(_)));
+        assert_eq!(
+            internal.write_without_response_queue.len(),
+            1,
+            "the kept service's queued entry must survive"
+        );
+        assert_pending(
+            &mut kept_pending,
+            "kept service's queued write-without-response",
+        )
+        .await;
 
         std::mem::forget(internal);
         std::mem::forget(peripheral);

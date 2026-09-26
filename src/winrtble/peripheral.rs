@@ -35,7 +35,6 @@ use serde::{Deserialize, Serialize};
 use serde_cr as serde;
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
-    convert::TryInto,
     fmt::{self, Debug, Display, Formatter},
     pin::Pin,
     sync::atomic::{AtomicBool, AtomicU16, Ordering},
@@ -270,28 +269,9 @@ impl Peripheral {
                 *service_data_guard = data_sections
                     .into_iter()
                     .filter_map(|d| {
-                        let data = utils::to_vec(&d.Data().unwrap());
-
-                        match d.DataType().unwrap() {
-                            advertisement_data_type::SERVICE_DATA_16_BIT_UUID => {
-                                let (uuid, data) = data.split_at(2);
-                                let uuid =
-                                    uuid_from_u16(u16::from_le_bytes(uuid.try_into().unwrap()));
-                                Some((uuid, data.to_owned()))
-                            }
-                            advertisement_data_type::SERVICE_DATA_32_BIT_UUID => {
-                                let (uuid, data) = data.split_at(4);
-                                let uuid =
-                                    uuid_from_u32(u32::from_le_bytes(uuid.try_into().unwrap()));
-                                Some((uuid, data.to_owned()))
-                            }
-                            advertisement_data_type::SERVICE_DATA_128_BIT_UUID => {
-                                let (uuid, data) = data.split_at(16);
-                                let uuid = Uuid::from_slice(uuid).unwrap();
-                                Some((uuid, data.to_owned()))
-                            }
-                            _ => None,
-                        }
+                        let data = utils::to_vec(&d.Data().ok()?);
+                        let data_type = d.DataType().ok()?;
+                        parse_service_data(data_type, &data)
                     })
                     .collect();
 
@@ -401,9 +381,33 @@ impl Peripheral {
     }
 }
 
+fn parse_service_data(data_type: u8, data: &[u8]) -> Option<(Uuid, Vec<u8>)> {
+    match data_type {
+        advertisement_data_type::SERVICE_DATA_16_BIT_UUID => {
+            let (uuid_bytes, rest) = data.split_first_chunk::<2>()?;
+            let uuid = uuid_from_u16(u16::from_le_bytes(*uuid_bytes));
+            Some((uuid, rest.to_owned()))
+        }
+        advertisement_data_type::SERVICE_DATA_32_BIT_UUID => {
+            let (uuid_bytes, rest) = data.split_first_chunk::<4>()?;
+            let uuid = uuid_from_u32(u32::from_le_bytes(*uuid_bytes));
+            Some((uuid, rest.to_owned()))
+        }
+        advertisement_data_type::SERVICE_DATA_128_BIT_UUID => {
+            let (uuid_bytes, rest) = data.split_first_chunk::<16>()?;
+            let uuid = Uuid::from_bytes(*uuid_bytes);
+            Some((uuid, rest.to_owned()))
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{parse_advertised_name, should_accept_name};
+    use super::{
+        advertisement_data_type, parse_advertised_name, parse_service_data, should_accept_name,
+    };
+    use crate::api::bleuuid::{uuid_from_u16, uuid_from_u32};
 
     #[test]
     fn advertised_name_removes_only_nul_padding() {
@@ -425,6 +429,72 @@ mod tests {
         assert!(should_accept_name(true, true));
         assert!(should_accept_name(false, false));
         assert!(should_accept_name(false, true));
+    }
+
+    #[test]
+    fn parse_service_data_16bit_short_data_returns_none() {
+        assert!(
+            parse_service_data(advertisement_data_type::SERVICE_DATA_16_BIT_UUID, &[]).is_none()
+        );
+        assert!(
+            parse_service_data(advertisement_data_type::SERVICE_DATA_16_BIT_UUID, &[0x00])
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn parse_service_data_16bit_valid_data() {
+        let data = vec![0xAB, 0xCD, 0x01, 0x02, 0x03];
+        let (uuid, rest) =
+            parse_service_data(advertisement_data_type::SERVICE_DATA_16_BIT_UUID, &data).unwrap();
+        assert_eq!(uuid, uuid_from_u16(0xCDAB));
+        assert_eq!(rest, vec![0x01, 0x02, 0x03]);
+    }
+
+    #[test]
+    fn parse_service_data_32bit_short_data_returns_none() {
+        assert!(
+            parse_service_data(
+                advertisement_data_type::SERVICE_DATA_32_BIT_UUID,
+                &[0x00, 0x00, 0x00]
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn parse_service_data_32bit_valid_data() {
+        let data = vec![0xAB, 0xCD, 0xEF, 0x00, 0x04, 0x05];
+        let (uuid, rest) =
+            parse_service_data(advertisement_data_type::SERVICE_DATA_32_BIT_UUID, &data).unwrap();
+        assert_eq!(uuid, uuid_from_u32(0x00EFCDAB));
+        assert_eq!(rest, vec![0x04, 0x05]);
+    }
+
+    #[test]
+    fn parse_service_data_128bit_short_data_returns_none() {
+        assert!(
+            parse_service_data(
+                advertisement_data_type::SERVICE_DATA_128_BIT_UUID,
+                &[0x00; 15]
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn parse_service_data_128bit_valid_data() {
+        let mut data = vec![0x00; 16];
+        data[0] = 0xFF;
+        data.push(0x99);
+        let (_, rest) =
+            parse_service_data(advertisement_data_type::SERVICE_DATA_128_BIT_UUID, &data).unwrap();
+        assert_eq!(rest, vec![0x99]);
+    }
+
+    #[test]
+    fn parse_service_data_unknown_type_returns_none() {
+        assert!(parse_service_data(0xFF, &[0x01, 0x02]).is_none());
     }
 }
 

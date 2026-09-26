@@ -395,7 +395,7 @@ fn parse_service_data(data_type: u8, data: &[u8]) -> Option<(Uuid, Vec<u8>)> {
         }
         advertisement_data_type::SERVICE_DATA_128_BIT_UUID => {
             let (uuid_bytes, rest) = data.split_first_chunk::<16>()?;
-            let uuid = Uuid::from_bytes(*uuid_bytes);
+            let uuid = Uuid::from_u128(u128::from_le_bytes(*uuid_bytes));
             Some((uuid, rest.to_owned()))
         }
         _ => None,
@@ -484,11 +484,13 @@ mod tests {
 
     #[test]
     fn parse_service_data_128bit_valid_data() {
-        let mut data = vec![0x00; 16];
-        data[0] = 0xFF;
-        data.push(0x99);
-        let (_, rest) =
+        let data = [
+            0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0x0F, 0x18,
+            0x00, 0x00, 0x99,
+        ];
+        let (uuid, rest) =
             parse_service_data(advertisement_data_type::SERVICE_DATA_128_BIT_UUID, &data).unwrap();
+        assert_eq!(uuid, uuid_from_u16(0x180F));
         assert_eq!(rest, vec![0x99]);
     }
 

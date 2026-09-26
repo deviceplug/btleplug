@@ -270,10 +270,10 @@ impl PeripheralInternal {
         service_uuid: Uuid,
         characteristics: HashMap<Uuid, Retained<CBCharacteristic>>,
     ) {
-        let service = self
-            .services
-            .get_mut(&service_uuid)
-            .expect("Got characteristics for a service we don't know about");
+        let Some(service) = self.services.get_mut(&service_uuid) else {
+            debug!("Ignoring characteristics for unknown service {service_uuid}");
+            return;
+        };
         for (characteristic_uuid, cb_characteristic) in characteristics {
             if let Some(existing) = service.characteristics.get_mut(&characteristic_uuid) {
                 // Update the CB object reference and properties, but preserve
@@ -302,7 +302,8 @@ impl PeripheralInternal {
         descriptors: HashMap<Uuid, Retained<CBDescriptor>>,
     ) -> bool {
         let Some(service) = self.services.get_mut(&service_uuid) else {
-            return false;
+            debug!("Ignoring descriptors for unknown service {service_uuid}");
+            return true;
         };
         let Some(characteristic) = service.characteristics.get_mut(&characteristic_uuid) else {
             return false;
@@ -342,9 +343,10 @@ impl PeripheralInternal {
         // back a ServicesDiscovered reply to the waiting future with all of
         // the characteristic info in it.
         if !self.services.values().any(|service| !service.discovered) {
-            if self.services_discovered_future_state.is_none() {
-                panic!("We should still have a future at this point!");
-            }
+            let Some(future_state) = self.services_discovered_future_state.take() else {
+                trace!("Services discovered with no pending future; ignoring");
+                return;
+            };
             let services = self
                 .services
                 .iter()
@@ -385,12 +387,7 @@ impl PeripheralInternal {
                 Ok(mtu) => CoreBluetoothReply::ServicesDiscovered(services, mtu),
                 Err(error) => CoreBluetoothReply::Err(error),
             };
-            self.services_discovered_future_state
-                .take()
-                .unwrap()
-                .lock()
-                .unwrap()
-                .set_reply(reply);
+            future_state.lock().unwrap().set_reply(reply);
         }
     }
 
@@ -2124,7 +2121,7 @@ mod tests {
             CBMutableService::initWithType_primary(CBMutableService::alloc(), &service_cbuuid, true)
         };
         let characteristic: Retained<CBCharacteristic> = Retained::into_super(characteristic);
-        let characteristics = NSArray::from_retained_slice(&[characteristic.clone()]);
+        let characteristics = NSArray::from_retained_slice(std::slice::from_ref(&characteristic));
         unsafe { service.setCharacteristics(Some(&characteristics)) };
         let service: Retained<CBService> = Retained::into_super(service);
 
@@ -2200,6 +2197,117 @@ mod tests {
 
         // CBPeripheral has no public initializer suitable for tests, so this
         // subclass must not run CoreBluetooth's private destruction path.
+        std::mem::forget(internal);
+        std::mem::forget(peripheral);
+    }
+
+    fn new_test_internal(peripheral_uuid: Uuid) -> (Retained<TestPeripheral>, PeripheralInternal) {
+        let peripheral_uuid_string = NSString::from_str(&peripheral_uuid.to_string());
+        let peripheral_identifier =
+            NSUUID::initWithUUIDString(NSUUID::alloc(), &peripheral_uuid_string)
+                .expect("valid peripheral UUID");
+        let peripheral = TestPeripheral::new(peripheral_identifier);
+        let (event_sender, _) = mpsc::channel(1);
+        let internal =
+            PeripheralInternal::new(Retained::into_super(peripheral.clone()), event_sender);
+        (peripheral, internal)
+    }
+
+    #[test]
+    fn set_characteristics_for_unknown_service_does_not_panic() {
+        let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
+        let (peripheral, mut internal) = new_test_internal(peripheral_uuid);
+        assert!(internal.services.is_empty());
+
+        internal.set_characteristics(
+            Uuid::from_u128(0x0000180f_0000_1000_8000_00805f9b34fb),
+            HashMap::new(),
+        );
+        assert!(internal.services.is_empty());
+
+        std::mem::forget(internal);
+        std::mem::forget(peripheral);
+    }
+
+    #[test]
+    fn check_discovered_with_no_waiting_future_does_not_panic() {
+        let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
+        let (peripheral, mut internal) = new_test_internal(peripheral_uuid);
+        let service_uuid = Uuid::from_u128(0x0000180f_0000_1000_8000_00805f9b34fb);
+        let service_cbuuid = uuid_to_cbuuid(service_uuid);
+        let service = unsafe {
+            CBMutableService::initWithType_primary(CBMutableService::alloc(), &service_cbuuid, true)
+        };
+        internal.services.insert(
+            service_uuid,
+            ServiceInternal {
+                cbservice: Retained::into_super(service),
+                characteristics: HashMap::new(),
+                discovered: true,
+            },
+        );
+        assert!(internal.services_discovered_future_state.is_none());
+
+        internal.check_discovered();
+
+        std::mem::forget(internal);
+        std::mem::forget(peripheral);
+    }
+
+    #[tokio::test]
+    async fn descriptors_for_unknown_service_leave_discovery_pending() {
+        let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
+        let (peripheral, mut internal) = new_test_internal(peripheral_uuid);
+        let service_uuid = Uuid::from_u128(0x0000180f_0000_1000_8000_00805f9b34fb);
+        let characteristic_uuid = Uuid::from_u128(0x00002a19_0000_1000_8000_00805f9b34fb);
+        let service_cbuuid = uuid_to_cbuuid(service_uuid);
+        let characteristic_cbuuid = uuid_to_cbuuid(characteristic_uuid);
+        let characteristic = unsafe {
+            CBMutableCharacteristic::initWithType_properties_value_permissions(
+                CBMutableCharacteristic::alloc(),
+                &characteristic_cbuuid,
+                CBCharacteristicProperties::Read,
+                None,
+                CBAttributePermissions::Readable,
+            )
+        };
+        let service = unsafe {
+            CBMutableService::initWithType_primary(CBMutableService::alloc(), &service_cbuuid, true)
+        };
+        let characteristic: Retained<CBCharacteristic> = Retained::into_super(characteristic);
+        let characteristics = NSArray::from_retained_slice(std::slice::from_ref(&characteristic));
+        unsafe { service.setCharacteristics(Some(&characteristics)) };
+        let service: Retained<CBService> = Retained::into_super(service);
+        internal.services.insert(
+            service_uuid,
+            ServiceInternal {
+                cbservice: service,
+                characteristics: HashMap::from([(
+                    characteristic_uuid,
+                    CharacteristicInternal::new(characteristic),
+                )]),
+                discovered: false,
+            },
+        );
+        let mut discovery = CoreBluetoothReplyFuture::default();
+        internal.services_discovered_future_state = Some(discovery.get_state_clone());
+
+        // A descriptor callback for a service this peripheral has never seen
+        // (e.g. an included service dropped by set_characteristics) must not
+        // fail the still-pending service discovery.
+        let handled = internal.set_characteristic_descriptors(
+            Uuid::from_u128(0x0000ffff_0000_1000_8000_00805f9b34fb),
+            characteristic_uuid,
+            HashMap::new(),
+        );
+        assert!(handled);
+
+        assert_pending(
+            &mut discovery,
+            "discovery after unknown-service descriptors",
+        )
+        .await;
+
         std::mem::forget(internal);
         std::mem::forget(peripheral);
     }

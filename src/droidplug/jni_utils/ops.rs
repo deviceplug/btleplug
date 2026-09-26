@@ -363,3 +363,117 @@ pub(crate) extern "C" fn fn_adapter_close_internal(mut env: EnvUnowned, obj: JOb
     })
     .resolve::<ThrowRuntimeExAndDefault>();
 }
+
+#[cfg(test)]
+mod test {
+    use std::{
+        sync::{
+            Arc,
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+            mpsc,
+        },
+        thread,
+        time::Duration,
+    };
+
+    use jni::{
+        jni_sig, jni_str,
+        objects::{Global, JObject},
+    };
+
+    use super::super::test_utils;
+    use super::fn_runnable;
+
+    const ROUNDS: usize = 256;
+    const CLOSES_PER_ROUND: usize = 32;
+
+    type Round = (Global<JObject<'static>>, Arc<AtomicBool>);
+
+    #[test]
+    fn wake_and_close_concurrent_stress() {
+        test_utils::with_env(|_env| Ok(())).unwrap();
+
+        let invocations = Arc::new(AtomicUsize::new(0));
+
+        let (caller_tx, caller_rx) = mpsc::channel::<Round>();
+        let (closer_tx, closer_rx) = mpsc::channel::<Round>();
+        let (ack_tx, ack_rx) = mpsc::channel::<()>();
+        let caller_ack_tx = ack_tx.clone();
+
+        let caller = thread::spawn(move || {
+            while let Ok((runnable, stop)) = caller_rx.recv() {
+                test_utils::with_env(|env| {
+                    while !stop.load(Ordering::Relaxed) {
+                        env.call_method(&runnable, jni_str!("run"), jni_sig!("()V"), &[])?;
+                    }
+                    Ok(())
+                })
+                .unwrap();
+                ack_tx.send(()).unwrap();
+            }
+        });
+
+        let closer = thread::spawn(move || {
+            while let Ok((runnable, stop)) = closer_rx.recv() {
+                test_utils::with_env(|env| {
+                    for _ in 0..CLOSES_PER_ROUND {
+                        env.call_method(&runnable, jni_str!("close"), jni_sig!("()V"), &[])?;
+                    }
+                    stop.store(true, Ordering::Relaxed);
+                    Ok(())
+                })
+                .unwrap();
+                caller_ack_tx.send(()).unwrap();
+            }
+        });
+
+        for _ in 0..ROUNDS {
+            let stop = Arc::new(AtomicBool::new(false));
+            let (caller_ref, closer_ref) = test_utils::with_env(|env| {
+                let count = invocations.clone();
+                let runnable = fn_runnable(env, move |_env, _obj| {
+                    count.fetch_add(1, Ordering::Relaxed);
+                    thread::sleep(Duration::from_micros(50));
+                })?;
+                let caller_ref = env.new_global_ref(&runnable)?;
+                let closer_ref = env.new_global_ref(&runnable)?;
+                Ok((caller_ref, closer_ref))
+            })
+            .unwrap();
+            caller_tx.send((caller_ref, stop.clone())).unwrap();
+            closer_tx.send((closer_ref, stop)).unwrap();
+            ack_rx.recv().unwrap();
+            ack_rx.recv().unwrap();
+        }
+
+        drop(caller_tx);
+        drop(closer_tx);
+        caller.join().unwrap();
+        closer.join().unwrap();
+
+        assert!(invocations.load(Ordering::Relaxed) > 0);
+    }
+
+    #[test]
+    fn call_after_close_is_noop() {
+        test_utils::with_env(|env| {
+            let invocations = Arc::new(AtomicUsize::new(0));
+            let count = invocations.clone();
+            let runnable = fn_runnable(env, move |_env, _obj| {
+                count.fetch_add(1, Ordering::Relaxed);
+            })?;
+            let global = env.new_global_ref(&runnable)?;
+
+            env.call_method(&global, jni_str!("close"), jni_sig!("()V"), &[])?;
+            env.call_method(&global, jni_str!("close"), jni_sig!("()V"), &[])?;
+            for _ in 0..10 {
+                env.call_method(&global, jni_str!("run"), jni_sig!("()V"), &[])?;
+            }
+
+            assert!(!env.exception_check());
+            assert_eq!(invocations.load(Ordering::Relaxed), 0);
+            Ok(())
+        })
+        .unwrap();
+    }
+}

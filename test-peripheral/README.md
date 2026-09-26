@@ -6,26 +6,59 @@ This directory contains BLE test peripheral implementations for btleplug's integ
 
 ### Option A: Hardware (Zephyr)
 
-The Zephyr firmware supports multiple boards. Pick whichever you have.
+The Zephyr firmware supports multiple boards, built from a pinned Zephyr `v4.4.2` tree so builds are reproducible. Pick whichever board you have.
 
 **Prerequisites:**
-- [Zephyr SDK](https://docs.zephyrproject.org/latest/develop/getting_started/index.html) and `west` tool
+- `uv` (used below to create an isolated Python environment for `west` and Zephyr's build tooling — never system `pip`)
+- Python 3.12+ (Zephyr v4.4.2 requires it; `uv venv --python 3.12` below provisions it for you even if your system Python is older)
+- Host build tools — CMake ≥ 3.20.5, Ninja, and `dtc` (the devicetree compiler):
+  - macOS: `brew install cmake ninja dtc`
+  - Debian/Ubuntu: `apt install cmake ninja-build device-tree-compiler`
+  - See also Zephyr's [Install dependencies](https://docs.zephyrproject.org/latest/develop/getting_started/index.html) guide.
 - One of the supported boards:
   - [nRF52840 DK](https://www.nordicsemi.com/Products/Development-hardware/nRF52840-DK) — also needs [nRF Command Line Tools](https://www.nordicsemi.com/Products/Development-tools/nRF-Command-Line-Tools)
-  - [ESP32-S3 DevKitC](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s3/esp32-s3-devkitc-1/) — also needs `esptool` (`pip install esptool`)
+  - [ESP32-S3 DevKitC](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s3/esp32-s3-devkitc-1/)
 
-**Build and flash:**
+**Set up the pinned workspace (once, from `test-peripheral/`):**
 
 ```bash
-cd zephyr
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python west
+source .venv/bin/activate
+# fish: source .venv/bin/activate.fish
 
+west init -l zephyr
+west update
+# Prevent an exported ZEPHYR_BASE from overriding the pinned tree above:
+west config zephyr.base-prefer configfile
+
+# Now that deps/zephyr exists, install its build and flash requirements:
+uv pip install --python .venv/bin/python \
+  -r deps/zephyr/scripts/requirements-base.txt \
+  -r deps/modules/hal/espressif/zephyr/requirements.txt
+
+# One-time Zephyr toolchain install (v4.4.2 requires SDK 1.0.1; installs to
+# ~/zephyr-sdk-1.0.1 by default):
+west sdk install --version 1.0.1 -t arm-zephyr-eabi xtensa-espressif_esp32s3_zephyr-elf
+
+# ESP32-S3 also needs its HAL blob libraries fetched once:
+west blobs fetch hal_espressif
+```
+
+This creates `test-peripheral/.west/` (workspace metadata) and `test-peripheral/deps/` (the pinned Zephyr `v4.4.2` tree and its modules — `hal_nordic`, `hal_espressif`, `cmsis_6`, `mbedtls`, `tf-psa-crypto`, `segger`), both gitignored along with `.venv/`. `test-peripheral/zephyr/west.yml` is the manifest; after editing it, re-run `west update` from `test-peripheral/` with `.venv` activated.
+
+**Migrating from an older checkout:** if you previously ran `west init` inside `test-peripheral/zephyr/` (the pre-pinned layout), delete `test-peripheral/zephyr/.west`, `test-peripheral/zephyr/zephyr`, `test-peripheral/zephyr/modules`, `test-peripheral/zephyr/bootloader`, and `test-peripheral/zephyr/tools` before following the setup above.
+
+**Build and flash (from `test-peripheral/zephyr/`, with `.venv` activated):**
+
+```bash
 # nRF52840 DK
-west build -b nrf52840dk/nrf52840
-west flash
+west build -b nrf52840dk/nrf52840 --pristine
+west flash --runner nrfjprog
 
 # ESP32-S3 DevKitC
-west build -b esp32s3_devkitc/esp32s3/procpu
-west flash
+west build -b esp32s3_devkitc/esp32s3/procpu --pristine -d build-esp32s3
+west flash -d build-esp32s3
 ```
 
 The board boots and immediately starts advertising as `"btleplug-test"`.
@@ -107,10 +140,19 @@ Write these opcodes to the Control Point characteristic (`00000101-...`):
 
 ### Zephyr build fails
 
-1. **Verify Zephyr SDK:** Run `west --version` and `cmake --version`.
+1. **Verify the pinned workspace is active and intact:**
+   - `.venv` is activated (`source test-peripheral/.venv/bin/activate`, or `.venv/bin/activate.fish` under fish).
+   - `west topdir` prints `.../test-peripheral`.
+   - `west list zephyr` shows `deps/zephyr v4.4.2`.
+   - `echo $ZEPHYR_BASE` is empty, or `west config zephyr.base-prefer` prints `configfile` (see "Stray `ZEPHYR_BASE`" below).
+   - `west sdk list` shows `1.0.1` installed.
 2. **Verify board target:** Board targets use slashes, not underscores (e.g. `nrf52840dk/nrf52840`, `esp32s3_devkitc/esp32s3/procpu`).
 3. **Clean build:** `west build -b <board> --pristine`
 4. **ESP32 first build:** The Espressif HAL is large — first build takes significantly longer than subsequent builds. This is normal.
+
+### Stray `ZEPHYR_BASE`
+
+If your shell (or another Zephyr workspace) exports `ZEPHYR_BASE`, `west` can resolve against that tree instead of the pinned `deps/zephyr` here. `west config zephyr.base-prefer configfile` (run once as part of setup above) makes `west` always prefer the workspace's own manifest over an exported `ZEPHYR_BASE`.
 
 ### Bumble can't find USB dongle
 

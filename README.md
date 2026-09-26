@@ -188,10 +188,12 @@ btleplug includes integration tests that exercise real BLE operations against a 
 
 **Quick start with hardware:**
 
+See `test-peripheral/README.md` for the one-time pinned-workspace setup (`uv`, `west`, the Zephyr SDK). Once that's done:
+
 ```bash
-# Flash the nRF52840 DK (one-time setup)
+# Flash the nRF52840 DK (.venv activated)
 cd test-peripheral/zephyr
-west build -b nrf52840dk/nrf52840 && west flash
+west build -b nrf52840dk/nrf52840 --pristine && west flash --runner nrfjprog
 
 # Run integration tests
 cargo test --test '*' -- --ignored

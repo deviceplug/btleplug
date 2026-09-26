@@ -6,13 +6,11 @@
 /workspace.xml
 **/*.code-workspace
 test-peripheral/.python-version
+test-peripheral/.venv/
+test-peripheral/.west/
+test-peripheral/deps/
 test-peripheral/zephyr/.cache
-test-peripheral/zephyr/.west/
-test-peripheral/zephyr/bootloader/
 test-peripheral/zephyr/build*
-test-peripheral/zephyr/modules/
-test-peripheral/zephyr/tools/
-test-peripheral/zephyr/zephyr/
 tests/android/gradle/
 tests/android/gradlew
 .worktrees/

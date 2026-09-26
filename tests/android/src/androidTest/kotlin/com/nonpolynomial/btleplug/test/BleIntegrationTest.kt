@@ -108,4 +108,9 @@ class BleIntegrationTest {
     @Test fun testPropertiesContainPeripheralInfo() = NativeTests.testPropertiesContainPeripheralInfo()
     @Test fun testConnectionParameters() = NativeTests.testConnectionParameters()
     @Test fun testRequestConnectionParameters() = NativeTests.testRequestConnectionParameters()
+
+    // ── Concurrency ─────────────────────────────────────────────────
+    @Test fun testConcurrentConnectAndDiscover() = NativeTests.testConcurrentConnectAndDiscover()
+    @Test fun testConcurrentOperationsSameService() = NativeTests.testConcurrentOperationsSameService()
+    @Test fun testDiscoverServicesDuringRead() = NativeTests.testDiscoverServicesDuringRead()
 }

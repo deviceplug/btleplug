@@ -243,3 +243,15 @@ jni_test!(
     Java_com_nonpolynomial_btleplug_test_NativeTests_testRequestConnectionParameters,
     test_cases::test_request_connection_parameters
 );
+jni_test!(
+    Java_com_nonpolynomial_btleplug_test_NativeTests_testConcurrentConnectAndDiscover,
+    test_cases::test_concurrent_connect_and_discover
+);
+jni_test!(
+    Java_com_nonpolynomial_btleplug_test_NativeTests_testConcurrentOperationsSameService,
+    test_cases::test_concurrent_operations_same_service
+);
+jni_test!(
+    Java_com_nonpolynomial_btleplug_test_NativeTests_testDiscoverServicesDuringRead,
+    test_cases::test_discover_services_during_read
+);

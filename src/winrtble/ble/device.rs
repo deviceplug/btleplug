@@ -119,7 +119,7 @@ impl BLEDevice {
         utils::to_error(status)
     }
 
-    async fn is_connected(&self) -> Result<bool> {
+    pub(crate) async fn is_connected(&self) -> Result<bool> {
         let winrt_error = |e| Error::Other(format!("{:?}", e).into());
         let status = self.device.ConnectionStatus().map_err(winrt_error)?;
 

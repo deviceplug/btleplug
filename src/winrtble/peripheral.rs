@@ -577,6 +577,15 @@ impl ApiPeripheral for Peripheral {
     /// Ok there has been successful connection. Note that peripherals allow only one connection at
     /// a time. Operations that attempt to communicate with a device will fail until it is connected.
     async fn connect(&self) -> Result<()> {
+        {
+            let device_guard = self.shared.device.lock().await;
+            if let Some(d) = &*device_guard
+                && matches!(d.is_connected().await, Ok(true))
+            {
+                return Ok(());
+            }
+        }
+
         let adapter_clone = self.shared.adapter.clone();
         let address = self.shared.address;
 
@@ -619,6 +628,8 @@ impl ApiPeripheral for Peripheral {
             }
         }
         let mut d = self.shared.device.lock().await;
+        // Services from a replaced BLEDevice are closed when it drops.
+        self.shared.ble_services.clear();
         *d = Some(device);
         self.shared.connected.store(true, Ordering::Relaxed);
         self.emit_event(CentralEvent::DeviceConnected(self.shared.address.into()));

@@ -16,6 +16,7 @@ Last verified: 2026-09-27
 - `cargo test --test '*' -- --ignored` -- Run integration tests (requires test peripheral)
 - `scripts/run-jni-tests.sh` -- Compile Java sources and run JNI host tests on host JVM
 - `scripts/run-integration-tests.sh` -- Run BLE integration tests (requires test peripheral); on Windows also runs the ignored `winrtble::adapter` radio lib tests (#476)
+- `scripts/run-integration-tests.ps1` -- Windows PowerShell equivalent of the above (same prebuild, radio-test sentinel, and timeout behavior)
 - `scripts/run-integration-tests-android.sh` -- Run Android integration tests
 - `scripts/build-java.sh` -- Build Java/Android components
 

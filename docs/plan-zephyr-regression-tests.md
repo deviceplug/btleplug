@@ -83,7 +83,7 @@ Updated: 2026-09-27, after Step 14.
 | 13 | `c139a9d` (prebuilds selected test binaries outside the timeout; radio tests filtered to `winrtble::adapter::cleanup_tests::`, serial, fail on zero matches; Windows path unexercised) |
 | 14 | follow-up fixes and docs below; final range review done (no Critical issues); macOS full hardware run 46/46 on 2026-09-27 |
 
-Baseline before Step 1: 32/32 hardware tests passing on macOS. After Step 11: 45/45. After Step 14: 46/46. Hardware coverage: macOS full suite; Linux full suite run by the user on 2026-09-27 with one failure (`test_unsubscribe_stops_notifications`, fixed in the BlueZ backend, re-run pending). Windows and Android are unverified.
+Baseline before Step 1: 32/32 hardware tests passing on macOS. After Step 11: 45/45. After Step 14: 46/46. Hardware coverage on 2026-09-27: macOS full suite; Linux full suite (after the BlueZ unsubscribe fix `39a7e2d`); Windows full suite (after `6216480` and the PowerShell runner fix `d5735e1`); Android 43/43 on a Pixel 9a (after `d797337`; that run had no 0x3E, so the retry path itself has not fired on hardware yet).
 
 ### Pending hardware verification
 
@@ -129,6 +129,9 @@ Steps 12 and 13 were committed on 2026-09-27 with the board detached. macOS resu
 11. Firmware: `connected(err)` returns without restarting advertising, and Zephyr v4.4.2 has no auto-resume, so a failed connection would leave the peripheral silent (behaviour predates this plan).
 12. Firmware: `write_control_point` ignores `offset`. Zephyr v4.4.2 queues prepare fragments without calling the callback (the attribute lacks `BT_GATT_PERM_PREPARE_WRITE`, `att.c:2247`), then calls it once on execute with the joined value and the first fragment's offset. A long Control Point write therefore works, but a prepare queue starting at a non-zero offset would be run as if it started at offset 0. Fix: reject `offset != 0`. The MTU test caps at `mtu - 4` so the command fits in one Write Request.
 13. Firmware: `disconnected()` unrefs `g_state.conn` before stopping periodic notifications, which may still be using it on the system workqueue (fix: stop notifications before the unref). `k_work_cancel_delayable` does not wait for a running handler, so reset can clear `notify_payload` during `bt_gatt_notify` (fix: `k_work_cancel_delayable_sync`). 0x06 writes the payload from the BT RX WQ with no synchronisation against the handler at all (fix: stage the payload and swap it on the system workqueue, or guard it with a lock). All predate this plan; tests avoid them by setting the payload after reset and before 0x01.
+14. Windows: a stale "connected" LE device (no name, `c0:28:8d:d5:ee:a8` on the test box) took 51 s to report `Unreachable` from a cached GATT service query, which stalled service-filtered `retrieve_peripherals` for every caller. Fixed in `6216480` (concurrent, 5 s per-device bound).
+15. Android: a fresh connect occasionally fails with HCI 0x3E (the nRF52 misses its first connection events), which Android reports as status 133. It hit `testOperationsAcrossPeripheralTriggeredDisconnect` in two consecutive full runs, about 1 s after the previous link's 4 s idle teardown. Why the peripheral misses the `CONNECT_IND` is unknown (no peripheral-side logs). droidplug now retries it (`d797337`).
+16. Android test environment: a Fitbit app and Google Nearby on the test phone interact with `btleplug-test` while tests run. Not a cause of failures so far, but noise to rule out when debugging.
 
 ## Steps
 

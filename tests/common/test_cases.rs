@@ -71,7 +71,7 @@ pub async fn test_discover_peripheral_by_name() {
 #[cfg(target_os = "macos")]
 pub async fn test_clear_peripherals_rediscovers_device() {
     use btleplug::api::{Central, CentralEvent, ScanFilter};
-    use futures::StreamExt;
+    use futures::{FutureExt, StreamExt};
     use std::time::Duration;
     use tokio::time;
 
@@ -108,6 +108,8 @@ pub async fn test_clear_peripherals_rediscovers_device() {
         adapter.peripherals().await.unwrap().is_empty(),
         "clear_peripherals returned before the public map was cleared"
     );
+    // Drop events emitted before the clear, including the initial DeviceDiscovered.
+    while let Some(Some(_)) = events.next().now_or_never() {}
 
     adapter.start_scan(ScanFilter::default()).await.unwrap();
     time::timeout(Duration::from_secs(15), async {

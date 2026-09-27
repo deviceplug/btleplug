@@ -11,6 +11,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 JAVA_DIR="$PROJECT_ROOT/src/droidplug/java"
 
+# shellcheck source=lib/java-home.sh
+source "$SCRIPT_DIR/lib/java-home.sh"
+
 # --- Colors (if terminal) ---------------------------------------------------
 if [ -t 1 ]; then
     RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; NC='\033[0m'
@@ -88,42 +91,9 @@ ensure_java() {
 
 # --- JAVA_HOME ---------------------------------------------------------------
 ensure_java_home() {
-    if [ -n "${JAVA_HOME:-}" ] && [ -d "$JAVA_HOME" ]; then
-        return 0
-    fi
-
-    case "$OS" in
-        Darwin)
-            JAVA_HOME="$(/usr/libexec/java_home 2>/dev/null || true)"
-            # Fallback: check Homebrew openjdk directly
-            if [ -z "${JAVA_HOME:-}" ] || [ ! -d "${JAVA_HOME:-}" ]; then
-                for v in 17 21 11; do
-                    local brew_jdk
-                    brew_jdk="$(brew --prefix "openjdk@$v" 2>/dev/null || true)"
-                    if [ -n "$brew_jdk" ] && [ -d "$brew_jdk/libexec/openjdk.jdk/Contents/Home" ]; then
-                        JAVA_HOME="$brew_jdk/libexec/openjdk.jdk/Contents/Home"
-                        break
-                    fi
-                done
-            fi
-            ;;
-        Linux)
-            # Common locations
-            for candidate in \
-                /usr/lib/jvm/java-17-openjdk-amd64 \
-                /usr/lib/jvm/java-17-openjdk \
-                /usr/lib/jvm/java-17 \
-                /usr/lib/jvm/default-java; do
-                if [ -d "$candidate" ]; then
-                    JAVA_HOME="$candidate"
-                    break
-                fi
-            done
-            ;;
-    esac
-
-    if [ -z "${JAVA_HOME:-}" ]; then
-        die "Could not determine JAVA_HOME. Set it manually and re-run."
+    JAVA_HOME="$(find_java_home)"
+    if [ -z "$JAVA_HOME" ]; then
+        die "Could not find a JDK 17 or 21. Set JAVA_HOME and re-run."
     fi
     export JAVA_HOME
     info "JAVA_HOME=$JAVA_HOME"

@@ -719,6 +719,12 @@ struct CoreBluetoothInternal {
     // task::block this when sending even though it'll never actually block.
     event_sender: Sender<CoreBluetoothEvent>,
     message_receiver: Fuse<Receiver<CoreBluetoothMessage>>,
+    // Gates DiscoveredPeripheral and advertisement-derived (ManufacturerData,
+    // ServiceData, Services, TxPowerLevel) delegate events: CBqueue callbacks
+    // queued before stopScan can still arrive after StopScanning/
+    // ClearPeripherals are processed, so we drop them instead of re-adding a
+    // peripheral or reporting stale advertisement data.
+    scanning: bool,
 }
 
 impl Debug for CoreBluetoothInternal {
@@ -730,6 +736,7 @@ impl Debug for CoreBluetoothInternal {
             .field("delegate_receiver", &self.delegate_receiver)
             .field("event_sender", &self.event_sender)
             .field("message_receiver", &self.message_receiver)
+            .field("scanning", &self.scanning)
             .finish()
     }
 }
@@ -874,6 +881,7 @@ impl CoreBluetoothInternal {
             event_sender,
             message_receiver: message_receiver.fuse(),
             delegate,
+            scanning: false,
         }
     }
 
@@ -1121,6 +1129,7 @@ impl CoreBluetoothInternal {
 
     async fn on_adapter_powered_off(&mut self) {
         warn!("Adapter powered off, canceling all pending operations");
+        self.scanning = false;
         let peripheral_uuids: Vec<Uuid> = self.peripherals.keys().cloned().collect();
         for uuid in peripheral_uuids {
             if let Err(e) = self
@@ -1763,6 +1772,15 @@ impl CoreBluetoothInternal {
                         }
                         self.dispatch_event(CoreBluetoothEvent::DidUpdateState{state}).await
                     }
+                    CentralDelegateEvent::DiscoveredPeripheral{..}
+                    | CentralDelegateEvent::ManufacturerData{..}
+                    | CentralDelegateEvent::ServiceData{..}
+                    | CentralDelegateEvent::Services{..}
+                    | CentralDelegateEvent::TxPowerLevel{..}
+                        if !self.scanning =>
+                    {
+                        trace!("Ignoring discovery/advertisement delegate event while not scanning");
+                    }
                     CentralDelegateEvent::DiscoveredPeripheral{cbperipheral, advertisement_name} => {
                         self.on_discovered_peripheral(cbperipheral, advertisement_name).await
                     }
@@ -1920,6 +1938,7 @@ impl CoreBluetoothInternal {
 
     fn start_discovery(&mut self, filter: ScanFilter) {
         trace!("BluetoothAdapter::start_discovery");
+        self.scanning = true;
         let service_uuids = scan_filter_to_service_uuids(filter);
         let options: Retained<NSMutableDictionary<NSString, AnyObject>> =
             NSMutableDictionary::new();
@@ -1939,6 +1958,7 @@ impl CoreBluetoothInternal {
 
     fn stop_discovery(&mut self) {
         trace!("BluetoothAdapter::stop_discovery");
+        self.scanning = false;
         unsafe { self.manager.stopScan() };
     }
 }

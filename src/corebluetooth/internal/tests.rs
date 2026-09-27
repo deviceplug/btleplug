@@ -2,8 +2,8 @@ use super::*;
 use futures::StreamExt;
 use objc2::{DefinedClass, define_class};
 use objc2_core_bluetooth::{
-    CBAttributePermissions, CBMutableCharacteristic, CBMutableDescriptor, CBMutableService,
-    CBPeripheralDelegate,
+    CBAdvertisementDataManufacturerDataKey, CBAttributePermissions, CBCentralManagerDelegate,
+    CBMutableCharacteristic, CBMutableDescriptor, CBMutableService, CBPeripheralDelegate,
 };
 use objc2_foundation::{NSError, NSObjectProtocol, NSString, ns_string};
 use std::sync::{
@@ -1994,4 +1994,241 @@ async fn remove_services_drains_matching_write_without_response_queue() {
 
     std::mem::forget(internal);
     std::mem::forget(peripheral);
+}
+
+/// Deliver a real `centralManager:didDiscoverPeripheral:advertisementData:RSSI:`
+/// callback on `internal`'s own delegate/manager, exactly as CBqueue would.
+///
+/// When `manufacturer_data` is given, the advertisement dictionary also
+/// carries a `CBAdvertisementDataManufacturerDataKey` entry, so the same
+/// callback can be used to exercise gating of the advertisement-derived
+/// events (`ManufacturerData`, `ServiceData`, `Services`, `TxPowerLevel`)
+/// that `centralManager:didDiscoverPeripheral:...` also produces.
+fn deliver_discovered_peripheral(
+    internal: &CoreBluetoothInternal,
+    peripheral: &TestPeripheral,
+    manufacturer_data: Option<(u16, &[u8])>,
+) {
+    let adv_data: Retained<NSMutableDictionary<NSString, AnyObject>> = NSMutableDictionary::new();
+    if let Some((manufacturer_id, data)) = manufacturer_data {
+        let mut bytes = manufacturer_id.to_le_bytes().to_vec();
+        bytes.extend_from_slice(data);
+        adv_data.insert(
+            unsafe { CBAdvertisementDataManufacturerDataKey },
+            &*Retained::into_super(NSData::from_vec(bytes)),
+        );
+    }
+    let rssi = NSNumber::new_i16(-50);
+    unsafe {
+        internal
+            .delegate
+            .centralManager_didDiscoverPeripheral_advertisementData_RSSI(
+                &internal.manager,
+                peripheral,
+                &adv_data,
+                &rssi,
+            );
+    }
+}
+
+fn test_peripheral_with_uuid(uuid: Uuid) -> Retained<TestPeripheral> {
+    let uuid_string = NSString::from_str(&uuid.to_string());
+    let identifier = NSUUID::initWithUUIDString(NSUUID::alloc(), &uuid_string).expect("valid UUID");
+    TestPeripheral::new(identifier)
+}
+
+/// Drain `internal`'s delegate/message channels by repeatedly calling
+/// `wait_for_message()` under a short timeout until one times out (i.e.
+/// nothing is pending any more). `CBCentralManager`'s
+/// `initWithDelegate:queue:` posts an initial `centralManagerDidUpdateState:`
+/// on CBqueue that can otherwise land in the delegate channel at an
+/// unpredictable time relative to an event a test injects directly, so tests
+/// settle the channel before and after injecting to stay timing-independent.
+async fn settle(internal: &mut CoreBluetoothInternal) {
+    loop {
+        if tokio::time::timeout(Duration::from_millis(200), internal.wait_for_message())
+            .await
+            .is_err()
+        {
+            break;
+        }
+    }
+}
+
+/// Drain every event currently buffered on `event_receiver` without blocking.
+fn drain_events(
+    event_receiver: &mut mpsc::Receiver<CoreBluetoothEvent>,
+) -> Vec<CoreBluetoothEvent> {
+    let mut events = Vec::new();
+    while let Ok(event) = event_receiver.try_recv() {
+        events.push(event);
+    }
+    events
+}
+
+#[tokio::test]
+#[ignore = "requires CoreBluetooth (creates a real CBCentralManager)"]
+async fn discovered_peripheral_is_ignored_while_not_scanning() {
+    let (_msg_sender, msg_receiver) = mpsc::channel::<CoreBluetoothMessage>(4);
+    let (event_sender, mut event_receiver) = mpsc::channel::<CoreBluetoothEvent>(4);
+    let mut internal = CoreBluetoothInternal::new(msg_receiver, event_sender);
+    settle(&mut internal).await;
+    assert!(!internal.scanning, "internal must start out not scanning");
+
+    // Simulate a DiscoveredPeripheral callback that was queued on CBqueue
+    // before stop_discovery() took effect (or that arrives with no scan
+    // ever started).
+    let uuid = Uuid::from_u128(0x22222222_2222_2222_2222_222222222222);
+    let peripheral = test_peripheral_with_uuid(uuid);
+    deliver_discovered_peripheral(&internal, &peripheral, None);
+    settle(&mut internal).await;
+
+    let peripherals_empty = internal.peripherals.is_empty();
+    let device_discovered = drain_events(&mut event_receiver)
+        .into_iter()
+        .find(|event| matches!(event, CoreBluetoothEvent::DeviceDiscovered { .. }));
+
+    std::mem::forget(internal);
+    std::mem::forget(peripheral);
+
+    assert!(
+        peripherals_empty,
+        "a DiscoveredPeripheral event received while not scanning must not add a peripheral"
+    );
+    assert!(
+        device_discovered.is_none(),
+        "no DeviceDiscovered event should have been dispatched, got {device_discovered:?}"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires CoreBluetooth (creates a real CBCentralManager)"]
+async fn discovered_peripheral_is_processed_while_scanning() {
+    let (_msg_sender, msg_receiver) = mpsc::channel::<CoreBluetoothMessage>(4);
+    let (event_sender, mut event_receiver) = mpsc::channel::<CoreBluetoothEvent>(4);
+    let mut internal = CoreBluetoothInternal::new(msg_receiver, event_sender);
+    settle(&mut internal).await;
+    // Set after settling: a PoweredOff initial state would otherwise clear
+    // `scanning` right back to false via on_adapter_powered_off().
+    internal.scanning = true;
+
+    let uuid = Uuid::from_u128(0x33333333_3333_3333_3333_333333333333);
+    let peripheral = test_peripheral_with_uuid(uuid);
+    deliver_discovered_peripheral(&internal, &peripheral, None);
+    settle(&mut internal).await;
+
+    let peripheral_known = internal.peripherals.contains_key(&uuid);
+    let device_discovered = drain_events(&mut event_receiver)
+        .into_iter()
+        .find(|event| matches!(event, CoreBluetoothEvent::DeviceDiscovered { .. }));
+
+    std::mem::forget(internal);
+    std::mem::forget(peripheral);
+
+    assert!(
+        peripheral_known,
+        "a DiscoveredPeripheral event received while scanning must add the peripheral"
+    );
+    match device_discovered {
+        Some(CoreBluetoothEvent::DeviceDiscovered {
+            uuid: event_uuid, ..
+        }) => {
+            assert_eq!(
+                event_uuid, uuid,
+                "DeviceDiscovered event was for the wrong peripheral"
+            );
+        }
+        other => panic!("expected a DeviceDiscovered event, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires CoreBluetooth (creates a real CBCentralManager)"]
+async fn stop_discovery_causes_late_discovered_peripheral_to_be_ignored() {
+    let (_msg_sender, msg_receiver) = mpsc::channel::<CoreBluetoothMessage>(4);
+    let (event_sender, mut event_receiver) = mpsc::channel::<CoreBluetoothEvent>(4);
+    let mut internal = CoreBluetoothInternal::new(msg_receiver, event_sender);
+    settle(&mut internal).await;
+
+    // Mirrors the regression scenario: a scan was running (so this
+    // callback was legitimately queued on CBqueue), stop_discovery() has
+    // since run, and only then does the queued callback get processed.
+    internal.scanning = true;
+    let uuid = Uuid::from_u128(0x44444444_4444_4444_4444_444444444444);
+    let peripheral = test_peripheral_with_uuid(uuid);
+    deliver_discovered_peripheral(&internal, &peripheral, None);
+    internal.stop_discovery();
+    settle(&mut internal).await;
+
+    let peripherals_empty = internal.peripherals.is_empty();
+    let device_discovered = drain_events(&mut event_receiver)
+        .into_iter()
+        .find(|event| matches!(event, CoreBluetoothEvent::DeviceDiscovered { .. }));
+
+    std::mem::forget(internal);
+    std::mem::forget(peripheral);
+
+    assert!(
+        peripherals_empty,
+        "a callback queued before stop_discovery() must not re-add the peripheral once processed after it"
+    );
+    assert!(
+        device_discovered.is_none(),
+        "no DeviceDiscovered event should have been dispatched, got {device_discovered:?}"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires CoreBluetooth (creates a real CBCentralManager)"]
+async fn late_advertisement_data_for_known_peripheral_is_ignored_after_stop_scan() {
+    let (_msg_sender, msg_receiver) = mpsc::channel::<CoreBluetoothMessage>(4);
+    let (event_sender, mut event_receiver) = mpsc::channel::<CoreBluetoothEvent>(4);
+    let mut internal = CoreBluetoothInternal::new(msg_receiver, event_sender);
+    settle(&mut internal).await;
+    internal.scanning = true;
+
+    // Discover the peripheral while scanning, so it becomes known and we get
+    // its per-peripheral event channel out of the DeviceDiscovered event.
+    let uuid = Uuid::from_u128(0x55555555_5555_5555_5555_555555555555);
+    let peripheral = test_peripheral_with_uuid(uuid);
+    deliver_discovered_peripheral(&internal, &peripheral, None);
+    settle(&mut internal).await;
+
+    let device_discovered = drain_events(&mut event_receiver)
+        .into_iter()
+        .find(|event| matches!(event, CoreBluetoothEvent::DeviceDiscovered { .. }));
+    let mut peripheral_event_receiver = match device_discovered {
+        Some(CoreBluetoothEvent::DeviceDiscovered {
+            uuid: event_uuid,
+            event_receiver,
+            ..
+        }) if event_uuid == uuid => event_receiver,
+        other => {
+            std::mem::forget(internal);
+            std::mem::forget(peripheral);
+            panic!("expected a DeviceDiscovered event for the injected peripheral, got {other:?}");
+        }
+    };
+
+    // Now simulate stop_scan(): the peripheral remains known, but a
+    // callback carrying fresh advertisement data for it that was queued
+    // before stop_scan() must not be forwarded once processed after it.
+    internal.stop_discovery();
+    deliver_discovered_peripheral(&internal, &peripheral, Some((0x1234, &[0xAA, 0xBB])));
+    settle(&mut internal).await;
+
+    let peripheral_still_known = internal.peripherals.contains_key(&uuid);
+    let manufacturer_event = peripheral_event_receiver.try_recv().ok();
+
+    std::mem::forget(internal);
+    std::mem::forget(peripheral);
+
+    assert!(
+        peripheral_still_known,
+        "the peripheral should remain known after stop_discovery()"
+    );
+    assert!(
+        manufacturer_event.is_none(),
+        "a late ManufacturerData advertisement callback must not reach an already-known peripheral after stop_scan(), got {manufacturer_event:?}"
+    );
 }

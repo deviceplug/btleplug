@@ -776,6 +776,50 @@ pub async fn test_characteristic_properties() {
     peripheral.disconnect().await.unwrap();
 }
 
+/// Covers #492: GATT errors on read/write must surface as `Err`, and the link must stay usable.
+pub async fn test_gatt_error_status_is_reported() {
+    use btleplug::api::WriteType;
+    use std::time::Duration;
+
+    let peripheral = peripheral_finder::find_and_connect().await;
+    peripheral_finder::reset_peripheral(&peripheral).await;
+    let char = peripheral_finder::find_characteristic(&peripheral, gatt_uuids::ERROR_CHAR);
+
+    let read_result = tokio::time::timeout(Duration::from_secs(10), peripheral.read(&char))
+        .await
+        .expect("read(ERROR_CHAR) timed out");
+    assert!(
+        read_result.is_err(),
+        "expected an error reading ERROR_CHAR, got {:?}",
+        read_result
+    );
+
+    let write_result = tokio::time::timeout(
+        Duration::from_secs(10),
+        peripheral.write(&char, &[0x00], WriteType::WithResponse),
+    )
+    .await
+    .expect("write(ERROR_CHAR) timed out");
+    assert!(
+        write_result.is_err(),
+        "expected an error writing ERROR_CHAR, got {:?}",
+        write_result
+    );
+
+    let static_char = peripheral_finder::find_characteristic(&peripheral, gatt_uuids::STATIC_READ);
+    let value = tokio::time::timeout(Duration::from_secs(10), peripheral.read(&static_char))
+        .await
+        .expect("follow-up read(STATIC_READ) timed out")
+        .expect("follow-up read(STATIC_READ) failed");
+    assert_eq!(
+        value,
+        gatt_uuids::STATIC_READ_VALUE,
+        "Static read should return [0x01, 0x02, 0x03, 0x04]"
+    );
+
+    peripheral.disconnect().await.unwrap();
+}
+
 // ── Notifications ───────────────────────────────────────────────────
 
 pub async fn test_subscribe_and_receive_notifications() {
@@ -1051,6 +1095,56 @@ pub async fn test_resubscribe_does_not_duplicate_notifications() {
         );
     }
 
+    peripheral.disconnect().await.unwrap();
+}
+
+/// Covers #471: a subscribe the peripheral refuses must resolve to `Err`, and later subscribes must still work.
+pub async fn test_refused_subscribe_returns_error() {
+    use futures::StreamExt;
+    use std::time::Duration;
+    use tokio::time;
+
+    let peripheral = peripheral_finder::find_and_connect().await;
+    peripheral_finder::reset_peripheral(&peripheral).await;
+    let refused_char =
+        peripheral_finder::find_characteristic(&peripheral, gatt_uuids::REFUSED_NOTIFY_CHAR);
+
+    let subscribe_result =
+        tokio::time::timeout(Duration::from_secs(10), peripheral.subscribe(&refused_char))
+            .await
+            .expect("subscribe(REFUSED_NOTIFY_CHAR) timed out");
+    assert!(
+        subscribe_result.is_err(),
+        "expected an error subscribing to REFUSED_NOTIFY_CHAR, got {:?}",
+        subscribe_result
+    );
+
+    let notify_char = peripheral_finder::find_characteristic(&peripheral, gatt_uuids::NOTIFY_CHAR);
+    let mut stream = peripheral.notifications().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(10), peripheral.subscribe(&notify_char))
+        .await
+        .expect("subscribe(NOTIFY_CHAR) timed out")
+        .expect("subscribe(NOTIFY_CHAR) should succeed after the refused subscribe");
+    peripheral_finder::send_control_command(&peripheral, gatt_uuids::CMD_START_NOTIFICATIONS).await;
+
+    let received = time::timeout(Duration::from_secs(5), async {
+        loop {
+            match stream.next().await {
+                Some(notification) if notification.uuid == gatt_uuids::NOTIFY_CHAR => return true,
+                Some(_) => continue,
+                None => return false,
+            }
+        }
+    })
+    .await
+    .unwrap_or(false);
+    assert!(
+        received,
+        "expected a notification on NOTIFY_CHAR after successfully subscribing"
+    );
+
+    peripheral_finder::send_control_command(&peripheral, gatt_uuids::CMD_STOP_NOTIFICATIONS).await;
+    peripheral.unsubscribe(&notify_char).await.unwrap();
     peripheral.disconnect().await.unwrap();
 }
 

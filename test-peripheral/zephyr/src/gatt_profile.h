@@ -31,6 +31,8 @@
     BT_UUID_DECLARE_128(BT_UUID_128_ENCODE(0x00000205, 0xb5a3, 0xf393, 0xe0a9, 0xe50e24dcca9e))
 #define BT_UUID_LONG_VALUE \
     BT_UUID_DECLARE_128(BT_UUID_128_ENCODE(0x00000206, 0xb5a3, 0xf393, 0xe0a9, 0xe50e24dcca9e))
+#define BT_UUID_ERROR_CHAR \
+    BT_UUID_DECLARE_128(BT_UUID_128_ENCODE(0x00000207, 0xb5a3, 0xf393, 0xe0a9, 0xe50e24dcca9e))
 
 /* --- Notification Test Service (0x00000003-...) --- */
 #define BT_UUID_NOTIFY_SERVICE \
@@ -41,6 +43,8 @@
     BT_UUID_DECLARE_128(BT_UUID_128_ENCODE(0x00000302, 0xb5a3, 0xf393, 0xe0a9, 0xe50e24dcca9e))
 #define BT_UUID_CONFIGURABLE_NOTIFY \
     BT_UUID_DECLARE_128(BT_UUID_128_ENCODE(0x00000303, 0xb5a3, 0xf393, 0xe0a9, 0xe50e24dcca9e))
+#define BT_UUID_REFUSED_NOTIFY_CHAR \
+    BT_UUID_DECLARE_128(BT_UUID_128_ENCODE(0x00000304, 0xb5a3, 0xf393, 0xe0a9, 0xe50e24dcca9e))
 
 /* --- Descriptor Test Service (0x00000004-...) --- */
 #define BT_UUID_DESCRIPTOR_SERVICE \
@@ -65,6 +69,9 @@
 #define LONG_VALUE_SIZE          512
 #define MANUFACTURER_COMPANY_ID  0xFFFF
 #define NOTIFICATION_INTERVAL_MS 1000
+
+/* Application error (0x80-0x9F); auth/encryption errors would trigger pairing. */
+#define ERROR_CHAR_ATT_ERROR 0x80
 
 /* --- Shared State --- */
 

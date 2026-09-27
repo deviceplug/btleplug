@@ -20,6 +20,10 @@ extern ssize_t read_long_value(struct bt_conn *, const struct bt_gatt_attr *,
                                void *, uint16_t, uint16_t);
 extern ssize_t write_long_value(struct bt_conn *, const struct bt_gatt_attr *,
                                 const void *, uint16_t, uint16_t, uint8_t);
+extern ssize_t read_error(struct bt_conn *, const struct bt_gatt_attr *,
+                          void *, uint16_t, uint16_t);
+extern ssize_t write_error(struct bt_conn *, const struct bt_gatt_attr *,
+                           const void *, uint16_t, uint16_t, uint8_t);
 extern ssize_t read_descriptor_test_char(struct bt_conn *,
                                          const struct bt_gatt_attr *,
                                          void *, uint16_t, uint16_t);
@@ -32,6 +36,10 @@ extern ssize_t write_rw_descriptor(struct bt_conn *, const struct bt_gatt_attr *
 extern void notify_ccc_changed(const struct bt_gatt_attr *, uint16_t);
 extern void indicate_ccc_changed(const struct bt_gatt_attr *, uint16_t);
 extern void configurable_notify_ccc_changed(const struct bt_gatt_attr *, uint16_t);
+extern ssize_t read_refused_ccc(struct bt_conn *, const struct bt_gatt_attr *,
+                                void *, uint16_t, uint16_t);
+extern ssize_t write_refused_ccc(struct bt_conn *, const struct bt_gatt_attr *,
+                                 const void *, uint16_t, uint16_t, uint8_t);
 
 /* Forward declaration for control point write handler */
 extern ssize_t write_control_point(struct bt_conn *, const struct bt_gatt_attr *,
@@ -92,6 +100,11 @@ BT_GATT_SERVICE_DEFINE(rw_svc,
         BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
         BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
         read_long_value, write_long_value, NULL),
+    /* Error Char -- read and write both always fail (#492) */
+    BT_GATT_CHARACTERISTIC(BT_UUID_ERROR_CHAR,
+        BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
+        BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+        read_error, write_error, NULL),
 );
 
 /* ============================================================
@@ -120,6 +133,14 @@ BT_GATT_SERVICE_DEFINE(notify_svc,
         NULL, NULL, NULL),
     BT_GATT_CCC(configurable_notify_ccc_changed,
         BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    /* Refused Notify -- unmanaged CCC whose write callback rejects every subscribe (#471) */
+    BT_GATT_CHARACTERISTIC(BT_UUID_REFUSED_NOTIFY_CHAR,
+        BT_GATT_CHRC_NOTIFY,
+        BT_GATT_PERM_NONE,
+        NULL, NULL, NULL),
+    BT_GATT_DESCRIPTOR(BT_UUID_GATT_CCC,
+        BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+        read_refused_ccc, write_refused_ccc, NULL),
 );
 
 /* ============================================================

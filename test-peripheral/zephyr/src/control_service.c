@@ -37,6 +37,9 @@ static void periodic_notify_handler(struct k_work *work)
 	 *   [7] = Configurable Notify declaration
 	 *   [8] = Configurable Notify value  <-- use for bt_gatt_notify
 	 *   [9] = Configurable Notify CCC
+	 *   [10] = Refused Notify declaration
+	 *   [11] = Refused Notify value (never notified -- CCC write always rejected)
+	 *   [12] = Refused Notify CCC
 	 */
 
 	/* Send notification on Notify Char (attr index 2 = value attribute) */

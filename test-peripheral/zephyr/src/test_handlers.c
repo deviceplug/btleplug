@@ -105,6 +105,22 @@ ssize_t write_long_value(struct bt_conn *conn, const struct bt_gatt_attr *attr,
     return len;
 }
 
+/* --- Error Test Characteristic Callbacks --- */
+
+/* ERROR_CHAR: every read and write fails (#492). */
+ssize_t read_error(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                   void *buf, uint16_t len, uint16_t offset)
+{
+    return BT_GATT_ERR(ERROR_CHAR_ATT_ERROR);
+}
+
+ssize_t write_error(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                    const void *buf, uint16_t len, uint16_t offset,
+                    uint8_t flags)
+{
+    return BT_GATT_ERR(ERROR_CHAR_ATT_ERROR);
+}
+
 /* --- Descriptor Test Service Callbacks --- */
 
 static const uint8_t read_only_descriptor_val[] = {0xDE, 0xAD, 0xBE, 0xEF};
@@ -167,4 +183,25 @@ void configurable_notify_ccc_changed(const struct bt_gatt_attr *attr, uint16_t v
     g_state.configurable_notify_enabled = (value == BT_GATT_CCC_NOTIFY);
     LOG_INF("Configurable Notify CCC: %s",
             g_state.configurable_notify_enabled ? "enabled" : "disabled");
+}
+
+/*
+ * Unmanaged CCC that rejects every write so subscribe fails with an ATT error (#471).
+ * Unmanaged (not BT_GATT_CCC/BT_GATT_CCC_WITH_WRITE_CB) because a managed CCC claims
+ * its one cfg slot before this write callback runs, and a rejected write never frees it.
+ */
+ssize_t write_refused_ccc(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                          const void *buf, uint16_t len, uint16_t offset,
+                          uint8_t flags)
+{
+    LOG_INF("Refused Notify CCC write rejected");
+    return BT_GATT_ERR(BT_ATT_ERR_WRITE_REQ_REJECTED);
+}
+
+ssize_t read_refused_ccc(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                         void *buf, uint16_t len, uint16_t offset)
+{
+    static const uint8_t ccc_value[2] = {0x00, 0x00};
+    return bt_gatt_attr_read(conn, attr, buf, len, offset,
+                             ccc_value, sizeof(ccc_value));
 }

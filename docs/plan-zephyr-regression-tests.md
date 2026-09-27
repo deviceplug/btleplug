@@ -61,7 +61,7 @@ Every step runs this loop. Do not start the next step until the current step is 
 
 ## Progress and Handoff
 
-Updated: 2026-09-26, after Step 9.
+Updated: 2026-09-27, after Step 10.
 
 ### Status
 
@@ -77,9 +77,10 @@ Updated: 2026-09-26, after Step 9.
 | 7 | `05b1922` (library fix found by this step), `487a633` (stale-event fix to `test_clear_peripherals_rediscovers_device`), `20b5520` |
 | 8 | `84f9dc2` (refusing CCC is an unmanaged descriptor, not the plan's managed CCC: a managed CCC leaks Zephyr's only cfg slot on rejection) |
 | 9 | `b768000` (no drops or reordering observed on macOS) |
-| 10-14 | Not started |
+| 10 | `79fb66b` (proved against both #487 panic sites separately; handles follow service variable names, see conventions) |
+| 11-14 | Not started |
 
-Baseline before Step 1: 32/32 hardware tests passing on macOS. Only macOS has been run on hardware; Windows, Linux, and Android branches are unverified.
+Baseline before Step 1: 32/32 hardware tests passing on macOS. After Step 10: 44/44. Only macOS has been run on hardware; Windows, Linux, and Android branches are unverified.
 
 ### Working conventions learned so far
 
@@ -94,6 +95,8 @@ Baseline before Step 1: 32/32 hardware tests passing on macOS. Only macOS has be
 - **Firmware threading.** Both boards build with `CONFIG_BT_RECV_WORKQ_BT=y`: ATT/GATT callbacks, including `CMD_RESET_STATE` (called directly from the Control Point write), run serially on the "BT RX WQ" thread. Only `periodic_notify_handler` and `disconnect_handler` run on the system workqueue.
 - **RTT / J-Link.** The DK's onboard J-Link runs old firmware (V1): `JLinkRTTLogger` never finds the RTT control block, and attaching `JLinkExe` at 4 MHz SWD stops BLE advertising (tests time out in `find_and_connect()`). Don't sink time into RTT capture; prove firmware behaviour from Zephyr source and test outcomes, or use macOS PacketLogger for ATT traffic.
 - **Plan text vs. source.** Check plan claims against the source before implementing: Step 6's `NotSupported("add_peripheral")` string and Step 7's `DeviceDisconnected` expectation were both wrong.
+- **GATT handle order.** Static services are placed by `SORT_BY_NAME` on the `BT_GATT_SERVICE_DEFINE` variable name, not source order (current order: control, descriptor, included, notify, rw). Only relative `attrs[]` indices are safe to hardcode.
+- **Regression proofs.** When a fix removed several panic or error sites, reintroduce them one at a time: an earlier site masks later ones. Add a control test (an existing test on the same broken code) to show the new test is what reaches the site.
 
 ### Findings outside this plan (report to the user; not fixed)
 
@@ -255,7 +258,8 @@ Tests:
 ### Step 14: Final documentation and branch review
 
 - Update `tests/AGENTS.md` test categories and freshness date for the new tests (concurrency, errors, advertisement rotation).
-- Update `test-peripheral/AGENTS.md` with the new characteristics, secondary service, opcode 0x04 behaviour, and payload size.
+- Update `test-peripheral/AGENTS.md` with the new characteristics, secondary service, opcode 0x04 behaviour, and payload size. Its "Four GATT services" line (~:26) is now four primary plus one secondary; also note the `SORT_BY_NAME` handle ordering.
+- `tests/AGENTS.md`: the Discovery glob `test_discover_*.rs` misses `test_discovery_with_included_service.rs`.
 - Run a final `opus` review over the whole range of commits from Step 1 to here, and a full hardware run of `./scripts/run-integration-tests.sh` on macOS with the nRF52840. Record any platform that could not be run.
 
 **Commit:** `doc: Update test suite and test peripheral docs for regression expansion`

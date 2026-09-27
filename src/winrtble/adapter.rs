@@ -20,12 +20,15 @@ use crate::{
     common::adapter_manager::AdapterManager,
 };
 use async_trait::async_trait;
+use futures::future::join_all;
 use futures::stream::Stream;
 use std::convert::TryFrom;
 use std::fmt::{self, Debug, Formatter};
 use std::future::IntoFuture;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use tokio::time::timeout;
 use windows::{
     Devices::{
         Bluetooth::{
@@ -60,6 +63,18 @@ impl Drop for RadioStateHandler {
         }
     }
 }
+
+/// Timeout for a single device's Cached-mode GATT service lookup during
+/// [`Adapter::retrieve_peripherals`]'s service/combined path.
+///
+/// WinRT's system-wide "connected" device selector can keep reporting a device as
+/// connected long after it has gone out of range; `GetGattServicesWithCacheModeAsync`
+/// on such a stale device has been observed to hang for tens of seconds (~51s on real
+/// hardware) instead of returning `Unreachable` promptly. A device that does not
+/// answer within this window is treated the same as one that returned a non-`Success`
+/// status: no services, so it cannot match a service filter. Kept separate from
+/// `ble::device::GATT_CACHE_TIMEOUT` (#325), which bounds a different, uncached call.
+const RETRIEVE_GATT_TIMEOUT: Duration = Duration::from_secs(5);
 
 fn winrt_error<E: std::fmt::Debug>(error: E) -> Error {
     Error::Other(format!("{error:?}").into())
@@ -216,6 +231,9 @@ impl Central for Adapter {
     /// WinRT's connected-device selector is system-wide and cannot be restricted to
     /// this `Radio`; callers must treat results as belonging to the Windows BLE
     /// subsystem rather than to one physical adapter when multiple radios exist.
+    /// For service and combined lookups, a device whose GATT services cannot be read
+    /// within 5 seconds is treated as having no services, so it cannot match the
+    /// service filter (it can still match by identifier in a combined lookup).
     async fn retrieve_peripherals(
         &self,
         options: RetrievePeripheralsOptions,
@@ -269,9 +287,12 @@ impl Central for Adapter {
             .map_err(winrt_error)?
             .into_iter()
             .collect::<Vec<_>>();
-        let mut result = Vec::new();
 
-        for info in devices {
+        // Look up devices concurrently; each lookup is bounded by RETRIEVE_GATT_TIMEOUT,
+        // so stale devices cost about one timeout in total.
+        let manager = &self.manager;
+        let options = &options;
+        let device_futures = devices.into_iter().map(|info| async move {
             let id = info.Id().map_err(winrt_error)?;
             let device = BluetoothLEDevice::FromIdAsync(&id)
                 .map_err(winrt_error)?
@@ -281,37 +302,64 @@ impl Central for Adapter {
             let address = checked_address(device.BluetoothAddress().map_err(winrt_error)?)?;
             let candidate_id = PeripheralId::from(address);
 
-            let service_result = device
+            let service_op = device
                 .GetGattServicesWithCacheModeAsync(BluetoothCacheMode::Cached)
-                .map_err(winrt_error)?
-                .into_future()
-                .await
                 .map_err(winrt_error)?;
-            let service_uuids = if service_result.Status().map_err(winrt_error)?
-                == GattCommunicationStatus::Success
+            let service_uuids = match timeout(
+                RETRIEVE_GATT_TIMEOUT,
+                service_op.clone().into_future(),
+            )
+            .await
             {
-                service_result
-                    .Services()
-                    .map_err(winrt_error)?
-                    .into_iter()
-                    .map(|service| {
-                        service
-                            .Uuid()
-                            .map(|uuid| crate::winrtble::utils::to_uuid(&uuid))
-                    })
-                    .collect::<windows::core::Result<Vec<_>>>()
-                    .map_err(winrt_error)?
-            } else {
-                Vec::new()
+                Ok(service_result) => {
+                    let service_result = service_result.map_err(winrt_error)?;
+                    if service_result.Status().map_err(winrt_error)?
+                        == GattCommunicationStatus::Success
+                    {
+                        service_result
+                            .Services()
+                            .map_err(winrt_error)?
+                            .into_iter()
+                            .map(|service| {
+                                service
+                                    .Uuid()
+                                    .map(|uuid| crate::winrtble::utils::to_uuid(&uuid))
+                            })
+                            .collect::<windows::core::Result<Vec<_>>>()
+                            .map_err(winrt_error)?
+                    } else {
+                        Vec::new()
+                    }
+                }
+                Err(_) => {
+                    log::debug!(
+                        "GATT service lookup for {candidate_id:?} did not complete within \
+                         {RETRIEVE_GATT_TIMEOUT:?}; treating it as having no services"
+                    );
+                    if let Err(cancel_err) = service_op.Cancel() {
+                        log::warn!(
+                            "Failed to cancel timed-out GATT service lookup for {candidate_id:?}: \
+                             {cancel_err:?}"
+                        );
+                    }
+                    Vec::new()
+                }
             };
-            if !api::matches_retrieval_selectors(&candidate_id, &service_uuids, &options) {
-                continue;
+            if !api::matches_retrieval_selectors(&candidate_id, &service_uuids, options) {
+                return Ok(None);
             }
-            let peripheral = self.manager.peripheral(&candidate_id).unwrap_or_else(|| {
-                let peripheral = Peripheral::new(Arc::downgrade(&self.manager), address);
-                self.manager.add_peripheral(peripheral)
+            let peripheral = manager.peripheral(&candidate_id).unwrap_or_else(|| {
+                let peripheral = Peripheral::new(Arc::downgrade(manager), address);
+                manager.add_peripheral(peripheral)
             });
-            result.push(peripheral);
+            Ok::<_, Error>(Some(peripheral))
+        });
+
+        let mut result = Vec::new();
+        for outcome in join_all(device_futures).await {
+            if let Some(peripheral) = outcome? {
+                result.push(peripheral);
+            }
         }
         Ok(api::merge_retrieved_peripherals(result, |peripheral| {
             crate::api::Peripheral::id(peripheral)

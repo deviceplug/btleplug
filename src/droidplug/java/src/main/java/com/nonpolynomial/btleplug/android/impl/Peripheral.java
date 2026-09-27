@@ -8,6 +8,7 @@ import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
+import android.os.SystemClock;
 import android.util.Log;
 
 import java.lang.ref.WeakReference;
@@ -16,6 +17,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import io.github.gedgygedgy.rust.future.Future;
 import io.github.gedgygedgy.rust.stream.QueueStream;
@@ -27,11 +31,38 @@ class Peripheral {
     private static final String TAG = "Peripheral";
     private static final UUID CLIENT_CHARACTERISTIC_CONFIGURATION_DESCRIPTOR = new UUID(0x00002902_0000_1000L, 0x8000_00805f9b34fbL);
 
+    // 0x3E is the HCI reason for a connection that failed to be established; Android usually
+    // surfaces it as its generic GATT_ERROR (133), which is not itself a public API constant.
+    // Both can be reported for a connection attempt that never reached STATE_CONNECTED, typically
+    // because the peripheral missed the first connection events. connect() retries on these
+    // instead of surfacing a spurious failure, but only when the failed attempt was fast: on
+    // Android <= 14 a ~30s direct-connect timeout is also reported as 133, and retrying that would
+    // turn a connect to an absent device into a ~90s wait.
+    static final int GATT_ERROR = 133;
+    static final int HCI_ERR_CONNECTION_FAILED_ESTABLISHMENT = 0x3e;
+    static final int MAX_CONNECT_RETRIES = 2; // up to 3 total connect attempts
+    static final long CONNECT_RETRY_DELAY_MS = 200;
+    static final long CONNECT_RETRY_MAX_ELAPSED_MS = 10_000;
+
+    // Library-owned scheduler for connect retries: deliberately not tied to any app's main
+    // looper, since an app that blocks its main thread while awaiting connect() would otherwise
+    // deadlock waiting for its own looper to run the retry.
+    private static final ScheduledExecutorService RETRY_EXECUTOR =
+            Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "btleplug-connect-retry");
+                t.setDaemon(true);
+                return t;
+            });
+
     private final BluetoothDevice device;
     private final Adapter adapter;
     private BluetoothGatt gatt;
     private final Callback callback;
     private boolean connected = false;
+    // Set for the duration of a single Callback.onConnectionStateChange dispatch to suppress the
+    // adapter's DeviceDisconnected notification when that DISCONNECTED is just a retryable failed
+    // connection attempt (see attemptConnect) rather than a real disconnect of a connected device.
+    private boolean suppressDisconnectNotification = false;
 
     // Cached connection parameters from onConnectionUpdated callback
     private int connectionInterval = -1;  // in 1.25ms units
@@ -57,42 +88,93 @@ class Peripheral {
     public Future<Void> connect() {
         SimpleFuture<Void> future = new SimpleFuture<>();
         synchronized (this) {
-            this.queueCommand(() -> {
-                this.asyncWithFuture(future, () -> {
-                    CommandCallback callback = new CommandCallback(future) {
-                        @Override
-                        public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
-                            Peripheral.this.asyncWithFuture(future, () -> {
-                                if (status != BluetoothGatt.GATT_SUCCESS) {
-                                    throw new NotConnectedException();
-                                }
-
-                                if (newState == BluetoothGatt.STATE_CONNECTED) {
-                                    Peripheral.this.wakeCommand(future, null);
-                                }
-                            });
-                        }
-                    };
-
-                    if (this.connected) {
-                        Peripheral.this.wakeCommand(future, null);
-                    } else if (this.gatt == null) {
-                        try {
-                            this.setCommandCallback(callback);
-                            this.gatt = this.device.connectGatt(null, false, this.callback);
-                        } catch (SecurityException ex) {
-                            throw new PermissionDeniedException(ex);
-                        }
-                    } else {
-                        this.setCommandCallback(callback);
-                        if (!this.gatt.connect()) {
-                            throw new RuntimeException("Unable to reconnect to device");
-                        }
-                    }
-                });
-            });
+            this.queueCommand(() -> this.attemptConnect(future, 0));
         }
         return future;
+    }
+
+    /**
+     * Pure retry decision for a failed connect attempt, package-private for unit testing.
+     *
+     * @param status status reported by onConnectionStateChange
+     * @param attempt zero-based index of the attempt that just failed
+     * @param attemptElapsedMs wall-clock duration of the attempt that just failed
+     */
+    static boolean shouldRetryConnect(int status, int attempt, long attemptElapsedMs) {
+        if (attempt >= MAX_CONNECT_RETRIES) {
+            return false;
+        }
+        if (status != GATT_ERROR && status != HCI_ERR_CONNECTION_FAILED_ESTABLISHMENT) {
+            return false;
+        }
+        return attemptElapsedMs < CONNECT_RETRY_MAX_ELAPSED_MS;
+    }
+
+    @SuppressLint("MissingPermission")
+    private void attemptConnect(SimpleFuture<Void> future, int attempt) {
+        this.asyncWithFuture(future, () -> {
+            long attemptStartMs = SystemClock.elapsedRealtime();
+            CommandCallback callback = new CommandCallback(future) {
+                @Override
+                public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
+                    Peripheral.this.asyncWithFuture(future, () -> {
+                        if (status != BluetoothGatt.GATT_SUCCESS) {
+                            long attemptElapsedMs = SystemClock.elapsedRealtime() - attemptStartMs;
+                            if (newState == BluetoothGatt.STATE_DISCONNECTED
+                                    && Peripheral.shouldRetryConnect(status, attempt, attemptElapsedMs)) {
+                                if (Peripheral.this.gatt != null) {
+                                    Peripheral.this.gatt.close();
+                                    Peripheral.this.gatt = null;
+                                }
+                                Peripheral.this.commandCallback = null;
+                                Peripheral.this.suppressDisconnectNotification = true;
+                                // Not kept: nothing here needs to cancel a pending retry, and a
+                                // pending retry already holds a reference to this Peripheral via
+                                // the closure, keeping it alive until it runs.
+                                RETRY_EXECUTOR.schedule(() -> {
+                                    Peripheral.this.dispatchToCommandCallback("connectRetry", () -> {
+                                        synchronized (Peripheral.this) {
+                                            Peripheral.this.attemptConnect(future, attempt + 1);
+                                        }
+                                    });
+                                }, CONNECT_RETRY_DELAY_MS, TimeUnit.MILLISECONDS);
+                                return;
+                            }
+
+                            if (Peripheral.this.gatt != null) {
+                                Peripheral.this.gatt.close();
+                                Peripheral.this.gatt = null;
+                            }
+                            Peripheral.this.connected = false;
+                            throw new NotConnectedException();
+                        }
+
+                        if (newState == BluetoothGatt.STATE_CONNECTED) {
+                            Peripheral.this.wakeCommand(future, null);
+                        }
+                    });
+                }
+            };
+
+            if (this.connected) {
+                Peripheral.this.wakeCommand(future, null);
+            } else if (this.gatt == null) {
+                try {
+                    this.setCommandCallback(callback);
+                    this.gatt = this.device.connectGatt(null, false, this.callback);
+                    if (this.gatt == null) {
+                        throw new NotConnectedException();
+                    }
+                } catch (SecurityException ex) {
+                    throw new PermissionDeniedException(ex);
+                }
+            } else {
+                this.setCommandCallback(callback);
+                if (!this.gatt.connect()) {
+                    throw new RuntimeException("Unable to reconnect to device");
+                }
+            }
+        });
     }
 
     @SuppressLint("MissingPermission")
@@ -542,7 +624,16 @@ class Peripheral {
     private class Callback extends BluetoothGattCallback {
         @Override
         public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
+            boolean suppressDisconnectNotification;
+            boolean nowConnected;
             synchronized (Peripheral.this) {
+                // connectGatt is always called (and its result assigned to Peripheral.this.gatt)
+                // while holding this same lock, so a callback for a superseded/stale gatt (e.g.
+                // a retry already moved on to a new connectGatt) can be safely ignored here.
+                if (gatt != Peripheral.this.gatt) {
+                    Log.w(TAG, "Ignoring onConnectionStateChange for stale gatt");
+                    return;
+                }
                 switch (newState) {
                     case BluetoothGatt.STATE_CONNECTED:
                         Peripheral.this.connected = true;
@@ -551,17 +642,26 @@ class Peripheral {
                         Peripheral.this.connected = false;
                         break;
                 }
+                // Reset before dispatch; the command callback below sets it back to true if needed.
+                Peripheral.this.suppressDisconnectNotification = false;
                 if (Peripheral.this.commandCallback != null) {
                     Peripheral.this.dispatchToCommandCallback("onConnectionStateChange",
                             () -> Peripheral.this.commandCallback.onConnectionStateChange(gatt, status, newState));
                 }
+                suppressDisconnectNotification = Peripheral.this.suppressDisconnectNotification;
+                // A failed connect closes the gatt and clears `connected` even if the state was CONNECTED.
+                nowConnected = Peripheral.this.connected;
             }
             switch (newState) {
                 case BluetoothGatt.STATE_CONNECTED:
-                    Peripheral.this.adapter.onConnectionStateChanged(Peripheral.this.device.getAddress(), true);
+                    if (nowConnected) {
+                        Peripheral.this.adapter.onConnectionStateChanged(Peripheral.this.device.getAddress(), true);
+                    }
                     break;
                 case BluetoothGatt.STATE_DISCONNECTED:
-                    Peripheral.this.adapter.onConnectionStateChanged(Peripheral.this.device.getAddress(), false);
+                    if (!suppressDisconnectNotification) {
+                        Peripheral.this.adapter.onConnectionStateChanged(Peripheral.this.device.getAddress(), false);
+                    }
                     break;
             }
         }

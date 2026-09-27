@@ -61,7 +61,7 @@ Every step runs this loop. Do not start the next step until the current step is 
 
 ## Progress and Handoff
 
-Updated: 2026-09-27, after Step 11.
+Updated: 2026-09-27, after Step 13.
 
 ### Status
 
@@ -79,14 +79,25 @@ Updated: 2026-09-27, after Step 11.
 | 9 | `b768000` (no drops or reordering observed on macOS) |
 | 10 | `79fb66b` (proved against both #487 panic sites separately; handles follow service variable names, see conventions) |
 | 11 | `d68ff66` (test restores the default advertising set itself; skips `wait_for_rediscovery` because the service-data event implies rediscovery on CoreBluetooth) |
-| 12-14 | Not started |
+| 12 | `e8768db` (**hardware run pending**; all four backends' `mtu()` return the negotiated ATT MTU, so `mtu - 4` holds) |
+| 13 | `c139a9d` (prebuilds selected test binaries outside the timeout; radio tests filtered to `winrtble::adapter::cleanup_tests::`, serial, fail on zero matches; Windows path unexercised) |
+| 14 | Not started |
 
 Baseline before Step 1: 32/32 hardware tests passing on macOS. After Step 11: 45/45. Only macOS has been run on hardware; Windows, Linux, and Android branches are unverified.
+
+### Pending hardware verification
+
+Steps 12 and 13 were committed on 2026-09-27 with the board detached, after build, lint, and review only. Before merging:
+
+1. Flash current firmware (`e8768db` or later) and run `./scripts/run-integration-tests.sh test_mtu_sized_notification_payload` 3 times, then the full suite (default timeout is now 40 s; this is the first run with the prebuild step).
+2. Check the logged `mtu=` / payload length. `mtu=23` means the platform sent 19 bytes and did not exercise the larger buffer; on macOS an occasional 23 would mean CoreBluetooth sampled before the MTU exchange finished. Watch `test_configurable_notification_payload`, which shares `notify_payload`.
+3. On failure, use PacketLogger to tell a truncated notification from none (the test message reports the last `CONFIGURABLE_NOTIFY` length seen).
+4. Windows: clear the GATT cache after flashing (Steps 10 and 12 changed the layout and payload), and confirm `winrtble_radio_tests` runs 3 tests.
 
 ### Working conventions learned so far
 
 - **Firmware tooling.** Workspace topdir is `test-peripheral/` (deps in `test-peripheral/deps/`, uv venv in `test-peripheral/.venv/`). Use `test-peripheral/.venv/bin/west` (or activate the venv; fish: `activate.fish`). Build from `test-peripheral/zephyr/`: `west build -b nrf52840dk/nrf52840 --pristine`; flash: `west flash --runner nrfjprog`.
-- **Hardware runs.** Use `TIMEOUT=60 ./scripts/run-integration-tests.sh <names>` until Step 13 raises the default. Run new tests at least 3 times (5 for timing-dependent ones). Write repeat loops as bash scripts in the scratchpad; the tool shell is zsh and mangles things like `echo ====`.
+- **Hardware runs.** `./scripts/run-integration-tests.sh <names>` (default per-test timeout 40 s since Step 13; binaries are prebuilt outside it). Run new tests at least 3 times (5 for timing-dependent ones). Write repeat loops as bash scripts in the scratchpad; the tool shell is zsh and mangles things like `echo ====`.
 - **Event helpers** in `tests/common/peripheral_finder.rs`: `spawn_event_collector` (always use it; the central event broadcast has capacity 16 and silently drops lagged events), `wait_for_event(rx, timeout, what, pred)`, `wait_for_connected` (skips stale BlueZ synthetic connection events), `wait_for_rediscovery` (no-op off Apple). Drain the receiver with `try_recv()` before starting a new phase that must not see earlier events.
 - **CoreBluetooth reconnect.** CoreBluetooth drops a peripheral on disconnect (issue #57); call `wait_for_rediscovery` before any reconnect after a disconnect.
 - **CoreBluetooth `clear_peripherals`** disconnects a connected peripheral without emitting `DeviceDisconnected` (documented contract since f3de711).

@@ -57,4 +57,5 @@ object NativeTests {
     external fun testConcurrentConnectAndDiscover()
     external fun testConcurrentOperationsSameService()
     external fun testDiscoverServicesDuringRead()
+    external fun testOperationsAcrossPeripheralTriggeredDisconnect()
 }

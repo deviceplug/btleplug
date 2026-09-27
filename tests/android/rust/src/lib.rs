@@ -156,6 +156,10 @@ jni_test!(
     test_cases::test_retrieve_peripherals_not_supported
 );
 jni_test!(
+    Java_com_nonpolynomial_btleplug_test_NativeTests_testAddPeripheralByAddress,
+    test_cases::test_add_peripheral_by_address
+);
+jni_test!(
     Java_com_nonpolynomial_btleplug_test_NativeTests_testConnectAndDisconnect,
     test_cases::test_connect_and_disconnect
 );
@@ -274,10 +278,6 @@ jni_test!(
 jni_test!(
     Java_com_nonpolynomial_btleplug_test_NativeTests_testOperationsAcrossPeripheralTriggeredDisconnect,
     test_cases::test_operations_across_peripheral_triggered_disconnect
-);
-jni_test!(
-    Java_com_nonpolynomial_btleplug_test_NativeTests_testAddPeripheralByAddress,
-    test_cases::test_add_peripheral_by_address
 );
 jni_test!(
     Java_com_nonpolynomial_btleplug_test_NativeTests_testGattErrorStatusIsReported,

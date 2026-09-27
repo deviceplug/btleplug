@@ -82,6 +82,7 @@ The Zephyr firmware implements the test GATT profile. The canonical UUID definit
 | Read/Write Test | `00000002-b5a3-f393-e0a9-e50e24dcca9e` | Read and write characteristic operations |
 | Notification Test | `00000003-b5a3-f393-e0a9-e50e24dcca9e` | Notify and indicate operations |
 | Descriptor Test | `00000004-b5a3-f393-e0a9-e50e24dcca9e` | Descriptor read/write operations |
+| Included (secondary) | `00000005-b5a3-f393-e0a9-e50e24dcca9e` | Included Char `00000501-...` (read-only `[0x05]`); included from the Descriptor service |
 
 ### Control Commands
 
@@ -92,9 +93,9 @@ Write these opcodes to the Control Point characteristic (`00000101-...`):
 | `0x01` | Start Notifications | Begin periodic notifications (1 Hz) |
 | `0x02` | Stop Notifications | Stop all periodic notifications |
 | `0x03` | Trigger Disconnect | Peripheral disconnects after 500ms |
-| `0x04` | Change Advertisements | Reserved; currently a no-op (logged only) |
+| `0x04` | Change Advertisements | Sets a pending flag; on the next advertising restart after a disconnect, the peripheral advertises an alternate set (flags + name advertising data, 128-bit service data + manufacturer data scan response) instead of the default. Cleared by the next connection or by `0x05` |
 | `0x05` | Reset State | Stop notifications, clear all buffers |
-| `0x06` | Set Notification Payload | Remaining bytes become the notification payload |
+| `0x06` | Set Notification Payload | Remaining bytes become the notification payload, truncated to 244 bytes (`CONFIG_BT_L2CAP_TX_MTU` minus the 3-byte ATT header) |
 
 ## Environment Variables
 

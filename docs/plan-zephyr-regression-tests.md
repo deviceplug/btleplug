@@ -61,7 +61,7 @@ Every step runs this loop. Do not start the next step until the current step is 
 
 ## Progress and Handoff
 
-Updated: 2026-09-27, after Step 13.
+Updated: 2026-09-27, after Step 14.
 
 ### Status
 
@@ -81,7 +81,7 @@ Updated: 2026-09-27, after Step 13.
 | 11 | `d68ff66` (test restores the default advertising set itself; skips `wait_for_rediscovery` because the service-data event implies rediscovery on CoreBluetooth) |
 | 12 | `e8768db` (**hardware run pending**; all four backends' `mtu()` return the negotiated ATT MTU, so `mtu - 4` holds) |
 | 13 | `c139a9d` (prebuilds selected test binaries outside the timeout; radio tests filtered to `winrtble::adapter::cleanup_tests::`, serial, fail on zero matches; Windows path unexercised) |
-| 14 | Not started |
+| 14 | follow-up fixes and docs below; final range review done (no Critical issues); macOS full hardware run **pending** (board detached) |
 
 Baseline before Step 1: 32/32 hardware tests passing on macOS. After Step 11: 45/45. Only macOS has been run on hardware; Windows, Linux, and Android branches are unverified.
 
@@ -93,6 +93,9 @@ Steps 12 and 13 were committed on 2026-09-27 with the board detached, after buil
 2. Check the logged `mtu=` / payload length. `mtu=23` means the platform sent 19 bytes and did not exercise the larger buffer; on macOS an occasional 23 would mean CoreBluetooth sampled before the MTU exchange finished. Watch `test_configurable_notification_payload`, which shares `notify_payload`.
 3. On failure, use PacketLogger to tell a truncated notification from none (the test message reports the last `CONFIGURABLE_NOTIFY` length seen).
 4. Windows: clear the GATT cache after flashing (Steps 10 and 12 changed the layout and payload), and confirm `winrtble_radio_tests` runs 3 tests.
+5. `cargo test --lib corebluetooth::internal::tests -- --ignored` on macOS (Bluetooth permission, no peripheral): the four `05b1922` unit tests are never run by the script.
+6. Run `test_advertisement_service_data_128bit` then `test_advertisement_services` back to back a few times to confirm the default advertising set returns within the script's inter-test gap.
+7. First runs on other backends: concurrent connect on BlueZ (the `InProgress` gate), `test_refused_subscribe_returns_error` on BlueZ/WinRT/Android, `test_add_peripheral_by_address` on Windows/Android, `test_retrieve_connected_peripheral_by_identifier` on BlueZ/WinRT, `Error::NotConnected` in `test_operations_across_peripheral_triggered_disconnect` on Android, and service-data repeat runs on BlueZ (findings 8, 9).
 
 ### Working conventions learned so far
 
@@ -123,6 +126,8 @@ Steps 12 and 13 were committed on 2026-09-27 with the board detached, after buil
 9. BlueZ never clears `ServiceData` when later advertisements omit it, so `properties().service_data` keeps showing stale entries while the device object exists.
 10. If `test_advertisement_service_data_128bit` fails before its final reconnect, the alternate set persists until the next connecting test; a scan-only test run in between (`test_advertisement_services`) fails as a knock-on.
 11. Firmware: `connected(err)` returns without restarting advertising, and Zephyr v4.4.2 has no auto-resume, so a failed connection would leave the peripheral silent (behaviour predates this plan).
+12. Firmware: `write_control_point` ignores `offset`. Zephyr v4.4.2 queues prepare fragments without calling the callback (the attribute lacks `BT_GATT_PERM_PREPARE_WRITE`, `att.c:2247`), then calls it once on execute with the joined value and the first fragment's offset. A long Control Point write therefore works, but a prepare queue starting at a non-zero offset would be run as if it started at offset 0. Fix: reject `offset != 0`. The MTU test caps at `mtu - 4` so the command fits in one Write Request.
+13. Firmware: `disconnected()` unrefs `g_state.conn` before stopping periodic notifications, which may still be using it on the system workqueue (fix: stop notifications before the unref). `k_work_cancel_delayable` does not wait for a running handler, so reset can clear `notify_payload` during `bt_gatt_notify` (fix: `k_work_cancel_delayable_sync`). 0x06 writes the payload from the BT RX WQ with no synchronisation against the handler at all (fix: stage the payload and swap it on the system workqueue, or guard it with a lock). All predate this plan; tests avoid them by setting the payload after reset and before 0x01.
 
 ## Steps
 
@@ -276,6 +281,7 @@ Tests:
 - Update `tests/AGENTS.md` test categories and freshness date for the new tests (concurrency, errors, advertisement rotation).
 - Update `test-peripheral/AGENTS.md` with the new characteristics, secondary service, opcode 0x04 behaviour, and payload size. Its "Four GATT services" line (~:26) is now four primary plus one secondary; also note the `SORT_BY_NAME` handle ordering.
 - `tests/AGENTS.md`: the Discovery glob `test_discover_*.rs` misses `test_discovery_with_included_service.rs`.
+- `test-peripheral/README.md`: 0x04 row, 0x06 payload size, and the Services table (added by the final range review).
 - Run a final `opus` review over the whole range of commits from Step 1 to here, and a full hardware run of `./scripts/run-integration-tests.sh` on macOS with the nRF52840. Record any platform that could not be run.
 
 **Commit:** `doc: Update test suite and test peripheral docs for regression expansion`

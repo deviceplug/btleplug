@@ -1,6 +1,6 @@
 # btleplug
 
-Last verified: 2026-09-26
+Last verified: 2026-09-27
 
 ## Tech Stack
 

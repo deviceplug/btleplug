@@ -61,7 +61,7 @@ Every step runs this loop. Do not start the next step until the current step is 
 
 ## Progress and Handoff
 
-Updated: 2026-09-27, after Step 10.
+Updated: 2026-09-27, after Step 11.
 
 ### Status
 
@@ -78,9 +78,10 @@ Updated: 2026-09-27, after Step 10.
 | 8 | `84f9dc2` (refusing CCC is an unmanaged descriptor, not the plan's managed CCC: a managed CCC leaks Zephyr's only cfg slot on rejection) |
 | 9 | `b768000` (no drops or reordering observed on macOS) |
 | 10 | `79fb66b` (proved against both #487 panic sites separately; handles follow service variable names, see conventions) |
-| 11-14 | Not started |
+| 11 | `d68ff66` (test restores the default advertising set itself; skips `wait_for_rediscovery` because the service-data event implies rediscovery on CoreBluetooth) |
+| 12-14 | Not started |
 
-Baseline before Step 1: 32/32 hardware tests passing on macOS. After Step 10: 44/44. Only macOS has been run on hardware; Windows, Linux, and Android branches are unverified.
+Baseline before Step 1: 32/32 hardware tests passing on macOS. After Step 11: 45/45. Only macOS has been run on hardware; Windows, Linux, and Android branches are unverified.
 
 ### Working conventions learned so far
 
@@ -107,6 +108,10 @@ Baseline before Step 1: 32/32 hardware tests passing on macOS. After Step 10: 44
 5. `AdapterManager` (`src/common/adapter_manager.rs`) uses a capacity-16 broadcast and `event_stream()` silently drops `Lagged`. Measured bursts of ~130 `DeviceUpdated` within ±500 ms of a disconnect during scanning. Any `events()` consumer can lose `DeviceConnected`/`DeviceDisconnected`. One unexplained cycle-2 `DeviceDisconnected` miss in Step 5 (1/5 runs, not reproduced in 25 instrumented runs) is attributed to this.
 6. WinRT does not clear `ble_services` after a peripheral-triggered disconnect, so a read afterwards may trigger an implicit reconnect; check on Windows hardware.
 7. `add_peripheral`'s `NotSupported` message ("Can't add a Peripheral from a PeripheralId") does not follow the operation-name convention `retrieve_peripherals` uses.
+8. The BlueZ repeat-run behaviour of `test_advertisement_service_data_128bit` relies on `device_set_service_data` clearing and re-adding service data when scanning with `duplicate_data` (checked in BlueZ master; the release that added this is unknown). An older BlueZ may send no `PropertiesChanged` on a second run.
+9. BlueZ never clears `ServiceData` when later advertisements omit it, so `properties().service_data` keeps showing stale entries while the device object exists.
+10. If `test_advertisement_service_data_128bit` fails before its final reconnect, the alternate set persists until the next connecting test; a scan-only test run in between (`test_advertisement_services`) fails as a knock-on.
+11. Firmware: `connected(err)` returns without restarting advertising, and Zephyr v4.4.2 has no auto-resume, so a failed connection would leave the peripheral silent (behaviour predates this plan).
 
 ## Steps
 

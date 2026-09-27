@@ -51,5 +51,5 @@ Each test is its own file (and therefore its own binary), ensuring process isola
 - One test per file ensures process isolation — never put multiple tests in the same file.
 - Tests must not depend on execution order; each test connects independently.
 - The scan timeout is 15 seconds (hardcoded in `peripheral_finder.rs`).
-- When adding a new test, also add the corresponding JNI export in `android/rust/src/lib.rs`, native declaration in `NativeTests.kt`, and `@Test` in `BleIntegrationTest.kt`. Tests backed by APIs Android does not support (e.g. `test_retrieve_connected_peripheral_by_service`) and macOS-only tests intentionally have no JNI export.
+- When adding a new test, also add the corresponding JNI export in `android/rust/src/lib.rs`, native declaration in `NativeTests.kt`, and `@Test` in `BleIntegrationTest.kt`. Tests backed by APIs Android does not support (e.g. `test_retrieve_connected_peripheral_by_service`, `test_retrieve_connected_peripheral_by_identifier`) and macOS-only tests intentionally have no JNI export.
 - Adapter-only tests require local adapter hardware but do not require the btleplug test peripheral; their desktop assertions are target-specific because CoreBluetooth and ordinary Android intentionally return `Ok(None)`.

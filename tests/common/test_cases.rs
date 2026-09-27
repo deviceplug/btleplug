@@ -275,6 +275,103 @@ pub async fn test_retrieve_peripherals_not_supported() {
     ));
 }
 
+/// Windows and Android construct a `Peripheral` from a bare id, so the returned handle must be
+/// usable. BlueZ and CoreBluetooth return `Error::NotSupported`; only the variant is asserted
+/// because its message does not follow the operation-name convention `retrieve_peripherals` uses.
+pub async fn test_add_peripheral_by_address() {
+    use btleplug::api::{Central, Peripheral as _};
+    use std::time::Duration;
+
+    let peripheral = peripheral_finder::find_and_connect().await;
+    let id = peripheral.id();
+    let adapter = peripheral_finder::get_adapter().await;
+
+    #[cfg(any(target_os = "linux", target_vendor = "apple"))]
+    {
+        let result = tokio::time::timeout(Duration::from_secs(10), adapter.add_peripheral(&id))
+            .await
+            .expect("add_peripheral() timed out");
+        assert!(
+            matches!(result, Err(btleplug::Error::NotSupported(_))),
+            "expected Error::NotSupported from add_peripheral(), got {:?}",
+            result
+        );
+        peripheral.disconnect().await.unwrap();
+    }
+
+    #[cfg(any(target_os = "windows", target_os = "android"))]
+    {
+        peripheral.disconnect().await.unwrap();
+
+        // The background scan may re-add the peripheral before add_peripheral() runs; both
+        // backends return an existing map entry before constructing one, so either way the
+        // returned handle is valid.
+        adapter.clear_peripherals().await.unwrap();
+
+        let added = tokio::time::timeout(Duration::from_secs(10), adapter.add_peripheral(&id))
+            .await
+            .expect("add_peripheral() timed out")
+            .expect("add_peripheral() should succeed");
+        assert_eq!(
+            added.id(),
+            id,
+            "add_peripheral() returned a peripheral with a different id"
+        );
+
+        tokio::time::timeout(Duration::from_secs(10), added.connect())
+            .await
+            .expect("connect() on add_peripheral()'s handle timed out")
+            .expect("connect() on add_peripheral()'s handle failed");
+        assert!(added.is_connected().await.unwrap());
+
+        tokio::time::timeout(Duration::from_secs(10), added.discover_services())
+            .await
+            .expect("discover_services() on add_peripheral()'s handle timed out")
+            .expect("discover_services() on add_peripheral()'s handle failed");
+
+        let char = peripheral_finder::find_characteristic(&added, gatt_uuids::STATIC_READ);
+        let value = tokio::time::timeout(Duration::from_secs(10), added.read(&char))
+            .await
+            .expect("read(STATIC_READ) on add_peripheral()'s handle timed out")
+            .expect("read(STATIC_READ) on add_peripheral()'s handle failed");
+        assert_eq!(
+            value,
+            gatt_uuids::STATIC_READ_VALUE,
+            "Static read should return [0x01, 0x02, 0x03, 0x04]"
+        );
+
+        added.disconnect().await.unwrap();
+    }
+}
+
+/// Android does not support retrieval (covered by `test_retrieve_peripherals_not_supported`).
+#[cfg(not(target_os = "android"))]
+pub async fn test_retrieve_connected_peripheral_by_identifier() {
+    use btleplug::api::{Central, Peripheral as _, RetrievePeripheralsOptions};
+
+    let adapter = peripheral_finder::get_adapter().await;
+    let expected = peripheral_finder::find_and_connect().await;
+    let expected_id = expected.id();
+
+    let retrieved = adapter
+        .retrieve_peripherals(RetrievePeripheralsOptions {
+            identifiers: Some(vec![expected_id.clone()]),
+            services: None,
+        })
+        .await
+        .expect("retrieval by identifier should be supported on desktop backends");
+    let matched = retrieved
+        .iter()
+        .find(|peripheral| peripheral.id() == expected_id)
+        .expect("connected test peripheral was not returned by identifier retrieval");
+    assert!(
+        matched.is_connected().await.unwrap(),
+        "retrieved peripheral should report connected"
+    );
+
+    expected.disconnect().await.unwrap();
+}
+
 pub async fn test_retrieve_connected_peripheral_by_service() {
     use btleplug::api::{Central, RetrievePeripheralsOptions};
 

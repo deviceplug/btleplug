@@ -58,4 +58,5 @@ object NativeTests {
     external fun testConcurrentOperationsSameService()
     external fun testDiscoverServicesDuringRead()
     external fun testOperationsAcrossPeripheralTriggeredDisconnect()
+    external fun testAddPeripheralByAddress()
 }

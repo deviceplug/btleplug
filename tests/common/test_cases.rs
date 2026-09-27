@@ -1204,6 +1204,200 @@ pub async fn test_discover_services_during_read() {
     peripheral.disconnect().await.unwrap();
 }
 
+/// Covers #490: a peripheral-triggered disconnect that lands mid-operation
+/// must not wedge the command queue or hide the `DeviceDisconnected` event.
+///
+/// This branch also fixed CoreBluetooth replying to pending operations when a
+/// peripheral goes away (`f3de711`, `src/corebluetooth/internal.rs`), so a
+/// timeout anywhere in this test is a real regression signal on every
+/// platform, not just Android -- it must never be relaxed away.
+pub async fn test_operations_across_peripheral_triggered_disconnect() {
+    use btleplug::api::CentralEvent;
+    use std::time::{Duration, Instant};
+
+    let peripheral = peripheral_finder::find_and_connect().await;
+    peripheral_finder::reset_peripheral(&peripheral).await;
+    assert!(peripheral.is_connected().await.unwrap());
+    let target_id = peripheral.id();
+
+    // Start the collector before sending the first 0x03 so the
+    // DeviceDisconnected event can't be lost (see
+    // peripheral_finder::spawn_event_collector). Reused for both disconnect
+    // cycles; the buffer is drained before cycle 2's 0x03 so no leftover
+    // cycle-1 event can satisfy a cycle-2 wait.
+    let mut events = peripheral_finder::spawn_event_collector().await;
+
+    let descriptor = super::find_descriptor(
+        &peripheral,
+        gatt_uuids::DESCRIPTOR_TEST_CHAR,
+        gatt_uuids::READ_ONLY_DESCRIPTOR,
+    );
+    let counter_char =
+        peripheral_finder::find_characteristic(&peripheral, gatt_uuids::COUNTER_READ);
+    let static_char = peripheral_finder::find_characteristic(&peripheral, gatt_uuids::STATIC_READ);
+
+    // Repeats a single kind of read operation, each bounded by a 5 second
+    // timeout, until one returns Err (the firmware disconnects ~500ms after
+    // 0x03). No operation may time out -- that would mean the disconnect
+    // never surfaced to a pending command. The whole loop is also bounded to
+    // ~10s so a regression that swallows the error forever fails instead of
+    // hanging. Restricting each cycle to one op kind (instead of alternating)
+    // makes it unambiguous which op the disconnect actually caught.
+    async fn run_until_disconnect<F, Fut, T, E>(cycle: &str, op_name: &str, mut op: F) -> E
+    where
+        F: FnMut() -> Fut,
+        Fut: std::future::Future<Output = Result<T, E>>,
+        E: std::fmt::Debug,
+    {
+        let loop_deadline = Instant::now() + Duration::from_secs(10);
+        let mut success_count = 0u32;
+        let mut iteration = 0u32;
+        loop {
+            iteration += 1;
+            if Instant::now() >= loop_deadline {
+                panic!(
+                    "{cycle}: no {op_name} call returned Err after {success_count} successful \
+                     calls within the 10s bound -- the peripheral-triggered disconnect (0x03) \
+                     never surfaced to a pending command"
+                );
+            }
+
+            let result = tokio::time::timeout(Duration::from_secs(5), op())
+                .await
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "{cycle}: {op_name} timed out on iteration {iteration} (after \
+                         {success_count} prior successful calls) -- disconnect mid-operation \
+                         wedged the command queue"
+                    )
+                });
+
+            match result {
+                Ok(_) => success_count += 1,
+                Err(e) => {
+                    println!(
+                        "{cycle}: {op_name} failed on iteration {iteration} (after \
+                         {success_count} prior successful calls) with error: {e:?}"
+                    );
+                    return e;
+                }
+            }
+        }
+    }
+
+    // Cycle 1: only descriptor reads are ever in flight, so the disconnect
+    // that ends the loop is unambiguously caught by a descriptor read.
+    peripheral_finder::send_control_command(&peripheral, gatt_uuids::CMD_TRIGGER_DISCONNECT).await;
+    let _ = run_until_disconnect("cycle 1", "read_descriptor(READ_ONLY_DESCRIPTOR)", || {
+        peripheral.read_descriptor(&descriptor)
+    })
+    .await;
+
+    peripheral_finder::wait_for_event(
+        &mut events,
+        Duration::from_secs(10),
+        "DeviceDisconnected(test peripheral) [cycle 1]",
+        |event| matches!(event, CentralEvent::DeviceDisconnected(id) if *id == target_id),
+    )
+    .await;
+    assert!(
+        !peripheral.is_connected().await.unwrap(),
+        "peripheral should be disconnected after cycle 1"
+    );
+
+    // One more read after disconnection must return Err promptly, not hang --
+    // proof the queue isn't wedged and the disconnect is visible to new ops.
+    // Checked once here; cycle 2 below re-proves the queue survives a second
+    // disconnect via its own reconnect + STATIC_READ at the end.
+    let post_disconnect_result = tokio::time::timeout(
+        Duration::from_secs(2),
+        peripheral.read(&counter_char),
+    )
+    .await
+    .expect("read(COUNTER_READ) after disconnection timed out -- command queue is wedged (#490)");
+    // Peripheral.java clears `connected` under its lock (~L551) before
+    // `adapter.onConnectionStateChanged` (~L564) emits `DeviceDisconnected`, so
+    // `read()`'s `!this.connected` guard (~L198) throws `NotConnectedException`,
+    // mapped by `get_poll_result` (`src/droidplug/peripheral.rs` ~L92) to `Error::NotConnected`.
+    #[cfg(target_os = "android")]
+    assert!(
+        matches!(post_disconnect_result, Err(btleplug::Error::NotConnected)),
+        "expected Error::NotConnected reading after disconnection on Android, got {:?}",
+        post_disconnect_result
+    );
+    #[cfg(not(target_os = "android"))]
+    assert!(
+        post_disconnect_result.is_err(),
+        "expected an error reading after disconnection, got {:?}",
+        post_disconnect_result
+    );
+
+    // Reconnect, rediscover, and reset before cycle 2.
+    peripheral_finder::wait_for_rediscovery(&mut events, target_id.clone()).await;
+
+    tokio::time::timeout(Duration::from_secs(10), peripheral.connect())
+        .await
+        .expect("connect() after cycle 1 disconnect timed out")
+        .expect("connect() after cycle 1 disconnect failed");
+    assert!(peripheral.is_connected().await.unwrap());
+
+    tokio::time::timeout(Duration::from_secs(10), peripheral.discover_services())
+        .await
+        .expect("discover_services() after cycle 1 timed out")
+        .expect("discover_services() after cycle 1 failed");
+
+    peripheral_finder::reset_peripheral(&peripheral).await;
+
+    // Cycle 2: only characteristic reads are ever in flight, so the
+    // disconnect that ends the loop is unambiguously caught by a
+    // characteristic read.
+    while events.try_recv().is_ok() {}
+    peripheral_finder::send_control_command(&peripheral, gatt_uuids::CMD_TRIGGER_DISCONNECT).await;
+    let _ = run_until_disconnect("cycle 2", "read(COUNTER_READ)", || {
+        peripheral.read(&counter_char)
+    })
+    .await;
+
+    peripheral_finder::wait_for_event(
+        &mut events,
+        Duration::from_secs(10),
+        "DeviceDisconnected(test peripheral) [cycle 2]",
+        |event| matches!(event, CentralEvent::DeviceDisconnected(id) if *id == target_id),
+    )
+    .await;
+    assert!(
+        !peripheral.is_connected().await.unwrap(),
+        "peripheral should be disconnected after cycle 2"
+    );
+
+    // Reconnect, rediscover, and read STATIC_READ to prove the command queue
+    // is not wedged.
+    peripheral_finder::wait_for_rediscovery(&mut events, target_id).await;
+
+    tokio::time::timeout(Duration::from_secs(10), peripheral.connect())
+        .await
+        .expect("connect() after cycle 2 disconnect timed out")
+        .expect("connect() after cycle 2 disconnect failed");
+    assert!(peripheral.is_connected().await.unwrap());
+
+    tokio::time::timeout(Duration::from_secs(10), peripheral.discover_services())
+        .await
+        .expect("discover_services() after cycle 2 timed out")
+        .expect("discover_services() after cycle 2 failed");
+
+    let value = tokio::time::timeout(Duration::from_secs(10), peripheral.read(&static_char))
+        .await
+        .expect("read(STATIC_READ) timed out")
+        .expect("read(STATIC_READ) failed");
+    assert_eq!(
+        value,
+        gatt_uuids::STATIC_READ_VALUE,
+        "Static read should return [0x01, 0x02, 0x03, 0x04]"
+    );
+
+    peripheral.disconnect().await.unwrap();
+}
+
 pub async fn test_request_connection_parameters() {
     use btleplug::api::ConnectionParameterPreset;
 

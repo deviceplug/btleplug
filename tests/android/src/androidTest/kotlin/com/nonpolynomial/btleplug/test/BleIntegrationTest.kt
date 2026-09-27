@@ -115,4 +115,5 @@ class BleIntegrationTest {
     @Test fun testConcurrentConnectAndDiscover() = NativeTests.testConcurrentConnectAndDiscover()
     @Test fun testConcurrentOperationsSameService() = NativeTests.testConcurrentOperationsSameService()
     @Test fun testDiscoverServicesDuringRead() = NativeTests.testDiscoverServicesDuringRead()
+    @Test fun testOperationsAcrossPeripheralTriggeredDisconnect() = NativeTests.testOperationsAcrossPeripheralTriggeredDisconnect()
 }

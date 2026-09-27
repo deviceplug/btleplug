@@ -263,3 +263,7 @@ jni_test!(
     Java_com_nonpolynomial_btleplug_test_NativeTests_testDiscoverServicesDuringRead,
     test_cases::test_discover_services_during_read
 );
+jni_test!(
+    Java_com_nonpolynomial_btleplug_test_NativeTests_testOperationsAcrossPeripheralTriggeredDisconnect,
+    test_cases::test_operations_across_peripheral_triggered_disconnect
+);

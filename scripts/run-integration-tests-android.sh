@@ -127,16 +127,15 @@ echo "sdk.dir=$(cd "$ANDROID_HOME" && pwd)" > "$ANDROID_TEST_DIR/local.propertie
 echo ""
 echo ">>> Step 4/4: Running instrumentation tests..."
 
-# Ensure JAVA_HOME is set (build-java.sh sets it internally but it doesn't persist)
-if [[ -z "${JAVA_HOME:-}" ]]; then
-    if [[ -d "/opt/homebrew/opt/openjdk@17" ]]; then
-        export JAVA_HOME="/opt/homebrew/opt/openjdk@17"
-    elif [[ -d "/usr/local/opt/openjdk@17" ]]; then
-        export JAVA_HOME="/usr/local/opt/openjdk@17"
-    elif command -v java &>/dev/null; then
-        export JAVA_HOME=$(/usr/libexec/java_home 2>/dev/null || true)
-    fi
+# build-java.sh ran in a subprocess, so resolve the same JDK again here.
+# shellcheck source=lib/java-home.sh
+source "$SCRIPT_DIR/lib/java-home.sh"
+JAVA_HOME="$(find_java_home)"
+if [[ -z "$JAVA_HOME" ]]; then
+    echo "ERROR: Could not find a JDK 17 or 21. Set JAVA_HOME and re-run."
+    exit 1
 fi
+export JAVA_HOME
 echo "    JAVA_HOME: ${JAVA_HOME:-<unset>}"
 
 # Ensure Gradle wrapper is available
@@ -161,7 +160,6 @@ TEST_EXIT=$?
 # Restore default stay-on behavior
 adb shell svc power stayon false
 
-exit $TEST_EXIT
-
 echo ""
 echo "=== Android integration tests complete ==="
+exit $TEST_EXIT

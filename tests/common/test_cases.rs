@@ -1131,6 +1131,70 @@ pub async fn test_configurable_notification_payload() {
     peripheral.disconnect().await.unwrap();
 }
 
+/// Exercises a notification payload sized to the negotiated ATT MTU rather than a small constant.
+pub async fn test_mtu_sized_notification_payload() {
+    use futures::StreamExt;
+    use std::time::Duration;
+    use tokio::time;
+
+    let peripheral = peripheral_finder::find_and_connect().await;
+    peripheral_finder::reset_peripheral(&peripheral).await;
+
+    let mtu = peripheral.mtu();
+    // The Control Point write carries the opcode byte plus the payload in one ATT write (MTU - 4).
+    // 243 = the firmware's 247-byte max MTU - 4.
+    let len = std::cmp::min(mtu.saturating_sub(4) as usize, 243);
+    println!("test_mtu_sized_notification_payload: mtu={mtu}, payload_len={len}");
+
+    let payload: Vec<u8> = (0..len)
+        .map(|i| (i as u8).wrapping_mul(7).wrapping_add(1))
+        .collect();
+
+    let config_char =
+        peripheral_finder::find_characteristic(&peripheral, gatt_uuids::CONFIGURABLE_NOTIFY);
+    let control_point =
+        peripheral_finder::find_characteristic(&peripheral, gatt_uuids::CONTROL_POINT);
+
+    let mut cmd = vec![gatt_uuids::CMD_SET_NOTIFICATION_PAYLOAD];
+    cmd.extend_from_slice(&payload);
+    peripheral
+        .write(&control_point, &cmd, btleplug::api::WriteType::WithResponse)
+        .await
+        .unwrap();
+
+    let mut stream = peripheral.notifications().await.unwrap();
+    peripheral.subscribe(&config_char).await.unwrap();
+    peripheral_finder::send_control_command(&peripheral, gatt_uuids::CMD_START_NOTIFICATIONS).await;
+
+    let timeout = time::sleep(Duration::from_secs(15));
+    tokio::pin!(timeout);
+    let mut matching = false;
+    let mut last_len = None;
+
+    loop {
+        tokio::select! {
+            Some(n) = stream.next() => {
+                if n.uuid == gatt_uuids::CONFIGURABLE_NOTIFY {
+                    last_len = Some(n.value.len());
+                    if n.value == payload {
+                        matching = true;
+                        break;
+                    }
+                }
+            }
+            _ = &mut timeout => break,
+        }
+    }
+
+    peripheral_finder::send_control_command(&peripheral, gatt_uuids::CMD_STOP_NOTIFICATIONS).await;
+    peripheral.unsubscribe(&config_char).await.unwrap();
+    assert!(
+        matching,
+        "Should receive notification with the {len}-byte MTU-sized payload; last CONFIGURABLE_NOTIFY len seen: {last_len:?}"
+    );
+    peripheral.disconnect().await.unwrap();
+}
+
 /// Covers #326: subscribing to the same characteristic twice must not
 /// register a duplicate notification handler, which would deliver every
 /// notification more than once.

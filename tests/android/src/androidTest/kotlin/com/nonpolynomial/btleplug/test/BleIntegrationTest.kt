@@ -99,6 +99,7 @@ class BleIntegrationTest {
     @Test fun testUnsubscribeStopsNotifications() = NativeTests.testUnsubscribeStopsNotifications()
     @Test fun testConfigurableNotificationPayload() = NativeTests.testConfigurableNotificationPayload()
     @Test fun testResubscribeDoesNotDuplicateNotifications() = NativeTests.testResubscribeDoesNotDuplicateNotifications()
+    @Test fun testMtuSizedNotificationPayload() = NativeTests.testMtuSizedNotificationPayload()
 
     // ── Descriptors ─────────────────────────────────────────────────
     @Test fun testReadOnlyDescriptor() = NativeTests.testReadOnlyDescriptor()

@@ -41,6 +41,7 @@ object NativeTests {
     external fun testUnsubscribeStopsNotifications()
     external fun testConfigurableNotificationPayload()
     external fun testResubscribeDoesNotDuplicateNotifications()
+    external fun testMtuSizedNotificationPayload()
 
     // Descriptors
     external fun testReadOnlyDescriptor()

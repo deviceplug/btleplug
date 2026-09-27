@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use bluez_async::{
-    BluetoothEvent, BluetoothSession, CharacteristicEvent, CharacteristicFlags, CharacteristicId,
-    CharacteristicInfo, DescriptorInfo, DeviceId, DeviceInfo, MacAddress, ServiceInfo,
-    WriteOptions,
+    BluetoothError, BluetoothEvent, BluetoothSession, CharacteristicEvent, CharacteristicFlags,
+    CharacteristicId, CharacteristicInfo, DescriptorInfo, DeviceId, DeviceInfo, MacAddress,
+    ServiceInfo, WriteOptions,
 };
 use futures::future::{join_all, ready};
 use futures::stream::{Stream, StreamExt};
@@ -267,7 +267,10 @@ impl api::Peripheral for Peripheral {
 
     async fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
         let characteristic_info = self.characteristic_info(characteristic)?;
-        Ok(self.session.stop_notify(&characteristic_info.id).await?)
+        match self.session.stop_notify(&characteristic_info.id).await {
+            Err(BluetoothError::DbusError(e)) if is_no_notify_session(&e) => Ok(()),
+            result => Ok(result?),
+        }
     }
 
     async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
@@ -437,5 +440,32 @@ impl From<CharacteristicFlags> for CharPropFlags {
             result.insert(CharPropFlags::EXTENDED_PROPERTIES);
         }
         result
+    }
+}
+
+/// BlueZ tracks notify sessions per D-Bus client and rejects `StopNotify` when this client has none
+/// (e.g. a repeated unsubscribe). There is nothing for this client to stop, so treat it as success.
+fn is_no_notify_session(error: &dbus::Error) -> bool {
+    error.name() == Some("org.bluez.Error.Failed")
+        && error.message() == Some("No notify session started")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_no_notify_session;
+
+    #[test]
+    fn no_notify_session_error_is_recognised() {
+        let error = dbus::Error::new_custom("org.bluez.Error.Failed", "No notify session started");
+        assert!(is_no_notify_session(&error));
+    }
+
+    #[test]
+    fn other_bluez_failures_are_not_recognised() {
+        let error = dbus::Error::new_custom("org.bluez.Error.Failed", "Not connected");
+        assert!(!is_no_notify_session(&error));
+        let error =
+            dbus::Error::new_custom("org.bluez.Error.NotPermitted", "No notify session started");
+        assert!(!is_no_notify_session(&error));
     }
 }

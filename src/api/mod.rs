@@ -406,6 +406,7 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     async fn subscribe(&self, characteristic: &Characteristic) -> Result<()>;
 
     /// Disables either notify or indicate (depending on support) for the specified characteristic.
+    /// Unsubscribing a characteristic that is not currently subscribed is not an error.
     async fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()>;
 
     /// Returns a stream of notifications for characteristic value updates. The stream will receive

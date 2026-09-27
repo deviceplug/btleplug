@@ -80,6 +80,7 @@ class BleIntegrationTest {
     @Test fun testConnectAndDisconnect() = NativeTests.testConnectAndDisconnect()
     @Test fun testReconnectAfterDisconnect() = NativeTests.testReconnectAfterDisconnect()
     @Test fun testPeripheralTriggeredDisconnect() = NativeTests.testPeripheralTriggeredDisconnect()
+    @Test fun testReconnectAfterPeripheralTriggeredDisconnect() = NativeTests.testReconnectAfterPeripheralTriggeredDisconnect()
 
     // ── Read/Write ──────────────────────────────────────────────────
     @Test fun testReadStaticValue() = NativeTests.testReadStaticValue()
@@ -96,6 +97,7 @@ class BleIntegrationTest {
     @Test fun testSubscribeAndReceiveIndications() = NativeTests.testSubscribeAndReceiveIndications()
     @Test fun testUnsubscribeStopsNotifications() = NativeTests.testUnsubscribeStopsNotifications()
     @Test fun testConfigurableNotificationPayload() = NativeTests.testConfigurableNotificationPayload()
+    @Test fun testResubscribeDoesNotDuplicateNotifications() = NativeTests.testResubscribeDoesNotDuplicateNotifications()
 
     // ── Descriptors ─────────────────────────────────────────────────
     @Test fun testReadOnlyDescriptor() = NativeTests.testReadOnlyDescriptor()

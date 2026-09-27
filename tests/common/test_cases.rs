@@ -1727,3 +1727,57 @@ pub async fn test_request_connection_parameters() {
     }
     peripheral.disconnect().await.unwrap();
 }
+
+/// Covers #487: CoreBluetooth panics in `set_characteristics` (unknown included service) and in
+/// `check_discovered` (re-discovery with no pending future). Secondary-service visibility is backend-dependent.
+pub async fn test_discovery_with_included_service() {
+    use std::time::Duration;
+    use tokio::time::timeout;
+
+    let peripheral = peripheral_finder::find_and_connect().await;
+
+    let assert_primary_services = |peripheral: &btleplug::platform::Peripheral| {
+        let service_uuids: Vec<_> = peripheral.services().iter().map(|s| s.uuid).collect();
+        assert!(
+            service_uuids.contains(&gatt_uuids::CONTROL_SERVICE),
+            "Control Service not found in {:?}",
+            service_uuids
+        );
+        assert!(
+            service_uuids.contains(&gatt_uuids::READ_WRITE_SERVICE),
+            "Read/Write Service not found in {:?}",
+            service_uuids
+        );
+        assert!(
+            service_uuids.contains(&gatt_uuids::NOTIFICATION_SERVICE),
+            "Notification Service not found in {:?}",
+            service_uuids
+        );
+        assert!(
+            service_uuids.contains(&gatt_uuids::DESCRIPTOR_SERVICE),
+            "Descriptor Service not found in {:?}",
+            service_uuids
+        );
+    };
+
+    assert_primary_services(&peripheral);
+
+    timeout(Duration::from_secs(10), peripheral.discover_services())
+        .await
+        .expect("discover_services() timed out")
+        .expect("discover_services() failed");
+    assert_primary_services(&peripheral);
+
+    let static_char = peripheral_finder::find_characteristic(&peripheral, gatt_uuids::STATIC_READ);
+    let value = timeout(Duration::from_secs(10), peripheral.read(&static_char))
+        .await
+        .expect("read(STATIC_READ) timed out")
+        .expect("read(STATIC_READ) failed");
+    assert_eq!(
+        value,
+        gatt_uuids::STATIC_READ_VALUE,
+        "Static read should return [0x01, 0x02, 0x03, 0x04]"
+    );
+
+    peripheral.disconnect().await.unwrap();
+}

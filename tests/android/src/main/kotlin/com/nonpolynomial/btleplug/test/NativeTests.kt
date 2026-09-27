@@ -63,4 +63,7 @@ object NativeTests {
     // GATT errors
     external fun testGattErrorStatusIsReported()
     external fun testRefusedSubscribeReturnsError()
+
+    // GATT profile structure
+    external fun testDiscoveryWithIncludedService()
 }

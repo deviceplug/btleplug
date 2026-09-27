@@ -121,4 +121,7 @@ class BleIntegrationTest {
     // ── GATT errors ──────────────────────────────────────────────────
     @Test fun testGattErrorStatusIsReported() = NativeTests.testGattErrorStatusIsReported()
     @Test fun testRefusedSubscribeReturnsError() = NativeTests.testRefusedSubscribeReturnsError()
+
+    // ── GATT profile structure ───────────────────────────────────────
+    @Test fun testDiscoveryWithIncludedService() = NativeTests.testDiscoveryWithIncludedService()
 }

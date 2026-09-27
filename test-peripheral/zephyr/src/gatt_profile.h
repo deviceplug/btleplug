@@ -79,6 +79,12 @@
 #define MANUFACTURER_COMPANY_ID  0xFFFF
 #define NOTIFICATION_INTERVAL_MS 1000
 
+/* Max configurable notification payload: CONFIG_BT_L2CAP_TX_MTU minus the
+ * 3-byte ATT header (opcode + handle), i.e. the largest ATT_HANDLE_VALUE_NTF
+ * payload at the firmware's maximum ATT MTU (247). Payloads longer than the
+ * negotiated MTU - 3 make bt_gatt_notify fail. */
+#define NOTIFY_PAYLOAD_MAX_LEN (CONFIG_BT_L2CAP_TX_MTU - 3)
+
 /* Application error (0x80-0x9F); auth/encryption errors would trigger pairing. */
 #define ERROR_CHAR_ATT_ERROR 0x80
 
@@ -97,7 +103,7 @@ struct peripheral_state {
     uint16_t long_value_len;
     uint8_t write_with_resp_value[256];
     uint16_t write_with_resp_len;
-    uint8_t notify_payload[20];
+    uint8_t notify_payload[NOTIFY_PAYLOAD_MAX_LEN];
     uint16_t notify_payload_len;
     uint8_t rw_descriptor_value[256];
     uint16_t rw_descriptor_len;

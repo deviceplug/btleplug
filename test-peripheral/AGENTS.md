@@ -1,6 +1,6 @@
 # test-peripheral/ -- BLE Test Peripheral Firmware (Zephyr)
 
-Freshness: 2026-09-26
+Freshness: 2026-09-27
 
 ## Purpose
 
@@ -24,7 +24,7 @@ Zephyr firmware GATT test peripheral used by the integration tests in `tests/`. 
 
 - The canonical UUID source of truth is `tests/common/gatt_uuids.rs`, mirrored in `zephyr/src/gatt_profile.h`.
 - Four GATT services: Control (`0x0001`), Read/Write (`0x0002`), Notification (`0x0003`), Descriptor (`0x0004`).
-- Control Point opcodes: `0x01` start notifications, `0x02` stop, `0x03` disconnect, `0x04` change adverts (sets a pending flag; the alternate set — flags + name advertising data, 128-bit service data + manufacturer data scan response — is used on the next advertising restart after a disconnect, and the flag clears on the next `connected()` callback or `0x05`), `0x05` reset, `0x06` set notification payload.
+- Control Point opcodes: `0x01` start notifications, `0x02` stop, `0x03` disconnect, `0x04` change adverts (sets a pending flag; the alternate set — flags + name advertising data, 128-bit service data + manufacturer data scan response — is used on the next advertising restart after a disconnect, and the flag clears on the next `connected()` callback or `0x05`), `0x05` reset, `0x06` set notification payload (truncated to 244 bytes, `CONFIG_BT_L2CAP_TX_MTU` minus the 3-byte ATT header; a payload longer than the negotiated MTU minus 3 is not sent).
 - Peripheral advertises as `"btleplug-test"` with the Control Service UUID in the scan response. After `0x04` and a disconnect, the next advertising cycle instead carries 128-bit service data (Control Service UUID + `[0x01]`) with no service UUID list, reverting to the default set once a client connects and disconnects again.
 
 ## Invariants

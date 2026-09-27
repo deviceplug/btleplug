@@ -224,6 +224,10 @@ jni_test!(
     test_cases::test_resubscribe_does_not_duplicate_notifications
 );
 jni_test!(
+    Java_com_nonpolynomial_btleplug_test_NativeTests_testMtuSizedNotificationPayload,
+    test_cases::test_mtu_sized_notification_payload
+);
+jni_test!(
     Java_com_nonpolynomial_btleplug_test_NativeTests_testReadOnlyDescriptor,
     test_cases::test_read_only_descriptor
 );

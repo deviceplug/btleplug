@@ -497,8 +497,6 @@ pub async fn test_add_peripheral_by_address() {
     }
 }
 
-/// Android does not support retrieval (covered by `test_retrieve_peripherals_not_supported`).
-#[cfg(not(target_os = "android"))]
 pub async fn test_retrieve_connected_peripheral_by_identifier() {
     use btleplug::api::{Central, Peripheral as _, RetrievePeripheralsOptions};
 
@@ -1604,8 +1602,20 @@ pub async fn test_concurrent_operations_same_service() {
         "Static read should return [0x01, 0x02, 0x03, 0x04]"
     );
 
-    peripheral.unsubscribe(&notify_char).await.unwrap();
-    peripheral.unsubscribe(&indicate_char).await.unwrap();
+    timeout(
+        Duration::from_secs(10),
+        peripheral.unsubscribe(&notify_char),
+    )
+    .await
+    .expect("unsubscribe(NOTIFY_CHAR) timed out")
+    .unwrap();
+    timeout(
+        Duration::from_secs(10),
+        peripheral.unsubscribe(&indicate_char),
+    )
+    .await
+    .expect("unsubscribe(INDICATE_CHAR) timed out")
+    .unwrap();
     peripheral.disconnect().await.unwrap();
 }
 
@@ -1631,9 +1641,9 @@ pub async fn test_discover_services_during_read() {
     discover_result.expect("discover_services() should succeed during concurrent read");
 
     let static_char = peripheral_finder::find_characteristic(&peripheral, gatt_uuids::STATIC_READ);
-    let static_value = peripheral
-        .read(&static_char)
+    let static_value = timeout(Duration::from_secs(10), peripheral.read(&static_char))
         .await
+        .expect("follow-up read(STATIC_READ) timed out")
         .expect("follow-up read(STATIC_READ) should succeed");
     assert_eq!(
         static_value,

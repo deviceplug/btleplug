@@ -18,6 +18,7 @@ object NativeTests {
 
     // Retrieval
     external fun testRetrievePeripheralsNotSupported()
+    external fun testAddPeripheralByAddress()
 
     // Connection
     external fun testConnectAndDisconnect()
@@ -60,7 +61,6 @@ object NativeTests {
     external fun testConcurrentOperationsSameService()
     external fun testDiscoverServicesDuringRead()
     external fun testOperationsAcrossPeripheralTriggeredDisconnect()
-    external fun testAddPeripheralByAddress()
 
     // GATT errors
     external fun testGattErrorStatusIsReported()

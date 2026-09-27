@@ -51,6 +51,11 @@
 - Fix failed Android GATT reads and writes being reported as success. Failures,
   such as insufficient authentication, are now returned as errors that include
   the GATT status code. (#492)
+- Fix CoreBluetooth discovery callbacks queued before `stop_scan()` re-adding
+  peripherals after `clear_peripherals()`, so `Central::peripherals()` could
+  still return a device (and `DeviceDiscovered` could fire) immediately after
+  stopping the scan and clearing. Advertisement callbacks that arrive after
+  `stop_scan()` are now ignored.
 
 # 0.13.2 (2026-09-20)
 

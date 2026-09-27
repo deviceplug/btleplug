@@ -135,6 +135,83 @@ pub async fn test_clear_peripherals_rediscovers_device() {
     );
 }
 
+/// Covers #489: CoreBluetooth disconnects a connected peripheral as part of
+/// `clear_peripherals()` but does not emit `DeviceDisconnected` for it (see
+/// the `Central::clear_peripherals` doc). Proves the link actually dropped
+/// via rediscovery -- the firmware only re-advertises once the connection is
+/// really gone -- and that the rediscovered handle still works.
+#[cfg(target_os = "macos")]
+pub async fn test_clear_peripherals_disconnects_connected_peripheral() {
+    use btleplug::api::{Central, CentralEvent, Peripheral as _};
+    use std::time::Duration;
+
+    let peripheral = peripheral_finder::find_and_connect().await;
+    let target_id = peripheral.id();
+    let mut events = peripheral_finder::spawn_event_collector().await;
+
+    let adapter = peripheral_finder::get_adapter().await;
+    tokio::time::timeout(Duration::from_secs(10), adapter.clear_peripherals())
+        .await
+        .expect("clear_peripherals() timed out")
+        .expect("clear_peripherals() failed");
+
+    assert!(
+        !adapter
+            .peripherals()
+            .await
+            .unwrap()
+            .iter()
+            .any(|p| p.id() == target_id),
+        "cleared peripheral is still in the public map"
+    );
+
+    // Bound the negative assertion (no DeviceDisconnected) by the positive
+    // rediscovery event rather than a sleep.
+    tokio::time::timeout(Duration::from_secs(15), async {
+        loop {
+            match events.recv().await {
+                Some(CentralEvent::DeviceDisconnected(id)) if id == target_id => panic!(
+                    "DeviceDisconnected(test peripheral) observed -- clear_peripherals() must \
+                     not emit it on CoreBluetooth"
+                ),
+                Some(CentralEvent::DeviceDiscovered(id)) if id == target_id => break,
+                Some(_) => continue,
+                None => panic!("event collector channel closed while waiting for rediscovery"),
+            }
+        }
+    })
+    .await
+    .expect("timed out waiting for rediscovery after clear_peripherals");
+
+    let rediscovered = adapter
+        .peripheral(&target_id)
+        .await
+        .expect("rediscovered peripheral not returned by peripheral()");
+
+    tokio::time::timeout(Duration::from_secs(10), rediscovered.connect())
+        .await
+        .expect("connect() on rediscovered peripheral timed out")
+        .expect("connect() on rediscovered peripheral failed");
+
+    tokio::time::timeout(Duration::from_secs(10), rediscovered.discover_services())
+        .await
+        .expect("discover_services() on rediscovered peripheral timed out")
+        .expect("discover_services() on rediscovered peripheral failed");
+
+    let char = peripheral_finder::find_characteristic(&rediscovered, gatt_uuids::STATIC_READ);
+    let value = tokio::time::timeout(Duration::from_secs(10), rediscovered.read(&char))
+        .await
+        .expect("read(STATIC_READ) on rediscovered peripheral timed out")
+        .expect("read(STATIC_READ) on rediscovered peripheral failed");
+    assert_eq!(
+        value,
+        gatt_uuids::STATIC_READ_VALUE,
+        "Static read should return [0x01, 0x02, 0x03, 0x04]"
+    );
+
+    rediscovered.disconnect().await.unwrap();
+}
+
 pub async fn test_discover_services() {
     let peripheral = peripheral_finder::find_and_connect().await;
     let services = peripheral.services();

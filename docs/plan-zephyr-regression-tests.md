@@ -126,7 +126,7 @@ Every step runs this loop. Do not start the next step until the current step is 
 
 **Goal:** Cover the #489 `clear_peripherals` behaviour change.
 
-- `test_clear_peripherals_disconnects_connected_peripheral` (macOS only): `find_and_connect()`, subscribe to events, `clear_peripherals()`, assert `DeviceDisconnected(id)` within a timeout, then scan and assert the peripheral is rediscovered (it only re-advertises once the link is actually down).
+- `test_clear_peripherals_disconnects_connected_peripheral` (macOS only): `find_and_connect()`, subscribe to events, `clear_peripherals()`, assert the peripheral left the public map, then assert it is rediscovered (it only re-advertises once the link is actually down) with no `DeviceDisconnected(id)` before that, per the `Central::clear_peripherals` doc. Finally connect the rediscovered handle and read `STATIC_READ`.
 
 **Commit:** `test(corebluetooth): Cover clear_peripherals on a connected peripheral`
 

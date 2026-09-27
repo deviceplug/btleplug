@@ -83,7 +83,7 @@ Updated: 2026-09-27, after Step 14.
 | 13 | `c139a9d` (prebuilds selected test binaries outside the timeout; radio tests filtered to `winrtble::adapter::cleanup_tests::`, serial, fail on zero matches; Windows path unexercised) |
 | 14 | follow-up fixes and docs below; final range review done (no Critical issues); macOS full hardware run 46/46 on 2026-09-27 |
 
-Baseline before Step 1: 32/32 hardware tests passing on macOS. After Step 11: 45/45. After Step 14: 46/46. Only macOS has been run on hardware; Windows, Linux, and Android branches are unverified.
+Baseline before Step 1: 32/32 hardware tests passing on macOS. After Step 11: 45/45. After Step 14: 46/46. Hardware coverage: macOS full suite; Linux full suite run by the user on 2026-09-27 with one failure (`test_unsubscribe_stops_notifications`, fixed in the BlueZ backend, re-run pending). Windows and Android are unverified.
 
 ### Pending hardware verification
 
@@ -112,6 +112,7 @@ Steps 12 and 13 were committed on 2026-09-27 with the board detached. macOS resu
 - **Plan text vs. source.** Check plan claims against the source before implementing: Step 6's `NotSupported("add_peripheral")` string and Step 7's `DeviceDisconnected` expectation were both wrong.
 - **GATT handle order.** Static services are placed by `SORT_BY_NAME` on the `BT_GATT_SERVICE_DEFINE` variable name, not source order (current order: control, descriptor, included, notify, rw). Only relative `attrs[]` indices are safe to hardcode.
 - **Regression proofs.** When a fix removed several panic or error sites, reintroduce them one at a time: an earlier site masks later ones. Add a control test (an existing test on the same broken code) to show the new test is what reaches the site.
+- **Linux type-check on macOS.** `libdbus-sys` refuses to cross-build, but a check-only build works with a stub `dbus-1.pc` (`Name: dbus-1`, `Version: 1.14.10`, `Libs: -ldbus-1`): `PKG_CONFIG_PATH=<dir> PKG_CONFIG_ALLOW_CROSS=1 cargo clippy --target x86_64-unknown-linux-gnu --lib --tests`. Linking and running still need Linux.
 
 ### Findings outside this plan (report to the user; not fixed)
 

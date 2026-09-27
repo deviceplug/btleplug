@@ -18,6 +18,7 @@ pub const WRITE_WITHOUT_RESPONSE: Uuid = Uuid::from_u128(0x00000204_b5a3_f393_e0
 pub const READ_WRITE: Uuid = Uuid::from_u128(0x00000205_b5a3_f393_e0a9_e50e24dcca9e);
 pub const LONG_VALUE: Uuid = Uuid::from_u128(0x00000206_b5a3_f393_e0a9_e50e24dcca9e);
 pub const ERROR_CHAR: Uuid = Uuid::from_u128(0x00000207_b5a3_f393_e0a9_e50e24dcca9e);
+pub const WRITE_LOG_CHAR: Uuid = Uuid::from_u128(0x00000208_b5a3_f393_e0a9_e50e24dcca9e);
 
 // --- Notification Test Service ---
 pub const NOTIFICATION_SERVICE: Uuid = Uuid::from_u128(0x00000003_b5a3_f393_e0a9_e50e24dcca9e);

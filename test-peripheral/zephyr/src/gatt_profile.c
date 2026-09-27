@@ -24,6 +24,8 @@ extern ssize_t read_error(struct bt_conn *, const struct bt_gatt_attr *,
                           void *, uint16_t, uint16_t);
 extern ssize_t write_error(struct bt_conn *, const struct bt_gatt_attr *,
                            const void *, uint16_t, uint16_t, uint8_t);
+extern ssize_t read_write_log(struct bt_conn *, const struct bt_gatt_attr *,
+                              void *, uint16_t, uint16_t);
 extern ssize_t read_descriptor_test_char(struct bt_conn *,
                                          const struct bt_gatt_attr *,
                                          void *, uint16_t, uint16_t);
@@ -105,6 +107,11 @@ BT_GATT_SERVICE_DEFINE(rw_svc,
         BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
         BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
         read_error, write_error, NULL),
+    /* Write Log -- write-without-response ordering counters (#464) */
+    BT_GATT_CHARACTERISTIC(BT_UUID_WRITE_LOG_CHAR,
+        BT_GATT_CHRC_READ,
+        BT_GATT_PERM_READ,
+        read_write_log, NULL, NULL),
 );
 
 /* ============================================================

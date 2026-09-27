@@ -33,6 +33,8 @@
     BT_UUID_DECLARE_128(BT_UUID_128_ENCODE(0x00000206, 0xb5a3, 0xf393, 0xe0a9, 0xe50e24dcca9e))
 #define BT_UUID_ERROR_CHAR \
     BT_UUID_DECLARE_128(BT_UUID_128_ENCODE(0x00000207, 0xb5a3, 0xf393, 0xe0a9, 0xe50e24dcca9e))
+#define BT_UUID_WRITE_LOG_CHAR \
+    BT_UUID_DECLARE_128(BT_UUID_128_ENCODE(0x00000208, 0xb5a3, 0xf393, 0xe0a9, 0xe50e24dcca9e))
 
 /* --- Notification Test Service (0x00000003-...) --- */
 #define BT_UUID_NOTIFY_SERVICE \
@@ -92,6 +94,10 @@ struct peripheral_state {
     uint16_t notify_payload_len;
     uint8_t rw_descriptor_value[256];
     uint16_t rw_descriptor_len;
+    /* Write-without-response ordering log (#464); see WRITE_LOG_CHAR. */
+    uint16_t wwr_count;
+    uint8_t wwr_last_seq;
+    uint8_t wwr_out_of_order;
 };
 
 extern struct peripheral_state g_state;

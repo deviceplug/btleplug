@@ -79,15 +79,15 @@ Updated: 2026-09-27, after Step 14.
 | 9 | `b768000` (no drops or reordering observed on macOS) |
 | 10 | `79fb66b` (proved against both #487 panic sites separately; handles follow service variable names, see conventions) |
 | 11 | `d68ff66` (test restores the default advertising set itself; skips `wait_for_rediscovery` because the service-data event implies rediscovery on CoreBluetooth) |
-| 12 | `e8768db` (**hardware run pending**; all four backends' `mtu()` return the negotiated ATT MTU, so `mtu - 4` holds) |
+| 12 | `e8768db` (macOS: `mtu=247`, 243-byte payload, 5/5 after one post-replug discovery failure; all four backends' `mtu()` return the negotiated ATT MTU, so `mtu - 4` holds) |
 | 13 | `c139a9d` (prebuilds selected test binaries outside the timeout; radio tests filtered to `winrtble::adapter::cleanup_tests::`, serial, fail on zero matches; Windows path unexercised) |
-| 14 | follow-up fixes and docs below; final range review done (no Critical issues); macOS full hardware run **pending** (board detached) |
+| 14 | follow-up fixes and docs below; final range review done (no Critical issues); macOS full hardware run 46/46 on 2026-09-27 |
 
-Baseline before Step 1: 32/32 hardware tests passing on macOS. After Step 11: 45/45. Only macOS has been run on hardware; Windows, Linux, and Android branches are unverified.
+Baseline before Step 1: 32/32 hardware tests passing on macOS. After Step 11: 45/45. After Step 14: 46/46. Only macOS has been run on hardware; Windows, Linux, and Android branches are unverified.
 
 ### Pending hardware verification
 
-Steps 12 and 13 were committed on 2026-09-27 with the board detached, after build, lint, and review only. Before merging:
+Steps 12 and 13 were committed on 2026-09-27 with the board detached. macOS results the same day, after reflashing: items 1, 2, 5, and 6 done (full suite 46/46 with the prebuild and 40 s timeout; `mtu=247`, payload 243; CoreBluetooth ignored lib tests 4/4; advertisement pair 3/3). The first MTU run after replugging the board failed in `find_and_connect()` with `discover_services: Device disconnected`; not reproduced in two reflash-then-connect cycles or later runs. Items 3, 4, and 7 remain for other platforms or failures:
 
 1. Flash current firmware (`e8768db` or later) and run `./scripts/run-integration-tests.sh test_mtu_sized_notification_payload` 3 times, then the full suite (default timeout is now 40 s; this is the first run with the prebuild step).
 2. Check the logged `mtu=` / payload length. `mtu=23` means the platform sent 19 bytes and did not exercise the larger buffer; on macOS an occasional 23 would mean CoreBluetooth sampled before the MTU exchange finished. Watch `test_configurable_notification_payload`, which shares `notify_payload`.

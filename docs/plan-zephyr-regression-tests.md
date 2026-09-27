@@ -61,7 +61,7 @@ Every step runs this loop. Do not start the next step until the current step is 
 
 ## Progress and Handoff
 
-Updated: 2026-09-26, after Step 7.
+Updated: 2026-09-26, after Step 8.
 
 ### Status
 
@@ -75,7 +75,8 @@ Updated: 2026-09-26, after Step 7.
 | 5 | `dd75aea` |
 | 6 | `f4034b2` |
 | 7 | `05b1922` (library fix found by this step), `487a633` (stale-event fix to `test_clear_peripherals_rediscovers_device`), `20b5520` |
-| 8-14 | Not started |
+| 8 | `84f9dc2` (refusing CCC is an unmanaged descriptor, not the plan's managed CCC: a managed CCC leaks Zephyr's only cfg slot on rejection) |
+| 9-14 | Not started |
 
 Baseline before Step 1: 32/32 hardware tests passing on macOS. Only macOS has been run on hardware; Windows, Linux, and Android branches are unverified.
 
@@ -88,6 +89,8 @@ Baseline before Step 1: 32/32 hardware tests passing on macOS. Only macOS has be
 - **CoreBluetooth `clear_peripherals`** disconnects a connected peripheral without emitting `DeviceDisconnected` (documented contract since f3de711).
 - **No pre-emptive relaxation.** Implementors repeatedly added `cfg` relaxations for BlueZ/Android without evidence; reviewers rejected them. Gate only with backend source evidence cited in a one-line comment.
 - **Housekeeping.** Any cargo command against `tests/android/rust` rewrites `tests/android/rust/Cargo.lock`; `git checkout -- tests/android/rust/Cargo.lock` afterwards. Never use `git stash` (shared stack). Keep comments in `test_cases.rs` sparse; implementors tend to over-comment.
+- **ESP32-S3 build check.** The board is `esp32s3_devkitc/esp32s3/procpu` (not `devkitm`); put `test-peripheral/.venv/bin` on `PATH` so the build finds `esptool`.
+- **RTT / J-Link.** The DK's onboard J-Link runs old firmware (V1): `JLinkRTTLogger` never finds the RTT control block, and attaching `JLinkExe` at 4 MHz SWD stops BLE advertising (tests time out in `find_and_connect()`). Don't sink time into RTT capture; prove firmware behaviour from Zephyr source and test outcomes, or use macOS PacketLogger for ATT traffic.
 - **Plan text vs. source.** Check plan claims against the source before implementing: Step 6's `NotSupported("add_peripheral")` string and Step 7's `DeviceDisconnected` expectation were both wrong.
 
 ### Findings outside this plan (report to the user; not fixed)

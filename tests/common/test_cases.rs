@@ -338,6 +338,80 @@ pub async fn test_advertisement_services() {
     );
 }
 
+/// #483: a byte-for-byte match on the Control Service UUID in a 128-bit
+/// service data advertisement proves the UUID byte order is correct.
+pub async fn test_advertisement_service_data_128bit() {
+    use btleplug::api::{Central, CentralEvent, Peripheral as _};
+    use std::time::Duration;
+
+    let peripheral = peripheral_finder::find_and_connect().await;
+    peripheral_finder::reset_peripheral(&peripheral).await;
+    let target_id = peripheral.id();
+
+    // Subscribe before disconnect() so the advertisement event isn't missed.
+    let mut events = peripheral_finder::spawn_event_collector().await;
+
+    peripheral_finder::send_control_command(&peripheral, gatt_uuids::CMD_CHANGE_ADVERTISEMENTS)
+        .await;
+
+    tokio::time::timeout(Duration::from_secs(10), peripheral.disconnect())
+        .await
+        .expect("disconnect() timed out")
+        .expect("disconnect() failed");
+
+    let matches_service_data = |event: &CentralEvent| {
+        matches!(
+            event,
+            CentralEvent::ServiceDataAdvertisement { id, service_data }
+                if *id == target_id
+                    && service_data.get(&gatt_uuids::CONTROL_SERVICE).map(Vec::as_slice)
+                        == Some(gatt_uuids::SERVICE_DATA_VALUE)
+        )
+    };
+    peripheral_finder::wait_for_event(
+        &mut events,
+        Duration::from_secs(15),
+        "ServiceDataAdvertisement(Control Service -> [0x01])",
+        matches_service_data,
+    )
+    .await;
+
+    // On CoreBluetooth this event only comes from the re-created peripheral
+    // (internal.rs on_peripheral_disconnect), so rediscovery already happened;
+    // wait_for_rediscovery would hang.
+    let adapter = peripheral_finder::get_adapter().await;
+    let rediscovered = adapter
+        .peripheral(&target_id)
+        .await
+        .expect("peripheral() failed for rediscovered id");
+
+    let props = rediscovered
+        .properties()
+        .await
+        .unwrap()
+        .expect("properties should be available after rediscovery");
+    assert_eq!(
+        props
+            .service_data
+            .get(&gatt_uuids::CONTROL_SERVICE)
+            .map(Vec::as_slice),
+        Some(gatt_uuids::SERVICE_DATA_VALUE),
+        "properties().service_data should contain Control Service -> [0x01]"
+    );
+
+    // Restore the default advertising set: connecting clears alt_adv_pending
+    // in connected(), so the disconnect that follows restarts the default
+    // set (service UUID list, no service data) for later tests.
+    tokio::time::timeout(Duration::from_secs(10), rediscovered.connect())
+        .await
+        .expect("connect() to restore default advertising timed out")
+        .expect("connect() to restore default advertising failed");
+    tokio::time::timeout(Duration::from_secs(10), rediscovered.disconnect())
+        .await
+        .expect("disconnect() to restore default advertising timed out")
+        .expect("disconnect() to restore default advertising failed");
+}
+
 // ── Retrieval ──────────────────────────────────────────────────────
 
 pub async fn test_retrieve_peripherals_not_supported() {

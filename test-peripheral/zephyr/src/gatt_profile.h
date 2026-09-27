@@ -2,6 +2,7 @@
 #define GATT_PROFILE_H_
 
 #include <zephyr/bluetooth/uuid.h>
+#include <zephyr/sys/atomic.h>
 
 /*
  * btleplug Test GATT Profile
@@ -104,6 +105,10 @@ struct peripheral_state {
     uint16_t wwr_count;
     uint8_t wwr_last_seq;
     uint8_t wwr_out_of_order;
+    /* #483: set by CMD_CHANGE_ADVERTISEMENTS, read by restart_adv_work_handler
+     * (system workqueue) and written from the BT RX workqueue (Control Point
+     * write, connected()), hence atomic_t rather than a plain bool. */
+    atomic_t alt_adv_pending;
 };
 
 extern struct peripheral_state g_state;

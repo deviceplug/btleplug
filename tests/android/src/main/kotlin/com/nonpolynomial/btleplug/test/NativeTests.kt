@@ -14,6 +14,7 @@ object NativeTests {
     external fun testScanFilterByServiceUuid()
     external fun testAdvertisementManufacturerData()
     external fun testAdvertisementServices()
+    external fun testAdvertisementServiceData128bit()
 
     // Retrieval
     external fun testRetrievePeripheralsNotSupported()

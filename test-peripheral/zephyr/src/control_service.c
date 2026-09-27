@@ -98,6 +98,7 @@ void reset_peripheral_state(void)
 	g_state.wwr_count = 0;
 	g_state.wwr_last_seq = 0;
 	g_state.wwr_out_of_order = 0;
+	atomic_clear(&g_state.alt_adv_pending);
 	memset(g_state.rw_value, 0, sizeof(g_state.rw_value));
 	memset(g_state.long_value, 0, sizeof(g_state.long_value));
 	memset(g_state.write_with_resp_value, 0, sizeof(g_state.write_with_resp_value));
@@ -137,10 +138,11 @@ void control_handle_command(const uint8_t *data, uint16_t len)
 		k_work_reschedule(&disconnect_work, K_MSEC(500));
 		break;
 	case CMD_CHANGE_ADVERTISEMENTS:
-		/* Deferred: advertisement rotation is not tested in the initial
-		 * integration test suite. Implement when CentralEvent::ServiceDataAdvertisement
-		 * tests are added. */
-		LOG_INF("Change advertisements (deferred — not tested in initial suite)");
+		/* Take effect on the next advertising restart after a disconnect
+		 * (see restart_adv_work_handler in main.c); cleared on the next
+		 * connected() callback or by CMD_RESET_STATE. */
+		atomic_set(&g_state.alt_adv_pending, 1);
+		LOG_INF("Alternate advertising set pending");
 		break;
 	case CMD_RESET_STATE:
 		reset_peripheral_state();

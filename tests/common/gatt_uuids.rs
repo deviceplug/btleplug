@@ -50,3 +50,4 @@ pub const STATIC_READ_VALUE: &[u8] = &[0x01, 0x02, 0x03, 0x04];
 pub const TEST_PERIPHERAL_NAME: &str = "btleplug-test";
 pub const TEST_APPEARANCE: u16 = 0x0340;
 pub const MANUFACTURER_COMPANY_ID: u16 = 0xFFFF;
+pub const SERVICE_DATA_VALUE: &[u8] = &[0x01];

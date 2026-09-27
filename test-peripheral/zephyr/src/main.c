@@ -39,6 +39,35 @@ static const struct bt_data sd[] = {
 	),
 };
 
+/* Alternate advertising set (#483): selected for one advertising cycle by
+ * CMD_CHANGE_ADVERTISEMENTS -- see restart_adv_work_handler() and
+ * g_state.alt_adv_pending (gatt_profile.h). */
+
+/* Alternate advertising data: flags + complete device name only. */
+static const struct bt_data alt_ad[] = {
+	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
+	BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME,
+		sizeof(CONFIG_BT_DEVICE_NAME) - 1),
+};
+
+/* Alternate scan response data:
+ * - 128-bit service data (Control Service UUID little-endian + [0x01]);
+ *   proves byte order for CentralEvent::ServiceDataAdvertisement (#483).
+ * - Manufacturer data: same bytes as the default scan response.
+ */
+static const struct bt_data alt_sd[] = {
+	BT_DATA_BYTES(BT_DATA_SVC_DATA128,
+		/* Control Service UUID (little-endian) */
+		0x9e, 0xca, 0xdc, 0x24, 0x0e, 0xe5, 0xa9, 0xe0,
+		0x93, 0xf3, 0xa3, 0xb5, 0x01, 0x00, 0x00, 0x00,
+		0x01 /* service data value */
+	),
+	BT_DATA_BYTES(BT_DATA_MANUFACTURER_DATA,
+		0xFF, 0xFF,       /* Company ID 0xFFFF (little-endian) */
+		0xBB, 0xCC, 0x01  /* "bt" + version */
+	),
+};
+
 static void connected(struct bt_conn *conn, uint8_t err)
 {
 	if (err) {
@@ -48,6 +77,10 @@ static void connected(struct bt_conn *conn, uint8_t err)
 
 	LOG_INF("Connected");
 	g_state.conn = bt_conn_ref(conn);
+
+	/* #483: a connection following an alternate-advertising cycle restores
+	 * the default set on the next disconnect. */
+	atomic_clear(&g_state.alt_adv_pending);
 }
 
 static void restart_adv_work_handler(struct k_work *work);
@@ -58,8 +91,17 @@ static void restart_adv_work_handler(struct k_work *work)
 	/* Ensure advertising is stopped before restarting */
 	bt_le_adv_stop();
 
-	int err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad),
-				   sd, ARRAY_SIZE(sd));
+	int err;
+
+	if (atomic_get(&g_state.alt_adv_pending)) {
+		LOG_INF("Advertising restart: using alternate set");
+		err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, alt_ad, ARRAY_SIZE(alt_ad),
+				       alt_sd, ARRAY_SIZE(alt_sd));
+	} else {
+		LOG_INF("Advertising restart: using default set");
+		err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad),
+				       sd, ARRAY_SIZE(sd));
+	}
 	if (err) {
 		LOG_ERR("Advertising restart failed (err %d)", err);
 	} else {

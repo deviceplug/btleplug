@@ -59,6 +59,47 @@ Every step runs this loop. Do not start the next step until the current step is 
 - Platform semantics that differ legitimately (e.g. BlueZ rejecting a concurrent `Connect` with `InProgress`) are gated with `cfg` and a one-line reason. Do not weaken an assertion to make a platform pass without flagging it to the user; an unexpected failure may be a real backend bug.
 - New characteristics are appended to the end of existing services so the hardcoded `notify_svc.attrs[]` indices in `control_service.c` stay valid. Update the index table comment when `notify_svc` grows.
 
+## Progress and Handoff
+
+Updated: 2026-09-26, after Step 7.
+
+### Status
+
+| Step | Commit(s) |
+|---|---|
+| Plan | `85987cb` |
+| 1 | `7ff431f` (pinned to v4.4.2, not v4.4.0; SDK 1.0.1) |
+| 2 | `9bc6f9e` |
+| 3 | `a2507c0` |
+| 4 | `4429e11` |
+| 5 | `dd75aea` |
+| 6 | `f4034b2` |
+| 7 | `05b1922` (library fix found by this step), `487a633` (stale-event fix to `test_clear_peripherals_rediscovers_device`), `20b5520` |
+| 8-14 | Not started |
+
+Baseline before Step 1: 32/32 hardware tests passing on macOS. Only macOS has been run on hardware; Windows, Linux, and Android branches are unverified.
+
+### Working conventions learned so far
+
+- **Firmware tooling.** Workspace topdir is `test-peripheral/` (deps in `test-peripheral/deps/`, uv venv in `test-peripheral/.venv/`). Use `test-peripheral/.venv/bin/west` (or activate the venv; fish: `activate.fish`). Build from `test-peripheral/zephyr/`: `west build -b nrf52840dk/nrf52840 --pristine`; flash: `west flash --runner nrfjprog`.
+- **Hardware runs.** Use `TIMEOUT=60 ./scripts/run-integration-tests.sh <names>` until Step 13 raises the default. Run new tests at least 3 times (5 for timing-dependent ones). Write repeat loops as bash scripts in the scratchpad; the tool shell is zsh and mangles things like `echo ====`.
+- **Event helpers** in `tests/common/peripheral_finder.rs`: `spawn_event_collector` (always use it; the central event broadcast has capacity 16 and silently drops lagged events), `wait_for_event(rx, timeout, what, pred)`, `wait_for_connected` (skips stale BlueZ synthetic connection events), `wait_for_rediscovery` (no-op off Apple). Drain the receiver with `try_recv()` before starting a new phase that must not see earlier events.
+- **CoreBluetooth reconnect.** CoreBluetooth drops a peripheral on disconnect (issue #57); call `wait_for_rediscovery` before any reconnect after a disconnect.
+- **CoreBluetooth `clear_peripherals`** disconnects a connected peripheral without emitting `DeviceDisconnected` (documented contract since f3de711).
+- **No pre-emptive relaxation.** Implementors repeatedly added `cfg` relaxations for BlueZ/Android without evidence; reviewers rejected them. Gate only with backend source evidence cited in a one-line comment.
+- **Housekeeping.** Any cargo command against `tests/android/rust` rewrites `tests/android/rust/Cargo.lock`; `git checkout -- tests/android/rust/Cargo.lock` afterwards. Never use `git stash` (shared stack). Keep comments in `test_cases.rs` sparse; implementors tend to over-comment.
+- **Plan text vs. source.** Check plan claims against the source before implementing: Step 6's `NotSupported("add_peripheral")` string and Step 7's `DeviceDisconnected` expectation were both wrong.
+
+### Findings outside this plan (report to the user; not fixed)
+
+1. `find_and_connect()` returns as soon as the local name matches, before the scan response (manufacturer data, service UUIDs) may have arrived, so `test_properties_contain_peripheral_info` is flaky (observed 1 failure in ~40 runs).
+2. CoreBluetooth `connect()` immediately after `disconnect()` fails with "Peripheral no longer available" until the device re-advertises; other backends allow it.
+3. The integration tests never initialise a logger, so `RUST_LOG` has no effect.
+4. The ESP32-S3 build warns `CONFIG_HEAP_MEM_POOL_SIZE` 4096 is below the required 29696 (Zephyr bumps it automatically).
+5. `AdapterManager` (`src/common/adapter_manager.rs`) uses a capacity-16 broadcast and `event_stream()` silently drops `Lagged`. Measured bursts of ~130 `DeviceUpdated` within ±500 ms of a disconnect during scanning. Any `events()` consumer can lose `DeviceConnected`/`DeviceDisconnected`. One unexplained cycle-2 `DeviceDisconnected` miss in Step 5 (1/5 runs, not reproduced in 25 instrumented runs) is attributed to this.
+6. WinRT does not clear `ble_services` after a peripheral-triggered disconnect, so a read afterwards may trigger an implicit reconnect; check on Windows hardware.
+7. `add_peripheral`'s `NotSupported` message ("Can't add a Peripheral from a PeripheralId") does not follow the operation-name convention `retrieve_peripherals` uses.
+
 ## Steps
 
 ### Step 1: Pin the Zephyr version

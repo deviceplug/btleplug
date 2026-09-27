@@ -95,6 +95,9 @@ void reset_peripheral_state(void)
 	g_state.write_with_resp_len = 0;
 	g_state.notify_payload_len = 0;
 	g_state.rw_descriptor_len = 0;
+	g_state.wwr_count = 0;
+	g_state.wwr_last_seq = 0;
+	g_state.wwr_out_of_order = 0;
 	memset(g_state.rw_value, 0, sizeof(g_state.rw_value));
 	memset(g_state.long_value, 0, sizeof(g_state.long_value));
 	memset(g_state.write_with_resp_value, 0, sizeof(g_state.write_with_resp_value));

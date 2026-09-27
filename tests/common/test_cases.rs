@@ -695,23 +695,55 @@ pub async fn test_write_without_response() {
 
 pub async fn test_write_without_response_burst() {
     use btleplug::api::WriteType;
+    use std::time::Duration;
 
     let peripheral = peripheral_finder::find_and_connect().await;
     peripheral_finder::reset_peripheral(&peripheral).await;
     let char =
         peripheral_finder::find_characteristic(&peripheral, gatt_uuids::WRITE_WITHOUT_RESPONSE);
+    let log_char = peripheral_finder::find_characteristic(&peripheral, gatt_uuids::WRITE_LOG_CHAR);
 
     // Send a burst of writes to exercise flow control. Without proper
     // canSendWriteWithoutResponse handling, later writes would be silently
-    // dropped by CoreBluetooth.
-    let num_writes = 50;
-    for i in 0u8..num_writes {
+    // dropped or reordered by CoreBluetooth (#464). The first byte of each
+    // payload is a sequence number the firmware checks for ordering.
+    let num_writes = 50u8;
+    for i in 0..num_writes {
         let data = vec![i; 20];
         peripheral
             .write(&char, &data, WriteType::WithoutResponse)
             .await
             .expect(&format!("write-without-response #{} should succeed", i));
     }
+
+    // Poll WRITE_LOG_CHAR ([count_lo, count_hi, last_seq, out_of_order]) until
+    // the firmware has observed all 50 writes.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    let mut last: Option<[u8; 4]> = None;
+    let (count, last_seq, out_of_order) = loop {
+        let raw = tokio::time::timeout(Duration::from_secs(10), peripheral.read(&log_char))
+            .await
+            .unwrap_or_else(|_| panic!("read(WRITE_LOG_CHAR) timed out; last observed {last:?}"))
+            .expect("read(WRITE_LOG_CHAR) should succeed");
+        assert_eq!(raw.len(), 4, "WRITE_LOG_CHAR returned {raw:?}");
+        let observed = [raw[0], raw[1], raw[2], raw[3]];
+        last = Some(observed);
+        let count = u16::from_le_bytes([observed[0], observed[1]]);
+        if count >= u16::from(num_writes) {
+            break (count, observed[2], observed[3]);
+        }
+        if tokio::time::Instant::now() >= deadline {
+            panic!(
+                "WRITE_LOG_CHAR did not reach count {num_writes} within 2s; last observed {last:?}"
+            );
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    };
+
+    assert_eq!(count, u16::from(num_writes), "write count mismatch");
+    assert_eq!(last_seq, num_writes - 1, "last_seq mismatch");
+    assert_eq!(out_of_order, 0, "writes were observed out of order");
+
     peripheral.disconnect().await.unwrap();
 }
 

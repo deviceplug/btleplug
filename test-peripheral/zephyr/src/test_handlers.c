@@ -59,6 +59,19 @@ ssize_t write_without_resp(struct bt_conn *conn, const struct bt_gatt_attr *attr
      */
     memcpy(g_state.rw_value + offset, buf, len);
     g_state.rw_value_len = offset + len;
+
+    /* Track delivery order (#464): first byte of each write is a sequence number. */
+    if (len > 0) {
+        uint8_t seq = ((const uint8_t *)buf)[0];
+        if (g_state.wwr_count != 0 && seq != (uint8_t)(g_state.wwr_last_seq + 1)) {
+            if (g_state.wwr_out_of_order < 0xFF) {
+                g_state.wwr_out_of_order++;
+            }
+        }
+        g_state.wwr_last_seq = seq;
+        g_state.wwr_count++;
+    }
+
     LOG_INF("Write without response: %u bytes", len);
     return len;
 }
@@ -119,6 +132,19 @@ ssize_t write_error(struct bt_conn *conn, const struct bt_gatt_attr *attr,
                     uint8_t flags)
 {
     return BT_GATT_ERR(ERROR_CHAR_ATT_ERROR);
+}
+
+/* WRITE_LOG_CHAR: [count_lo, count_hi, last_seq, out_of_order] (#464). */
+ssize_t read_write_log(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                       void *buf, uint16_t len, uint16_t offset)
+{
+    uint8_t data[4] = {
+        (uint8_t)(g_state.wwr_count & 0xFF),
+        (uint8_t)((g_state.wwr_count >> 8) & 0xFF),
+        g_state.wwr_last_seq,
+        g_state.wwr_out_of_order,
+    };
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, data, sizeof(data));
 }
 
 /* --- Descriptor Test Service Callbacks --- */

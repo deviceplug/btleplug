@@ -300,15 +300,40 @@ pub async fn test_retrieve_connected_peripheral_by_service() {
 // ── Connection ──────────────────────────────────────────────────────
 
 pub async fn test_connect_and_disconnect() {
+    use btleplug::api::CentralEvent;
     use std::time::Duration;
-    use tokio::time;
+
+    // Start the collector before find_and_connect() so the DeviceConnected
+    // event for this peripheral can't be lost to broadcast-channel lag
+    // (see peripheral_finder::spawn_event_collector).
+    let mut events = peripheral_finder::spawn_event_collector().await;
 
     let peripheral = peripheral_finder::find_and_connect().await;
     assert!(peripheral.is_connected().await.unwrap());
+    let target_id = peripheral.id();
+
+    // On BlueZ, events() synthesises a DeviceConnected for every
+    // already-connected device the moment the stream opens, and BlueZ keeps
+    // LE links alive after a process exits -- so a prior test that panicked
+    // mid-connection can leave a stale DeviceConnected(id) at the head of
+    // this collector, followed by a DeviceDisconnected(id) from this test's
+    // own ensure_clean_state() and then the real DeviceConnected(id).
+    // wait_for_connected() discards that stale connect/disconnect pair and
+    // only returns once it has seen a DeviceConnected(id) with nothing after
+    // it but silence (see peripheral_finder::wait_for_connected).
+    peripheral_finder::wait_for_connected(&mut events, &target_id, Duration::from_secs(15)).await;
+
     println!("Disconnecting");
     peripheral.disconnect().await.unwrap();
     println!("Disconnected");
-    time::sleep(Duration::from_millis(500)).await;
+
+    peripheral_finder::wait_for_event(
+        &mut events,
+        Duration::from_secs(15),
+        "DeviceDisconnected(test peripheral)",
+        |event| matches!(event, CentralEvent::DeviceDisconnected(id) if *id == target_id),
+    )
+    .await;
     assert!(!peripheral.is_connected().await.unwrap());
     println!("Waiting on is connected update?");
 }
@@ -330,17 +355,105 @@ pub async fn test_reconnect_after_disconnect() {
 }
 
 pub async fn test_peripheral_triggered_disconnect() {
+    use btleplug::api::CentralEvent;
     use std::time::Duration;
-    use tokio::time;
+
+    // Start the collector before find_and_connect() so the DeviceConnected
+    // event for this peripheral can't be lost to broadcast-channel lag
+    // (see peripheral_finder::spawn_event_collector).
+    let mut events = peripheral_finder::spawn_event_collector().await;
 
     let peripheral = peripheral_finder::find_and_connect().await;
     assert!(peripheral.is_connected().await.unwrap());
+    let target_id = peripheral.id();
+
+    // See test_connect_and_disconnect: a stale DeviceConnected/Disconnected
+    // pair left over from ensure_clean_state() cleaning up a prior test's
+    // lingering connection would make a bare DeviceConnected wait match too
+    // early, so the later DeviceDisconnected wait below would then match the
+    // buffered disconnect from that stale pair instead of the firmware's
+    // 500ms delayed disconnect. wait_for_connected() discards the stale pair
+    // (see peripheral_finder::wait_for_connected).
+    peripheral_finder::wait_for_connected(&mut events, &target_id, Duration::from_secs(15)).await;
+
     peripheral_finder::send_control_command(&peripheral, gatt_uuids::CMD_TRIGGER_DISCONNECT).await;
-    time::sleep(Duration::from_secs(2)).await;
+
+    peripheral_finder::wait_for_event(
+        &mut events,
+        Duration::from_secs(10),
+        "DeviceDisconnected(test peripheral)",
+        |event| matches!(event, CentralEvent::DeviceDisconnected(id) if *id == target_id),
+    )
+    .await;
     assert!(
         !peripheral.is_connected().await.unwrap(),
         "Peripheral should have disconnected us"
     );
+}
+
+/// Covers #484: connect() must succeed after a peripheral-triggered
+/// disconnect with no explicit disconnect() call first, and a subsequent
+/// connect() while already connected must return Ok promptly (the fast path).
+pub async fn test_reconnect_after_peripheral_triggered_disconnect() {
+    use btleplug::api::CentralEvent;
+    use std::time::Duration;
+
+    let peripheral = peripheral_finder::find_and_connect().await;
+    peripheral_finder::reset_peripheral(&peripheral).await;
+    assert!(peripheral.is_connected().await.unwrap());
+    let target_id = peripheral.id();
+
+    // Start the collector after reset_peripheral() -- only the disconnect
+    // and rediscovery events matter here, and reset_peripheral() doesn't
+    // disconnect.
+    let mut events = peripheral_finder::spawn_event_collector().await;
+
+    peripheral_finder::send_control_command(&peripheral, gatt_uuids::CMD_TRIGGER_DISCONNECT).await;
+
+    peripheral_finder::wait_for_event(
+        &mut events,
+        Duration::from_secs(10),
+        "DeviceDisconnected(test peripheral)",
+        |event| matches!(event, CentralEvent::DeviceDisconnected(id) if *id == target_id),
+    )
+    .await;
+    assert!(!peripheral.is_connected().await.unwrap());
+
+    peripheral_finder::wait_for_rediscovery(&mut events, target_id).await;
+
+    // #484: connect() without an explicit disconnect() first.
+    tokio::time::timeout(Duration::from_secs(10), peripheral.connect())
+        .await
+        .expect("connect() after peripheral-triggered disconnect timed out")
+        .expect("connect() after peripheral-triggered disconnect failed");
+    assert!(peripheral.is_connected().await.unwrap());
+
+    tokio::time::timeout(Duration::from_secs(10), peripheral.discover_services())
+        .await
+        .expect("discover_services() timed out")
+        .expect("discover_services() failed");
+
+    let char = peripheral_finder::find_characteristic(&peripheral, gatt_uuids::STATIC_READ);
+    let value = tokio::time::timeout(Duration::from_secs(10), peripheral.read(&char))
+        .await
+        .expect("read(STATIC_READ) timed out")
+        .expect("read(STATIC_READ) failed");
+    assert_eq!(
+        value,
+        gatt_uuids::STATIC_READ_VALUE,
+        "Static read should return [0x01, 0x02, 0x03, 0x04]"
+    );
+
+    // #484 fast path: connect() while already connected must return Ok
+    // within 2 seconds instead of re-running the full connection sequence.
+    let result = tokio::time::timeout(Duration::from_secs(2), peripheral.connect()).await;
+    assert!(
+        matches!(result, Ok(Ok(()))),
+        "connect() while already connected did not return Ok within 2s: {:?}",
+        result
+    );
+
+    peripheral.disconnect().await.unwrap();
 }
 
 // ── Read / Write ────────────────────────────────────────────────────
@@ -692,6 +805,79 @@ pub async fn test_configurable_notification_payload() {
     peripheral.disconnect().await.unwrap();
 }
 
+/// Covers #326: subscribing to the same characteristic twice must not
+/// register a duplicate notification handler, which would deliver every
+/// notification more than once.
+pub async fn test_resubscribe_does_not_duplicate_notifications() {
+    use futures::StreamExt;
+    use std::collections::HashSet;
+    use std::time::Duration;
+    use tokio::time;
+
+    let peripheral = peripheral_finder::find_and_connect().await;
+    peripheral_finder::reset_peripheral(&peripheral).await;
+    let char = peripheral_finder::find_characteristic(&peripheral, gatt_uuids::NOTIFY_CHAR);
+
+    tokio::time::timeout(Duration::from_secs(10), peripheral.subscribe(&char))
+        .await
+        .expect("first subscribe(NOTIFY_CHAR) timed out")
+        .expect("first subscribe(NOTIFY_CHAR) should succeed");
+    tokio::time::timeout(Duration::from_secs(10), peripheral.subscribe(&char))
+        .await
+        .expect("second subscribe(NOTIFY_CHAR) timed out")
+        .expect("second subscribe(NOTIFY_CHAR) should succeed");
+
+    // Take the notification stream before starting notifications so nothing
+    // is missed.
+    let mut stream = peripheral.notifications().await.unwrap();
+    peripheral_finder::send_control_command(&peripheral, gatt_uuids::CMD_START_NOTIFICATIONS).await;
+
+    let mut received = Vec::new();
+    let timeout = time::sleep(Duration::from_secs(4));
+    tokio::pin!(timeout);
+    loop {
+        tokio::select! {
+            Some(notification) = stream.next() => {
+                if notification.uuid == gatt_uuids::NOTIFY_CHAR {
+                    received.push(notification.value);
+                }
+            }
+            _ = &mut timeout => break,
+        }
+    }
+
+    peripheral_finder::send_control_command(&peripheral, gatt_uuids::CMD_STOP_NOTIFICATIONS).await;
+    peripheral.unsubscribe(&char).await.unwrap();
+
+    assert!(
+        received.len() >= 3,
+        "Expected at least 3 notifications, got {}",
+        received.len()
+    );
+
+    // NOTIFY_CHAR's payload is a single incrementing counter byte
+    // (test-peripheral/zephyr/src/control_service.c periodic_notify_handler:
+    // `static uint8_t counter; uint8_t data[] = {counter++};`). If resubscribe
+    // duplicated the notification handler, the same counter value would
+    // appear more than once in this collection window.
+    let mut seen = HashSet::new();
+    for value in &received {
+        assert_eq!(
+            value.len(),
+            1,
+            "NOTIFY_CHAR payload should be a single counter byte, got {:?}",
+            value
+        );
+        assert!(
+            seen.insert(value[0]),
+            "counter byte {} repeated -- resubscribe duplicated the notification handler",
+            value[0]
+        );
+    }
+
+    peripheral.disconnect().await.unwrap();
+}
+
 // ── Descriptors ─────────────────────────────────────────────────────
 
 pub async fn test_read_only_descriptor() {
@@ -859,60 +1045,17 @@ pub async fn test_concurrent_connect_and_discover() {
     let peripheral = peripheral_finder::find_and_connect().await;
     assert!(peripheral.is_connected().await.unwrap());
 
-    #[cfg(target_vendor = "apple")]
-    let mut events = {
-        use btleplug::api::Central;
-        peripheral_finder::get_adapter()
-            .await
-            .events()
-            .await
-            .unwrap()
-    };
+    // Start the collector before disconnect() so nothing is lost while it is
+    // awaited (see peripheral_finder::spawn_event_collector).
+    let mut events = peripheral_finder::spawn_event_collector().await;
 
     peripheral.disconnect().await.unwrap();
     assert!(!peripheral.is_connected().await.unwrap());
 
-    // CoreBluetooth drops the peripheral from its internal map on disconnect
-    // and only re-inserts it once the background scan rediscovers it; wait
-    // for that rediscovery before attempting to reconnect (see
-    // src/corebluetooth/internal.rs on_peripheral_disconnect/on_discovered_peripheral).
-    // Other backends keep the peripheral connectable across disconnects, so
-    // they go straight to the concurrent connect below.
-    #[cfg(target_vendor = "apple")]
-    {
-        use btleplug::api::CentralEvent;
-        use futures::StreamExt;
-
-        // CoreBluetooth only emits DeviceDiscovered for an id that is
-        // currently absent from AdapterManager, and AdapterManager removes
-        // the peripheral on DeviceDisconnected (src/common/adapter_manager.rs
-        // emit()), so a DeviceDiscovered(target_id) is always fresh. A
-        // DeviceUpdated(target_id) is only trustworthy once we've also seen
-        // the id actually leave and re-enter the map (DeviceDisconnected or
-        // DeviceDiscovered), since one queued before our disconnect would
-        // otherwise be indistinguishable from a post-rediscovery update.
-        let target_id = peripheral.id();
-        let mut seen_removed_or_discovered = false;
-        timeout(Duration::from_secs(15), async {
-            loop {
-                match events.next().await {
-                    Some(CentralEvent::DeviceDiscovered(id)) if id == target_id => break,
-                    Some(CentralEvent::DeviceDisconnected(id)) if id == target_id => {
-                        seen_removed_or_discovered = true;
-                    }
-                    Some(CentralEvent::DeviceUpdated(id))
-                        if id == target_id && seen_removed_or_discovered =>
-                    {
-                        break;
-                    }
-                    Some(_) => continue,
-                    None => panic!("adapter event stream ended while waiting for rediscovery"),
-                }
-            }
-        })
-        .await
-        .expect("timed out waiting for peripheral rediscovery after disconnect");
-    }
+    // On macOS, wait for the peripheral to be rediscovered before attempting
+    // to reconnect; other backends keep it connectable across disconnects and
+    // this is a no-op (see peripheral_finder::wait_for_rediscovery).
+    peripheral_finder::wait_for_rediscovery(&mut events, peripheral.id()).await;
 
     // Concurrent connect (#488).
     let results = timeout(Duration::from_secs(15), async {

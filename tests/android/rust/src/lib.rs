@@ -164,6 +164,10 @@ jni_test!(
     test_cases::test_peripheral_triggered_disconnect
 );
 jni_test!(
+    Java_com_nonpolynomial_btleplug_test_NativeTests_testReconnectAfterPeripheralTriggeredDisconnect,
+    test_cases::test_reconnect_after_peripheral_triggered_disconnect
+);
+jni_test!(
     Java_com_nonpolynomial_btleplug_test_NativeTests_testReadStaticValue,
     test_cases::test_read_static_value
 );
@@ -210,6 +214,10 @@ jni_test!(
 jni_test!(
     Java_com_nonpolynomial_btleplug_test_NativeTests_testConfigurableNotificationPayload,
     test_cases::test_configurable_notification_payload
+);
+jni_test!(
+    Java_com_nonpolynomial_btleplug_test_NativeTests_testResubscribeDoesNotDuplicateNotifications,
+    test_cases::test_resubscribe_does_not_duplicate_notifications
 );
 jni_test!(
     Java_com_nonpolynomial_btleplug_test_NativeTests_testReadOnlyDescriptor,

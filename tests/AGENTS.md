@@ -27,7 +27,7 @@ Each test is its own file (and therefore its own binary), ensuring process isola
 - **Discovery**: `test_discover_*.rs`, `test_scan_*.rs`, `test_advertisement_*.rs`
 - **Connection**: `test_connect_*.rs`, `test_reconnect_*.rs`, `test_peripheral_triggered_*.rs`
 - **Read/Write**: `test_read_*.rs`, `test_write_*.rs`, `test_long_value_*.rs`, `test_characteristic_properties.rs`
-- **Notifications**: `test_subscribe_*.rs`, `test_unsubscribe_*.rs`, `test_configurable_notification_*.rs`
+- **Notifications**: `test_subscribe_*.rs`, `test_unsubscribe_*.rs`, `test_configurable_notification_*.rs`, `test_resubscribe_*.rs`
 - **Descriptors**: `test_*_descriptor*.rs`
 - **Device Info**: `test_mtu_*.rs`, `test_read_rssi.rs`, `test_properties_*.rs`, `test_connection_parameters.rs`, `test_request_connection_parameters.rs`
 

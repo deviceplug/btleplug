@@ -22,6 +22,7 @@ object NativeTests {
     external fun testConnectAndDisconnect()
     external fun testReconnectAfterDisconnect()
     external fun testPeripheralTriggeredDisconnect()
+    external fun testReconnectAfterPeripheralTriggeredDisconnect()
 
     // Read/Write
     external fun testReadStaticValue()
@@ -38,6 +39,7 @@ object NativeTests {
     external fun testSubscribeAndReceiveIndications()
     external fun testUnsubscribeStopsNotifications()
     external fun testConfigurableNotificationPayload()
+    external fun testResubscribeDoesNotDuplicateNotifications()
 
     // Descriptors
     external fun testReadOnlyDescriptor()

@@ -33,6 +33,10 @@ pub const DESCRIPTOR_TEST_CHAR: Uuid = Uuid::from_u128(0x00000401_b5a3_f393_e0a9
 pub const READ_ONLY_DESCRIPTOR: Uuid = Uuid::from_u128(0x000004a1_b5a3_f393_e0a9_e50e24dcca9e);
 pub const READ_WRITE_DESCRIPTOR: Uuid = Uuid::from_u128(0x000004a2_b5a3_f393_e0a9_e50e24dcca9e);
 
+// --- Included Secondary Service (#487) ---
+pub const INCLUDED_SERVICE: Uuid = Uuid::from_u128(0x00000005_b5a3_f393_e0a9_e50e24dcca9e);
+pub const INCLUDED_CHAR: Uuid = Uuid::from_u128(0x00000501_b5a3_f393_e0a9_e50e24dcca9e);
+
 // --- Control Point opcodes ---
 pub const CMD_START_NOTIFICATIONS: u8 = 0x01;
 pub const CMD_STOP_NOTIFICATIONS: u8 = 0x02;

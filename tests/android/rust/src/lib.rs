@@ -279,3 +279,7 @@ jni_test!(
     Java_com_nonpolynomial_btleplug_test_NativeTests_testRefusedSubscribeReturnsError,
     test_cases::test_refused_subscribe_returns_error
 );
+jni_test!(
+    Java_com_nonpolynomial_btleplug_test_NativeTests_testDiscoveryWithIncludedService,
+    test_cases::test_discovery_with_included_service
+);

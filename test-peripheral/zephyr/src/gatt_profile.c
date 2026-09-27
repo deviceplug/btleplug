@@ -42,6 +42,8 @@ extern ssize_t read_refused_ccc(struct bt_conn *, const struct bt_gatt_attr *,
                                 void *, uint16_t, uint16_t);
 extern ssize_t write_refused_ccc(struct bt_conn *, const struct bt_gatt_attr *,
                                  const void *, uint16_t, uint16_t, uint8_t);
+extern ssize_t read_included_char(struct bt_conn *, const struct bt_gatt_attr *,
+                                  void *, uint16_t, uint16_t);
 
 /* Forward declaration for control point write handler */
 extern ssize_t write_control_point(struct bt_conn *, const struct bt_gatt_attr *,
@@ -151,10 +153,26 @@ BT_GATT_SERVICE_DEFINE(notify_svc,
 );
 
 /* ============================================================
+ * Service 5: Included Secondary Service (#487) — must be defined
+ * before descriptor_svc includes it below.
+ * ============================================================ */
+BT_GATT_SERVICE_DEFINE(included_svc,
+    BT_GATT_SECONDARY_SERVICE(BT_UUID_INCLUDED_SERVICE),
+    /* Included Char */
+    BT_GATT_CHARACTERISTIC(BT_UUID_INCLUDED_CHAR,
+        BT_GATT_CHRC_READ,
+        BT_GATT_PERM_READ,
+        read_included_char, NULL, NULL),
+);
+
+/* ============================================================
  * Service 4: Descriptor Test Service
  * ============================================================ */
 BT_GATT_SERVICE_DEFINE(descriptor_svc,
     BT_GATT_PRIMARY_SERVICE(BT_UUID_DESCRIPTOR_SERVICE),
+    /* Include Declaration — must immediately follow the service
+     * declaration (#487) */
+    BT_GATT_INCLUDE_SERVICE((void *)attr_included_svc),
     /* Descriptor Test Char — Read, with custom descriptors */
     BT_GATT_CHARACTERISTIC(BT_UUID_DESCRIPTOR_TEST_CHAR,
         BT_GATT_CHRC_READ,

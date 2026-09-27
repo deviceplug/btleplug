@@ -231,3 +231,13 @@ ssize_t read_refused_ccc(struct bt_conn *conn, const struct bt_gatt_attr *attr,
     return bt_gatt_attr_read(conn, attr, buf, len, offset,
                              ccc_value, sizeof(ccc_value));
 }
+
+/* --- Included Secondary Service Callbacks (#487) --- */
+
+ssize_t read_included_char(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                           void *buf, uint16_t len, uint16_t offset)
+{
+    static const uint8_t included_char_val[] = {0x05};
+    return bt_gatt_attr_read(conn, attr, buf, len, offset,
+                             included_char_val, sizeof(included_char_val));
+}

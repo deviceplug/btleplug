@@ -58,6 +58,12 @@
 #define BT_UUID_RW_DESCRIPTOR \
     BT_UUID_DECLARE_128(BT_UUID_128_ENCODE(0x000004A2, 0xb5a3, 0xf393, 0xe0a9, 0xe50e24dcca9e))
 
+/* --- Included Secondary Service (0x00000005-...) --- */
+#define BT_UUID_INCLUDED_SERVICE \
+    BT_UUID_DECLARE_128(BT_UUID_128_ENCODE(0x00000005, 0xb5a3, 0xf393, 0xe0a9, 0xe50e24dcca9e))
+#define BT_UUID_INCLUDED_CHAR \
+    BT_UUID_DECLARE_128(BT_UUID_128_ENCODE(0x00000501, 0xb5a3, 0xf393, 0xe0a9, 0xe50e24dcca9e))
+
 /* --- Control Point Opcodes --- */
 #define CMD_START_NOTIFICATIONS  0x01
 #define CMD_STOP_NOTIFICATIONS   0x02

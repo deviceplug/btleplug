@@ -72,6 +72,7 @@ class BleIntegrationTest {
     @Test fun testScanFilterByServiceUuid() = NativeTests.testScanFilterByServiceUuid()
     @Test fun testAdvertisementManufacturerData() = NativeTests.testAdvertisementManufacturerData()
     @Test fun testAdvertisementServices() = NativeTests.testAdvertisementServices()
+    @Test fun testAdvertisementServiceData128bit() = NativeTests.testAdvertisementServiceData128bit()
 
     // ── Retrieval ────────────────────────────────────────────────────
     @Test fun testRetrievePeripheralsNotSupported() = NativeTests.testRetrievePeripheralsNotSupported()

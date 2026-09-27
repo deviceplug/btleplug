@@ -117,4 +117,8 @@ class BleIntegrationTest {
     @Test fun testDiscoverServicesDuringRead() = NativeTests.testDiscoverServicesDuringRead()
     @Test fun testOperationsAcrossPeripheralTriggeredDisconnect() = NativeTests.testOperationsAcrossPeripheralTriggeredDisconnect()
     @Test fun testAddPeripheralByAddress() = NativeTests.testAddPeripheralByAddress()
+
+    // ── GATT errors ──────────────────────────────────────────────────
+    @Test fun testGattErrorStatusIsReported() = NativeTests.testGattErrorStatusIsReported()
+    @Test fun testRefusedSubscribeReturnsError() = NativeTests.testRefusedSubscribeReturnsError()
 }

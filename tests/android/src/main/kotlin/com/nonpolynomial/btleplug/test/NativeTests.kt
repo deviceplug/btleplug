@@ -59,4 +59,8 @@ object NativeTests {
     external fun testDiscoverServicesDuringRead()
     external fun testOperationsAcrossPeripheralTriggeredDisconnect()
     external fun testAddPeripheralByAddress()
+
+    // GATT errors
+    external fun testGattErrorStatusIsReported()
+    external fun testRefusedSubscribeReturnsError()
 }

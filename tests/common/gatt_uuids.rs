@@ -17,12 +17,14 @@ pub const WRITE_WITH_RESPONSE: Uuid = Uuid::from_u128(0x00000203_b5a3_f393_e0a9_
 pub const WRITE_WITHOUT_RESPONSE: Uuid = Uuid::from_u128(0x00000204_b5a3_f393_e0a9_e50e24dcca9e);
 pub const READ_WRITE: Uuid = Uuid::from_u128(0x00000205_b5a3_f393_e0a9_e50e24dcca9e);
 pub const LONG_VALUE: Uuid = Uuid::from_u128(0x00000206_b5a3_f393_e0a9_e50e24dcca9e);
+pub const ERROR_CHAR: Uuid = Uuid::from_u128(0x00000207_b5a3_f393_e0a9_e50e24dcca9e);
 
 // --- Notification Test Service ---
 pub const NOTIFICATION_SERVICE: Uuid = Uuid::from_u128(0x00000003_b5a3_f393_e0a9_e50e24dcca9e);
 pub const NOTIFY_CHAR: Uuid = Uuid::from_u128(0x00000301_b5a3_f393_e0a9_e50e24dcca9e);
 pub const INDICATE_CHAR: Uuid = Uuid::from_u128(0x00000302_b5a3_f393_e0a9_e50e24dcca9e);
 pub const CONFIGURABLE_NOTIFY: Uuid = Uuid::from_u128(0x00000303_b5a3_f393_e0a9_e50e24dcca9e);
+pub const REFUSED_NOTIFY_CHAR: Uuid = Uuid::from_u128(0x00000304_b5a3_f393_e0a9_e50e24dcca9e);
 
 // --- Descriptor Test Service ---
 pub const DESCRIPTOR_SERVICE: Uuid = Uuid::from_u128(0x00000004_b5a3_f393_e0a9_e50e24dcca9e);

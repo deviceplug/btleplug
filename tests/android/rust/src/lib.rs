@@ -271,3 +271,11 @@ jni_test!(
     Java_com_nonpolynomial_btleplug_test_NativeTests_testAddPeripheralByAddress,
     test_cases::test_add_peripheral_by_address
 );
+jni_test!(
+    Java_com_nonpolynomial_btleplug_test_NativeTests_testGattErrorStatusIsReported,
+    test_cases::test_gatt_error_status_is_reported
+);
+jni_test!(
+    Java_com_nonpolynomial_btleplug_test_NativeTests_testRefusedSubscribeReturnsError,
+    test_cases::test_refused_subscribe_returns_error
+);

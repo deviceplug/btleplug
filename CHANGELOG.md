@@ -1,4 +1,4 @@
-# 0.13.3 (2026-09-26)
+# 0.13.3 (2026-09-27)
 
 ## Bugfixes
 
@@ -56,6 +56,20 @@
   still return a device (and `DeviceDiscovered` could fire) immediately after
   stopping the scan and clearing. Advertisement callbacks that arrive after
   `stop_scan()` are now ignored.
+- Fix BlueZ `unsubscribe()` failing with "No notify session started" when the
+  characteristic was not subscribed, for example on a repeated unsubscribe.
+  Unsubscribing a characteristic that is not subscribed now succeeds on every
+  backend.
+- Fix Windows `retrieve_peripherals()` with a service filter taking a minute or
+  more when the system listed a stale "connected" device whose GATT services
+  could not be read. Connected devices are now queried concurrently, and a
+  device that does not answer within 5 seconds is treated as having no
+  services.
+- Fix Android `connect()` failing with `Error::NotConnected` when a connection
+  failed to be established (HCI 0x3E, which Android reports as GATT status
+  133). Such attempts are now retried up to twice. After a failed connect, the
+  failed `BluetoothGatt` is closed instead of being reused by the next
+  `connect()`.
 
 # 0.13.2 (2026-09-20)
 

@@ -16,6 +16,7 @@ library.
 readme = "README.md"
 keywords = ["bluetooth", "BLE", "bluez", "uwp", "corebluetooth"]
 categories = ["hardware-support"]
+include = ["src/**", "examples/**", "/README.md", "/CHANGELOG.md", "/LICENSE.md"]
 
 [lib]
 name = "btleplug"

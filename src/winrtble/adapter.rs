@@ -128,6 +128,16 @@ impl Adapter {
             _state_handler: state_handler,
         })
     }
+
+    /// Overrides whether the adapter is treated as supporting the Coded (long-range) PHY.
+    /// With `false`, scans never request Coded PHY. Some adapters that report support stop
+    /// delivering most 1M PHY advertisements with it enabled. Takes effect on the next
+    /// [`Central::start_scan`].
+    pub fn set_coded_phy_supported(&self, supported: bool) -> Result<()> {
+        let mut watcher = self.watcher.lock().map_err(Into::<Error>::into)?;
+        watcher.set_coded_phy_supported(supported);
+        Ok(())
+    }
 }
 
 #[cfg(test)]

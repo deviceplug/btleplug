@@ -25,9 +25,10 @@ pub type AdvertisementEventHandler =
 pub struct BLEWatcher {
     watcher: BluetoothLEAdvertisementWatcher,
     received_token: Option<i64>,
-    /// Whether the adapter reports Coded (long-range) PHY support. Only
-    /// then is `UseCodedPhy` requested: the setter succeeds on any adapter,
-    /// and on one without Coded PHY the scan starts but never reports.
+    /// Whether the adapter reports Coded (long-range) PHY support, unless
+    /// overridden by `Adapter::set_coded_phy_supported`. Only then is
+    /// `UseCodedPhy` requested: the setter succeeds on any adapter, and on
+    /// one without Coded PHY the scan starts but never reports.
     coded_phy_supported: bool,
 }
 
@@ -65,6 +66,10 @@ impl BLEWatcher {
         })
     }
 
+    pub fn set_coded_phy_supported(&mut self, supported: bool) {
+        self.coded_phy_supported = supported;
+    }
+
     pub fn start(
         &mut self,
         filter: ScanFilter,
@@ -87,10 +92,9 @@ impl BLEWatcher {
         // adapter supports it. `SetUseCodedPhy(true)` is accepted (and
         // `Start` succeeds) on adapters without Coded PHY as well, and the
         // scan then delivers no advertisements at all, so the capability
-        // check is the guard rather than the setter's result.
-        if self.coded_phy_supported {
-            let _ = self.watcher.SetUseCodedPhy(true);
-        }
+        // check is the guard rather than the setter's result. Set it on every
+        // scan: the watcher is reused and the flag can change between scans.
+        let _ = self.watcher.SetUseCodedPhy(self.coded_phy_supported);
         debug!(
             "extended scanning enabled; coded PHY {}",
             if self.coded_phy_supported {

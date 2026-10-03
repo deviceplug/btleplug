@@ -80,7 +80,7 @@ impl BLEWatcher {
             watcher,
             received_token: None,
             coded_phy_supported,
-            use_coded_phy: true,
+            use_coded_phy: false,
         })
     }
 

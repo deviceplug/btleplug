@@ -130,10 +130,11 @@ impl Adapter {
     }
 
     /// Sets whether scans also receive advertisements on the Coded (long-range) PHY.
-    /// Has no effect on adapters that do not report Coded PHY support, where requesting
-    /// it would stop the scan from reporting anything. Some adapters that do report
-    /// support stop delivering most 1M PHY advertisements while it is enabled. Takes
-    /// effect on the next [`Central::start_scan`].
+    ///
+    /// Disabled by default: some adapters that report Coded PHY support stop delivering
+    /// most 1M PHY advertisements while it is enabled. Has no effect on adapters that do
+    /// not report support, where requesting it would stop the scan from reporting
+    /// anything. Takes effect on the next [`Central::start_scan`].
     pub fn set_use_coded_phy(&self, enabled: bool) -> Result<()> {
         let mut watcher = self.watcher.lock().map_err(Into::<Error>::into)?;
         watcher.set_use_coded_phy(enabled);

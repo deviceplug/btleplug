@@ -34,6 +34,14 @@ fn init_inner(env: &mut Env) -> crate::Result<()> {
             jni_str!("com.nonpolynomial.btleplug.android.impl.Adapter"),
             false,
         )?;
+        // jni-macros 0.22.4 expands native_method! to AtomicBool::fetch_update, deprecated
+        // since Rust 1.99 (jni-rs/jni-rs#846).
+        #[allow(deprecated)]
+        let on_connection_state_changed = native_method! {
+            name = "onConnectionStateChanged",
+            sig = (addr: JString, connected: jboolean) -> (),
+            fn = adapter_on_connection_state_changed,
+        };
         unsafe {
             env.register_native_methods(
                 &adapter_class,
@@ -45,11 +53,7 @@ fn init_inner(env: &mut Env) -> crate::Result<()> {
                         jni_str!("(Landroid/bluetooth/le/ScanResult;)V"),
                         adapter_report_scan_result as *mut c_void,
                     ),
-                    native_method! {
-                        name = "onConnectionStateChanged",
-                        sig = (addr: JString, connected: jboolean) -> (),
-                        fn = adapter_on_connection_state_changed,
-                    },
+                    on_connection_state_changed,
                 ],
             )?
         };

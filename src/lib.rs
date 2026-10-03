@@ -154,7 +154,7 @@ pub enum Error {
     Other(Box<dyn std::error::Error + Send + Sync>),
 }
 
-/// Convert [`PoisonError`] to [`Error`] for replace `unwrap` to `map_err`
+/// Convert [`PoisonError`](std::sync::PoisonError) to [`Error`] so lock results can use `?`
 impl<T: std::fmt::Debug> From<std::sync::PoisonError<T>> for Error {
     fn from(e: std::sync::PoisonError<T>) -> Self {
         Self::Other(format!("{:?}", e).into())

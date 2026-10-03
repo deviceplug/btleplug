@@ -1,3 +1,22 @@
+# 0.13.4 (2026-10-03)
+
+## Behavior Changes
+
+- **Windows Coded PHY scanning is now opt-in**: Scans no longer request the
+  Coded (long-range) PHY by default, restoring the scanning behavior from
+  before 0.13.0. Since 0.13.0, scans requested it on every adapter that reported
+  Coded PHY support, but some of those adapters then stopped delivering most 1M
+  PHY advertisements, so ordinary nearby devices were never discovered.
+  Applications that need devices advertising on the Coded PHY should call
+  `Adapter::set_use_coded_phy(true)` before `start_scan()`. (#493)
+
+## Features
+
+- Add `Adapter::set_use_coded_phy()` on Windows to opt in to receiving
+  advertisements on the Coded PHY. It has no effect on adapters that do not
+  report Coded PHY support, where requesting it would stop scans from reporting
+  any advertisements. (#493)
+
 # 0.13.3 (2026-09-27)
 
 ## Bugfixes

@@ -25,11 +25,28 @@ pub type AdvertisementEventHandler =
 pub struct BLEWatcher {
     watcher: BluetoothLEAdvertisementWatcher,
     received_token: Option<i64>,
-    /// Whether the adapter reports Coded (long-range) PHY support, unless
-    /// overridden by `Adapter::set_coded_phy_supported`. Only then is
-    /// `UseCodedPhy` requested: the setter succeeds on any adapter, and on
+    /// Whether the adapter reports Coded (long-range) PHY support. Only then
+    /// is `UseCodedPhy` requested: the setter succeeds on any adapter, and on
     /// one without Coded PHY the scan starts but never reports.
     coded_phy_supported: bool,
+    use_coded_phy: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CodedPhyScan {
+    Enabled,
+    NotRequested,
+    Unsupported,
+}
+
+impl CodedPhyScan {
+    fn new(supported: bool, requested: bool) -> Self {
+        match (requested, supported) {
+            (false, _) => Self::NotRequested,
+            (true, false) => Self::Unsupported,
+            (true, true) => Self::Enabled,
+        }
+    }
 }
 
 impl From<windows::core::Error> for Error {
@@ -63,11 +80,12 @@ impl BLEWatcher {
             watcher,
             received_token: None,
             coded_phy_supported,
+            use_coded_phy: true,
         })
     }
 
-    pub fn set_coded_phy_supported(&mut self, supported: bool) {
-        self.coded_phy_supported = supported;
+    pub fn set_use_coded_phy(&mut self, enabled: bool) {
+        self.use_coded_phy = enabled;
     }
 
     pub fn start(
@@ -88,19 +106,22 @@ impl BLEWatcher {
         self.watcher
             .SetScanningMode(BluetoothLEScanningMode::Active)?;
         let _ = self.watcher.SetAllowExtendedAdvertisements(true);
-        // Also receive on the Coded (long-range) PHY, but only when the
-        // adapter supports it. `SetUseCodedPhy(true)` is accepted (and
-        // `Start` succeeds) on adapters without Coded PHY as well, and the
-        // scan then delivers no advertisements at all, so the capability
-        // check is the guard rather than the setter's result. Set it on every
-        // scan: the watcher is reused and the flag can change between scans.
-        let _ = self.watcher.SetUseCodedPhy(self.coded_phy_supported);
+        // Also receive on the Coded (long-range) PHY when requested and the
+        // adapter supports it. `SetUseCodedPhy(true)` is accepted (and `Start`
+        // succeeds) on adapters without Coded PHY as well, and the scan then
+        // delivers no advertisements at all, so the capability check is the
+        // guard rather than the setter's result. Set it on every scan: the
+        // watcher is reused and the request can change between scans.
+        let coded_phy = CodedPhyScan::new(self.coded_phy_supported, self.use_coded_phy);
+        let _ = self
+            .watcher
+            .SetUseCodedPhy(coded_phy == CodedPhyScan::Enabled);
         debug!(
             "extended scanning enabled; coded PHY {}",
-            if self.coded_phy_supported {
-                "enabled"
-            } else {
-                "not supported by adapter, disabled"
+            match coded_phy {
+                CodedPhyScan::Enabled => "enabled",
+                CodedPhyScan::NotRequested => "not requested, disabled",
+                CodedPhyScan::Unsupported => "requested but not supported by adapter, disabled",
             }
         );
 
@@ -167,7 +188,15 @@ impl BLEWatcher {
 
 #[cfg(test)]
 mod tests {
-    use super::{MATCH_CACHE_CAPACITY, MatchCache};
+    use super::{CodedPhyScan, MATCH_CACHE_CAPACITY, MatchCache};
+
+    #[test]
+    fn coded_phy_requires_request_and_adapter_support() {
+        assert_eq!(CodedPhyScan::new(true, true), CodedPhyScan::Enabled);
+        assert_eq!(CodedPhyScan::new(false, true), CodedPhyScan::Unsupported);
+        assert_eq!(CodedPhyScan::new(true, false), CodedPhyScan::NotRequested);
+        assert_eq!(CodedPhyScan::new(false, false), CodedPhyScan::NotRequested);
+    }
 
     #[test]
     fn match_cache_is_bounded() {

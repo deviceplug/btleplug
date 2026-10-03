@@ -699,6 +699,76 @@ fn check_discovered_with_no_waiting_future_does_not_panic() {
 }
 
 #[tokio::test]
+async fn unrequested_descriptor_rediscovery_is_ignored() {
+    let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345679);
+    let (peripheral, mut internal) = new_test_internal(peripheral_uuid);
+    let service_uuid = Uuid::from_u128(0x03b80e5a_ede8_4b33_a751_6ce34ec4c700);
+    let characteristic_uuid = Uuid::from_u128(0x7772e5db_3868_4112_a1a9_f2669d106bf3);
+    let service_cbuuid = uuid_to_cbuuid(service_uuid);
+    let characteristic_cbuuid = uuid_to_cbuuid(characteristic_uuid);
+    let characteristic = unsafe {
+        CBMutableCharacteristic::initWithType_properties_value_permissions(
+            CBMutableCharacteristic::alloc(),
+            &characteristic_cbuuid,
+            CBCharacteristicProperties::Read,
+            None,
+            CBAttributePermissions::Readable,
+        )
+    };
+    let service = unsafe {
+        CBMutableService::initWithType_primary(CBMutableService::alloc(), &service_cbuuid, true)
+    };
+    let characteristic: Retained<CBCharacteristic> = Retained::into_super(characteristic);
+    let characteristics = NSArray::from_retained_slice(std::slice::from_ref(&characteristic));
+    unsafe { service.setCharacteristics(Some(&characteristics)) };
+    internal.services.insert(
+        service_uuid,
+        ServiceInternal {
+            cbservice: Retained::into_super(service),
+            characteristics: HashMap::from([(
+                characteristic_uuid,
+                CharacteristicInternal::new(characteristic.clone()),
+            )]),
+            discovered: false,
+        },
+    );
+
+    assert!(internal.services_discovered_future_state.is_empty());
+    internal.set_characteristic_descriptors(
+        service_uuid,
+        characteristic_uuid,
+        HashMap::new(),
+        false,
+    );
+    assert!(internal.services.values().all(|service| service.discovered));
+
+    internal
+        .services
+        .values_mut()
+        .for_each(|service| service.discovered = false);
+    let discovery = CoreBluetoothReplyFuture::default();
+    internal
+        .services_discovered_future_state
+        .push_back(discovery.get_state_clone());
+    internal.set_characteristic_descriptors(
+        service_uuid,
+        characteristic_uuid,
+        HashMap::new(),
+        false,
+    );
+    let reply = tokio::time::timeout(Duration::from_secs(1), discovery)
+        .await
+        .expect("a later discovery request should still be answered");
+    assert!(matches!(
+        reply,
+        CoreBluetoothReply::ServicesDiscovered(_, _)
+    ));
+
+    std::mem::forget(internal);
+    std::mem::forget(peripheral);
+}
+
+#[tokio::test]
 async fn descriptors_for_unknown_service_leave_discovery_pending() {
     let peripheral_uuid = Uuid::from_u128(0x12345678_1234_5678_1234_567812345678);
     let (peripheral, mut internal) = new_test_internal(peripheral_uuid);

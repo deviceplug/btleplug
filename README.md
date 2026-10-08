@@ -122,6 +122,8 @@ by the consuming application.
 
 There is now a build script at `./scripts/build-java.sh` for building the java portion of the library on linux or macOS. This can also be used as a guide for manual building if need be.
 
+Call `btleplug::platform::init` from a thread whose context class loader sees the application's classes. Threads that entered native code from Java already do. A thread attached from native code must first set its context class loader to the application's, such as `Context.getClassLoader()`.
+
 If your app uses Proguard/R8 with `minifyEnabled true`, you must add keep rules for btleplug's
 Java classes. All of btleplug's Java code (including vendored jni-utils classes) is only accessed
 via JNI from native code, so R8 will treat it as dead code and strip it without these rules.

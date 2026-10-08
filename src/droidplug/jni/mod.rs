@@ -28,8 +28,12 @@ fn init_inner(env: &mut Env) -> crate::Result<()> {
     // Seed the JavaVM singleton so JavaVM::singleton() works from any thread.
     env.get_java_vm()?;
     {
-        let adapter_class =
-            env.find_class(jni_str!("com/nonpolynomial/btleplug/android/impl/Adapter"))?;
+        let loader = jni::objects::LoaderContext::default();
+        let adapter_class = loader.load_class(
+            env,
+            jni_str!("com.nonpolynomial.btleplug.android.impl.Adapter"),
+            false,
+        )?;
         unsafe {
             env.register_native_methods(
                 &adapter_class,
@@ -57,7 +61,6 @@ fn init_inner(env: &mut Env) -> crate::Result<()> {
         };
         use objects::*;
 
-        let loader = jni::objects::LoaderContext::default();
         <JPeripheral as Reference>::lookup_class(env, &loader)?;
         <JScanFilterClass as Reference>::lookup_class(env, &loader)?;
         <JNotConnectedException as Reference>::lookup_class(env, &loader)?;

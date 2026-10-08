@@ -40,7 +40,7 @@ pub fn find_descriptor(
     );
 }
 
-use jni::objects::JClass;
+use jni::objects::{JClass, JObject, JThread};
 use jni::{Env, EnvUnowned, jni_str};
 use jni::errors::ThrowRuntimeExAndDefault;
 use std::sync::OnceLock;
@@ -85,19 +85,31 @@ fn run_test(env: &mut Env, test_name: &str, f: impl std::future::Future<Output =
     }
 }
 
-/// Initialize btleplug's Android/JNI layer. Must be called once before any tests.
+/// Runs `platform::init` on a natively attached thread with the app's context class loader.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_nonpolynomial_btleplug_test_NativeTests_initBtleplug(
     mut env: EnvUnowned,
-    _class: JClass,
+    this: JObject,
 ) {
     android_logger::init_once(
         android_logger::Config::default()
             .with_max_level(log::LevelFilter::Debug)
             .with_tag("btleplug-test"),
     );
-    env.with_env(|env| btleplug::platform::init(env))
-        .resolve::<ThrowRuntimeExAndDefault>();
+    env.with_env(|env| -> btleplug::Result<()> {
+        let loader = env.get_object_class(&this)?.get_class_loader(env)?;
+        let loader = env.new_global_ref(loader)?;
+        let vm = env.get_java_vm()?;
+        std::thread::spawn(move || {
+            vm.attach_current_thread(|env| -> btleplug::Result<()> {
+                JThread::current_thread(env)?.set_context_class_loader(env, &loader)?;
+                btleplug::platform::init(env)
+            })
+        })
+        .join()
+        .expect("btleplug init thread panicked")
+    })
+    .resolve::<ThrowRuntimeExAndDefault>();
 }
 
 // ── Test JNI exports ────────────────────────────────────────────────

@@ -14,7 +14,7 @@ use crate::{
         self, BDAddr, CentralEvent, CharPropFlags, Characteristic, Descriptor,
         PeripheralProperties, Service, ValueNotification, WriteType,
     },
-    common::{adapter_manager::AdapterManager, util::notifications_stream_from_broadcast_receiver},
+    common::{adapter_manager::AdapterManager, util::broadcast_stream},
 };
 use async_trait::async_trait;
 use futures::channel::mpsc::{Receiver, SendError, Sender};
@@ -597,9 +597,11 @@ impl api::Peripheral for Peripheral {
         Ok(())
     }
 
-    async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
+    async fn notifications(
+        &self,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ValueNotification>> + Send>>> {
         let receiver = self.shared.notifications_channel.subscribe();
-        Ok(notifications_stream_from_broadcast_receiver(receiver))
+        Ok(broadcast_stream(receiver))
     }
 
     async fn write_descriptor(&self, descriptor: &Descriptor, data: &[u8]) -> Result<()> {

@@ -413,7 +413,12 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     /// a notification when a value notification or indication is received from the device.
     /// The stream will remain valid across connections and can be queried before any connection
     /// is made.
-    async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>>;
+    ///
+    /// `Err` items report lost or unreadable notifications, such as
+    /// [`Error::Lagged`](crate::Error::Lagged). The stream continues.
+    async fn notifications(
+        &self,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ValueNotification>> + Send>>>;
 
     /// Write some data to the descriptor. Returns an error if the write couldn't be sent or (in
     /// the case of a write-with-response) if the device returns an error.
@@ -518,7 +523,10 @@ pub trait Central: Send + Sync + Clone {
 
     /// Retrieve a stream of `CentralEvent`s. This stream will receive notifications when events
     /// occur for this Central module. See [`CentralEvent`] for the full set of possible events.
-    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent> + Send>>>;
+    ///
+    /// `Err` items report skipped events, such as [`Error::Lagged`](crate::Error::Lagged).
+    /// The stream continues.
+    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = Result<CentralEvent>> + Send>>>;
 
     /// Starts a scan for BLE devices. This scan will generally continue until explicitly stopped,
     /// although this may depend on your Bluetooth adapter. Discovered devices will be announced

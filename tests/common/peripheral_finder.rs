@@ -201,17 +201,31 @@ pub fn find_characteristic(
         .unwrap_or_else(|| panic!("characteristic {} not found", uuid))
 }
 
+/// The peripheral's notification stream, failing the test on an `Err` item.
+pub async fn notification_stream(
+    peripheral: &Peripheral,
+) -> impl futures::Stream<Item = btleplug::api::ValueNotification> + Unpin {
+    use futures::StreamExt;
+
+    peripheral
+        .notifications()
+        .await
+        .unwrap()
+        .map(|item| item.expect("notification stream reported an error"))
+}
+
 /// Subscribe to `adapter.events()` and forward every event into an unbounded
 /// channel.
 ///
 /// The central event broadcast channel (`src/common/adapter_manager.rs`) has
-/// capacity 16 and `event_stream()` silently drops events for a receiver that
-/// falls behind (`filter_map(|x| x.ok())`). During an active scan CoreBluetooth
-/// emits `DeviceUpdated` for every nearby advertiser, so a receiver that isn't
-/// polled continuously can lose events (in particular `DeviceConnected`)
-/// between the moment it subscribes and the moment a test gets around to
-/// reading it. Forwarding into an unbounded channel from a task that starts
-/// draining immediately avoids that loss. The subscription (`events().await`)
+/// capacity 16, and a receiver that falls behind loses events and gets
+/// `Error::Lagged`. During an active scan CoreBluetooth emits `DeviceUpdated`
+/// for every nearby advertiser, so a receiver that isn't polled continuously
+/// can lose events (in particular `DeviceConnected`) between the moment it
+/// subscribes and the moment a test gets around to reading it. Forwarding into
+/// an unbounded channel from a task that starts draining immediately avoids
+/// that loss, and a lag that still happens panics the collector, which closes
+/// the channel for `wait_for_event`. The subscription (`events().await`)
 /// happens before the forwarding task is spawned, so no event between the
 /// caller's request and the task starting is missed.
 pub async fn spawn_event_collector() -> UnboundedReceiver<CentralEvent> {
@@ -228,11 +242,12 @@ pub async fn spawn_event_collector() -> UnboundedReceiver<CentralEvent> {
             tokio::select! {
                 _ = tx.closed() => break,
                 ev = events.next() => match ev {
-                    Some(e) => {
+                    Some(Ok(e)) => {
                         if tx.send(e).is_err() {
                             break;
                         }
                     }
+                    Some(Err(err)) => panic!("adapter event stream reported an error: {err}"),
                     None => break,
                 },
             }

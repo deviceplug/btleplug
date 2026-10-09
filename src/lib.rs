@@ -150,6 +150,9 @@ pub enum Error {
     #[error("Runtime Error: {}", _0)]
     RuntimeError(String),
 
+    #[error("Stream lagged, {0} items skipped")]
+    Lagged(u64),
+
     #[error("{}", _0)]
     Other(Box<dyn std::error::Error + Send + Sync>),
 }

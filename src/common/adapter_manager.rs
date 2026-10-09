@@ -11,14 +11,15 @@
 // following copyright:
 //
 // Copyright (c) 2014 The Rust Project Developers
+use super::util::broadcast_stream;
+use crate::Result;
 use crate::api::{CentralEvent, Peripheral};
 use crate::platform::PeripheralId;
 use dashmap::{DashMap, mapref::one::RefMut};
-use futures::stream::{Stream, StreamExt};
+use futures::stream::Stream;
 use log::trace;
 use std::pin::Pin;
 use tokio::sync::broadcast;
-use tokio_stream::wrappers::BroadcastStream;
 
 #[derive(Debug)]
 pub struct AdapterManager<PeripheralType>
@@ -53,9 +54,8 @@ where
         }
     }
 
-    pub fn event_stream(&self) -> Pin<Box<dyn Stream<Item = CentralEvent> + Send>> {
-        let receiver = self.events_channel.subscribe();
-        Box::pin(BroadcastStream::new(receiver).filter_map(|x| async move { x.ok() }))
+    pub fn event_stream(&self) -> Pin<Box<dyn Stream<Item = Result<CentralEvent>> + Send>> {
+        broadcast_stream(self.events_channel.subscribe())
     }
 
     /// Inserts a peripheral if absent and returns the retained instance,
@@ -184,7 +184,7 @@ mod tests {
 
         async fn notifications(
             &self,
-        ) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<ValueNotification>> + Send>>> {
             unreachable!()
         }
 
@@ -249,5 +249,28 @@ mod tests {
             assert!(Arc::ptr_eq(&stored.state, &peripheral.state));
             assert_eq!(peripheral.state.load(Ordering::SeqCst), WORKERS);
         }
+    }
+
+    #[tokio::test]
+    async fn lagged_event_stream_reports_skipped_count_then_resumes() {
+        use futures::stream::StreamExt;
+
+        let manager = AdapterManager::<TestPeripheral>::default();
+        let events = manager.event_stream();
+        let id = TestPeripheral::new().id();
+        for _ in 0..20 {
+            manager.emit(CentralEvent::DeviceUpdated(id.clone()));
+        }
+        drop(manager);
+
+        let items: Vec<_> = events.collect().await;
+
+        assert_eq!(items.len(), 17);
+        assert!(matches!(items[0], Err(crate::Error::Lagged(4))));
+        assert!(
+            items[1..]
+                .iter()
+                .all(|item| matches!(item, Ok(CentralEvent::DeviceUpdated(_))))
+        );
     }
 }

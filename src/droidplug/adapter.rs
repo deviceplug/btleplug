@@ -133,7 +133,7 @@ impl Central for Adapter {
         Ok("Android".to_string())
     }
 
-    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent> + Send>>> {
+    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = Result<CentralEvent>> + Send>>> {
         Ok(self.manager.event_stream())
     }
 

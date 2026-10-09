@@ -27,7 +27,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Each adapter has an event stream, we fetch via events(),
     // simplifying the type, this will return what is essentially a
-    // Future<Result<Stream<Item=CentralEvent>>>.
+    // Future<Result<Stream<Item=Result<CentralEvent>>>>.
     let mut events = central.events().await?;
 
     // start scanning for devices
@@ -36,6 +36,13 @@ async fn main() -> anyhow::Result<()> {
     // Process events asynchronously. In a real program, run this loop in its own
     // Tokio task if event handling should proceed independently of other work.
     while let Some(event) = events.next().await {
+        let event = match event {
+            Ok(event) => event,
+            Err(err) => {
+                println!("Missed events: {}", err);
+                continue;
+            }
+        };
         match event {
             CentralEvent::DeviceDiscovered(id) => {
                 let peripheral = central.peripheral(&id).await?;

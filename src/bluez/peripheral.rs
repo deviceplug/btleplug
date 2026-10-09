@@ -273,12 +273,14 @@ impl api::Peripheral for Peripheral {
         }
     }
 
-    async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
+    async fn notifications(
+        &self,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ValueNotification>> + Send>>> {
         let device_id = self.device.clone();
         let events = self.session.device_event_stream(&device_id).await?;
         let services = self.services.clone();
         Ok(Box::pin(events.filter_map(move |event| {
-            ready(value_notification(event, &device_id, services.clone()))
+            ready(value_notification(event, &device_id, services.clone()).map(Ok))
         })))
     }
 

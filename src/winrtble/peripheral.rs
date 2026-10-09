@@ -23,7 +23,7 @@ use crate::{
         Service, ValueNotification, WriteType,
         bleuuid::{uuid_from_u16, uuid_from_u32},
     },
-    common::{adapter_manager::AdapterManager, util::notifications_stream_from_broadcast_receiver},
+    common::{adapter_manager::AdapterManager, util::broadcast_stream},
 };
 use async_trait::async_trait;
 use dashmap::DashMap;
@@ -673,9 +673,11 @@ impl ApiPeripheral for Peripheral {
         ble_characteristic.read_value().await
     }
 
-    async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
+    async fn notifications(
+        &self,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ValueNotification>> + Send>>> {
         let receiver = self.shared.notifications_channel.subscribe();
-        Ok(notifications_stream_from_broadcast_receiver(receiver))
+        Ok(broadcast_stream(receiver))
     }
 
     async fn write_descriptor(&self, descriptor: &Descriptor, data: &[u8]) -> Result<()> {

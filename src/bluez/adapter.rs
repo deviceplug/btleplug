@@ -51,7 +51,7 @@ fn matches_retrieval_options(
 impl Central for Adapter {
     type Peripheral = Peripheral;
 
-    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent> + Send>>> {
+    async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = Result<CentralEvent>> + Send>>> {
         // There's a race between getting this event stream and getting the current set of devices.
         // Get the stream first, on the basis that it's better to have a duplicate DeviceDiscovered
         // event than to miss one. It's unlikely to happen in any case.
@@ -86,7 +86,7 @@ impl Central for Adapter {
             .filter_map(move |event| central_events(event, session.clone(), adapter_id.clone()))
             .flat_map(stream::iter);
 
-        Ok(Box::pin(initial_events.chain(events)))
+        Ok(Box::pin(initial_events.chain(events).map(Ok)))
     }
 
     async fn start_scan(&self, filter: ScanFilter) -> Result<()> {

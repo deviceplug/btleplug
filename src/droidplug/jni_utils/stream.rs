@@ -114,11 +114,38 @@ mod test {
     use super::super::test_utils;
     use super::{JSendStream, JStream};
     use futures::stream::Stream;
-    use jni::{jni_sig, jni_str};
+    use jni::{Env, errors::Result, jni_sig, jni_str, objects::JObject};
     use std::{
         pin::Pin,
         task::{Context, Poll},
     };
+
+    fn new_queue_stream<'local>(env: &mut Env<'local>) -> Result<JObject<'local>> {
+        env.new_object(
+            jni_str!("io/github/gedgygedgy/rust/stream/QueueStream"),
+            jni_sig!("()V"),
+            &[],
+        )
+    }
+
+    fn new_object<'local>(env: &mut Env<'local>) -> Result<JObject<'local>> {
+        env.new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[])
+    }
+
+    fn add(env: &mut Env, stream: &JObject, item: &JObject) -> Result<()> {
+        env.call_method(
+            stream,
+            jni_str!("add"),
+            jni_sig!("(Ljava/lang/Object;)V"),
+            &[item.into()],
+        )?;
+        Ok(())
+    }
+
+    fn finish(env: &mut Env, stream: &JObject) -> Result<()> {
+        env.call_method(stream, jni_str!("finish"), jni_sig!("()V"), &[])?;
+        Ok(())
+    }
 
     #[test]
     fn test_jstream() {
@@ -128,16 +155,8 @@ mod test {
             let data = Arc::new(test_utils::TestWakerData::new());
             let waker = test_utils::test_waker(&data);
 
-            let stream_obj = env
-                .new_object(
-                    jni_str!("io/github/gedgygedgy/rust/stream/QueueStream"),
-                    jni_sig!("()V"),
-                    &[],
-                )
-                .unwrap();
-            let stream_local = env.new_local_ref(&stream_obj).unwrap();
-            let jstream = env.cast_local::<JStream>(stream_local).unwrap();
-            let mut stream = JSendStream::new(env, &jstream).unwrap();
+            let stream_obj = new_queue_stream(env)?;
+            let mut stream = JSendStream::from_env(env, &stream_obj)?;
 
             assert!(
                 Pin::new(&mut stream)
@@ -145,47 +164,29 @@ mod test {
                     .is_pending()
             );
             assert_eq!(Arc::strong_count(&data), 3);
-            assert_eq!(data.value(), false);
+            assert!(!data.value());
 
-            let obj1 = env
-                .new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[])
-                .unwrap();
-            env.call_method(
-                &stream_obj,
-                jni_str!("add"),
-                jni_sig!("(Ljava/lang/Object;)V"),
-                &[(&obj1).into()],
-            )
-            .unwrap();
+            let obj1 = new_object(env)?;
+            add(env, &stream_obj, &obj1)?;
             assert_eq!(Arc::strong_count(&data), 2);
-            assert_eq!(data.value(), true);
+            assert!(data.value());
             data.set_value(false);
 
-            let obj2 = env
-                .new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[])
-                .unwrap();
-            env.call_method(
-                &stream_obj,
-                jni_str!("add"),
-                jni_sig!("(Ljava/lang/Object;)V"),
-                &[(&obj2).into()],
-            )
-            .unwrap();
-            assert_eq!(data.value(), false);
+            let obj2 = new_object(env)?;
+            add(env, &stream_obj, &obj2)?;
+            assert!(!data.value());
 
             let poll = Pin::new(&mut stream).poll_next(&mut Context::from_waker(&waker));
-            if let Poll::Ready(Some(Ok(actual_obj1))) = poll {
-                assert!(env.is_same_object(actual_obj1.as_obj(), &obj1).unwrap());
-            } else {
+            let Poll::Ready(Some(Ok(actual_obj1))) = poll else {
                 panic!("Poll result should be ready");
-            }
+            };
+            assert!(env.is_same_object(actual_obj1.as_obj(), &obj1)?);
 
             let poll = Pin::new(&mut stream).poll_next(&mut Context::from_waker(&waker));
-            if let Poll::Ready(Some(Ok(actual_obj2))) = poll {
-                assert!(env.is_same_object(actual_obj2.as_obj(), &obj2).unwrap());
-            } else {
+            let Poll::Ready(Some(Ok(actual_obj2))) = poll else {
                 panic!("Poll result should be ready");
-            }
+            };
+            assert!(env.is_same_object(actual_obj2.as_obj(), &obj2)?);
 
             assert!(
                 Pin::new(&mut stream)
@@ -193,19 +194,18 @@ mod test {
                     .is_pending()
             );
             assert_eq!(Arc::strong_count(&data), 3);
-            assert_eq!(data.value(), false);
+            assert!(!data.value());
 
-            env.call_method(&stream_obj, jni_str!("finish"), jni_sig!("()V"), &[])
-                .unwrap();
+            finish(env, &stream_obj)?;
             assert_eq!(Arc::strong_count(&data), 2);
-            assert_eq!(data.value(), true);
+            assert!(data.value());
             data.set_value(false);
 
             let poll = Pin::new(&mut stream).poll_next(&mut Context::from_waker(&waker));
-            if let Poll::Ready(None) = poll {
-            } else {
-                panic!("Poll result should be ready");
-            }
+            assert!(
+                matches!(poll, Poll::Ready(None)),
+                "finished stream should end"
+            );
 
             Ok(())
         })
@@ -218,25 +218,13 @@ mod test {
 
         let (mut stream, stream_obj_global, obj1_global, obj2_global) =
             test_utils::with_env(|env| {
-                let stream_obj = env
-                    .new_object(
-                        jni_str!("io/github/gedgygedgy/rust/stream/QueueStream"),
-                        jni_sig!("()V"),
-                        &[],
-                    )
-                    .unwrap();
-                let stream_obj_global = env.new_global_ref(&stream_obj).unwrap();
-                let stream_local = env.new_local_ref(&stream_obj).unwrap();
-                let jstream = env.cast_local::<JStream>(stream_local).unwrap();
-                let stream = JSendStream::new(env, &jstream).unwrap();
-                let obj1 = env
-                    .new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[])
-                    .unwrap();
-                let obj1_global = env.new_global_ref(&obj1).unwrap();
-                let obj2 = env
-                    .new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[])
-                    .unwrap();
-                let obj2_global = env.new_global_ref(&obj2).unwrap();
+                let stream_obj = new_queue_stream(env)?;
+                let stream_obj_global = env.new_global_ref(&stream_obj)?;
+                let stream = JSendStream::from_env(env, &stream_obj)?;
+                let obj1 = new_object(env)?;
+                let obj1_global = env.new_global_ref(&obj1)?;
+                let obj2 = new_object(env)?;
+                let obj2_global = env.new_global_ref(&obj2)?;
                 Ok((stream, stream_obj_global, obj1_global, obj2_global))
             })
             .unwrap();
@@ -245,26 +233,12 @@ mod test {
             join!(
                 async {
                     test_utils::with_env(|env| {
-                        let s = env.new_local_ref(stream_obj_global.as_obj()).unwrap();
-                        let o1 = env.new_local_ref(obj1_global.as_obj()).unwrap();
-                        let o2 = env.new_local_ref(obj2_global.as_obj()).unwrap();
-                        env.call_method(
-                            &s,
-                            jni_str!("add"),
-                            jni_sig!("(Ljava/lang/Object;)V"),
-                            &[(&o1).into()],
-                        )
-                        .unwrap();
-                        env.call_method(
-                            &s,
-                            jni_str!("add"),
-                            jni_sig!("(Ljava/lang/Object;)V"),
-                            &[(&o2).into()],
-                        )
-                        .unwrap();
-                        env.call_method(&s, jni_str!("finish"), jni_sig!("()V"), &[])
-                            .unwrap();
-                        Ok(())
+                        let s = env.new_local_ref(stream_obj_global.as_obj())?;
+                        let o1 = env.new_local_ref(obj1_global.as_obj())?;
+                        let o2 = env.new_local_ref(obj2_global.as_obj())?;
+                        add(env, &s, &o1)?;
+                        add(env, &s, &o2)?;
+                        finish(env, &s)
                     })
                     .unwrap();
                 },
@@ -272,16 +246,16 @@ mod test {
                     use futures::StreamExt;
                     let g1 = stream.next().await.unwrap().unwrap();
                     test_utils::with_env(|env| {
-                        let o1 = env.new_local_ref(obj1_global.as_obj()).unwrap();
-                        assert!(env.is_same_object(g1.as_obj(), &o1).unwrap());
+                        let o1 = env.new_local_ref(obj1_global.as_obj())?;
+                        assert!(env.is_same_object(g1.as_obj(), &o1)?);
                         Ok(())
                     })
                     .unwrap();
 
                     let g2 = stream.next().await.unwrap().unwrap();
                     test_utils::with_env(|env| {
-                        let o2 = env.new_local_ref(obj2_global.as_obj()).unwrap();
-                        assert!(env.is_same_object(g2.as_obj(), &o2).unwrap());
+                        let o2 = env.new_local_ref(obj2_global.as_obj())?;
+                        assert!(env.is_same_object(g2.as_obj(), &o2)?);
                         Ok(())
                     })
                     .unwrap();
@@ -298,19 +272,11 @@ mod test {
         use std::sync::{Arc, Barrier, mpsc};
 
         let (mut stream, stream_obj_global, obj_global) = test_utils::with_env(|env| {
-            let stream_obj = env
-                .new_object(
-                    jni_str!("io/github/gedgygedgy/rust/stream/QueueStream"),
-                    jni_sig!("()V"),
-                    &[],
-                )
-                .unwrap();
-            let stream_obj_global = env.new_global_ref(&stream_obj).unwrap();
-            let stream = JSendStream::from_env(env, &stream_obj).unwrap();
-            let obj = env
-                .new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[])
-                .unwrap();
-            let obj_global = env.new_global_ref(&obj).unwrap();
+            let stream_obj = new_queue_stream(env)?;
+            let stream_obj_global = env.new_global_ref(&stream_obj)?;
+            let stream = JSendStream::from_env(env, &stream_obj)?;
+            let obj = new_object(env)?;
+            let obj_global = env.new_global_ref(&obj)?;
             Ok((stream, stream_obj_global, obj_global))
         })
         .unwrap();
@@ -326,22 +292,16 @@ mod test {
 
         barrier.wait();
         test_utils::with_env(|env| {
-            let stream_local = env.new_local_ref(stream_obj_global.as_obj()).unwrap();
-            let obj_local = env.new_local_ref(obj_global.as_obj()).unwrap();
-            env.call_method(
-                &stream_local,
-                jni_str!("add"),
-                jni_sig!("(Ljava/lang/Object;)V"),
-                &[(&obj_local).into()],
-            )?;
-            Ok(())
+            let stream_local = env.new_local_ref(stream_obj_global.as_obj())?;
+            let obj_local = env.new_local_ref(obj_global.as_obj())?;
+            add(env, &stream_local, &obj_local)
         })
         .unwrap();
         worker.join().unwrap();
         let actual = rx.recv().unwrap();
         test_utils::with_env(|env| {
-            let expected = env.new_local_ref(obj_global.as_obj()).unwrap();
-            assert!(env.is_same_object(actual.as_obj(), &expected).unwrap());
+            let expected = env.new_local_ref(obj_global.as_obj())?;
+            assert!(env.is_same_object(actual.as_obj(), &expected)?);
             Ok(())
         })
         .unwrap();
@@ -351,23 +311,13 @@ mod test {
     fn test_jstream_ready_poll_owns_its_item() {
         use super::super::task::{self, JPollResult};
         use super::JStreamPoll;
-        use jni::objects::JObject;
         use std::sync::Arc;
 
         test_utils::with_env(|env| {
             let data = Arc::new(test_utils::TestWakerData::new());
-            let stream_obj = env.new_object(
-                jni_str!("io/github/gedgygedgy/rust/stream/QueueStream"),
-                jni_sig!("()V"),
-                &[],
-            )?;
-            let obj = env.new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[])?;
-            env.call_method(
-                &stream_obj,
-                jni_str!("add"),
-                jni_sig!("(Ljava/lang/Object;)V"),
-                &[(&obj).into()],
-            )?;
+            let stream_obj = new_queue_stream(env)?;
+            let obj = new_object(env)?;
+            add(env, &stream_obj, &obj)?;
             let stream_local = env.new_local_ref(&stream_obj)?;
             let jstream = env.cast_local::<JStream>(stream_local)?;
 
@@ -401,11 +351,7 @@ mod test {
         const ITEMS: i32 = 20_000;
 
         let (mut stream, stream_obj_global) = test_utils::with_env(|env| {
-            let stream_obj = env.new_object(
-                jni_str!("io/github/gedgygedgy/rust/stream/QueueStream"),
-                jni_sig!("()V"),
-                &[],
-            )?;
+            let stream_obj = new_queue_stream(env)?;
             let stream_obj_global = env.new_global_ref(&stream_obj)?;
             let stream = JSendStream::from_env(env, &stream_obj)?;
             Ok((stream, stream_obj_global))
@@ -414,7 +360,7 @@ mod test {
 
         let (tx, rx) = mpsc::channel();
         let consumer = std::thread::spawn(move || {
-            let drained: jni::errors::Result<Vec<i32>> = block_on(async {
+            let drained: Result<Vec<i32>> = block_on(async {
                 let mut received = Vec::new();
                 while let Some(item) = stream.next().await {
                     let item = item?;
@@ -432,7 +378,7 @@ mod test {
         test_utils::with_env(|env| {
             let stream_local = env.new_local_ref(stream_obj_global.as_obj())?;
             for i in 0..ITEMS {
-                env.with_local_frame(1, |env| -> jni::errors::Result<()> {
+                env.with_local_frame(1, |env| -> Result<()> {
                     let boxed = env
                         .call_static_method(
                             jni_str!("java/lang/Integer"),
@@ -441,17 +387,10 @@ mod test {
                             &[i.into()],
                         )?
                         .l()?;
-                    env.call_method(
-                        &stream_local,
-                        jni_str!("add"),
-                        jni_sig!("(Ljava/lang/Object;)V"),
-                        &[(&boxed).into()],
-                    )?;
-                    Ok(())
+                    add(env, &stream_local, &boxed)
                 })?;
             }
-            env.call_method(&stream_local, jni_str!("finish"), jni_sig!("()V"), &[])?;
-            Ok(())
+            finish(env, &stream_local)
         })
         .unwrap();
 

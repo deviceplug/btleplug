@@ -346,4 +346,124 @@ mod test {
         })
         .unwrap();
     }
+
+    #[test]
+    fn test_jstream_ready_poll_owns_its_item() {
+        use super::super::task::{self, JPollResult};
+        use super::JStreamPoll;
+        use jni::objects::JObject;
+        use std::sync::Arc;
+
+        test_utils::with_env(|env| {
+            let data = Arc::new(test_utils::TestWakerData::new());
+            let stream_obj = env.new_object(
+                jni_str!("io/github/gedgygedgy/rust/stream/QueueStream"),
+                jni_sig!("()V"),
+                &[],
+            )?;
+            let obj = env.new_object(jni_str!("java/lang/Object"), jni_sig!("()V"), &[])?;
+            env.call_method(
+                &stream_obj,
+                jni_str!("add"),
+                jni_sig!("(Ljava/lang/Object;)V"),
+                &[(&obj).into()],
+            )?;
+            let stream_local = env.new_local_ref(&stream_obj)?;
+            let jstream = env.cast_local::<JStream>(stream_local)?;
+
+            let jwaker = task::waker(env, test_utils::test_waker(&data))?;
+            let ready = jstream.poll_next(env, &jwaker)?;
+            assert!(!env.is_same_object(&ready, JObject::null())?);
+
+            let jwaker = task::waker(env, test_utils::test_waker(&data))?;
+            let second = jstream.poll_next(env, &jwaker)?;
+            assert!(
+                env.is_same_object(&second, JObject::null())?,
+                "a second poll handed out the only item, which `ready` already owns"
+            );
+
+            let poll_result = env.cast_local::<JPollResult>(ready)?;
+            let stream_poll_obj = poll_result.get(env)?;
+            let stream_poll = env.cast_local::<JStreamPoll>(stream_poll_obj)?;
+            let actual = stream_poll.get(env)?;
+            assert!(env.is_same_object(&actual, &obj)?);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn test_jsendstream_drains_concurrent_adds_in_order() {
+        use futures::{StreamExt, executor::block_on};
+        use std::{sync::mpsc, time::Duration};
+
+        // Enough adds that many of them overlap a drain on the other thread.
+        const ITEMS: i32 = 20_000;
+
+        let (mut stream, stream_obj_global) = test_utils::with_env(|env| {
+            let stream_obj = env.new_object(
+                jni_str!("io/github/gedgygedgy/rust/stream/QueueStream"),
+                jni_sig!("()V"),
+                &[],
+            )?;
+            let stream_obj_global = env.new_global_ref(&stream_obj)?;
+            let stream = JSendStream::from_env(env, &stream_obj)?;
+            Ok((stream, stream_obj_global))
+        })
+        .unwrap();
+
+        let (tx, rx) = mpsc::channel();
+        let consumer = std::thread::spawn(move || {
+            let drained: jni::errors::Result<Vec<i32>> = block_on(async {
+                let mut received = Vec::new();
+                while let Some(item) = stream.next().await {
+                    let item = item?;
+                    let value = test_utils::with_env(|env| {
+                        env.call_method(item.as_obj(), jni_str!("intValue"), jni_sig!("()I"), &[])?
+                            .i()
+                    })?;
+                    received.push(value);
+                }
+                Ok(received)
+            });
+            tx.send(drained).unwrap();
+        });
+
+        test_utils::with_env(|env| {
+            let stream_local = env.new_local_ref(stream_obj_global.as_obj())?;
+            for i in 0..ITEMS {
+                env.with_local_frame(1, |env| -> jni::errors::Result<()> {
+                    let boxed = env
+                        .call_static_method(
+                            jni_str!("java/lang/Integer"),
+                            jni_str!("valueOf"),
+                            jni_sig!("(I)Ljava/lang/Integer;"),
+                            &[i.into()],
+                        )?
+                        .l()?;
+                    env.call_method(
+                        &stream_local,
+                        jni_str!("add"),
+                        jni_sig!("(Ljava/lang/Object;)V"),
+                        &[(&boxed).into()],
+                    )?;
+                    Ok(())
+                })?;
+            }
+            env.call_method(&stream_local, jni_str!("finish"), jni_sig!("()V"), &[])?;
+            Ok(())
+        })
+        .unwrap();
+
+        let received = rx
+            .recv_timeout(Duration::from_secs(60))
+            .expect("consumer did not finish draining the stream")
+            .unwrap();
+        consumer.join().unwrap();
+        assert!(
+            received.iter().copied().eq(0..ITEMS),
+            "expected 0..{ITEMS} in order, drained {} items",
+            received.len()
+        );
+    }
 }

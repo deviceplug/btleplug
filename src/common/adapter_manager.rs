@@ -184,7 +184,7 @@ mod tests {
 
         async fn notifications(
             &self,
-        ) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<ValueNotification>> + Send>>> {
             unreachable!()
         }
 

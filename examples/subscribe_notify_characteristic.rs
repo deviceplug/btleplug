@@ -78,11 +78,17 @@ async fn main() -> anyhow::Result<()> {
                                 let mut notification_stream =
                                     peripheral.notifications().await?.take(4);
                                 // Process while the BLE connection is not broken or stopped.
-                                while let Some(data) = notification_stream.next().await {
-                                    println!(
-                                        "Received data from {:?} [{:?}]: {:?}",
-                                        local_name, data.uuid, data.value
-                                    );
+                                while let Some(item) = notification_stream.next().await {
+                                    match item {
+                                        Ok(data) => println!(
+                                            "Received data from {:?} [{:?}]: {:?}",
+                                            local_name, data.uuid, data.value
+                                        ),
+                                        Err(err) => println!(
+                                            "Lost notifications from {:?}: {}",
+                                            local_name, err
+                                        ),
+                                    }
                                 }
                             }
                         }

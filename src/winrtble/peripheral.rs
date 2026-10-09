@@ -673,7 +673,9 @@ impl ApiPeripheral for Peripheral {
         ble_characteristic.read_value().await
     }
 
-    async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
+    async fn notifications(
+        &self,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ValueNotification>> + Send>>> {
         let receiver = self.shared.notifications_channel.subscribe();
         Ok(notifications_stream_from_broadcast_receiver(receiver))
     }

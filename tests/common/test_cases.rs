@@ -934,7 +934,7 @@ pub async fn test_subscribe_and_receive_notifications() {
     let peripheral = peripheral_finder::find_and_connect().await;
     peripheral_finder::reset_peripheral(&peripheral).await;
     let char = peripheral_finder::find_characteristic(&peripheral, gatt_uuids::NOTIFY_CHAR);
-    let mut stream = peripheral.notifications().await.unwrap();
+    let mut stream = peripheral_finder::notification_stream(&peripheral).await;
     peripheral.subscribe(&char).await.unwrap();
     peripheral_finder::send_control_command(&peripheral, gatt_uuids::CMD_START_NOTIFICATIONS).await;
 
@@ -978,7 +978,7 @@ pub async fn test_subscribe_and_receive_indications() {
     let peripheral = peripheral_finder::find_and_connect().await;
     peripheral_finder::reset_peripheral(&peripheral).await;
     let char = peripheral_finder::find_characteristic(&peripheral, gatt_uuids::INDICATE_CHAR);
-    let mut stream = peripheral.notifications().await.unwrap();
+    let mut stream = peripheral_finder::notification_stream(&peripheral).await;
     peripheral.subscribe(&char).await.unwrap();
     peripheral_finder::send_control_command(&peripheral, gatt_uuids::CMD_START_NOTIFICATIONS).await;
 
@@ -1019,7 +1019,7 @@ pub async fn test_unsubscribe_stops_notifications() {
     let peripheral = peripheral_finder::find_and_connect().await;
     peripheral_finder::reset_peripheral(&peripheral).await;
     let char = peripheral_finder::find_characteristic(&peripheral, gatt_uuids::NOTIFY_CHAR);
-    let mut stream = peripheral.notifications().await.unwrap();
+    let mut stream = peripheral_finder::notification_stream(&peripheral).await;
     peripheral.subscribe(&char).await.unwrap();
     peripheral_finder::send_control_command(&peripheral, gatt_uuids::CMD_START_NOTIFICATIONS).await;
 
@@ -1098,7 +1098,7 @@ pub async fn test_configurable_notification_payload() {
         .await
         .unwrap();
 
-    let mut stream = peripheral.notifications().await.unwrap();
+    let mut stream = peripheral_finder::notification_stream(&peripheral).await;
     peripheral.subscribe(&config_char).await.unwrap();
     peripheral_finder::send_control_command(&peripheral, gatt_uuids::CMD_START_NOTIFICATIONS).await;
 
@@ -1160,7 +1160,7 @@ pub async fn test_mtu_sized_notification_payload() {
         .await
         .unwrap();
 
-    let mut stream = peripheral.notifications().await.unwrap();
+    let mut stream = peripheral_finder::notification_stream(&peripheral).await;
     peripheral.subscribe(&config_char).await.unwrap();
     peripheral_finder::send_control_command(&peripheral, gatt_uuids::CMD_START_NOTIFICATIONS).await;
 
@@ -1217,7 +1217,7 @@ pub async fn test_resubscribe_does_not_duplicate_notifications() {
 
     // Take the notification stream before starting notifications so nothing
     // is missed.
-    let mut stream = peripheral.notifications().await.unwrap();
+    let mut stream = peripheral_finder::notification_stream(&peripheral).await;
     peripheral_finder::send_control_command(&peripheral, gatt_uuids::CMD_START_NOTIFICATIONS).await;
 
     let mut received = Vec::new();
@@ -1288,7 +1288,7 @@ pub async fn test_refused_subscribe_returns_error() {
     );
 
     let notify_char = peripheral_finder::find_characteristic(&peripheral, gatt_uuids::NOTIFY_CHAR);
-    let mut stream = peripheral.notifications().await.unwrap();
+    let mut stream = peripheral_finder::notification_stream(&peripheral).await;
     tokio::time::timeout(Duration::from_secs(10), peripheral.subscribe(&notify_char))
         .await
         .expect("subscribe(NOTIFY_CHAR) timed out")

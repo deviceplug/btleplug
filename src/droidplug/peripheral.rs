@@ -394,47 +394,43 @@ impl api::Peripheral for Peripheral {
             .await
     }
 
-    async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
+    async fn notifications(
+        &self,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ValueNotification>> + Send>>> {
         use futures::stream::StreamExt;
         let shared = self.shared.clone();
         let stream = self.with_obj(|env, obj| {
             let stream = obj.get_notifications(env)?;
             Ok(JSendStream::new(env, &stream)?)
         })?;
-        let stream = stream
-            .map(move |item| match item {
-                Ok(item) => {
-                    let vm = jvm()?;
-                    let result: crate::Result<_> = vm
-                        .attach_current_thread(|env| -> jni::errors::Result<_> {
-                            let local_obj = env.new_local_ref(item.as_obj())?;
-                            let characteristic =
-                                env.cast_local::<JBluetoothGattCharacteristic>(local_obj)?;
-                            let uuid = characteristic.get_uuid(env)?;
-                            let value = characteristic.get_value(env)?;
-                            let service_uuid = shared
-                                .lock()
-                                .ok()
-                                .and_then(|guard| {
-                                    guard
-                                        .services
-                                        .iter()
-                                        .find(|s| s.characteristics.iter().any(|c| c.uuid == uuid))
-                                        .map(|s| s.uuid)
-                                })
-                                .unwrap_or_default();
-                            Ok(ValueNotification {
-                                uuid,
-                                service_uuid,
-                                value,
-                            })
+        let stream = stream.map(move |item| -> Result<ValueNotification> {
+            let item = item?;
+            jvm()?
+                .attach_current_thread(|env| -> jni::errors::Result<_> {
+                    let local_obj = env.new_local_ref(item.as_obj())?;
+                    let characteristic =
+                        env.cast_local::<JBluetoothGattCharacteristic>(local_obj)?;
+                    let uuid = characteristic.get_uuid(env)?;
+                    let value = characteristic.get_value(env)?;
+                    let service_uuid = shared
+                        .lock()
+                        .ok()
+                        .and_then(|guard| {
+                            guard
+                                .services
+                                .iter()
+                                .find(|s| s.characteristics.iter().any(|c| c.uuid == uuid))
+                                .map(|s| s.uuid)
                         })
-                        .map_err(Into::into);
-                    result
-                }
-                Err(err) => Err(err.into()),
-            })
-            .filter_map(|item| async { item.ok() });
+                        .unwrap_or_default();
+                    Ok(ValueNotification {
+                        uuid,
+                        service_uuid,
+                        value,
+                    })
+                })
+                .map_err(Into::into)
+        });
         Ok(Box::pin(stream))
     }
 

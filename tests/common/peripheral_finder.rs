@@ -201,6 +201,19 @@ pub fn find_characteristic(
         .unwrap_or_else(|| panic!("characteristic {} not found", uuid))
 }
 
+/// The peripheral's notification stream, failing the test on an `Err` item.
+pub async fn notification_stream(
+    peripheral: &Peripheral,
+) -> impl futures::Stream<Item = btleplug::api::ValueNotification> + Unpin {
+    use futures::StreamExt;
+
+    peripheral
+        .notifications()
+        .await
+        .unwrap()
+        .map(|item| item.expect("notification stream reported an error"))
+}
+
 /// Subscribe to `adapter.events()` and forward every event into an unbounded
 /// channel.
 ///

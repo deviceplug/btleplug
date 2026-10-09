@@ -1,3 +1,19 @@
+# Unreleased
+
+## Breaking Changes
+
+- **`Peripheral::notifications()`**: Items are now `Result<ValueNotification>`,
+  so lost or unreadable notifications reach the caller as `Err`.
+- **`Error` enum**: New variant `Lagged(u64)`, the number of items a stream
+  skipped. Exhaustive matches will need updating.
+
+## Bugfixes
+
+- Fix Android `notifications()` spinning at full CPU, unreachable by timeouts,
+  when the Java stream failed on every poll.
+- Fix macOS and Windows `notifications()` silently skipping notifications when
+  more than 16 were queued. They are reported as `Error::Lagged`.
+
 # 0.13.4 (2026-10-03)
 
 ## Behavior Changes

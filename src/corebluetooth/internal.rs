@@ -38,8 +38,9 @@ use objc2_core_bluetooth::{
 use objc2_foundation::{NSArray, NSData, NSMutableDictionary, NSNumber, NSString, NSUUID};
 use std::{
     collections::{BTreeSet, HashMap, VecDeque},
-    ffi::CString,
+    ffi::{CString, c_void},
     fmt::{self, Debug, Formatter},
+    future::Future,
     ops::Deref,
     thread,
 };
@@ -1986,6 +1987,32 @@ impl Drop for CoreBluetoothInternal {
     }
 }
 
+/// Pushes an autorelease pool on creation and pops it on drop.
+struct AutoreleasePoolGuard(*mut c_void);
+
+impl AutoreleasePoolGuard {
+    fn new() -> Self {
+        // Safety: pushes and pops must be strictly nested per thread. This holds
+        // because the guard is !Send and the only users run on the dedicated
+        // CoreBluetooth thread, whose current-thread runtime drives nothing but
+        // the message loop, and nothing else pushes a pool across an `.await`.
+        Self(unsafe { objc2::ffi::objc_autoreleasePoolPush() })
+    }
+}
+
+impl Drop for AutoreleasePoolGuard {
+    fn drop(&mut self) {
+        unsafe { objc2::ffi::objc_autoreleasePoolPop(self.0) }
+    }
+}
+
+/// Drives `future` to completion inside an autorelease pool that spans its
+/// `.await` points, which `objc2::rc::autoreleasepool` cannot do.
+async fn within_autorelease_pool<F: Future>(future: F) -> F::Output {
+    let _pool = AutoreleasePoolGuard::new();
+    future.await
+}
+
 pub fn run_corebluetooth_thread(
     event_sender: Sender<CoreBluetoothEvent>,
 ) -> Result<Sender<CoreBluetoothMessage>, Error> {
@@ -2005,7 +2032,7 @@ pub fn run_corebluetooth_thread(
         runtime.block_on(async move {
             let mut cbi = CoreBluetoothInternal::new(receiver, event_sender);
             loop {
-                cbi.wait_for_message().await;
+                within_autorelease_pool(cbi.wait_for_message()).await;
             }
         })
     });

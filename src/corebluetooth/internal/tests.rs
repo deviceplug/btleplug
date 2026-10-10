@@ -2302,3 +2302,26 @@ async fn late_advertisement_data_for_known_peripheral_is_ignored_after_stop_scan
         "a late ManufacturerData advertisement callback must not reach an already-known peripheral after stop_scan(), got {manufacturer_event:?}"
     );
 }
+
+#[test]
+fn autorelease_pool_window_releases_autoreleased_objects() {
+    use objc2::rc::Weak;
+    use objc2::runtime::NSObject;
+
+    // Run on a fresh thread so no outer pool is involved.
+    thread::spawn(|| {
+        let runtime = runtime::Builder::new_current_thread().build().unwrap();
+        let weak: Weak<NSObject> = runtime.block_on(within_autorelease_pool(async {
+            let obj = NSObject::new();
+            let weak = Weak::from_retained(&obj);
+            // Only the pool keeps the object alive after this.
+            let _ = Retained::autorelease_ptr(obj);
+            tokio::task::yield_now().await;
+            assert!(weak.load().is_some(), "object freed before pool popped");
+            weak
+        }));
+        assert!(weak.load().is_none(), "object leaked past pool pop");
+    })
+    .join()
+    .unwrap();
+}

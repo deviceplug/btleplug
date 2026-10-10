@@ -1,3 +1,33 @@
+# 0.13.5 (2026-10-10)
+
+## Bugfixes
+
+- Fix Android (`droidplug`) notification streams losing notifications, or
+  stopping entirely while the polling thread spun at full CPU. The Java
+  notification queue removed items outside its lock while the Bluetooth
+  callback thread added to it, which could corrupt the queue so that every
+  later poll failed and the error was silently retried. (#497)
+- Fix Android `init` failing with `failed to resolve Java class
+  'com/nonpolynomial/btleplug/android/impl/Adapter'` when called from a thread
+  attached from native code, such as Dioxus's `manganis`. The `Adapter` class is
+  now resolved through the thread's context class loader, like every other
+  btleplug class. The calling thread's context class loader must be the
+  application's. (#495)
+- Fix CoreBluetooth memory growing without bound while scanning. The
+  CoreBluetooth thread never drained an autorelease pool, so Objective-C objects
+  autoreleased for every advertisement report, such as peripheral name
+  conversions, were held for the life of the process. (#494)
+- Fix BlueZ `connect()` failing with `Service discovery timed out` for
+  peripherals that take longer than 5 seconds to resolve services, which is
+  common for unpaired devices that BlueZ has no service cache for. The timeout
+  is now 30 seconds. (#496)
+- Fix BlueZ adapters that report a `bluetooth` modalias being missing from
+  `Manager::adapters()`.
+
+## Dependencies
+
+- Update `bluez-async` from 0.8.2 to 0.9.0.
+
 # 0.13.4 (2026-10-03)
 
 ## Behavior Changes

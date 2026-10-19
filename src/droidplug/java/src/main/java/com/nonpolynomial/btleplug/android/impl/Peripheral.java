@@ -648,6 +648,11 @@ class Peripheral {
                     Peripheral.this.dispatchToCommandCallback("onConnectionStateChange",
                             () -> Peripheral.this.commandCallback.onConnectionStateChange(gatt, status, newState));
                 }
+                // Close it, or the client stays registered with Android and leaks.
+                if (newState == BluetoothGatt.STATE_DISCONNECTED && Peripheral.this.gatt == gatt) {
+                    gatt.close();
+                    Peripheral.this.gatt = null;
+                }
                 suppressDisconnectNotification = Peripheral.this.suppressDisconnectNotification;
                 // A failed connect closes the gatt and clears `connected` even if the state was CONNECTED.
                 nowConnected = Peripheral.this.connected;

@@ -42,12 +42,38 @@ pub fn to_descriptor_value(
 ) -> GattClientCharacteristicConfigurationDescriptorValue {
     let notify = GattCharacteristicProperties::Notify;
     let indicate = GattCharacteristicProperties::Indicate;
-    if properties & indicate == indicate {
-        GattClientCharacteristicConfigurationDescriptorValue::Indicate
-    } else if properties & notify == notify {
+    if properties & notify == notify {
         GattClientCharacteristicConfigurationDescriptorValue::Notify
+    } else if properties & indicate == indicate {
+        GattClientCharacteristicConfigurationDescriptorValue::Indicate
     } else {
         GattClientCharacteristicConfigurationDescriptorValue::None
+    }
+}
+
+#[cfg(test)]
+mod notification_mode_tests {
+    use super::*;
+    #[test]
+    fn prefer_notifications_when_both_modes_are_advertised() {
+        let notify = GattCharacteristicProperties::Notify;
+        let indicate = GattCharacteristicProperties::Indicate;
+        assert_eq!(
+            to_descriptor_value(notify | indicate),
+            GattClientCharacteristicConfigurationDescriptorValue::Notify
+        );
+        assert_eq!(
+            to_descriptor_value(notify),
+            GattClientCharacteristicConfigurationDescriptorValue::Notify
+        );
+        assert_eq!(
+            to_descriptor_value(indicate),
+            GattClientCharacteristicConfigurationDescriptorValue::Indicate
+        );
+        assert_eq!(
+            to_descriptor_value(GattCharacteristicProperties::None),
+            GattClientCharacteristicConfigurationDescriptorValue::None
+        );
     }
 }
 

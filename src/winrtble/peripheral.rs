@@ -721,8 +721,8 @@ impl ApiPeripheral for Peripheral {
     }
 
     async fn request_connection_parameters(&self, preset: ConnectionParameterPreset) -> Result<()> {
-        let device = self.shared.device.lock().await;
-        match &*device {
+        let mut device = self.shared.device.lock().await;
+        match &mut *device {
             Some(device) => device.request_connection_parameters(preset),
             None => Err(Error::NotConnected),
         }

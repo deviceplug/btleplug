@@ -19,7 +19,7 @@ use tokio::time::timeout;
 use windows::{
     Devices::Bluetooth::{
         BluetoothCacheMode, BluetoothConnectionStatus, BluetoothLEDevice,
-        BluetoothLEPreferredConnectionParameters,
+        BluetoothLEPreferredConnectionParameters, BluetoothLEPreferredConnectionParametersRequest,
         GenericAttributeProfile::{
             GattCharacteristic, GattCommunicationStatus, GattDescriptor, GattDeviceService,
             GattDeviceServicesResult, GattSession,
@@ -41,6 +41,7 @@ pub struct BLEDevice {
     connection_token: i64,
     pdu_change_token: i64,
     services: Vec<GattDeviceService>,
+    preferred_parameters_request: Option<BluetoothLEPreferredConnectionParametersRequest>,
 }
 
 impl BLEDevice {
@@ -89,6 +90,7 @@ impl BLEDevice {
             connection_token,
             pdu_change_token,
             services: vec![],
+            preferred_parameters_request: None,
         })
     }
 
@@ -220,7 +222,7 @@ impl BLEDevice {
     }
 
     pub fn request_connection_parameters(
-        &self,
+        &mut self,
         preset: crate::api::ConnectionParameterPreset,
     ) -> Result<()> {
         let winrt_error = |e| Error::Other(format!("{:?}", e).into());
@@ -244,7 +246,12 @@ impl BLEDevice {
         // BluetoothLEPreferredConnectionParametersRequestStatus:
         //   Unspecified = 0, Success = 1, DeviceNotAvailable = 2, AccessDenied = 3
         match status.0 {
-            1 => Ok(()),
+            1 => {
+                if let Some(previous) = self.preferred_parameters_request.replace(result) {
+                    let _ = previous.Close();
+                }
+                Ok(())
+            }
             2 | 3 => Err(Error::NotSupported(format!(
                 "request_connection_parameters not supported (status {:?})",
                 status
@@ -273,6 +280,10 @@ impl BLEDevice {
                 .collect();
             self.services = services;
             debug!("services {:?}", self.services.len());
+        } else {
+            // Do not turn an unreachable/protocol failure into an empty service
+            // list and a misleading "missing characteristic" error in callers.
+            utils::to_error(status)?;
         }
         Ok(self.services.as_slice())
     }
@@ -280,6 +291,9 @@ impl BLEDevice {
 
 impl Drop for BLEDevice {
     fn drop(&mut self) {
+        if let Some(request) = self.preferred_parameters_request.take() {
+            let _ = request.Close();
+        }
         let result = self
             .gatt_session
             .RemoveMaxPduSizeChanged(self.pdu_change_token);

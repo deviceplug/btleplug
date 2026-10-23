@@ -13,3 +13,9 @@ mod internal;
 pub mod manager;
 pub mod peripheral;
 mod utils;
+
+#[cfg(all(
+    feature = "ios-write-without-response-fallback",
+    any(target_os = "ios", test)
+))]
+mod ios_write_policy;

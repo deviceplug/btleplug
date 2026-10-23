@@ -2028,6 +2028,8 @@ async fn remove_services_drains_matching_write_without_response_queue() {
     internal
         .write_without_response_queue
         .push_back(PendingWriteWithoutResponse {
+            #[cfg(all(target_os = "ios", feature = "ios-write-without-response-fallback"))]
+            queued_at: Instant::now(),
             service_uuid: removed_service_uuid,
             characteristic_uuid,
             data: vec![1],
@@ -2036,6 +2038,8 @@ async fn remove_services_drains_matching_write_without_response_queue() {
     internal
         .write_without_response_queue
         .push_back(PendingWriteWithoutResponse {
+            #[cfg(all(target_os = "ios", feature = "ios-write-without-response-fallback"))]
+            queued_at: Instant::now(),
             service_uuid: kept_service_uuid,
             characteristic_uuid,
             data: vec![2],

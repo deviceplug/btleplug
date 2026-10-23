@@ -23,6 +23,8 @@ name = "btleplug"
 path = "src/lib.rs"
 
 [features]
+# Opt in to paced writes when iOS stops reporting write readiness.
+ios-write-without-response-fallback = []
 serde = ["uuid/serde", "serde_cr", "serde_bytes"]
 jni-host-tests = ["jni/invocation", "once_cell"]
 

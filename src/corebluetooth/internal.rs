@@ -8,6 +8,8 @@
 // For more info on handling CoreBluetooth Managers (and possibly having
 // multiple), see https://forums.developer.apple.com/thread/20810
 
+#[cfg(all(target_os = "ios", feature = "ios-write-without-response-fallback"))]
+use super::ios_write_policy::WriteGate;
 use super::{
     central_delegate::{CentralDelegate, CentralDelegateEvent},
     ffi,
@@ -24,9 +26,9 @@ use crate::api::{
     WriteType,
 };
 use futures::channel::mpsc::{self, Receiver, Sender};
-use futures::select;
 use futures::sink::SinkExt;
 use futures::stream::{Fuse, StreamExt};
+use futures::{FutureExt, select};
 use log::{debug, error, trace, warn};
 use objc2::{AnyThread, msg_send};
 use objc2::{rc::Retained, runtime::AnyObject};
@@ -44,6 +46,8 @@ use std::{
     ops::Deref,
     thread,
 };
+#[cfg(all(target_os = "ios", feature = "ios-write-without-response-fallback"))]
+use std::{sync::Arc, time::Instant};
 use tokio::runtime;
 use uuid::Uuid;
 
@@ -194,6 +198,8 @@ impl CharacteristicInternal {
 }
 
 struct PendingWriteWithoutResponse {
+    #[cfg(all(target_os = "ios", feature = "ios-write-without-response-fallback"))]
+    queued_at: Instant,
     service_uuid: Uuid,
     characteristic_uuid: Uuid,
     data: Vec<u8>,
@@ -275,6 +281,8 @@ struct PeripheralInternal {
     pub services_discovered_future_state: VecDeque<CoreBluetoothReplyStateShared>,
     pub read_rssi_future_state: VecDeque<CoreBluetoothReplyStateShared>,
     pub write_without_response_queue: VecDeque<PendingWriteWithoutResponse>,
+    #[cfg(all(target_os = "ios", feature = "ios-write-without-response-fallback"))]
+    write_gate: WriteGate,
 }
 
 impl Debug for PeripheralInternal {
@@ -313,6 +321,8 @@ impl PeripheralInternal {
             services_discovered_future_state: VecDeque::with_capacity(2),
             read_rssi_future_state: VecDeque::with_capacity(4),
             write_without_response_queue: VecDeque::new(),
+            #[cfg(all(target_os = "ios", feature = "ios-write-without-response-fallback"))]
+            write_gate: WriteGate::default(),
         }
     }
 
@@ -1356,7 +1366,10 @@ impl CoreBluetoothInternal {
             trace!("Writing value! With kind {:?}", kind);
             match kind {
                 WriteType::WithoutResponse => {
-                    if unsafe { peripheral.peripheral.canSendWriteWithoutResponse() } {
+                    let ready = unsafe { peripheral.peripheral.canSendWriteWithoutResponse() };
+                    #[cfg(all(target_os = "ios", feature = "ios-write-without-response-fallback"))]
+                    let ready = ready && peripheral.write_without_response_queue.is_empty();
+                    if ready {
                         unsafe {
                             peripheral.peripheral.writeValue_forCharacteristic_type(
                                 &NSData::from_vec(data),
@@ -1364,11 +1377,21 @@ impl CoreBluetoothInternal {
                                 CBCharacteristicWriteType::WithoutResponse,
                             );
                         }
+                        #[cfg(all(
+                            target_os = "ios",
+                            feature = "ios-write-without-response-fallback"
+                        ))]
+                        peripheral.write_gate.submitted(Instant::now());
                         fut.lock().unwrap().set_reply(CoreBluetoothReply::Ok);
                     } else {
                         trace!("Queueing write-without-response (peripheral not ready)");
                         peripheral.write_without_response_queue.push_back(
                             PendingWriteWithoutResponse {
+                                #[cfg(all(
+                                    target_os = "ios",
+                                    feature = "ios-write-without-response-fallback"
+                                ))]
+                                queued_at: Instant::now(),
                                 service_uuid,
                                 characteristic_uuid,
                                 data,
@@ -1394,6 +1417,33 @@ impl CoreBluetoothInternal {
     fn drain_write_without_response_queue(&mut self, peripheral_uuid: Uuid) {
         if let Some(peripheral) = self.peripherals.get_mut(&peripheral_uuid) {
             while let Some(pending) = peripheral.write_without_response_queue.pop_front() {
+                #[cfg(all(target_os = "ios", feature = "ios-write-without-response-fallback"))]
+                {
+                    if Arc::strong_count(&pending.fut) == 1 {
+                        // The caller dropped its future (for example, on timeout).
+                        continue;
+                    }
+                    if unsafe { peripheral.peripheral.state() } != CBPeripheralState::Connected {
+                        pending
+                            .fut
+                            .lock()
+                            .unwrap()
+                            .set_reply(CoreBluetoothReply::Err(
+                                "Peripheral disconnected before queued write".into(),
+                            ));
+                        continue;
+                    }
+                    if !unsafe { peripheral.peripheral.canSendWriteWithoutResponse() }
+                        && Instant::now() < peripheral.write_gate.deadline(pending.queued_at)
+                    {
+                        peripheral.write_without_response_queue.push_front(pending);
+                        break;
+                    }
+                }
+                #[cfg(not(all(
+                    target_os = "ios",
+                    feature = "ios-write-without-response-fallback"
+                )))]
                 if !unsafe { peripheral.peripheral.canSendWriteWithoutResponse() } {
                     peripheral.write_without_response_queue.push_front(pending);
                     break;
@@ -1409,6 +1459,11 @@ impl CoreBluetoothInternal {
                                 CBCharacteristicWriteType::WithoutResponse,
                             );
                         }
+                        #[cfg(all(
+                            target_os = "ios",
+                            feature = "ios-write-without-response-fallback"
+                        ))]
+                        peripheral.write_gate.submitted(Instant::now());
                         pending
                             .fut
                             .lock()
@@ -1761,7 +1816,37 @@ impl CoreBluetoothInternal {
     }
 
     async fn wait_for_message(&mut self) {
+        #[cfg(all(target_os = "ios", feature = "ios-write-without-response-fallback"))]
+        let deadline = self
+            .peripherals
+            .values()
+            .filter_map(|p| {
+                p.write_without_response_queue
+                    .front()
+                    .map(|pending| p.write_gate.deadline(pending.queued_at))
+            })
+            .min();
+        #[cfg(all(target_os = "ios", feature = "ios-write-without-response-fallback"))]
+        let retry = async move {
+            match deadline {
+                Some(at) => tokio::time::sleep_until(at.into()).await,
+                None => futures::future::pending::<()>().await,
+            }
+        }
+        .fuse();
+        #[cfg(not(all(target_os = "ios", feature = "ios-write-without-response-fallback")))]
+        let retry = futures::future::pending::<()>().fuse();
+        futures::pin_mut!(retry);
         select! {
+            _ = retry => {
+                #[cfg(all(target_os = "ios", feature = "ios-write-without-response-fallback"))]
+                {
+                    let peripherals: Vec<_> = self.peripherals.keys().copied().collect();
+                    for uuid in peripherals {
+                        self.drain_write_without_response_queue(uuid);
+                    }
+                }
+            },
             delegate_msg = self.delegate_receiver.select_next_some() => {
                 match delegate_msg {
                     // TODO We should probably also register some sort of
@@ -2028,7 +2113,10 @@ pub fn run_corebluetooth_thread(
     let (sender, receiver) = mpsc::channel::<CoreBluetoothMessage>(256);
     // CoreBluetoothInternal is !Send, so we need to keep it on a single thread.
     thread::spawn(move || {
-        let runtime = runtime::Builder::new_current_thread().build().unwrap();
+        let mut builder = runtime::Builder::new_current_thread();
+        #[cfg(all(target_os = "ios", feature = "ios-write-without-response-fallback"))]
+        builder.enable_time();
+        let runtime = builder.build().unwrap();
         runtime.block_on(async move {
             let mut cbi = CoreBluetoothInternal::new(receiver, event_sender);
             loop {

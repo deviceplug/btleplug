@@ -209,3 +209,22 @@ BTLEPlug is covered under a BSD 3-Clause License, with some parts from
 Rumble/Blurmac covered under MIT/Apache dual license, and BSD 3-Clause
 licenses, respectively. See LICENSE.md for more info and copyright
 information.
+
+## Optional iOS write readiness fallback
+
+The `ios-write-without-response-fallback` Cargo feature is disabled by default.
+It enables an iOS-only workaround for missing write-without-response readiness
+callbacks in the background. If readiness is not reported, queued writes may be
+submitted once 30 ms has elapsed since the previous submission. The first queued
+write waits 30 ms when there is no previous submission. Normal ready writes keep
+the existing fast path; FIFO ordering is preserved.
+
+This is a best-effort workaround, not a delivery guarantee: bypassing readiness
+can lose data if the controller buffer is actually full. Applications should opt
+in only when this tradeoff is appropriate and provide their own timeout and
+message-expiration policies. Dropping the write future cancels writes still in
+the fallback queue; it cannot recall writes already submitted to CoreBluetooth.
+The feature does not keep an app running in the background or affect other
+platforms or writes with a response.
+
+See [Apple's discussion of background readiness callbacks](https://developer.apple.com/forums/thread/765444).

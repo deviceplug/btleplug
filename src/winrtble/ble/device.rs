@@ -22,7 +22,7 @@ use windows::{
         BluetoothLEPreferredConnectionParameters,
         GenericAttributeProfile::{
             GattCharacteristic, GattCommunicationStatus, GattDescriptor, GattDeviceService,
-            GattDeviceServicesResult, GattSession,
+            GattDeviceServicesResult, GattSession, GattSharingMode,
         },
     },
     Foundation::TypedEventHandler,
@@ -129,6 +129,16 @@ impl BLEDevice {
     pub async fn get_characteristics(
         service: &GattDeviceService,
     ) -> Result<Vec<GattCharacteristic>> {
+        // Some services refuse characteristic discovery (AccessDenied) until they have been
+        // opened. Opening shared doesn't stop other apps using the service, and if it fails
+        // discovery is still tried as before.
+        match service.OpenAsync(GattSharingMode::SharedReadAndWrite) {
+            Ok(op) => match op.await {
+                Ok(status) => trace!("service open status {:?}", status),
+                Err(e) => debug!("service open failed {:?}", e),
+            },
+            Err(e) => debug!("service open failed {:?}", e),
+        }
         let async_result = match timeout(
             GATT_CACHE_TIMEOUT,
             service

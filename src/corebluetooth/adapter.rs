@@ -11,6 +11,7 @@ use crate::common::adapter_manager::AdapterManager;
 use crate::{Error, Result};
 use async_trait::async_trait;
 use futures::channel::mpsc::{self, Sender};
+use futures::channel::oneshot;
 use futures::sink::SinkExt;
 use futures::stream::{Stream, StreamExt};
 use log::*;
@@ -18,6 +19,7 @@ use objc2_core_bluetooth::CBManagerState;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use tokio::task;
 
 /// Implementation of [api::Central](crate::api::Central).
@@ -25,6 +27,43 @@ use tokio::task;
 pub struct Adapter {
     manager: Arc<AdapterManager<Peripheral>>,
     sender: Sender<CoreBluetoothMessage>,
+    keep_alive: KeepAlive,
+}
+
+/// Keeps an adapter's CoreBluetooth thread running. The adapter, every
+/// peripheral it hands out and the event and notification streams from them
+/// hold one; the thread stops when the last is dropped.
+/// The adapter's own bookkeeping (its event task and peripheral map) doesn't
+/// hold one, since it lives as long as the thread does.
+pub(crate) type KeepAlive = Arc<oneshot::Sender<()>>;
+
+/// Wraps a stream handed to the application so that it holds a `KeepAlive`,
+/// and keeps delivering items after the adapter it came from is dropped.
+pub(crate) fn keep_alive_stream<T: 'static>(
+    stream: Pin<Box<dyn Stream<Item = T> + Send>>,
+    keep_alive: Option<KeepAlive>,
+) -> Pin<Box<dyn Stream<Item = T> + Send>> {
+    Box::pin(KeepAliveStream {
+        stream,
+        _keep_alive: keep_alive,
+    })
+}
+
+struct KeepAliveStream<T> {
+    stream: Pin<Box<dyn Stream<Item = T> + Send>>,
+    _keep_alive: Option<KeepAlive>,
+}
+
+impl<T> Stream for KeepAliveStream<T> {
+    type Item = T;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<T>> {
+        self.stream.as_mut().poll_next(cx)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.stream.size_hint()
+    }
 }
 
 fn get_central_state(state: CBManagerState) -> CentralState {
@@ -38,7 +77,8 @@ fn get_central_state(state: CBManagerState) -> CentralState {
 impl Adapter {
     pub(crate) async fn new() -> Result<Self> {
         let (sender, mut receiver) = mpsc::channel(256);
-        let adapter_sender = run_corebluetooth_thread(sender)?;
+        let (shutdown_sender, shutdown_receiver) = oneshot::channel();
+        let adapter_sender = run_corebluetooth_thread(sender, shutdown_receiver)?;
         // Since init currently blocked until the state update, we know the
         // receiver is dropped after that. We can pick it up here and make it
         // part of our event loop to update our peripherals.
@@ -153,6 +193,7 @@ impl Adapter {
         Ok(Adapter {
             manager,
             sender: adapter_sender,
+            keep_alive: Arc::new(shutdown_sender),
         })
     }
 }
@@ -162,7 +203,10 @@ impl Central for Adapter {
     type Peripheral = Peripheral;
 
     async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent> + Send>>> {
-        Ok(self.manager.event_stream())
+        Ok(keep_alive_stream(
+            self.manager.event_stream(),
+            Some(self.keep_alive.clone()),
+        ))
     }
 
     async fn start_scan(&self, filter: ScanFilter) -> Result<()> {
@@ -182,7 +226,12 @@ impl Central for Adapter {
     }
 
     async fn peripherals(&self) -> Result<Vec<Peripheral>> {
-        Ok(self.manager.peripherals())
+        Ok(self
+            .manager
+            .peripherals()
+            .into_iter()
+            .map(|p| p.with_keep_alive(&self.keep_alive))
+            .collect())
     }
 
     async fn retrieve_peripherals(
@@ -206,7 +255,10 @@ impl Central for Adapter {
             })
             .await?;
         match fut.await {
-            CoreBluetoothReply::Peripherals(peripherals) => Ok(peripherals),
+            CoreBluetoothReply::Peripherals(peripherals) => Ok(peripherals
+                .into_iter()
+                .map(|p| p.with_keep_alive(&self.keep_alive))
+                .collect()),
             CoreBluetoothReply::Err(msg) => Err(Error::RuntimeError(msg)),
             CoreBluetoothReply::Ok => Ok(Vec::new()),
             _ => Err(Error::RuntimeError(
@@ -216,7 +268,10 @@ impl Central for Adapter {
     }
 
     async fn peripheral(&self, id: &PeripheralId) -> Result<Peripheral> {
-        self.manager.peripheral(id).ok_or(Error::DeviceNotFound)
+        self.manager
+            .peripheral(id)
+            .map(|p| p.with_keep_alive(&self.keep_alive))
+            .ok_or(Error::DeviceNotFound)
     }
 
     async fn add_peripheral(&self, _address: &PeripheralId) -> Result<Peripheral> {

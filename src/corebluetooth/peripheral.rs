@@ -5,6 +5,7 @@
 // Licensed under the BSD 3-Clause license. See LICENSE file in the project root
 // for full license information.
 
+use super::adapter::{KeepAlive, keep_alive_stream};
 use super::internal::{
     CoreBluetoothMessage, CoreBluetoothReply, CoreBluetoothReplyFuture, PeripheralEventInternal,
 };
@@ -55,6 +56,9 @@ impl Display for PeripheralId {
 #[derive(Clone)]
 pub struct Peripheral {
     shared: Arc<Shared>,
+    // Set on the copies the adapter hands out, so the CoreBluetooth thread
+    // keeps running while the application still holds this peripheral.
+    keep_alive: Option<KeepAlive>,
 }
 
 struct Shared {
@@ -194,7 +198,15 @@ impl Peripheral {
                 }
             }
         });
-        Self { shared }
+        Self {
+            shared,
+            keep_alive: None,
+        }
+    }
+
+    pub(super) fn with_keep_alive(mut self, keep_alive: &KeepAlive) -> Self {
+        self.keep_alive = Some(keep_alive.clone());
+        self
     }
 
     pub(super) fn update_name(
@@ -599,7 +611,10 @@ impl api::Peripheral for Peripheral {
 
     async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
         let receiver = self.shared.notifications_channel.subscribe();
-        Ok(notifications_stream_from_broadcast_receiver(receiver))
+        Ok(keep_alive_stream(
+            notifications_stream_from_broadcast_receiver(receiver),
+            self.keep_alive.clone(),
+        ))
     }
 
     async fn write_descriptor(&self, descriptor: &Descriptor, data: &[u8]) -> Result<()> {

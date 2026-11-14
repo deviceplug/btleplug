@@ -24,6 +24,8 @@ use crate::api::{
     WriteType,
 };
 use futures::channel::mpsc::{self, Receiver, Sender};
+use futures::channel::oneshot;
+use futures::future::{self, Either};
 use futures::select;
 use futures::sink::SinkExt;
 use futures::stream::{Fuse, StreamExt};
@@ -42,6 +44,7 @@ use std::{
     fmt::{self, Debug, Formatter},
     future::Future,
     ops::Deref,
+    pin::pin,
     thread,
 };
 use tokio::runtime;
@@ -2013,8 +2016,11 @@ async fn within_autorelease_pool<F: Future>(future: F) -> F::Output {
     future.await
 }
 
+/// Starts the thread that owns the `CBCentralManager`. It runs until `shutdown`
+/// completes, which happens when the adapter's last `KeepAlive` is dropped.
 pub fn run_corebluetooth_thread(
     event_sender: Sender<CoreBluetoothEvent>,
+    mut shutdown: oneshot::Receiver<()>,
 ) -> Result<Sender<CoreBluetoothMessage>, Error> {
     let authorization = unsafe { CBManager::authorization_class() };
     if authorization != CBManagerAuthorization::AllowedAlways
@@ -2031,9 +2037,18 @@ pub fn run_corebluetooth_thread(
         let runtime = runtime::Builder::new_current_thread().build().unwrap();
         runtime.block_on(async move {
             let mut cbi = CoreBluetoothInternal::new(receiver, event_sender);
+            // The adapter's event task and peripheral map hold message senders
+            // for as long as this thread runs, so the message channel never
+            // closes on its own. Stop when the last `KeepAlive` is dropped.
             loop {
-                within_autorelease_pool(cbi.wait_for_message()).await;
+                let message = pin!(within_autorelease_pool(cbi.wait_for_message()));
+                // Shutdown first, so a steady stream of delegate events can't
+                // keep the thread running.
+                if let Either::Left(_) = future::select(&mut shutdown, message).await {
+                    break;
+                }
             }
+            trace!("Adapter and its peripherals dropped, stopping the CoreBluetooth thread");
         })
     });
     Ok(sender)

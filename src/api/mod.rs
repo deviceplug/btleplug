@@ -219,6 +219,15 @@ pub struct ScanFilter {
     /// If the filter contains at least one service UUID, only devices supporting at least one of
     /// the given services will be available.
     pub services: Vec<Uuid>,
+    /// Scan for Bluetooth Low Energy devices only.
+    ///
+    /// On Linux (BlueZ) the default is `false`: discovery uses the `auto` transport, which makes
+    /// the controller run a BR/EDR inquiry alongside the LE scan for as long as the scan lasts.
+    /// Some controllers cannot do other BR/EDR work during an inquiry, for example reading a
+    /// remote name or connecting a classic device. Setting this to `true` selects the `le`
+    /// transport, which keeps the controller out of inquiry. The other backends only ever scan
+    /// for LE devices and ignore this field.
+    pub le_only: bool,
 }
 
 /// Selects peripherals for [`Central::retrieve_peripherals`].

@@ -94,7 +94,7 @@ impl BLEWatcher {
         on_received: AdvertisementEventHandler,
     ) -> Result<()> {
         self.remove_received_handler()?;
-        let ScanFilter { services } = filter;
+        let ScanFilter { services, .. } = filter;
 
         // Clear any OS-level service UUID filter from a previous scan.
         // We intentionally do NOT set service UUIDs on the OS filter: on some

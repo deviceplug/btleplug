@@ -93,7 +93,11 @@ impl Central for Adapter {
         let filter = DiscoveryFilter {
             service_uuids: filter.services,
             duplicate_data: Some(true),
-            transport: Some(Transport::Auto),
+            transport: Some(if filter.le_only {
+                Transport::Le
+            } else {
+                Transport::Auto
+            }),
             ..Default::default()
         };
         self.session

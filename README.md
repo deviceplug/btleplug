@@ -86,6 +86,11 @@ drop some advertisement types (such as service data) that it shouldn't.
 Applications targeting Linux should perform their own post-filtering on scan
 results rather than relying solely on `ScanFilter`.
 
+By default btleplug asks BlueZ for the `auto` transport, so the controller also
+runs a BR/EDR inquiry while a scan is active. Applications that only need BLE
+can set `ScanFilter::le_only` to scan with the `le` transport instead; other
+platforms ignore it.
+
 ## Library Features
 
 #### Serialization/Deserialization

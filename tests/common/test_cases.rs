@@ -256,6 +256,7 @@ pub async fn test_scan_filter_by_service_uuid() {
     adapter
         .start_scan(ScanFilter {
             services: vec![gatt_uuids::CONTROL_SERVICE],
+            ..Default::default()
         })
         .await
         .unwrap();
